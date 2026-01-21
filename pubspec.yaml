@@ -57,6 +57,31 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  assets:
+    - assets/images/
+    - assets/langs/
+
+  fonts:
+    - family: Cairo
+      fonts:
+        - asset: assets/fonts/Cairo-Black.ttf
+        - asset: assets/fonts/Cairo-Bold.ttf
+        - asset: assets/fonts/Cairo-ExtraBold.ttf
+        - asset: assets/fonts/Cairo-ExtraLight.ttf
+        - asset: assets/fonts/Cairo-Light.ttf
+        - asset: assets/fonts/Cairo-Medium.ttf
+        - asset: assets/fonts/Cairo-Regular.ttf
+        - asset: assets/fonts/Cairo-SemiBold.ttf
+    - family: Tajawal
+      fonts:
+        - asset: assets/fonts/Tajawal-Black.ttf
+        - asset: assets/fonts/Tajawal-Bold.ttf
+        - asset: assets/fonts/Tajawal-ExtraBold.ttf
+        - asset: assets/fonts/Tajawal-ExtraLight.ttf
+        - asset: assets/fonts/Tajawal-Light.ttf
+        - asset: assets/fonts/Tajawal-Medium.ttf
+        - asset: assets/fonts/Tajawal-Regular.ttf
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
