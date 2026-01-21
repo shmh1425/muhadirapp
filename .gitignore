@@ -1,0 +1,19 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+build/
+ECHO is on.
+# Android
+android/.gradle/
+android/local.properties
+ECHO is on.
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ECHO is on.
+# Misc
+.idea/
+*.iml
+.vscode/
