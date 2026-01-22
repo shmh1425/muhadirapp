@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'components/notification_bell.dart';
+import 'notifications_screen.dart';
 
 class ServicesScreen extends StatelessWidget {
   const ServicesScreen({super.key});
@@ -34,7 +35,16 @@ class ServicesScreen extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  const NotificationBell(),
+                  NotificationBell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const NotificationsScreen(),
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
               const SizedBox(height: 26),
@@ -62,11 +72,19 @@ class ServicesScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 26),
-              const Center(
+              Center(
                 child: _ServiceCard(
                   title: 'التنبيهات',
                   icon: Icons.notifications,
                   isWide: true,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const NotificationsScreen(),
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -82,11 +100,13 @@ class _ServiceCard extends StatelessWidget {
     required this.title,
     required this.icon,
     this.isWide = false,
+    this.onTap,
   });
 
   final String title;
   final IconData icon;
   final bool isWide;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -103,62 +123,66 @@ class _ServiceCard extends StatelessWidget {
         ? screenWidth - 24 * 2
         : (screenWidth - 24 * 2 - 14) / 2;
 
-    return SizedBox(
-      width: cardWidth,
-      height: 156,
-      child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.topCenter,
-        children: [
-          Container(
-            margin: const EdgeInsets.only(top: 16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: borderColor, width: 1.2),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    color: primaryColor,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(22),
+      child: SizedBox(
+        width: cardWidth,
+        height: 156,
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.topCenter,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: borderColor, width: 1.2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: primaryColor,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          Positioned(
-            top: 0,
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: borderColor, width: 1.2),
-                color: Colors.white,
-              ),
-              child: ShaderMask(
-                shaderCallback: (bounds) {
-                  return iconGradient.createShader(
-                    Rect.fromLTWH(0, 0, bounds.width, bounds.height),
-                  );
-                },
-                child: Icon(icon, color: Colors.white, size: 22),
+            Positioned(
+              top: 0,
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: borderColor, width: 1.2),
+                  color: Colors.white,
+                ),
+                child: ShaderMask(
+                  shaderCallback: (bounds) {
+                    return iconGradient.createShader(
+                      Rect.fromLTWH(0, 0, bounds.width, bounds.height),
+                    );
+                  },
+                  child: Icon(icon, color: Colors.white, size: 22),
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

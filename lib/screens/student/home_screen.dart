@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'student_card_page.dart';
 import 'components/custom_nav_bar_icons.dart';
+import 'notifications_screen.dart';
 import 'components/notification_bell.dart';
 import 'settings_screen.dart';
 import 'services_screen.dart';
@@ -86,7 +87,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     'أهلاً نورة',
                     style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
-                  const NotificationBell(),
+                  NotificationBell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const NotificationsScreen(),
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
               const SizedBox(height: 30),

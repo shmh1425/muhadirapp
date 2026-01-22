@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'app_settings.dart';
 import 'components/notification_bell.dart';
+import 'notifications_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -105,7 +106,16 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  const NotificationBell(),
+                  NotificationBell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const NotificationsScreen(),
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
