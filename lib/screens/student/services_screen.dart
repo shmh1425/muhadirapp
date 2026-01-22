@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'components/notification_bell.dart';
 import 'notifications_screen.dart';
+import 'nfc_attendance_screen.dart';
 
 class ServicesScreen extends StatelessWidget {
   const ServicesScreen({super.key});
@@ -52,22 +53,30 @@ class ServicesScreen extends StatelessWidget {
                 spacing: 14,
                 runSpacing: 18,
                 alignment: WrapAlignment.end,
-                children: const [
-                  _ServiceCard(
+                children: [
+                  const _ServiceCard(
                     title: 'الجدول الدراسي',
                     icon: Icons.calendar_today,
                   ),
-                  _ServiceCard(
+                  const _ServiceCard(
                     title: 'تتبع الحضور',
                     icon: Icons.access_time,
                   ),
-                  _ServiceCard(
+                  const _ServiceCard(
                     title: 'إدارة الأعذار',
                     icon: Icons.insert_chart_outlined,
                   ),
                   _ServiceCard(
                     title: 'التحضير',
                     icon: Icons.wifi_tethering,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const NfcAttendanceScreen(),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),

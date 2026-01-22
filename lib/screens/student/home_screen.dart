@@ -7,6 +7,7 @@ import 'notifications_screen.dart';
 import 'components/notification_bell.dart';
 import 'settings_screen.dart';
 import 'services_screen.dart';
+import 'nfc_attendance_screen.dart';
 import 'app_settings.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -117,7 +118,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   child: ElevatedButton(
                     onPressed: () {
-                      // الحدث عند الضغط
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const NfcAttendanceScreen(),
+                        ),
+                      );
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.transparent,
