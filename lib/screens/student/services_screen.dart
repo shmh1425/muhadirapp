@@ -4,6 +4,7 @@ import 'notifications_screen.dart';
 import 'nfc_attendance_screen.dart';
 import 'components/custom_nav_bar_icons.dart';
 import 'home_screen.dart';
+import 'settings_screen.dart';
 import 'excuse_screen.dart';
 import 'attendance_tracking_screen.dart';
 import 'schedule_screen.dart';
@@ -23,13 +24,17 @@ class ServicesScreen extends StatelessWidget {
         bottomNavigationBar: NavBarSettingsArabic(
           selectedIndex: 1,
           onItemTapped: (index) {
-            if (index == 2) {
+            if (index == 0) {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+            } else if (index == 1) {
+              // Stay on services screen
+            } else if (index == 2) {
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => const HomeScreen()),
                 (route) => false,
               );
-            } else if (index == 1) {
-              // Stay on services screen
             }
           },
         ),
@@ -83,7 +88,7 @@ class ServicesScreen extends StatelessWidget {
                       );
                     },
                   ),
-                  const _ServiceCard(
+                  _ServiceCard(
                     title: 'تتبع الحضور',
                     icon: Icons.access_time,
                     onTap: () {
@@ -94,7 +99,7 @@ class ServicesScreen extends StatelessWidget {
                       );
                     },
                   ),
-                  const _ServiceCard(
+                  _ServiceCard(
                     title: 'إدارة الأعذار',
                     icon: Icons.insert_chart_outlined,
                     onTap: () {
@@ -105,7 +110,7 @@ class ServicesScreen extends StatelessWidget {
                       );
                     },
                   ),
-                  const _ServiceCard(
+                  _ServiceCard(
                     title: 'التحضير',
                     icon: Icons.wifi_tethering,
                     onTap: () {

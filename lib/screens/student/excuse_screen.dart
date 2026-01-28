@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'components/notification_bell.dart';
 import 'rejection_detail_screen.dart';
 import 'submit_excuse_screen.dart';
+import 'notifications_screen.dart';
 
 class ExcuseScreen extends StatefulWidget {
   const ExcuseScreen({super.key});
@@ -147,7 +148,16 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
           ),
         ),
         const Spacer(),
-        const NotificationBell(),
+        NotificationBell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const NotificationsScreen(),
+              ),
+            );
+          },
+        ),
       ],
     );
   }

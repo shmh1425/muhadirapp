@@ -3,6 +3,7 @@ import 'components/notification_bell.dart';
 import 'components/custom_nav_bar_icons.dart';
 import 'home_screen.dart';
 import 'settings_screen.dart';
+import 'notifications_screen.dart';
 
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
@@ -238,7 +239,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               ),
             ),
           ),
-          const NotificationBell(),
+          NotificationBell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const NotificationsScreen(),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );

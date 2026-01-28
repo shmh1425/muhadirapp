@@ -4,6 +4,7 @@ import 'components/notification_bell.dart';
 import 'components/custom_nav_bar_icons.dart';
 import 'home_screen.dart';
 import 'settings_screen.dart';
+import 'notifications_screen.dart';
 
 class AttendanceTrackingScreen extends StatefulWidget {
   const AttendanceTrackingScreen({super.key});
@@ -156,7 +157,16 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
             ),
           ),
         ),
-        const NotificationBell(),
+        NotificationBell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const NotificationsScreen(),
+              ),
+            );
+          },
+        ),
       ],
     );
   }
