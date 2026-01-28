@@ -71,12 +71,23 @@ class ServicesScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 26),
+              const SizedBox(height: 36),
               Wrap(
                 spacing: 14,
                 runSpacing: 18,
                 alignment: WrapAlignment.end,
                 children: [
+                  _ServiceCard(
+                    title: 'تتبع الحضور',
+                    icon: Icons.access_time,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AttendanceTrackingScreen(),
+                        ),
+                      );
+                    },
+                  ),
                   _ServiceCard(
                     title: 'الجدول الدراسي',
                     icon: Icons.calendar_today,
@@ -89,12 +100,14 @@ class ServicesScreen extends StatelessWidget {
                     },
                   ),
                   _ServiceCard(
-                    title: 'تتبع الحضور',
-                    icon: Icons.access_time,
+                    title: 'التحضير',
+                    icon: Icons.wifi_tethering,
+                    backgroundImage: 'assets/images/NFC_logo.jpeg',
                     onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const AttendanceTrackingScreen(),
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const NfcAttendanceScreen(),
                         ),
                       );
                     },
@@ -110,35 +123,33 @@ class ServicesScreen extends StatelessWidget {
                       );
                     },
                   ),
-                  _ServiceCard(
-                    title: 'التحضير',
-                    icon: Icons.wifi_tethering,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const NfcAttendanceScreen(),
-                        ),
-                      );
-                    },
-                  ),
                 ],
               ),
               const SizedBox(height: 26),
-              Center(
-                child: _ServiceCard(
-                  title: 'التنبيهات',
-                  icon: Icons.notifications,
-                  isWide: true,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const NotificationsScreen(),
+              Builder(
+                builder: (context) {
+                  final cardWidth =
+                      (MediaQuery.of(context).size.width - 24 * 2 - 14) / 2;
+                  return Align(
+                    alignment: Alignment.center,
+                    child: SizedBox(
+                      width: cardWidth,
+                      child: _ServiceCard(
+                        title: 'التنبيهات',
+                        icon: Icons.notifications,
+                        width: cardWidth,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const NotificationsScreen(),
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -152,28 +163,39 @@ class _ServiceCard extends StatelessWidget {
   const _ServiceCard({
     required this.title,
     required this.icon,
+    this.width,
     this.isWide = false,
     this.onTap,
+    this.backgroundImage,
   });
 
   final String title;
   final IconData icon;
+  final double? width;
   final bool isWide;
   final VoidCallback? onTap;
+  final String? backgroundImage;
 
   @override
   Widget build(BuildContext context) {
     const primaryColor = Color(0xFF006571);
-    const borderColor = Color(0xFFD9D9D9);
+    const cardColor = Color(0xFFF8F7F7);
+    const borderGradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      stops: [0.25, 0.95],
+      colors: [Color(0xFF27A2A9), Color(0xFF006571)],
+    );
     const iconGradient = LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
+      stops: [0.25, 0.95],
       colors: [Color(0xFF27A2A9), Color(0xFF006571)],
     );
 
     final screenWidth = MediaQuery.of(context).size.width;
-    final cardWidth =
-        isWide ? screenWidth - 24 * 2 : (screenWidth - 24 * 2 - 14) / 2;
+    final cardWidth = width ??
+        (isWide ? screenWidth - 24 * 2 : (screenWidth - 24 * 2 - 14) / 2);
 
     return GestureDetector(
       onTap: onTap,
@@ -187,28 +209,52 @@ class _ServiceCard extends StatelessWidget {
             Container(
               margin: const EdgeInsets.only(top: 16),
               decoration: BoxDecoration(
-                color: Colors.white,
                 borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: borderColor, width: 1.2),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                gradient: borderGradient,
               ),
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 16),
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      color: primaryColor,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+              padding: const EdgeInsets.all(1.2),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: cardColor,
+                  borderRadius: BorderRadius.circular(21),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
                     ),
-                  ),
+                  ],
+                ),
+                child: Stack(
+                  children: [
+                    if (backgroundImage != null)
+                      Positioned(
+                        left: 16,
+                        bottom: 12,
+                        child: Opacity(
+                          opacity: 0.35,
+                          child: Image.asset(
+                            backgroundImage!,
+                            width: 34,
+                            height: 34,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      ),
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            color: primaryColor,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -219,8 +265,8 @@ class _ServiceCard extends StatelessWidget {
                 height: 40,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: borderColor, width: 1.2),
-                  color: Colors.white,
+                  border: Border.all(color: const Color(0xFF27A2A9), width: 1.2),
+                  color: cardColor,
                 ),
                 child: ShaderMask(
                   shaderCallback: (bounds) {

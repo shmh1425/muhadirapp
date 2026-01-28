@@ -103,7 +103,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             Expanded(
                               child: _RoleChip(
-                                label: 'طالبة/ة',
+                                label: 'طالب/ـة',
                                 isActive: _selectedRole == _UserRole.student,
                                 onTap: () {
                                   setState(() {

@@ -441,44 +441,38 @@ class _ExcuseCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Row(
+            textDirection: TextDirection.rtl,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Expanded(
-                child: Directionality(
-                  textDirection: TextDirection.rtl,
-                  child: Row(
-                    children: <Widget>[
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          Text(
-                            item.timeRange,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF1A1A1A),
-                            ),
-                            textAlign: TextAlign.right,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            item.dateText,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1A1A1A),
-                            ),
-                            textAlign: TextAlign.right,
-                          ),
-                        ],
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Directionality(
+                    textDirection: TextDirection.ltr,
+                    child: Text(
+                      item.timeRange,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1A1A1A),
                       ),
-                      const Spacer(),
-                    ],
+                      textAlign: TextAlign.right,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 4),
+                  Text(
+                    item.dateText,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1A1A1A),
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
+              const Spacer(),
               IntrinsicWidth(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,

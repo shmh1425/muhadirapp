@@ -1,5 +1,8 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'app_settings.dart';
 
 class StudentCardPage extends StatelessWidget {
   const StudentCardPage({super.key});
@@ -74,22 +77,33 @@ class StudentCardPage extends StatelessWidget {
             textDirection: TextDirection.rtl,
             child: Row(
               children: [
-                Container(
-                  width: 45,
-                  height: 46,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: const Color(0xFF006571),
-                      width: 3,
-                    ),
-                  ),
-                  child: ClipOval(
-                    child: Image.asset(
-                      "assets/images/avatar.png",
-                      fit: BoxFit.cover,
-                    ),
-                  ),
+                ValueListenableBuilder<bool>(
+                  valueListenable: AppSettings.instance.blurProfileImage,
+                  builder: (context, isBlurred, child) {
+                    return Container(
+                      width: 45,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: const Color(0xFF006571),
+                          width: 3,
+                        ),
+                      ),
+                      child: ClipOval(
+                        child: ImageFiltered(
+                          imageFilter: ImageFilter.blur(
+                            sigmaX: isBlurred ? 6 : 0,
+                            sigmaY: isBlurred ? 6 : 0,
+                          ),
+                          child: Image.asset(
+                            "assets/images/avatar.png",
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(width: 16),
                 Expanded(
