@@ -2,18 +2,23 @@
 .dart_tool/
 .packages
 build/
-ECHO is on.
+*.iml
+
 # Android
 android/.gradle/
 android/local.properties
-ECHO is on.
+android/**/gradle-wrapper.jar
+
 # iOS
 ios/Pods/
 ios/.symlinks/
 ios/Flutter/Flutter.framework
 ios/Flutter/Flutter.podspec
-ECHO is on.
+
 # Misc
 .idea/
-*.iml
 .vscode/
+*.log
+*.pyc
+.DS_Store
+Thumbs.db
