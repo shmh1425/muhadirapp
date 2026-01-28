@@ -7,7 +7,9 @@ import 'notifications_screen.dart';
 import 'components/notification_bell.dart';
 import 'settings_screen.dart';
 import 'services_screen.dart';
-import 'nfc_attendance_screen.dart';
+import 'schedule_screen.dart';
+import 'excuse_screen.dart';
+import 'submit_excuse_screen.dart';
 import 'app_settings.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -158,7 +160,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   TextButton(
                     onPressed: () {
-                      // action on press
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ScheduleScreen(),
+                        ),
+                      );
                     },
                     style: ButtonStyle(
                       foregroundColor:
@@ -210,7 +217,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   TextButton(
                     onPressed: () {
-                      // action on press
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ExcuseScreen(),
+                        ),
+                      );
                     },
                     style: ButtonStyle(
                       foregroundColor:
@@ -239,12 +251,23 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   children: [
-                    buildLectureCard(
-                      'جودة البرمجيات',
-                      '1',
-                      '103',
-                      statusText: 'إرفاق عذر',
-                      statusColor: Colors.grey,
+                    InkWell(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SubmitExcuseScreen(),
+                          ),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: buildLectureCard(
+                        'جودة البرمجيات',
+                        '1',
+                        '103',
+                        statusText: 'إرفاق عذر',
+                        statusColor: Colors.grey,
+                      ),
                     ),
                     buildLectureCard(
                       'بحوث عمليات',
@@ -253,7 +276,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       statusText: 'قيد المعالجة',
                       statusColor: Colors.amber,
                     ),
-                  ].map((card) {
+                  ].map((Widget card) {
                     return Padding(
                       padding: const EdgeInsets.only(right: 12),
                       child: card,

@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'components/notification_bell.dart';
 import 'notifications_screen.dart';
 import 'nfc_attendance_screen.dart';
+import 'components/custom_nav_bar_icons.dart';
+import 'home_screen.dart';
+import 'excuse_screen.dart';
+import 'attendance_tracking_screen.dart';
+import 'schedule_screen.dart';
 
 class ServicesScreen extends StatelessWidget {
   const ServicesScreen({super.key});
@@ -15,6 +20,19 @@ class ServicesScreen extends StatelessWidget {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: Colors.white,
+        bottomNavigationBar: NavBarSettingsArabic(
+          selectedIndex: 1,
+          onItemTapped: (index) {
+            if (index == 2) {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const HomeScreen()),
+                (route) => false,
+              );
+            } else if (index == 1) {
+              // Stay on services screen
+            }
+          },
+        ),
         body: SafeArea(
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -54,19 +72,40 @@ class ServicesScreen extends StatelessWidget {
                 runSpacing: 18,
                 alignment: WrapAlignment.end,
                 children: [
-                  const _ServiceCard(
+                  _ServiceCard(
                     title: 'الجدول الدراسي',
                     icon: Icons.calendar_today,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => ScheduleScreen(),
+                        ),
+                      );
+                    },
                   ),
                   const _ServiceCard(
                     title: 'تتبع الحضور',
                     icon: Icons.access_time,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AttendanceTrackingScreen(),
+                        ),
+                      );
+                    },
                   ),
                   const _ServiceCard(
                     title: 'إدارة الأعذار',
                     icon: Icons.insert_chart_outlined,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const ExcuseScreen(),
+                        ),
+                      );
+                    },
                   ),
-                  _ServiceCard(
+                  const _ServiceCard(
                     title: 'التحضير',
                     icon: Icons.wifi_tethering,
                     onTap: () {
@@ -128,13 +167,11 @@ class _ServiceCard extends StatelessWidget {
     );
 
     final screenWidth = MediaQuery.of(context).size.width;
-    final cardWidth = isWide
-        ? screenWidth - 24 * 2
-        : (screenWidth - 24 * 2 - 14) / 2;
+    final cardWidth =
+        isWide ? screenWidth - 24 * 2 : (screenWidth - 24 * 2 - 14) / 2;
 
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(22),
       child: SizedBox(
         width: cardWidth,
         height: 156,
