@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'student/home_screen.dart';
+import 'lecturer/lecturer_home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -38,6 +39,10 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_selectedRole == _UserRole.student) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const HomeScreen()),
+      );
+    } else if (_selectedRole == _UserRole.lecturer) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const LecturerHomeScreen()),
       );
     }
   }
