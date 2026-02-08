@@ -112,8 +112,7 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
               ...visibleItems
                   .map((item) => _ExcuseCard(
                         item: item,
-                      ))
-                  .toList(),
+                      )),
             ],
           ),
         ),
@@ -218,7 +217,7 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
         borderRadius: BorderRadius.circular(18),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -376,7 +375,7 @@ class _ExcuseCard extends StatelessWidget {
   void _showClosedInfoDialog(BuildContext context) {
     showDialog(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.5),
+      barrierColor: Colors.black.withValues(alpha: 0.5),
       builder: (BuildContext context) {
         return Directionality(
           textDirection: TextDirection.rtl,
@@ -431,7 +430,7 @@ class _ExcuseCard extends StatelessWidget {
         ),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -445,20 +444,17 @@ class _ExcuseCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  Directionality(
-                    textDirection: TextDirection.ltr,
-                    child: Text(
-                      item.timeRange,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1A1A1A),
-                      ),
-                      textAlign: TextAlign.right,
+                  Text(
+                    'أولى-ثانية',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1A1A1A),
                     ),
+                    textAlign: TextAlign.right,
                   ),
                   const SizedBox(height: 4),
                   Text(

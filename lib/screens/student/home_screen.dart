@@ -170,13 +170,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     },
                     style: ButtonStyle(
                       foregroundColor:
-                          MaterialStateProperty.resolveWith<Color>((states) {
-                        if (states.contains(MaterialState.pressed)) {
+                          WidgetStateProperty.resolveWith<Color>((states) {
+                        if (states.contains(WidgetState.pressed)) {
                           return const Color(0xFF006571); // اللون عند الضغط
                         }
                         return const Color(0xFF006571); // اللون العادي
                       }),
-                      overlayColor: MaterialStateProperty.all(
+                      overlayColor: WidgetStateProperty.all(
                         const Color(0x22006571),
                       ),
                     ),
@@ -227,13 +227,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     },
                     style: ButtonStyle(
                       foregroundColor:
-                          MaterialStateProperty.resolveWith<Color>((states) {
-                        if (states.contains(MaterialState.pressed)) {
+                          WidgetStateProperty.resolveWith<Color>((states) {
+                        if (states.contains(WidgetState.pressed)) {
                           return const Color(0xFF006571); // اللون عند الضغط
                         }
                         return const Color(0xFF006571); // اللون العادي
                       }),
-                      overlayColor: MaterialStateProperty.all(
+                      overlayColor: WidgetStateProperty.all(
                         const Color(0x22006571),
                       ),
                     ),
@@ -432,7 +432,7 @@ class _HomeScreenState extends State<HomeScreen> {
         border: Border.all(color: const Color(0xFFE0E0E0), width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),

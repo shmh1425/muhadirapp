@@ -14,6 +14,22 @@ class ScheduleScreen extends StatefulWidget {
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
   static const Color _primaryColor = Color(0xFF006571);
+  static const Color _gridBorderColor = Color(0xFFE6E6E6);
+  static const Color _headerCellColor = Color(0xFFF3F5F6);
+  static const double _timeColWidth = 52;
+  static const double _rowHeight = 60;
+
+  String _formatHHmm(String time) {
+    final parts = time.split(':');
+    if (parts.length != 2) return time;
+    final hour = parts[0].padLeft(2, '0');
+    final minute = parts[1].padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
+  String _formatSlotLabel(TimeSlot slot) {
+    return '${_formatHHmm(slot.start)} - ${_formatHHmm(slot.end)}';
+  }
 
   final List<String> _days = <String>[
     'الأحد',
@@ -61,7 +77,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         courseName: 'جودة البرمجيات',
         day: 'الأحد',
         startTime: '10:00',
-        endTime: '11:50',
+        endTime: '10:50',
         color: const Color(0xFF2196F3),
         courseCode: 'SE3322',
         activity: 'نظري',
@@ -87,37 +103,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       ),
       CourseSchedule(
         courseName: 'هندسة البيانات',
-        day: 'الأثنين',
-        startTime: '10:00',
-        endTime: '11:50',
-        color: const Color(0xFF03A9F4),
-        courseCode: 'SE3323',
-        activity: 'نظري',
-        section: '1',
-        hours: '3',
-        lecturer: 'محاضر',
-        location: 'الزاهر - طالبات',
-        room: '104 ط',
-      ),
-      CourseSchedule(
-        courseName: 'بحوث العمليات',
-        day: 'الثلاثاء',
+        day: 'الخميس',
         startTime: '8:00',
         endTime: '9:50',
-        color: const Color(0xFF4CAF50),
-        courseCode: 'SE3321',
-        activity: 'نظري',
-        section: '1',
-        hours: '4',
-        lecturer: 'إناس محمد طاهر بوقس',
-        location: 'الزاهر - طالبات',
-        room: '102 ط',
-      ),
-      CourseSchedule(
-        courseName: 'هندسة البيانات',
-        day: 'الثلاثاء',
-        startTime: '10:00',
-        endTime: '11:50',
         color: const Color(0xFF03A9F4),
         courseCode: 'SE3323',
         activity: 'نظري',
@@ -142,22 +130,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         room: '103 ط',
       ),
       CourseSchedule(
-        courseName: 'هندسة البيانات',
-        day: 'الخميس',
-        startTime: '8:00',
-        endTime: '9:50',
-        color: const Color(0xFF03A9F4),
-        courseCode: 'SE3323',
-        activity: 'نظري',
-        section: '1',
-        hours: '3',
-        lecturer: 'محاضر',
-        location: 'الزاهر - طالبات',
-        room: '104 ط',
-      ),
-      CourseSchedule(
         courseName: 'الثقافة الإسلامية',
-        day: 'الخميس',
+        day: 'الأربعاء',
         startTime: '10:00',
         endTime: '11:50',
         color: const Color(0xFFE91E63),
@@ -258,19 +232,27 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final screenWidth = MediaQuery.of(context).size.width;
-        final dayWidth = (screenWidth - 80 - 32) / _days.length;
+        final dayWidth = (screenWidth - _timeColWidth - 32) / _days.length;
+        // عرض وارتفاع محددان حتى لا يحصل الـ Column على قيود غير محدودة (تفشل التخطيط ثم hit test)
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: SingleChildScrollView(
             scrollDirection: Axis.vertical,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  _buildDaysHeader(dayWidth),
-                  _buildTimeTable(dayWidth),
-                ],
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: constraints.maxWidth,
+                minHeight: constraints.maxHeight,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    _buildSemesterRow(),
+                    const SizedBox(height: 10),
+                    _buildTable(dayWidth),
+                  ],
+                ),
               ),
             ),
           ),
@@ -279,208 +261,207 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
+  Widget _buildSemesterRow() {
+    return const Align(
+      alignment: Alignment.centerRight,
+      child: Text(
+        'الفصل الدراسي: الثاني 1447 هـ',
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF1A1A1A),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTable(double dayWidth) {
+    final tableHeight = _timeSlots.length * _rowHeight;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: _gridBorderColor, width: 1),
+          color: Colors.white,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            _buildDaysHeader(dayWidth),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                // عمود الأوقات أولاً ليظهر على اليمين في RTL
+                SizedBox(
+                  width: _timeColWidth,
+                  height: tableHeight,
+                  child: _buildTimeColumn(),
+                ),
+                // أعمدة الأيام
+                ..._days.map((day) {
+                  return SizedBox(
+                    width: dayWidth,
+                    height: tableHeight,
+                    child: _buildDayStack(day, dayWidth, tableHeight),
+                  );
+                }),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildDaysHeader(double dayWidth) {
     return Row(
       children: <Widget>[
+        // خلية فارغة فوق عمود الأوقات (يظهر على اليمين في RTL)
         SizedBox(
-          width: 80,
-          child: Container(),
+          width: _timeColWidth,
+          child: Container(
+            height: 48,
+            decoration: const BoxDecoration(color: _headerCellColor),
+          ),
         ),
         ..._days.map((String day) {
           return SizedBox(
             width: dayWidth,
             child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    color: Colors.grey.shade300,
-                    width: 1,
-                  ),
-                ),
-              ),
+              height: 48,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(color: _headerCellColor),
               child: Text(
                 day,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 14,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                   color: Color(0xFF1A1A1A),
                 ),
               ),
             ),
           );
-        }).toList(),
-      ],
-    );
-  }
-
-  Widget _buildTimeTable(double dayWidth) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        _buildTimeColumn(),
-        ..._days.map((String day) {
-          return SizedBox(
-            width: dayWidth,
-            child: _buildDayColumn(day),
-          );
-        }).toList(),
+        }),
       ],
     );
   }
 
   Widget _buildTimeColumn() {
-    return SizedBox(
-      width: 80,
-      child: Column(
-        children: _timeSlots.map((TimeSlot timeSlot) {
-          return Container(
-            height: 60,
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: Colors.grey.shade300,
-                  width: 1,
-                ),
-              ),
-            ),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                '${timeSlot.start} - ${timeSlot.end}',
-                textAlign: TextAlign.right,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF1A1A1A),
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildDayColumn(String day) {
     return Column(
-      children: _timeSlots.asMap().entries.map((entry) {
-        final int index = entry.key;
-        final TimeSlot timeSlot = entry.value;
-        final slotStartMinutes = _parseTimeToMinutes(timeSlot.start);
-        
-        CourseSchedule? course;
-        for (final c in _courses) {
-          if (c.day != day) continue;
-          final courseStartMinutes = _parseTimeToMinutes(c.startTime);
-          final courseEndMinutes = _parseTimeToMinutes(c.endTime);
-          if (slotStartMinutes >= courseStartMinutes && slotStartMinutes < courseEndMinutes) {
-            if (slotStartMinutes == courseStartMinutes) {
-              course = c;
-              break;
-            } else {
-              return Container(
-                height: 60,
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: Colors.grey.shade300,
-                      width: 1,
-                    ),
-                    left: BorderSide(
-                      color: Colors.grey.shade300,
-                      width: 1,
-                    ),
-                  ),
-                ),
-              );
-            }
-          }
-        }
-
-        if (course == null) {
-          return Container(
-            height: 60,
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: Colors.grey.shade300,
-                  width: 1,
-                ),
-                left: BorderSide(
-                  color: Colors.grey.shade300,
-                  width: 1,
-                ),
-              ),
-            ),
-          );
-        }
-
-        final courseStartMinutes = _parseTimeToMinutes(course.startTime);
-        final courseEndMinutes = _parseTimeToMinutes(course.endTime);
-        final courseDuration = courseEndMinutes - courseStartMinutes;
-        final slotCount = (courseDuration / 50).ceil();
-        final courseHeight = (slotCount * 60.0) - 4;
-
+      children: _timeSlots.map((TimeSlot slot) {
         return Container(
-          height: 60,
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: Colors.grey.shade300,
-                width: 1,
-              ),
-              left: BorderSide(
-                color: Colors.grey.shade300,
-                width: 1,
-              ),
-            ),
-          ),
-          child: GestureDetector(
-            onTap: () => _showCourseDetails(course!),
-            child: Container(
-              height: courseHeight,
-              margin: const EdgeInsets.all(2),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-              decoration: BoxDecoration(
-                color: course.color,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Flexible(
-                    child: Text(
-                      course.courseName,
-                      style: const TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                        height: 1.2,
-                      ),
-                      textAlign: TextAlign.right,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    width: 5,
-                    height: 5,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ],
-              ),
+          height: _rowHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          alignment: Alignment.centerRight,
+          decoration: const BoxDecoration(color: _headerCellColor),
+          child: Text(
+            _formatSlotLabel(slot),
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A1A1A),
             ),
           ),
         );
       }).toList(),
+    );
+  }
+
+  Widget _buildDayStack(String day, double dayWidth, double tableHeight) {
+    final firstSlotMinutes = _parseTimeToMinutes(_timeSlots.first.start);
+    const int slotMinutes = 50;
+
+    final dayCourses = _courses.where((c) => c.day == day).toList();
+    dayCourses.sort((a, b) => _parseTimeToMinutes(a.startTime) - _parseTimeToMinutes(b.startTime));
+
+    return Stack(
+      clipBehavior: Clip.hardEdge,
+      children: <Widget>[
+        // Grid background
+        Column(
+          children: List<Widget>.generate(_timeSlots.length, (int idx) {
+            return Container(
+              height: _rowHeight,
+              decoration: BoxDecoration(
+                border: Border(
+                  left: const BorderSide(color: _gridBorderColor, width: 1),
+                  top: BorderSide(
+                    color: idx == 0 ? _gridBorderColor : Colors.transparent,
+                    width: 1,
+                  ),
+                  bottom: const BorderSide(color: _gridBorderColor, width: 1),
+                ),
+              ),
+            );
+          }),
+        ),
+        // Courses overlay - مربع مدمج (ساعتين = مربع واحد يمتد خليتين)
+        ...dayCourses.map((course) {
+          final startMin = _parseTimeToMinutes(course.startTime);
+          final endMin = _parseTimeToMinutes(course.endTime);
+          final durationMin = (endMin - startMin).clamp(0, 24 * 60);
+          final slotCount = (durationMin / slotMinutes).ceil().clamp(1, _timeSlots.length);
+          final slotIndex = ((startMin - firstSlotMinutes) / slotMinutes).floor().clamp(0, _timeSlots.length - 1);
+          final top = slotIndex * _rowHeight;
+          final blockHeight = slotCount * _rowHeight;
+
+          return Positioned(
+            top: top,
+            left: 0,
+            right: 0,
+            child: SizedBox(
+              width: dayWidth,
+              height: blockHeight,
+              child: GestureDetector(
+                onTap: () => _showCourseDetails(course),
+                child: Container(
+                  width: double.infinity,
+                  height: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: course.color,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Expanded(
+                        child: Center(
+                          child: Text(
+                            course.courseName,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                              height: 1.2,
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        width: 5,
+                        height: 5,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
+      ],
     );
   }
 
@@ -548,7 +529,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       _buildDetailRow('الشعبة', course.section),
                       _buildDetailRow('الساعات', course.hours),
                       _buildDetailRow('المحاضر', course.lecturer),
-                      _buildDetailRow('الوقت', '${course.startTime} - ${course.endTime}'),
+                      _buildDetailRow(
+                        'الوقت',
+                        '${_formatHHmm(course.startTime)} - ${_formatHHmm(course.endTime)}',
+                      ),
                       _buildDetailRow('اليوم', course.day),
                       _buildDetailRow('المقر', course.location),
                       _buildDetailRow('القاعة', course.room),
