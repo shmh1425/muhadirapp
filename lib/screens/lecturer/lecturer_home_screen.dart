@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../student/components/custom_nav_bar_icons.dart';
+import 'lecturer_nav_bar.dart';
 import '../student/components/notification_bell.dart';
 import '../student/notifications_screen.dart';
-import '../student/settings_screen.dart';
+import 'lecturer_qr_screen.dart';
 
 class LecturerHomeScreen extends StatefulWidget {
   const LecturerHomeScreen({super.key});
@@ -115,23 +115,31 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
     });
 
     switch (index) {
-      case 0: // Settings
-        await Future.delayed(const Duration(milliseconds: 180));
+      case 0:
+        // شاشة البروفايل/الإعدادات للمحاضر - لاحقاً
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('شاشة البروفايل - قريباً'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        break;
+      case 1:
+        await Future.delayed(const Duration(milliseconds: 160));
         if (!mounted) return;
         await Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const SettingsScreen()),
+          MaterialPageRoute(
+            builder: (_) => const LecturerQrScreen(lecture: null),
+          ),
         );
         if (!mounted) return;
         setState(() {
           selectedIndex = 2;
         });
         break;
-      case 1: // Services/Grid
-        // يمكن إضافة شاشة خدمات المحاضر لاحقاً
-        break;
-      case 2: // Home
-        // Stay on Home
+      case 2:
+        // Home الحالي
         break;
     }
   }
@@ -160,7 +168,7 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: Colors.white,
-        bottomNavigationBar: NavBarSettingsArabic(
+        bottomNavigationBar: LecturerNavBar(
           selectedIndex: selectedIndex,
           onItemTapped: _onItemTapped,
         ),
@@ -568,7 +576,8 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF0F7F8),
                   borderRadius: BorderRadius.circular(8),
@@ -585,7 +594,8 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
               ),
               const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF5F5F5),
                   borderRadius: BorderRadius.circular(8),
