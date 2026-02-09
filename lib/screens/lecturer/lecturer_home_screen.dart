@@ -3,6 +3,7 @@ import 'lecturer_nav_bar.dart';
 import '../student/components/notification_bell.dart';
 import '../student/notifications_screen.dart';
 import 'lecturer_qr_screen.dart';
+import 'lecturer_profile_screen.dart';
 
 class LecturerHomeScreen extends StatefulWidget {
   const LecturerHomeScreen({super.key});
@@ -116,13 +117,25 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
 
     switch (index) {
       case 0:
-        // شاشة البروفايل/الإعدادات للمحاضر - لاحقاً
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('شاشة البروفايل - قريباً'),
-            duration: Duration(seconds: 2),
+        await Future.delayed(const Duration(milliseconds: 160));
+        if (!mounted) return;
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const LecturerProfileScreen(
+              lecturer: LecturerProfile(
+                name: 'أنـاس بوقس',
+                email: 'username@example.com',
+                college: 'كلية الحاسبات',
+                department: 'هندسة البرمجيات',
+              ),
+            ),
           ),
         );
+        if (!mounted) return;
+        setState(() {
+          selectedIndex = 2; // الرجوع للهوم بعد الخروج من البروفايل
+        });
         break;
       case 1:
         await Future.delayed(const Duration(milliseconds: 160));

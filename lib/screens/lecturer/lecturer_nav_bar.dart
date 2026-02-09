@@ -107,7 +107,7 @@ class LecturerNavBar extends StatelessWidget {
   IconData _iconForIndex(int index) {
     switch (index) {
       case 0:
-        return Icons.person_outline;
+        return Icons.person;
       case 1:
         return Icons.qr_code_2_rounded;
       case 2:
