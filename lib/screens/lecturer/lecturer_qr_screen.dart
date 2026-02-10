@@ -6,6 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'lecturer_nav_bar.dart';
 import 'lecturer_home_screen.dart';
 import 'lecturer_profile_screen.dart';
+import '../../models/lecturer/lecture_item.dart';
 
 class LecturerQrScreen extends StatefulWidget {
   const LecturerQrScreen({
