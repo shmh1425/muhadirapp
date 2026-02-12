@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'student/home_screen.dart';
 import 'lecturer/lecturer_home_screen.dart';
+import 'female_security/accepted_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -37,8 +38,12 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     if (_selectedRole == _UserRole.student) {
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => const HomeScreen()));
+    } else if (_selectedRole == _UserRole.security) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const AcceptedScreen()),
       );
     } else if (_selectedRole == _UserRole.lecturer) {
       Navigator.of(context).pushReplacement(
@@ -136,7 +141,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 20,
+                ),
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
@@ -201,10 +209,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    _InputField(
-                      hintText: '••••••••',
-                      obscureText: true,
-                    ),
+                    _InputField(hintText: '••••••••', obscureText: true),
                     const SizedBox(height: 8),
                     Align(
                       alignment: Alignment.centerRight,
@@ -337,11 +342,7 @@ class _RoleChip extends StatelessWidget {
   }
 }
 
-enum _UserRole {
-  lecturer,
-  student,
-  security,
-}
+enum _UserRole { lecturer, student, security }
 
 class _InputField extends StatelessWidget {
   const _InputField({
@@ -383,8 +384,10 @@ class _InputField extends StatelessWidget {
         ),
         filled: true,
         fillColor: Colors.white,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(color: Colors.black.withOpacity(0.08)),
