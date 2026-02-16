@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import 'lecturer_nav_bar.dart';
+import 'lecturer_notifications_screen.dart';
 
 class LecturerProfile {
   final String name;
@@ -130,10 +131,11 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
                         icon: Icons.notifications_none_rounded,
                         label: 'التنبيهات',
                         onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('التنبيهات - لاحقاً'),
-                              duration: Duration(seconds: 2),
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  const LecturerNotificationsScreen(),
                             ),
                           );
                         },
