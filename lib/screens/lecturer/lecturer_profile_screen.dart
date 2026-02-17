@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import 'lecturer_my_lectures_screen.dart';
 import 'lecturer_nav_bar.dart';
 import 'lecturer_notifications_screen.dart';
 
@@ -20,10 +21,7 @@ class LecturerProfile {
 }
 
 class LecturerProfileScreen extends StatefulWidget {
-  const LecturerProfileScreen({
-    super.key,
-    required this.lecturer,
-  });
+  const LecturerProfileScreen({super.key, required this.lecturer});
 
   final LecturerProfile lecturer;
 
@@ -92,10 +90,10 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
                         icon: Icons.calendar_today_outlined,
                         label: 'محاضراتي',
                         onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('شاشة محاضراتي - لاحقاً'),
-                              duration: Duration(seconds: 2),
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const LecturerMyLecturesScreen(),
                             ),
                           );
                         },
@@ -341,11 +339,7 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
     return Container(
       color: Colors.white,
       child: const Center(
-        child: Icon(
-          Icons.person,
-          size: 40,
-          color: _primaryColor,
-        ),
+        child: Icon(Icons.person, size: 40, color: _primaryColor),
       ),
     );
   }
@@ -386,11 +380,7 @@ class _ProfileActionButton extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(
-              icon,
-              size: 24,
-              color: iconColor,
-            ),
+            Icon(icon, size: 24, color: iconColor),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -403,14 +393,10 @@ class _ProfileActionButton extends StatelessWidget {
                 ),
               ),
             ),
-            const Icon(
-              Icons.chevron_left,
-              color: Color(0xFF9E9E9E),
-            ),
+            const Icon(Icons.chevron_left, color: Color(0xFF9E9E9E)),
           ],
         ),
       ),
     );
   }
 }
-
