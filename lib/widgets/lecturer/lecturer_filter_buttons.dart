@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../screens/lecturer/lecturer_language.dart';
 
 /// Filter buttons component (اليوم، غدًا، الكل)
 class LecturerFilterButtons extends StatelessWidget {
@@ -42,7 +43,7 @@ class LecturerFilterButtons extends StatelessWidget {
                 ),
                 child: Center(
                   child: Text(
-                    filter,
+                    LecturerLanguageController.dayNameFromArabic(filter),
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -61,4 +62,3 @@ class LecturerFilterButtons extends StatelessWidget {
     );
   }
 }
-

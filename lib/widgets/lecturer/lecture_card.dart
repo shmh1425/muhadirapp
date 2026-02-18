@@ -1,26 +1,23 @@
 import 'package:flutter/material.dart';
 import '../../models/lecturer/lecture_item.dart';
+import '../../screens/lecturer/lecturer_language.dart';
 
 /// Card component لعرض معلومات المحاضرة في Timeline
 class LectureCard extends StatelessWidget {
   final LectureItem lecture;
 
-  const LectureCard({
-    super.key,
-    required this.lecture,
-  });
+  const LectureCard({super.key, required this.lecture});
 
   @override
   Widget build(BuildContext context) {
+    String tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: const Color(0xFFE8E8E8),
-          width: 1,
-        ),
+        border: Border.all(color: const Color(0xFFE8E8E8), width: 1),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -50,14 +47,14 @@ class LectureCard extends StatelessWidget {
               Expanded(
                 child: _buildDetailItem(
                   Icons.location_on_outlined,
-                  'القاعة ${lecture.hall}',
+                  '${tr('القاعة', 'Hall')} ${lecture.hall}',
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: _buildDetailItem(
                   Icons.group_outlined,
-                  'الشعبة ${lecture.section}',
+                  '${tr('الشعبة', 'Section')} ${lecture.section}',
                 ),
               ),
             ],
@@ -90,7 +87,7 @@ class LectureCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  lecture.activity,
+                  _activityLabel(lecture.activity),
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
@@ -106,14 +103,21 @@ class LectureCard extends StatelessWidget {
     );
   }
 
+  String _activityLabel(String activity) {
+    switch (activity) {
+      case 'عملي':
+        return LecturerLanguageController.tr('عملي', 'Lab');
+      case 'نظري':
+        return LecturerLanguageController.tr('نظري', 'Theory');
+      default:
+        return activity;
+    }
+  }
+
   Widget _buildDetailItem(IconData icon, String text) {
     return Row(
       children: [
-        Icon(
-          icon,
-          size: 16,
-          color: const Color(0xFF006571),
-        ),
+        Icon(icon, size: 16, color: const Color(0xFF006571)),
         const SizedBox(width: 6),
         Expanded(
           child: Text(
@@ -131,4 +135,3 @@ class LectureCard extends StatelessWidget {
     );
   }
 }
-

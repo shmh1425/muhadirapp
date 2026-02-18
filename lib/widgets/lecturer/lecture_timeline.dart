@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/lecturer/lecture_item.dart';
+import '../../screens/lecturer/lecturer_language.dart';
 import '../../utils/shared/time_utils.dart';
 import 'lecture_card.dart';
 
@@ -7,20 +8,20 @@ import 'lecture_card.dart';
 class LectureTimeline extends StatelessWidget {
   final List<LectureItem> lectures;
 
-  const LectureTimeline({
-    super.key,
-    required this.lectures,
-  });
+  const LectureTimeline({super.key, required this.lectures});
 
   @override
   Widget build(BuildContext context) {
     if (lectures.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(32.0),
+          padding: const EdgeInsets.all(32),
           child: Text(
-            'لا توجد محاضرات',
-            style: TextStyle(
+            LecturerLanguageController.tr(
+              'لا توجد محاضرات',
+              'No lectures available',
+            ),
+            style: const TextStyle(
               fontSize: 16,
               color: Color(0xFF999999),
               fontFamily: 'Cairo',
@@ -67,7 +68,9 @@ class LectureTimeline extends StatelessWidget {
                               bottom: 22,
                               child: Container(
                                 width: 1.5,
-                                color: const Color(0xFF006571).withValues(alpha: 0.22),
+                                color: const Color(
+                                  0xFF006571,
+                                ).withValues(alpha: 0.22),
                               ),
                             ),
                           // النقطة الأولى
@@ -98,9 +101,7 @@ class LectureTimeline extends StatelessWidget {
                     ),
                     const SizedBox(width: 12),
                     // الكارد
-                    Expanded(
-                      child: LectureCard(lecture: lecture),
-                    ),
+                    Expanded(child: LectureCard(lecture: lecture)),
                   ],
                 ),
               ),
@@ -159,4 +160,3 @@ class LectureTimeline extends StatelessWidget {
     );
   }
 }
-

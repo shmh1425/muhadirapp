@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/calendar_day.dart';
 import '../../models/lecturer/lecture_item.dart';
-import '../../utils/shared/date_utils.dart' as date_utils;
+import '../../screens/lecturer/lecturer_language.dart';
 import '../../utils/hijri_converter.dart';
 import 'lecture_detail_card.dart';
 
@@ -20,14 +20,20 @@ class DayDetailsBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hijriYear = HijriConverter.toArabicNumber(day.hijriYear);
-    final dayName = date_utils.AppDateUtils.getArabicDayName(day.date);
-    
+    final hijriYear = LecturerLanguageController.isArabic
+        ? HijriConverter.toArabicNumber(day.hijriYear)
+        : '${day.hijriYear}';
+    final dayName = LecturerLanguageController.dayNameFromWeekday(
+      day.date.weekday,
+    );
+    final monthName = _hijriMonthName(day.hijriMonthName);
+    final hijriSuffix = LecturerLanguageController.isArabic ? 'هـ' : ' AH';
+
     // تحديد لون Header حسب حالة اليوم
     final headerColor = _getHeaderColor(day.status);
 
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: LecturerLanguageController.direction(),
       child: Container(
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.9,
@@ -45,13 +51,15 @@ class DayDetailsBottomSheet extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               decoration: BoxDecoration(
                 color: headerColor,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20),
+                ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '$dayName ${HijriConverter.toArabicNumber(day.hijriDay)} ${day.hijriMonthName} $hijriYearهـ',
+                    '$dayName ${_hijriDayText(day.hijriDay)} $monthName $hijriYear$hijriSuffix',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -61,14 +69,17 @@ class DayDetailsBottomSheet extends StatelessWidget {
                   ),
                   if (canEdit)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Text(
-                        'قابل للتعديل',
-                        style: TextStyle(
+                      child: Text(
+                        _tr('قابل للتعديل', 'Editable'),
+                        style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: Colors.white,
@@ -78,14 +89,17 @@ class DayDetailsBottomSheet extends StatelessWidget {
                     )
                   else
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Text(
-                        'عرض فقط',
-                        style: TextStyle(
+                      child: Text(
+                        _tr('عرض فقط', 'View only'),
+                        style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: Colors.white,
@@ -102,7 +116,10 @@ class DayDetailsBottomSheet extends StatelessWidget {
                   ? Padding(
                       padding: const EdgeInsets.all(32.0),
                       child: Text(
-                        'لا توجد محاضرات في هذا اليوم',
+                        _tr(
+                          'لا توجد محاضرات في هذا اليوم',
+                          'No lectures for this day',
+                        ),
                         style: TextStyle(
                           fontSize: 16,
                           color: Colors.grey.shade600,
@@ -151,5 +168,47 @@ class DayDetailsBottomSheet extends StatelessWidget {
         return const Color(0xFF27A2A9);
     }
   }
-}
 
+  String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
+
+  String _hijriDayText(int dayValue) {
+    if (LecturerLanguageController.isArabic) {
+      return HijriConverter.toArabicNumber(dayValue);
+    }
+    return '$dayValue';
+  }
+
+  String _hijriMonthName(String arabicMonth) {
+    if (LecturerLanguageController.isArabic) {
+      return arabicMonth;
+    }
+    switch (arabicMonth) {
+      case 'محرم':
+        return 'Muharram';
+      case 'صفر':
+        return 'Safar';
+      case 'ربيع الأول':
+        return 'Rabi I';
+      case 'ربيع الثاني':
+        return 'Rabi II';
+      case 'جمادى الأولى':
+        return 'Jumada I';
+      case 'جمادى الثانية':
+        return 'Jumada II';
+      case 'رجب':
+        return 'Rajab';
+      case 'شعبان':
+        return 'Shaaban';
+      case 'رمضان':
+        return 'Ramadan';
+      case 'شوال':
+        return 'Shawwal';
+      case 'ذو القعدة':
+        return 'Dhul Qadah';
+      case 'ذو الحجة':
+        return 'Dhul Hijjah';
+      default:
+        return arabicMonth;
+    }
+  }
+}

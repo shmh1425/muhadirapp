@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../services/lecturer/lecture_repository.dart';
 import 'lecturer_home_screen.dart';
+import 'lecturer_language.dart';
 import 'lecturer_nav_bar.dart';
 import 'lecturer_profile_screen.dart';
 import 'lecturer_qr_screen.dart';
+import 'widgets/modern_popup_dialog.dart';
 import 'widgets/profile_back_button.dart';
 
 class LecturerAttendanceReportScreen extends StatefulWidget {
@@ -31,6 +33,19 @@ class _LecturerAttendanceReportScreenState
   String _selectedDay = 'اليوم';
   _StatusFilter _statusFilter = _StatusFilter.all;
   Map<String, _AttendanceStatus> _draftStatuses = {};
+
+  String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
+
+  String _displayDay(String day) {
+    return LecturerLanguageController.dayNameFromArabic(day);
+  }
+
+  String _displayCourse(String course) {
+    if (course == 'الكل') {
+      return _tr('الكل', 'All');
+    }
+    return course;
+  }
 
   @override
   void initState() {
@@ -115,7 +130,11 @@ class _LecturerAttendanceReportScreenState
         setState(() => _resetEditState());
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('لا توجد تغييرات جديدة للحفظ.')),
+          SnackBar(
+            content: Text(
+              _tr('لا توجد تغييرات جديدة للحفظ.', 'No new changes to save.'),
+            ),
+          ),
         );
       }
       return;
@@ -140,9 +159,14 @@ class _LecturerAttendanceReportScreenState
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('تم حفظ تغييرات تقرير الحضور.'),
-        duration: Duration(seconds: 2),
+      SnackBar(
+        content: Text(
+          _tr(
+            'تم حفظ تغييرات تقرير الحضور.',
+            'Attendance report changes saved.',
+          ),
+        ),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -159,28 +183,40 @@ class _LecturerAttendanceReportScreenState
       context: context,
       builder: (dialogContext) {
         return Directionality(
-          textDirection: TextDirection.rtl,
-          child: AlertDialog(
-            title: const Text(
-              'تغييرات غير محفوظة',
-              style: TextStyle(
+          textDirection: LecturerLanguageController.direction(),
+          child: ModernPopupDialog(
+            title: Text(
+              _tr('تغييرات غير محفوظة', 'Unsaved changes'),
+              style: const TextStyle(
                 fontFamily: 'Cairo',
                 fontWeight: FontWeight.w800,
+                color: _primary,
               ),
             ),
-            content: const Text(
-              'يوجد تعديلات لم يتم حفظها بعد. هل تريد حفظها قبل الخروج من وضع التعديل؟',
-              style: TextStyle(fontFamily: 'Cairo', height: 1.4),
+            accentColor: _primary,
+            child: Text(
+              _tr(
+                'يوجد تعديلات لم يتم حفظها بعد. هل تريد حفظها قبل الخروج من وضع التعديل؟',
+                'You have unsaved changes. Save before leaving edit mode?',
+              ),
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 13,
+                color: Colors.black87,
+                height: 1.5,
+              ),
             ),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: const Text('تجاهل'),
+              ModernPopupActionButton(
+                label: _tr('تجاهل', 'Discard'),
+                onTap: () => Navigator.of(dialogContext).pop(false),
+                isPrimary: false,
               ),
-              FilledButton(
-                onPressed: () => Navigator.of(dialogContext).pop(true),
-                style: FilledButton.styleFrom(backgroundColor: _primary),
-                child: const Text('حفظ'),
+              ModernPopupActionButton(
+                label: _tr('حفظ', 'Save'),
+                onTap: () => Navigator.of(dialogContext).pop(true),
+                isPrimary: true,
+                primaryColor: _primary,
               ),
             ],
           ),
@@ -253,57 +289,62 @@ class _LecturerAttendanceReportScreenState
   Widget build(BuildContext context) {
     final group = _activeGroup;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF8FBFB),
-        bottomNavigationBar: LecturerNavBar(
-          selectedIndex: _selectedNavIndex,
-          onItemTapped: _onItemTapped,
-        ),
-        body: SafeArea(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final tableHeight = constraints.maxHeight * 0.58;
-              return SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 6),
-                    Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: ProfileBackButton(onTap: _goToProfile),
+    return ValueListenableBuilder<LecturerLanguage>(
+      valueListenable: LecturerLanguageController.notifier,
+      builder: (context, _, __) {
+        return Directionality(
+          textDirection: LecturerLanguageController.direction(),
+          child: Scaffold(
+            backgroundColor: const Color(0xFFF8FBFB),
+            bottomNavigationBar: LecturerNavBar(
+              selectedIndex: _selectedNavIndex,
+              onItemTapped: _onItemTapped,
+            ),
+            body: SafeArea(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final tableHeight = constraints.maxHeight * 0.58;
+                  return SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
                     ),
-                    const SizedBox(height: 10),
-                    _buildFilters(),
-                    const SizedBox(height: 12),
-                    if (group != null) ...[
-                      _buildLectureSummary(group),
-                      const SizedBox(height: 10),
-                      _buildStatusTabs(),
-                      const SizedBox(height: 8),
-                      _buildStudentsTable(tableHeight),
-                      if (_isEditMode) ...[
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 6),
+                        Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: ProfileBackButton(onTap: _goToProfile),
+                        ),
+                        const SizedBox(height: 10),
+                        _buildFilters(),
                         const SizedBox(height: 12),
-                        _buildSaveChangesButton(group),
+                        if (group != null) ...[
+                          _buildLectureSummary(group),
+                          const SizedBox(height: 10),
+                          _buildStatusTabs(),
+                          const SizedBox(height: 8),
+                          _buildStudentsTable(tableHeight),
+                          if (_isEditMode) ...[
+                            const SizedBox(height: 12),
+                            _buildSaveChangesButton(group),
+                          ],
+                        ] else
+                          SizedBox(
+                            height: constraints.maxHeight * 0.56,
+                            child: _buildEmptyState(),
+                          ),
+                        const SizedBox(height: 8),
                       ],
-                    ] else
-                      SizedBox(
-                        height: constraints.maxHeight * 0.56,
-                        child: _buildEmptyState(),
-                      ),
-                    const SizedBox(height: 8),
-                  ],
-                ),
-              );
-            },
+                    ),
+                  );
+                },
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -345,9 +386,9 @@ class _LecturerAttendanceReportScreenState
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   minimumSize: const Size(0, 30),
                 ),
-                child: const Text(
-                  'إعادة ضبط',
-                  style: TextStyle(
+                child: Text(
+                  _tr('إعادة ضبط', 'Reset'),
+                  style: const TextStyle(
                     fontFamily: 'Cairo',
                     fontWeight: FontWeight.w700,
                     fontSize: 11.5,
@@ -360,14 +401,15 @@ class _LecturerAttendanceReportScreenState
             children: [
               Expanded(
                 child: _buildFilterSelector(
-                  label: 'المقرر',
-                  value: _selectedCourse,
+                  label: _tr('المقرر', 'Course'),
+                  value: _displayCourse(_selectedCourse),
                   icon: Icons.menu_book_rounded,
                   onTap: () async {
                     final selected = await _showFilterSheet(
-                      title: 'اختيار المقرر',
+                      title: _tr('اختيار المقرر', 'Select Course'),
                       options: _courseOptions,
                       current: _selectedCourse,
+                      displayLabel: _displayCourse,
                     );
                     if (selected != null) {
                       setState(() {
@@ -381,14 +423,15 @@ class _LecturerAttendanceReportScreenState
               const SizedBox(width: 8),
               Expanded(
                 child: _buildFilterSelector(
-                  label: 'اليوم',
-                  value: _selectedDay,
+                  label: _tr('اليوم', 'Day'),
+                  value: _displayDay(_selectedDay),
                   icon: Icons.calendar_today_rounded,
                   onTap: () async {
                     final selected = await _showFilterSheet(
-                      title: 'اختيار اليوم',
+                      title: _tr('اختيار اليوم', 'Select Day'),
                       options: _dayOptions,
                       current: _selectedDay,
+                      displayLabel: _displayDay,
                     );
                     if (selected != null) {
                       setState(() {
@@ -470,13 +513,14 @@ class _LecturerAttendanceReportScreenState
     required String title,
     required List<String> options,
     required String current,
+    String Function(String value)? displayLabel,
   }) {
     return showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
         return Directionality(
-          textDirection: TextDirection.rtl,
+          textDirection: LecturerLanguageController.direction(),
           child: Container(
             margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
@@ -524,6 +568,9 @@ class _LecturerAttendanceReportScreenState
                     itemBuilder: (context, index) {
                       final option = options[index];
                       final isSelected = option == current;
+                      final shown = displayLabel == null
+                          ? option
+                          : displayLabel(option);
                       return InkWell(
                         borderRadius: BorderRadius.circular(10),
                         onTap: () => Navigator.of(ctx).pop(option),
@@ -542,7 +589,7 @@ class _LecturerAttendanceReportScreenState
                             children: [
                               Expanded(
                                 child: Text(
-                                  option,
+                                  shown,
                                   style: TextStyle(
                                     fontFamily: 'Cairo',
                                     fontSize: 13,
@@ -622,7 +669,7 @@ class _LecturerAttendanceReportScreenState
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${_dayName(group.dayOfWeek)} • ${group.timeRange} • الشعبة ${group.section}',
+                  '${_dayName(group.dayOfWeek)} • ${group.timeRange} • ${_tr('الشعبة', 'Section')} ${group.section}',
                   style: const TextStyle(
                     fontFamily: 'Cairo',
                     color: Colors.white,
@@ -636,24 +683,28 @@ class _LecturerAttendanceReportScreenState
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
             child: Column(
               children: [
-                _summaryRow('عدد الطلاب', '${group.students.length}', _primary),
                 _summaryRow(
-                  'عدد الحضور',
+                  _tr('عدد الطلاب', 'Total Students'),
+                  '${group.students.length}',
+                  _primary,
+                ),
+                _summaryRow(
+                  _tr('عدد الحضور', 'Present Count'),
                   '${counts.present}',
                   const Color(0xFF2EAF5E),
                 ),
                 _summaryRow(
-                  'عدد الغياب',
+                  _tr('عدد الغياب', 'Absent Count'),
                   '${counts.absent}',
                   const Color(0xFFE65151),
                 ),
                 _summaryRow(
-                  'عدد المعذور',
+                  _tr('عدد المعذور', 'Excused Count'),
                   '${counts.excused}',
                   const Color(0xFFF0A825),
                 ),
                 _summaryRow(
-                  'عدد المتأخر',
+                  _tr('عدد المتأخر', 'Late Count'),
                   '${counts.late}',
                   const Color(0xFF4D8EDB),
                 ),
@@ -662,7 +713,7 @@ class _LecturerAttendanceReportScreenState
                   children: [
                     Expanded(
                       child: _modeButton(
-                        label: 'معاينة',
+                        label: _tr('معاينة', 'Preview'),
                         icon: Icons.remove_red_eye_rounded,
                         isActive: !_isEditMode,
                         onTap: () => _switchToViewMode(group),
@@ -671,7 +722,7 @@ class _LecturerAttendanceReportScreenState
                     const SizedBox(width: 8),
                     Expanded(
                       child: _modeButton(
-                        label: 'تعديل',
+                        label: _tr('تعديل', 'Edit'),
                         icon: Icons.edit_rounded,
                         isActive: _isEditMode,
                         onTap: () => _enterEditMode(group),
@@ -727,7 +778,7 @@ class _LecturerAttendanceReportScreenState
               ),
               const SizedBox(width: 8),
               Text(
-                'حفظ التغييرات',
+                _tr('حفظ التغييرات', 'Save Changes'),
                 style: TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 13,
@@ -891,9 +942,9 @@ class _LecturerAttendanceReportScreenState
                   topRight: Radius.circular(13),
                 ),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  SizedBox(
+                  const SizedBox(
                     width: 32,
                     child: Text(
                       '#',
@@ -903,16 +954,22 @@ class _LecturerAttendanceReportScreenState
                   ),
                   Expanded(
                     flex: 4,
-                    child: Text('اسم الطالب', style: _headerStyle),
+                    child: Text(
+                      _tr('اسم الطالب', 'Student Name'),
+                      style: _headerStyle,
+                    ),
                   ),
                   Expanded(
                     flex: 3,
-                    child: Text('الرقم الجامعي', style: _headerStyle),
+                    child: Text(
+                      _tr('الرقم الجامعي', 'Academic Number'),
+                      style: _headerStyle,
+                    ),
                   ),
                   SizedBox(
                     width: 54,
                     child: Text(
-                      'الوقت',
+                      _tr('الوقت', 'Time'),
                       textAlign: TextAlign.center,
                       style: _headerStyle,
                     ),
@@ -920,7 +977,7 @@ class _LecturerAttendanceReportScreenState
                   SizedBox(
                     width: 78,
                     child: Text(
-                      'الحالة',
+                      _tr('الحالة', 'Status'),
                       textAlign: TextAlign.center,
                       style: _headerStyle,
                     ),
@@ -930,10 +987,13 @@ class _LecturerAttendanceReportScreenState
             ),
             Expanded(
               child: _visibleStudents.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
-                        'لا يوجد طلاب في هذا الفلتر.',
-                        style: TextStyle(
+                        _tr(
+                          'لا يوجد طلاب في هذا الفلتر.',
+                          'No students in this filter.',
+                        ),
+                        style: const TextStyle(
                           fontFamily: 'Cairo',
                           color: Colors.black54,
                           fontWeight: FontWeight.w600,
@@ -1088,14 +1148,17 @@ class _LecturerAttendanceReportScreenState
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: const Color(0xFFDCE7E9)),
         ),
-        child: const Column(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.event_busy_rounded, color: _primary, size: 34),
-            SizedBox(height: 8),
+            const Icon(Icons.event_busy_rounded, color: _primary, size: 34),
+            const SizedBox(height: 8),
             Text(
-              'لا توجد بيانات حضور لهذا اليوم.',
-              style: TextStyle(
+              _tr(
+                'لا توجد بيانات حضور لهذا اليوم.',
+                'No attendance data for this day.',
+              ),
+              style: const TextStyle(
                 fontFamily: 'Cairo',
                 color: Color(0xFF4F6369),
                 fontWeight: FontWeight.w700,
@@ -1114,7 +1177,7 @@ class _LecturerAttendanceReportScreenState
       builder: (ctx) {
         final statuses = _AttendanceStatus.values;
         return Directionality(
-          textDirection: TextDirection.rtl,
+          textDirection: LecturerLanguageController.direction(),
           child: Container(
             margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
@@ -1133,9 +1196,9 @@ class _LecturerAttendanceReportScreenState
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'تعديل حالة الطالب',
-                  style: TextStyle(
+                Text(
+                  _tr('تعديل حالة الطالب', 'Edit student status'),
+                  style: const TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
@@ -1250,29 +1313,29 @@ class _LecturerAttendanceReportScreenState
   _StatusStyle _statusStyle(_AttendanceStatus status) {
     switch (status) {
       case _AttendanceStatus.present:
-        return const _StatusStyle(
-          label: 'حاضر',
+        return _StatusStyle(
+          label: _tr('حاضر', 'Present'),
           bg: Color(0xFFDFF4E5),
           fg: Color(0xFF2B9E56),
           color: Color(0xFF2B9E56),
         );
       case _AttendanceStatus.absent:
-        return const _StatusStyle(
-          label: 'غائب',
+        return _StatusStyle(
+          label: _tr('غائب', 'Absent'),
           bg: Color(0xFFFDE1E1),
           fg: Color(0xFFD14A4A),
           color: Color(0xFFD14A4A),
         );
       case _AttendanceStatus.excused:
-        return const _StatusStyle(
-          label: 'معذور',
+        return _StatusStyle(
+          label: _tr('معذور', 'Excused'),
           bg: Color(0xFFFFF3D6),
           fg: Color(0xFFC78A1E),
           color: Color(0xFFC78A1E),
         );
       case _AttendanceStatus.late:
-        return const _StatusStyle(
-          label: 'متأخر',
+        return _StatusStyle(
+          label: _tr('متأخر', 'Late'),
           bg: Color(0xFFE3EEFF),
           fg: Color(0xFF3E73C9),
           color: Color(0xFF3E73C9),
@@ -1283,8 +1346,8 @@ class _LecturerAttendanceReportScreenState
   _StatusStyle _filterStyle(_StatusFilter filter) {
     switch (filter) {
       case _StatusFilter.all:
-        return const _StatusStyle(
-          label: 'الكل',
+        return _StatusStyle(
+          label: _tr('الكل', 'All'),
           color: Color(0xFF6F7D82),
           bg: Color(0xFFECEFF0),
           fg: Color(0xFF6F7D82),
@@ -1318,24 +1381,7 @@ class _LecturerAttendanceReportScreenState
   }
 
   String _dayName(int weekday) {
-    switch (weekday) {
-      case 7:
-        return 'الأحد';
-      case 1:
-        return 'الاثنين';
-      case 2:
-        return 'الثلاثاء';
-      case 3:
-        return 'الأربعاء';
-      case 4:
-        return 'الخميس';
-      case 5:
-        return 'الجمعة';
-      case 6:
-        return 'السبت';
-      default:
-        return 'غير محدد';
-    }
+    return LecturerLanguageController.dayNameFromWeekday(weekday);
   }
 
   List<_LectureAttendanceGroup> _buildMockGroups(List<LectureItem> lectures) {

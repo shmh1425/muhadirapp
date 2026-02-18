@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../services/lecturer/lecture_repository.dart';
 import 'lecturer_home_screen.dart';
+import 'lecturer_language.dart';
 import 'lecturer_nav_bar.dart';
 import 'lecturer_profile_screen.dart';
 import 'lecturer_qr_screen.dart';
@@ -78,6 +79,16 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
     ..._dayOrder.map((day) => _DayTabItem(label: _dayName(day), weekday: day)),
   ];
 
+  String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
+
+  String _displayDayNameFromArabic(String day) {
+    return LecturerLanguageController.dayNameFromArabic(day);
+  }
+
+  String _displayDayName(int weekday) {
+    return _displayDayNameFromArabic(_dayName(weekday));
+  }
+
   Future<void> _goToProfile() async {
     await Navigator.pushReplacement(
       context,
@@ -96,43 +107,51 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF8FBFB),
-        bottomNavigationBar: LecturerNavBar(
-          selectedIndex: _selectedNavIndex,
-          onItemTapped: _onItemTapped,
-        ),
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Column(
-              children: [
-                const SizedBox(height: 6),
-                Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: ProfileBackButton(onTap: _goToProfile),
+    return ValueListenableBuilder<LecturerLanguage>(
+      valueListenable: LecturerLanguageController.notifier,
+      builder: (context, _, __) {
+        return Directionality(
+          textDirection: LecturerLanguageController.direction(),
+          child: Scaffold(
+            backgroundColor: const Color(0xFFF8FBFB),
+            bottomNavigationBar: LecturerNavBar(
+              selectedIndex: _selectedNavIndex,
+              onItemTapped: _onItemTapped,
+            ),
+            body: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
                 ),
-                const SizedBox(height: 10),
-                _buildTabsSection(),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: _selectedTab == 'الكل'
-                        ? _buildAllScheduleTable()
-                        : _buildSingleDayTable(
-                            _tabs.firstWhere(
-                              (tab) => tab.label == _selectedTab,
-                            ),
-                          ),
-                  ),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: ProfileBackButton(onTap: _goToProfile),
+                    ),
+                    const SizedBox(height: 10),
+                    _buildTabsSection(),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: _selectedTab == 'الكل'
+                            ? _buildAllScheduleTable()
+                            : _buildSingleDayTable(
+                                _tabs.firstWhere(
+                                  (tab) => tab.label == _selectedTab,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -180,7 +199,7 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
                   ),
                 ),
                 child: Text(
-                  tab.label,
+                  _displayDayNameFromArabic(tab.label),
                   style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 11,
@@ -219,10 +238,10 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               child: Row(
                 children: [
-                  const SizedBox(
+                  SizedBox(
                     width: 50,
                     child: Text(
-                      'الوقت',
+                      _tr('الوقت', 'Time'),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white,
@@ -235,7 +254,7 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
                   ..._dayOrder.map(
                     (day) => Expanded(
                       child: Text(
-                        _dayName(day),
+                        _displayDayName(day),
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: Colors.white,
@@ -327,7 +346,7 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
               color: _headerBg,
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
-                tab.label,
+                _displayDayNameFromArabic(tab.label),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: Colors.white,
@@ -445,7 +464,7 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: LecturerLanguageController.direction(),
         child: Container(
           margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -474,10 +493,10 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
               ),
               Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'تفاصيل المحاضرة',
-                      style: TextStyle(
+                      _tr('تفاصيل المحاضرة', 'Lecture Details'),
+                      style: const TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
@@ -492,14 +511,17 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
                 ],
               ),
               const SizedBox(height: 6),
-              _detailRow('المقرر', lecture.courseName),
+              _detailRow(_tr('المقرر', 'Course'), lecture.courseName),
               _detailRow('CRN', lecture.crn),
-              _detailRow('الشعبة', lecture.section),
-              _detailRow('القاعة', lecture.hall),
-              _detailRow('النوع', lecture.activity),
-              _detailRow('اليوم', _dayName(lecture.dayOfWeek)),
+              _detailRow(_tr('الشعبة', 'Section'), lecture.section),
+              _detailRow(_tr('القاعة', 'Hall'), lecture.hall),
+              _detailRow(_tr('النوع', 'Type'), lecture.activity),
               _detailRow(
-                'الوقت',
+                _tr('اليوم', 'Day'),
+                _displayDayName(lecture.dayOfWeek),
+              ),
+              _detailRow(
+                _tr('الوقت', 'Time'),
                 _displayHour(_normalizeHour(lecture.startTime)),
               ),
               const SizedBox(height: 14),
@@ -517,9 +539,9 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
                   ),
                   child: TextButton(
                     onPressed: () => Navigator.of(ctx).pop(),
-                    child: const Text(
-                      'إغلاق',
-                      style: TextStyle(
+                    child: Text(
+                      _tr('إغلاق', 'Close'),
+                      style: const TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 15,
                         fontWeight: FontWeight.w700,

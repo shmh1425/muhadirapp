@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'lecturer_nav_bar.dart';
 import 'lecturer_home_screen.dart';
+import 'lecturer_language.dart';
 import 'lecturer_qr_screen.dart';
 import 'lecturer_profile_screen.dart';
+import 'widgets/modern_popup_dialog.dart';
 import 'widgets/profile_back_button.dart';
 
 class LecturerNotificationsScreen extends StatefulWidget {
@@ -29,6 +31,8 @@ class _LecturerNotificationsScreenState
         .where((n) => n.categoryLabel == _selectedCategory)
         .toList();
   }
+
+  String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
   Future<void> _onItemTapped(int index) async {
     if (index == _selectedIndex) return;
@@ -123,31 +127,33 @@ class _LecturerNotificationsScreenState
       context: context,
       builder: (dialogContext) {
         return Directionality(
-          textDirection: TextDirection.rtl,
-          child: _ModernPopupDialog(
-            title: const Text(
-              'حذف الإشعار',
-              style: TextStyle(
+          textDirection: LecturerLanguageController.direction(),
+          child: ModernPopupDialog(
+            title: Text(
+              _tr('حذف الإشعار', 'Delete Notification'),
+              style: const TextStyle(
                 fontFamily: 'Cairo',
                 fontWeight: FontWeight.w800,
               ),
             ),
             accentColor: const Color(0xFFE53935),
             actions: [
-              _DialogActionButton(
-                label: 'إلغاء',
+              ModernPopupActionButton(
+                label: _tr('إلغاء', 'Cancel'),
                 onTap: () => Navigator.of(dialogContext).pop(),
                 isPrimary: false,
               ),
-              _DialogActionButton(
-                label: 'حذف',
+              ModernPopupActionButton(
+                label: _tr('حذف', 'Delete'),
                 onTap: () {
                   Navigator.of(dialogContext).pop();
                   _deleteNotification(notification);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('تم حذف الإشعار.'),
-                      duration: Duration(seconds: 2),
+                    SnackBar(
+                      content: Text(
+                        _tr('تم حذف الإشعار.', 'Notification deleted.'),
+                      ),
+                      duration: const Duration(seconds: 2),
                     ),
                   );
                 },
@@ -155,9 +161,12 @@ class _LecturerNotificationsScreenState
                 primaryColor: const Color(0xFFE53935),
               ),
             ],
-            child: const Text(
-              'هل أنت متأكد من حذف هذا الإشعار؟ لا يمكن التراجع بعد الحذف.',
-              style: TextStyle(
+            child: Text(
+              _tr(
+                'هل أنت متأكد من حذف هذا الإشعار؟ لا يمكن التراجع بعد الحذف.',
+                'Are you sure you want to delete this notification? This action cannot be undone.',
+              ),
+              style: const TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 13,
                 color: Colors.black87,
@@ -172,78 +181,89 @@ class _LecturerNotificationsScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF8FBFB),
-        bottomNavigationBar: LecturerNavBar(
-          selectedIndex: _selectedIndex,
-          onItemTapped: _onItemTapped,
-        ),
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Column(
-              children: [
-                const SizedBox(height: 6),
-                Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: ProfileBackButton(onTap: _goToProfile),
+    return ValueListenableBuilder<LecturerLanguage>(
+      valueListenable: LecturerLanguageController.notifier,
+      builder: (context, _, __) {
+        return Directionality(
+          textDirection: LecturerLanguageController.direction(),
+          child: Scaffold(
+            backgroundColor: const Color(0xFFF8FBFB),
+            bottomNavigationBar: LecturerNavBar(
+              selectedIndex: _selectedIndex,
+              onItemTapped: _onItemTapped,
+            ),
+            body: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
                 ),
-                const SizedBox(height: 10),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFD6E6E8)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: _CategoryTabs(
-                    selected: _selectedCategory,
-                    onChanged: _changeCategory,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Expanded(
-                  child: _filteredNotifications.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'لا توجد تنبيهات حالياً',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.black54,
-                              fontFamily: 'Cairo',
-                            ),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: ProfileBackButton(onTap: _goToProfile),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFD6E6E8)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
                           ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          itemCount: _filteredNotifications.length,
-                          itemBuilder: (context, index) {
-                            final item = _filteredNotifications[index];
-                            return GestureDetector(
-                              onTap: () => _openDetails(item),
-                              child: _NotificationCard(
-                                item: item,
-                                onDelete: () => _confirmDelete(item),
+                        ],
+                      ),
+                      child: _CategoryTabs(
+                        selected: _selectedCategory,
+                        onChanged: _changeCategory,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: _filteredNotifications.isEmpty
+                          ? Center(
+                              child: Text(
+                                _tr(
+                                  'لا توجد تنبيهات حالياً',
+                                  'No notifications available',
+                                ),
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.black54,
+                                  fontFamily: 'Cairo',
+                                ),
                               ),
-                            );
-                          },
-                        ),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              itemCount: _filteredNotifications.length,
+                              itemBuilder: (context, index) {
+                                final item = _filteredNotifications[index];
+                                return GestureDetector(
+                                  onTap: () => _openDetails(item),
+                                  child: _NotificationCard(
+                                    item: item,
+                                    onDelete: () => _confirmDelete(item),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -257,6 +277,20 @@ class _CategoryTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final labels = ['الكل', 'أكاديمي', 'شخصي', 'الطلاب'];
+    String displayLabel(String label) {
+      switch (label) {
+        case 'الكل':
+          return LecturerLanguageController.tr('الكل', 'All');
+        case 'أكاديمي':
+          return LecturerLanguageController.tr('أكاديمي', 'Academic');
+        case 'شخصي':
+          return LecturerLanguageController.tr('شخصي', 'Personal');
+        case 'الطلاب':
+          return LecturerLanguageController.tr('الطلاب', 'Students');
+        default:
+          return label;
+      }
+    }
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -287,7 +321,7 @@ class _CategoryTabs extends StatelessWidget {
                   ),
                 ),
                 child: Text(
-                  label,
+                  displayLabel(label),
                   style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 12,
@@ -409,6 +443,20 @@ class _NotificationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = _styles[item.type]!;
+    String tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
+    String localizedCategory(String label) {
+      switch (label) {
+        case 'أكاديمي':
+          return tr('أكاديمي', 'Academic');
+        case 'شخصي':
+          return tr('شخصي', 'Personal');
+        case 'الطلاب':
+          return tr('الطلاب', 'Students');
+        default:
+          return label;
+      }
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
@@ -457,7 +505,7 @@ class _NotificationCard extends StatelessWidget {
                   Icons.delete_outline_rounded,
                   color: Color(0xFFE53935),
                 ),
-                tooltip: 'حذف الإشعار',
+                tooltip: tr('حذف الإشعار', 'Delete notification'),
               ),
             ],
           ),
@@ -465,13 +513,15 @@ class _NotificationCard extends StatelessWidget {
           Row(
             children: [
               _metaChip(
-                item.categoryLabel,
+                localizedCategory(item.categoryLabel),
                 const Color(0xFFEAF6F7),
                 const Color(0xFF006571),
               ),
               const SizedBox(width: 6),
               _metaChip(
-                item.isExcuseRequest ? 'طلب عذر' : _typeLabel(item.type),
+                item.isExcuseRequest
+                    ? tr('طلب عذر', 'Excuse request')
+                    : _typeLabel(item.type),
                 style.soft,
                 style.accent,
               ),
@@ -540,15 +590,16 @@ class _NotificationCard extends StatelessWidget {
   }
 
   String _typeLabel(_NotificationType type) {
+    String tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
     switch (type) {
       case _NotificationType.success:
-        return 'نجاح';
+        return tr('نجاح', 'Success');
       case _NotificationType.error:
-        return 'تنبيه';
+        return tr('تنبيه', 'Alert');
       case _NotificationType.warning:
-        return 'تحذير';
+        return tr('تحذير', 'Warning');
       case _NotificationType.info:
-        return 'معلومة';
+        return tr('معلومة', 'Info');
     }
   }
 }
@@ -563,124 +614,136 @@ class _LecturerNotificationDetailsScreen extends StatelessWidget {
     const primaryColor = Color(0xFF006571);
     final bool canApproveOrReject = notification.isExcuseRequest;
     final excuseDetails = notification.excuseDetails;
+    String tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(
+    return ValueListenableBuilder<LecturerLanguage>(
+      valueListenable: LecturerLanguageController.notifier,
+      builder: (context, _, __) => Directionality(
+        textDirection: LecturerLanguageController.direction(),
+        child: Scaffold(
           backgroundColor: Colors.white,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.close, color: primaryColor),
-            onPressed: () => Navigator.pop(context),
-          ),
-          centerTitle: true,
-          title: const Text(
-            'تفاصيل الاشعار',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: primaryColor,
-              fontFamily: 'Cairo',
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.close, color: primaryColor),
+              onPressed: () => Navigator.pop(context),
             ),
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(
-                Icons.delete_outline_rounded,
-                color: Color(0xFFE53935),
+            centerTitle: true,
+            title: Text(
+              tr('تفاصيل الاشعار', 'Notification Details'),
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: primaryColor,
+                fontFamily: 'Cairo',
               ),
-              tooltip: 'حذف الإشعار',
-              onPressed: () => _showDeleteDialog(context),
             ),
-          ],
-        ),
-        body: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 8),
-              Text(
-                notification.title,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.black87,
-                  fontFamily: 'Cairo',
+            actions: [
+              IconButton(
+                icon: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Color(0xFFE53935),
                 ),
+                tooltip: tr('حذف الإشعار', 'Delete notification'),
+                onPressed: () => _showDeleteDialog(context),
               ),
-              const SizedBox(height: 12),
-              Text(
-                notification.message,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Colors.black87,
-                  height: 1.5,
-                  fontFamily: 'Cairo',
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                notification.date,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.black54,
-                  fontFamily: 'Cairo',
-                ),
-              ),
-              if (excuseDetails != null) ...[
-                const SizedBox(height: 16),
-                _ExcusePreviewCard(
-                  details: excuseDetails,
-                  onPreviewAttachment: () =>
-                      _showAttachmentPreviewDialog(context, excuseDetails),
-                ),
-              ],
-              const Spacer(),
-              if (canApproveOrReject)
-                SizedBox(
-                  height: 48,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _GradientButton(
-                          label: 'قبول',
-                          colors: const [Color(0xFF27A2A9), Color(0xFF006571)],
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('تم قبول الطلب.'),
-                                duration: Duration(seconds: 2),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _GradientButton(
-                          label: 'رفض',
-                          colors: const [Color(0xFFE53935), Color(0xFFC62828)],
-                          onPressed: () {
-                            _showRejectDialog(context);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                SizedBox(
-                  height: 48,
-                  child: _GradientButton(
-                    label: 'إغلاق',
-                    colors: const [Color(0xFF27A2A9), Color(0xFF006571)],
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ),
             ],
+          ),
+          body: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 8),
+                Text(
+                  notification.title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black87,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  notification.message,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Colors.black87,
+                    height: 1.5,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  notification.date,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.black54,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+                if (excuseDetails != null) ...[
+                  const SizedBox(height: 16),
+                  _ExcusePreviewCard(
+                    details: excuseDetails,
+                    onPreviewAttachment: () =>
+                        _showAttachmentPreviewDialog(context, excuseDetails),
+                  ),
+                ],
+                const Spacer(),
+                if (canApproveOrReject)
+                  SizedBox(
+                    height: 48,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _GradientButton(
+                            label: tr('قبول', 'Approve'),
+                            colors: const [
+                              Color(0xFF27A2A9),
+                              Color(0xFF006571),
+                            ],
+                            onPressed: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    tr('تم قبول الطلب.', 'Request approved.'),
+                                  ),
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _GradientButton(
+                            label: tr('رفض', 'Reject'),
+                            colors: const [
+                              Color(0xFFE53935),
+                              Color(0xFFC62828),
+                            ],
+                            onPressed: () {
+                              _showRejectDialog(context);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  SizedBox(
+                    height: 48,
+                    child: _GradientButton(
+                      label: tr('إغلاق', 'Close'),
+                      colors: const [Color(0xFF27A2A9), Color(0xFF006571)],
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -688,28 +751,29 @@ class _LecturerNotificationDetailsScreen extends StatelessWidget {
   }
 
   void _showDeleteDialog(BuildContext context) {
+    String tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
     showDialog<void>(
       context: context,
       builder: (ctx) {
         return Directionality(
-          textDirection: TextDirection.rtl,
-          child: _ModernPopupDialog(
-            title: const Text(
-              'حذف الإشعار',
-              style: TextStyle(
+          textDirection: LecturerLanguageController.direction(),
+          child: ModernPopupDialog(
+            title: Text(
+              tr('حذف الإشعار', 'Delete notification'),
+              style: const TextStyle(
                 fontFamily: 'Cairo',
                 fontWeight: FontWeight.w800,
               ),
             ),
             accentColor: const Color(0xFFE53935),
             actions: [
-              _DialogActionButton(
-                label: 'إلغاء',
+              ModernPopupActionButton(
+                label: tr('إلغاء', 'Cancel'),
                 onTap: () => Navigator.of(ctx).pop(),
                 isPrimary: false,
               ),
-              _DialogActionButton(
-                label: 'حذف',
+              ModernPopupActionButton(
+                label: tr('حذف', 'Delete'),
                 onTap: () {
                   Navigator.of(ctx).pop();
                   Navigator.of(context).pop(true);
@@ -718,9 +782,12 @@ class _LecturerNotificationDetailsScreen extends StatelessWidget {
                 primaryColor: const Color(0xFFE53935),
               ),
             ],
-            child: const Text(
-              'سيتم حذف الإشعار بشكل نهائي.',
-              style: TextStyle(
+            child: Text(
+              tr(
+                'سيتم حذف الإشعار بشكل نهائي.',
+                'This notification will be permanently deleted.',
+              ),
+              style: const TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 13,
                 color: Colors.black87,
@@ -733,37 +800,41 @@ class _LecturerNotificationDetailsScreen extends StatelessWidget {
   }
 
   void _showRejectDialog(BuildContext context) {
+    String tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
     showDialog<void>(
       context: context,
       builder: (ctx) {
         String reason = '';
         return Directionality(
-          textDirection: TextDirection.rtl,
-          child: _ModernPopupDialog(
-            title: const Text(
-              'سبب الرفض',
-              style: TextStyle(
+          textDirection: LecturerLanguageController.direction(),
+          child: ModernPopupDialog(
+            title: Text(
+              tr('سبب الرفض', 'Reject reason'),
+              style: const TextStyle(
                 fontFamily: 'Cairo',
                 fontWeight: FontWeight.w800,
               ),
             ),
             accentColor: const Color(0xFFE53935),
             actions: [
-              _DialogActionButton(
-                label: 'إلغاء',
+              ModernPopupActionButton(
+                label: tr('إلغاء', 'Cancel'),
                 onTap: () => Navigator.of(ctx).pop(),
                 isPrimary: false,
               ),
-              _DialogActionButton(
-                label: 'تأكيد',
+              ModernPopupActionButton(
+                label: tr('تأكيد', 'Confirm'),
                 onTap: () {
                   Navigator.of(ctx).pop();
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
                         reason.isEmpty
-                            ? 'تم رفض الطلب بدون سبب محدد.'
-                            : 'تم رفض الطلب مع سبب: $reason',
+                            ? tr(
+                                'تم رفض الطلب بدون سبب محدد.',
+                                'Request rejected without a specified reason.',
+                              )
+                            : '${tr('تم رفض الطلب مع سبب', 'Request rejected with reason')}: $reason',
                       ),
                       duration: const Duration(seconds: 2),
                     ),
@@ -777,16 +848,22 @@ class _LecturerNotificationDetailsScreen extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'اكتب سبب رفضك للعذر، سيصل للطالب مع حالة الطلب.',
-                  style: TextStyle(fontSize: 13, fontFamily: 'Cairo'),
+                Text(
+                  tr(
+                    'اكتب سبب رفضك للعذر، سيصل للطالب مع حالة الطلب.',
+                    'Write the reason for rejection. It will be sent to the student.',
+                  ),
+                  style: const TextStyle(fontSize: 13, fontFamily: 'Cairo'),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   maxLines: 3,
                   onChanged: (value) => reason = value,
                   decoration: InputDecoration(
-                    hintText: 'اكتب السبب هنا...',
+                    hintText: tr(
+                      'اكتب السبب هنا...',
+                      'Write the reason here...',
+                    ),
                     hintStyle: const TextStyle(
                       fontFamily: 'Cairo',
                       fontSize: 13,
@@ -812,30 +889,31 @@ class _LecturerNotificationDetailsScreen extends StatelessWidget {
     BuildContext context,
     _StudentExcuseDetails details,
   ) {
+    String tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
     showDialog<void>(
       context: context,
       builder: (ctx) {
         return Directionality(
-          textDirection: TextDirection.rtl,
-          child: _ModernPopupDialog(
-            title: const Text(
-              'معاينة مرفق العذر',
-              style: TextStyle(
+          textDirection: LecturerLanguageController.direction(),
+          child: ModernPopupDialog(
+            title: Text(
+              tr('معاينة مرفق العذر', 'Excuse Attachment Preview'),
+              style: const TextStyle(
                 fontFamily: 'Cairo',
                 fontWeight: FontWeight.w800,
               ),
             ),
             accentColor: const Color(0xFF006571),
             actions: [
-              _DialogActionButton(
-                label: 'إغلاق',
+              ModernPopupActionButton(
+                label: tr('إغلاق', 'Close'),
                 onTap: () => Navigator.of(ctx).pop(),
                 isPrimary: true,
                 primaryColor: const Color(0xFF006571),
               ),
             ],
             child: Text(
-              'اسم المرفق: ${details.attachmentName}\n\nمكان عرض ملف العذر الفعلي (PDF/صورة) يكون هنا.',
+              '${tr('اسم المرفق', 'Attachment name')}: ${details.attachmentName}\n\n${tr('هنا يتم عرض ملف العذر الفعلي (PDF/صورة).', 'The actual excuse file preview (PDF/Image) will appear here.')}',
               style: const TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 13,
@@ -861,6 +939,7 @@ class _ExcusePreviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    String tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
@@ -872,17 +951,23 @@ class _ExcusePreviewCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _previewRow('تاريخ الاستلام', details.submissionDate),
-          _previewRow('التوقيت', details.submissionTime),
+          _previewRow(
+            tr('تاريخ الاستلام', 'Submission date'),
+            details.submissionDate,
+          ),
+          _previewRow(tr('التوقيت', 'Time'), details.submissionTime),
           const SizedBox(height: 8),
-          _previewRow('عذر الطالب', details.studentName),
-          _previewRow('رقمه الجامعي', details.academicNumber),
+          _previewRow(tr('اسم الطالب', 'Student name'), details.studentName),
+          _previewRow(
+            tr('رقمه الجامعي', 'Academic number'),
+            details.academicNumber,
+          ),
           const SizedBox(height: 8),
           const Divider(color: Color(0xFFCECECE)),
           const SizedBox(height: 4),
-          const Text(
-            'تفاصيل العذر المرسل',
-            style: TextStyle(
+          Text(
+            tr('تفاصيل العذر المرسل', 'Excuse details'),
+            style: const TextStyle(
               fontFamily: 'Cairo',
               fontSize: 13,
               color: Colors.black87,
@@ -908,9 +993,9 @@ class _ExcusePreviewCard extends StatelessWidget {
                 Icons.attachment_rounded,
                 color: Color(0xFF006571),
               ),
-              label: const Text(
-                'معاينة مرفق العذر',
-                style: TextStyle(
+              label: Text(
+                tr('معاينة مرفق العذر', 'Preview attachment'),
+                style: const TextStyle(
                   fontFamily: 'Cairo',
                   color: Color(0xFF006571),
                   fontWeight: FontWeight.w700,
@@ -941,117 +1026,6 @@ class _ExcusePreviewCard extends StatelessWidget {
           fontWeight: FontWeight.w600,
         ),
       ),
-    );
-  }
-}
-
-class _ModernPopupDialog extends StatelessWidget {
-  const _ModernPopupDialog({
-    required this.title,
-    required this.child,
-    required this.actions,
-    required this.accentColor,
-  });
-
-  final Widget title;
-  final Widget child;
-  final List<Widget> actions;
-  final Color accentColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: accentColor.withValues(alpha: 0.35)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 44,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFD8D8D8),
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            title,
-            const SizedBox(height: 12),
-            child,
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                for (int i = 0; i < actions.length; i++) ...[
-                  Expanded(child: actions[i]),
-                  if (i != actions.length - 1) const SizedBox(width: 8),
-                ],
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DialogActionButton extends StatelessWidget {
-  const _DialogActionButton({
-    required this.label,
-    required this.onTap,
-    required this.isPrimary,
-    this.primaryColor = const Color(0xFF006571),
-  });
-
-  final String label;
-  final VoidCallback onTap;
-  final bool isPrimary;
-  final Color primaryColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final button = Container(
-      height: 42,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: isPrimary ? null : const Color(0xFFF2F2F2),
-        gradient: isPrimary
-            ? LinearGradient(
-                colors: [primaryColor.withValues(alpha: 0.8), primaryColor],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              )
-            : null,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontFamily: 'Cairo',
-          fontWeight: FontWeight.w700,
-          color: isPrimary ? Colors.white : const Color(0xFF444444),
-        ),
-      ),
-    );
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: onTap,
-      child: button,
     );
   }
 }

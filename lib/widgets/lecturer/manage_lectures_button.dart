@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../screens/lecturer/lecturer_language.dart';
 
 /// Button لإدارة المحاضرات
 class ManageLecturesButton extends StatelessWidget {
@@ -16,9 +17,14 @@ class ManageLecturesButton extends StatelessWidget {
           () {
             // Placeholder - يمكن ربطه بشاشة إدارة المحاضرات لاحقاً
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('شاشة إدارة المحاضرات - قيد التطوير'),
-                duration: Duration(seconds: 2),
+              SnackBar(
+                content: Text(
+                  LecturerLanguageController.tr(
+                    'شاشة إدارة المحاضرات - قيد التطوير',
+                    'Manage lectures screen is under development',
+                  ),
+                ),
+                duration: const Duration(seconds: 2),
               ),
             );
           },
@@ -49,9 +55,9 @@ class ManageLecturesButton extends StatelessWidget {
               size: 20,
             ),
             const SizedBox(width: 8),
-            const Text(
-              'ادارة المحاضرات',
-              style: TextStyle(
+            Text(
+              LecturerLanguageController.tr('ادارة المحاضرات', 'Manage Lectures'),
+              style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
                 color: Colors.white,
@@ -64,4 +70,3 @@ class ManageLecturesButton extends StatelessWidget {
     );
   }
 }
-

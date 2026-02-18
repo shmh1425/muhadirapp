@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'lecturer_nav_bar.dart';
 import '../student/components/notification_bell.dart';
 import '../student/notifications_screen.dart';
+import 'lecturer_language.dart';
 import 'lecturer_qr_screen.dart';
 import 'lecturer_profile_screen.dart';
 import '../../widgets/monthly_calendar.dart';
@@ -40,9 +41,7 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
   void initState() {
     super.initState();
     _calendarService = CalendarService(_repository);
-    _dayTapHandler = DayTapHandler(
-      repository: _repository,
-    );
+    _dayTapHandler = DayTapHandler(repository: _repository);
     _allLectures = _repository.getAllLectures();
   }
 
@@ -109,94 +108,111 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
     });
   }
 
+  String _sectionTitle(String filter) {
+    switch (filter) {
+      case 'غدًا':
+        return LecturerLanguageController.tr(
+          'محاضرات الغد',
+          "Tomorrow's Lectures",
+        );
+      case 'الكل':
+        return LecturerLanguageController.tr('جميع المحاضرات', 'All Lectures');
+      default:
+        return LecturerLanguageController.tr(
+          "محاضرات اليوم",
+          "Today's Lectures",
+        );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        bottomNavigationBar: LecturerNavBar(
-          selectedIndex: selectedIndex,
-          onItemTapped: _onItemTapped,
-        ),
-        body: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            children: [
-              // Header with greeting and notification
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return ValueListenableBuilder<LecturerLanguage>(
+      valueListenable: LecturerLanguageController.notifier,
+      builder: (context, _, __) {
+        return Directionality(
+          textDirection: LecturerLanguageController.direction(),
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            bottomNavigationBar: LecturerNavBar(
+              selectedIndex: selectedIndex,
+              onItemTapped: _onItemTapped,
+            ),
+            body: SafeArea(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 20,
+                ),
                 children: [
-                  Expanded(
-                    child: LecturerHomeHeader(selectedFilter: _selectedFilter),
-                  ),
-                  NotificationBell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const NotificationsScreen(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: LecturerHomeHeader(
+                          selectedFilter: _selectedFilter,
                         ),
-                      );
-                    },
+                      ),
+                      NotificationBell(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const NotificationsScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 28),
+                  LecturerFilterButtons(
+                    selectedFilter: _selectedFilter,
+                    onFilterChanged: _handleFilterChanged,
+                  ),
+                  const SizedBox(height: 16),
+                  if (_selectedFilter != 'الكل') ...[
+                    const ManageLecturesButton(),
+                    const SizedBox(height: 28),
+                  ] else
+                    const SizedBox(height: 16),
+                  if (_selectedFilter == 'الكل') ...[
+                    MonthlyCalendar(
+                      currentMonth: _currentCalendarMonth,
+                      calendarDays: _calendarService.buildCalendarDays(
+                        _currentCalendarMonth,
+                        _allLectures,
+                      ),
+                      onDayTap: _handleDayTap,
+                      onMonthChanged: _handleMonthChanged,
+                    ),
+                  ] else ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Text(
+                        _sectionTitle(_selectedFilter),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF222222),
+                          fontFamily: 'Cairo',
+                        ),
+                      ),
+                    ),
+                    LectureTimeline(
+                      lectures: FilterService.filterLectures(
+                        _allLectures,
+                        _selectedFilter,
+                      ),
+                    ),
+                  ],
                 ],
               ),
-              const SizedBox(height: 28),
-
-              // Filter buttons
-              LecturerFilterButtons(
-                selectedFilter: _selectedFilter,
-                onFilterChanged: _handleFilterChanged,
-              ),
-              const SizedBox(height: 16),
-
-              // Manage Lectures button (يظهر فقط عند اختيار اليوم أو غداً)
-              if (_selectedFilter != 'الكل') ...[
-                const ManageLecturesButton(),
-                const SizedBox(height: 28),
-              ] else
-                const SizedBox(height: 16),
-
-              // عرض التقويم أو Timeline حسب الفلتر
-              if (_selectedFilter == 'الكل') ...[
-                // التقويم الشهري
-                MonthlyCalendar(
-                  currentMonth: _currentCalendarMonth,
-                  calendarDays: _calendarService.buildCalendarDays(
-                    _currentCalendarMonth,
-                    _allLectures,
-                  ),
-                  onDayTap: _handleDayTap,
-                  onMonthChanged: _handleMonthChanged,
-                ),
-              ] else ...[
-                // Section title
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Text(
-                    FilterService.getSectionTitle(_selectedFilter),
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF222222),
-                      fontFamily: 'Cairo',
-                    ),
-                  ),
-                ),
-                // Timeline with lectures
-                LectureTimeline(
-                  lectures: FilterService.filterLectures(
-                    _allLectures,
-                    _selectedFilter,
-                  ),
-                ),
-              ],
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
