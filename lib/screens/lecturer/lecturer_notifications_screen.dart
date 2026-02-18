@@ -4,6 +4,7 @@ import 'lecturer_nav_bar.dart';
 import 'lecturer_home_screen.dart';
 import 'lecturer_qr_screen.dart';
 import 'lecturer_profile_screen.dart';
+import 'widgets/profile_back_button.dart';
 
 class LecturerNotificationsScreen extends StatefulWidget {
   const LecturerNotificationsScreen({super.key});
@@ -81,6 +82,22 @@ class _LecturerNotificationsScreenState
     });
   }
 
+  Future<void> _goToProfile() async {
+    await Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const LecturerProfileScreen(
+          lecturer: LecturerProfile(
+            name: 'أنـاس بوقس',
+            email: 'username@example.com',
+            college: 'كلية الحاسبات',
+            department: 'هندسة البرمجيات',
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _openDetails(_LecturerNotification notification) async {
     final bool? deleted = await Navigator.push<bool>(
       context,
@@ -155,79 +172,75 @@ class _LecturerNotificationsScreenState
 
   @override
   Widget build(BuildContext context) {
-    const primaryColor = Color(0xFF006571);
-
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFFF8FBFB),
         bottomNavigationBar: LecturerNavBar(
           selectedIndex: _selectedIndex,
           onItemTapped: _onItemTapped,
         ),
         body: SafeArea(
-          child: Column(
-            children: [
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: const [
-                    SizedBox(width: 28),
-                    Expanded(
-                      child: Text(
-                        'التنبيهات',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: primaryColor,
-                          fontFamily: 'Cairo',
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 28),
-                  ],
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              children: [
+                const SizedBox(height: 6),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: ProfileBackButton(onTap: _goToProfile),
                 ),
-              ),
-              const SizedBox(height: 16),
-              _CategoryTabs(
-                selected: _selectedCategory,
-                onChanged: _changeCategory,
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: _filteredNotifications.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'لا توجد تنبيهات حالياً',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.black54,
-                            fontFamily: 'Cairo',
-                          ),
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 8,
-                        ),
-                        itemCount: _filteredNotifications.length,
-                        itemBuilder: (context, index) {
-                          final item = _filteredNotifications[index];
-                          return GestureDetector(
-                            onTap: () => _openDetails(item),
-                            child: _NotificationCard(
-                              item: item,
-                              onDelete: () => _confirmDelete(item),
-                            ),
-                          );
-                        },
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFD6E6E8)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
                       ),
-              ),
-            ],
+                    ],
+                  ),
+                  child: _CategoryTabs(
+                    selected: _selectedCategory,
+                    onChanged: _changeCategory,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: _filteredNotifications.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'لا توجد تنبيهات حالياً',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.black54,
+                              fontFamily: 'Cairo',
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          itemCount: _filteredNotifications.length,
+                          itemBuilder: (context, index) {
+                            final item = _filteredNotifications[index];
+                            return GestureDetector(
+                              onTap: () => _openDetails(item),
+                              child: _NotificationCard(
+                                item: item,
+                                onDelete: () => _confirmDelete(item),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -247,32 +260,40 @@ class _CategoryTabs extends StatelessWidget {
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      physics: const BouncingScrollPhysics(),
       child: Row(
         children: labels.map((label) {
           final bool isActive = label == selected;
           return Padding(
-            padding: const EdgeInsets.only(left: 8),
-            child: ChoiceChip(
-              label: Text(
-                label,
-                style: TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : const Color(0xFF006571),
+            padding: const EdgeInsets.only(left: 6),
+            child: GestureDetector(
+              onTap: () => onChanged(label),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 170),
+                curve: Curves.easeOut,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 7,
                 ),
-              ),
-              selected: isActive,
-              onSelected: (_) => onChanged(label),
-              backgroundColor: const Color(0xFFE3F2F3),
-              selectedColor: const Color(0xFF006571),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-                side: BorderSide(
+                decoration: BoxDecoration(
                   color: isActive
                       ? const Color(0xFF006571)
-                      : const Color(0xFFE0E0E0),
+                      : const Color(0xFFF2F6F7),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isActive
+                        ? const Color(0xFF006571)
+                        : const Color(0xFFD9E5E7),
+                  ),
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: isActive ? Colors.white : const Color(0xFF425C62),
+                  ),
                 ),
               ),
             ),

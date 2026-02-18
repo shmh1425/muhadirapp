@@ -6,6 +6,7 @@ import 'lecturer_home_screen.dart';
 import 'lecturer_nav_bar.dart';
 import 'lecturer_profile_screen.dart';
 import 'lecturer_qr_screen.dart';
+import 'widgets/profile_back_button.dart';
 
 class LecturerMyLecturesScreen extends StatefulWidget {
   const LecturerMyLecturesScreen({super.key});
@@ -77,12 +78,28 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
     ..._dayOrder.map((day) => _DayTabItem(label: _dayName(day), weekday: day)),
   ];
 
+  Future<void> _goToProfile() async {
+    await Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const LecturerProfileScreen(
+          lecturer: LecturerProfile(
+            name: 'أنـاس بوقس',
+            email: 'username@example.com',
+            college: 'كلية الحاسبات',
+            department: 'هندسة البرمجيات',
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFFF8FBFB),
         bottomNavigationBar: LecturerNavBar(
           selectedIndex: _selectedNavIndex,
           onItemTapped: _onItemTapped,
@@ -92,10 +109,14 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Column(
               children: [
-                _buildTopHeader(),
-                const SizedBox(height: 12),
-                _buildTabs(),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: ProfileBackButton(onTap: _goToProfile),
+                ),
                 const SizedBox(height: 10),
+                _buildTabsSection(),
+                const SizedBox(height: 12),
                 Expanded(
                   child: SingleChildScrollView(
                     child: _selectedTab == 'الكل'
@@ -115,37 +136,30 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
     );
   }
 
-  Widget _buildTopHeader() {
-    return Row(
-      children: [
-        IconButton(
-          onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: _primaryColor,
-            size: 20,
+  Widget _buildTabsSection() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFD6E6E8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
-        ),
-        const Expanded(
-          child: Text(
-            'محاضراتي',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: 'Cairo',
-              fontSize: 28,
-              fontWeight: FontWeight.w800,
-              color: _primaryColor,
-            ),
-          ),
-        ),
-        const SizedBox(width: 42),
-      ],
+        ],
+      ),
+      child: _buildTabs(),
     );
   }
 
   Widget _buildTabs() {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
       child: Row(
         children: _tabs.map((tab) {
           final bool isActive = _selectedTab == tab.label;
@@ -185,8 +199,16 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
   Widget _buildAllScheduleTable() {
     return Container(
       decoration: BoxDecoration(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFBDBDBD)),
+        border: Border.all(color: const Color(0xFFD6E5E8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
@@ -285,8 +307,16 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
 
     return Container(
       decoration: BoxDecoration(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFBDBDBD)),
+        border: Border.all(color: const Color(0xFFD6E5E8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),

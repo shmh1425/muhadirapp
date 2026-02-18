@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import 'lecturer_attendance_report_screen.dart';
 import 'lecturer_my_lectures_screen.dart';
 import 'lecturer_nav_bar.dart';
 import 'lecturer_notifications_screen.dart';
@@ -103,10 +104,11 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
                         icon: Icons.insert_chart_outlined_rounded,
                         label: 'تقرير الحضور',
                         onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('تقرير الحضور - لاحقاً'),
-                              duration: Duration(seconds: 2),
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  const LecturerAttendanceReportScreen(),
                             ),
                           );
                         },
