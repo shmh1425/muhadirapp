@@ -52,7 +52,7 @@ class MonthlyCalendar extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // سهم الشهر السابق (يمين في RTL = الشهر السابق)
+        // سهم الشهر السابق: ← (الماضي)
         IconButton(
           onPressed: () {
             final prevMonth = DateTime(
@@ -62,7 +62,7 @@ class MonthlyCalendar extends StatelessWidget {
             );
             onMonthChanged(prevMonth);
           },
-          icon: const Icon(Icons.chevron_right),
+          icon: const Icon(Icons.chevron_left),
           style: IconButton.styleFrom(
             backgroundColor: const Color(0xFFF5F5F5),
             shape: RoundedRectangleBorder(
@@ -93,7 +93,7 @@ class MonthlyCalendar extends StatelessWidget {
             ),
           ],
         ),
-        // سهم الشهر التالي (يسار في RTL = الشهر التالي)
+        // سهم الشهر التالي: → (المستقبل)
         IconButton(
           onPressed: () {
             final nextMonth = DateTime(
@@ -103,7 +103,7 @@ class MonthlyCalendar extends StatelessWidget {
             );
             onMonthChanged(nextMonth);
           },
-          icon: const Icon(Icons.chevron_left),
+          icon: const Icon(Icons.chevron_right),
           style: IconButton.styleFrom(
             backgroundColor: const Color(0xFFF5F5F5),
             shape: RoundedRectangleBorder(

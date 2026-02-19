@@ -6,6 +6,7 @@ import '../welcome_screen.dart';
 import 'lecturer_attendance_report_screen.dart';
 import 'lecturer_language.dart';
 import 'lecturer_my_lectures_screen.dart';
+import 'lecturer_navigation.dart';
 import 'lecturer_nav_bar.dart';
 import 'lecturer_notifications_screen.dart';
 import 'widgets/modern_popup_dialog.dart';
@@ -254,19 +255,8 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
                           _ProfileActionButton(
                             icon: Icons.settings_outlined,
                             label: _tr('إدارة المحاضرات', 'Manage Lectures'),
-                            onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    _tr(
-                                      'إدارة المحاضرات - لاحقاً',
-                                      'Manage Lectures - Coming soon',
-                                    ),
-                                  ),
-                                  duration: const Duration(seconds: 2),
-                                ),
-                              );
-                            },
+                            onTap: () =>
+                                LecturerNavigation.goToManageLectures(context),
                           ),
                           const SizedBox(height: 10),
                           _ProfileActionButton(

@@ -98,6 +98,15 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
     });
   }
 
+  /// محاضرات المعروضة حسب الفلتر: اليوم / غداً (لو الغد إجازة = قائمة فارغة)
+  List<LectureItem> _getLecturesForDisplay() {
+    if (_selectedFilter == 'غدًا') {
+      final tomorrow = DateTime.now().add(const Duration(days: 1));
+      if (_repository.isHoliday(tomorrow)) return [];
+    }
+    return FilterService.filterLectures(_allLectures, _selectedFilter);
+  }
+
   void _handleDayTap(CalendarDay day) {
     _dayTapHandler.handleDayTap(context, day, _allLectures);
   }
@@ -200,12 +209,7 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
                         ),
                       ),
                     ),
-                    LectureTimeline(
-                      lectures: FilterService.filterLectures(
-                        _allLectures,
-                        _selectedFilter,
-                      ),
-                    ),
+                    LectureTimeline(lectures: _getLecturesForDisplay()),
                   ],
                 ],
               ),

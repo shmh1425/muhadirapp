@@ -41,11 +41,14 @@ class CalendarService {
       );
       final hijriInfo = HijriConverter.gregorianToHijri(date);
 
-      // حساب عدد المحاضرات في هذا اليوم
+      // العطلة: لا محاضرات ولا نقاط (جمعة/سبت + عطلات رسمية)
+      final isHoliday = _repository.isHoliday(date);
       final dayOfWeek = date.weekday;
-      final lecturesForDay = allLectures
-          .where((lecture) => lecture.dayOfWeek == dayOfWeek)
-          .toList();
+      final lecturesForDay = isHoliday
+          ? <LectureItem>[]
+          : allLectures
+              .where((lecture) => lecture.dayOfWeek == dayOfWeek)
+              .toList();
       final lecturesCount = lecturesForDay.length;
 
       // تحديد الحالة حسب الأولوية
