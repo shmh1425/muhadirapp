@@ -33,7 +33,10 @@ class ProfileBackButton extends StatelessWidget {
               ),
             ],
           ),
-          child: Icon(Icons.arrow_back_ios_new_rounded, size: 15, color: color),
+          child: IconTheme(
+            data: IconThemeData(color: color, size: 15),
+            child: const BackButtonIcon(),
+          ),
         ),
       ),
     );

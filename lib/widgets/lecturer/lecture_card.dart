@@ -5,14 +5,15 @@ import '../../screens/lecturer/lecturer_language.dart';
 /// Card component لعرض معلومات المحاضرة في Timeline
 class LectureCard extends StatelessWidget {
   final LectureItem lecture;
+  final VoidCallback? onTap;
 
-  const LectureCard({super.key, required this.lecture});
+  const LectureCard({super.key, required this.lecture, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     String tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
-    return Container(
+    final content = Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -101,6 +102,18 @@ class LectureCard extends StatelessWidget {
         ],
       ),
     );
+
+    if (onTap != null) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: content,
+        ),
+      );
+    }
+    return content;
   }
 
   String _activityLabel(String activity) {

@@ -7,7 +7,6 @@ import 'lecturer_attendance_report_screen.dart';
 import 'lecturer_language.dart';
 import 'lecturer_my_lectures_screen.dart';
 import 'lecturer_navigation.dart';
-import 'lecturer_nav_bar.dart';
 import 'lecturer_notifications_screen.dart';
 import 'widgets/modern_popup_dialog.dart';
 
@@ -35,7 +34,6 @@ class LecturerProfileScreen extends StatefulWidget {
 }
 
 class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
-  int _selectedIndex = 0; // البروفايل هو التاب الأول
   bool _isBlurred = false;
 
   static const Color _primaryColor = Color(0xFF006571);
@@ -43,26 +41,6 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
   bool get _isArabic => LecturerLanguageController.isArabic;
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
-
-  Future<void> _onItemTapped(int index) async {
-    if (index == _selectedIndex) return;
-
-    setState(() {
-      _selectedIndex = index;
-    });
-
-    switch (index) {
-      case 0:
-        // نحن بالفعل في شاشة البروفايل
-        break;
-      case 1:
-        Navigator.of(context).pop(); // يرجع للشاشة التي تحتوي QR أو الهوم
-        break;
-      case 2:
-        Navigator.of(context).pop();
-        break;
-    }
-  }
 
   void _toggleBlur() {
     setState(() {
@@ -112,7 +90,7 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
                 child: Column(
                   children: [
                     _LanguageOptionTile(
-                      label: 'العربية',
+                      label: _tr('العربية', 'Arabic'),
                       selected: draftLanguage == LecturerLanguage.arabic,
                       onTap: () => setDialogState(
                         () => draftLanguage = LecturerLanguage.arabic,
@@ -120,7 +98,7 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
                     ),
                     const SizedBox(height: 8),
                     _LanguageOptionTile(
-                      label: 'English',
+                      label: _tr('English', 'English'),
                       selected: draftLanguage == LecturerLanguage.english,
                       onTap: () => setDialogState(
                         () => draftLanguage = LecturerLanguage.english,
@@ -192,7 +170,9 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
 
     if (confirmed != true || !mounted) return;
 
-    Navigator.of(context).pushAndRemoveUntil(
+    // استخدام الـ root navigator لمسح الـ stack بالكامل (بما فيه LecturerMainShell والـ BottomNav)
+    // وإظهار شاشة الترحيب فقط — منع تكرار الـ BottomNav أو بقائه ظاهراً بعد الخروج.
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const WelcomeScreen()),
       (route) => false,
     );
@@ -207,10 +187,6 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
           textDirection: LecturerLanguageController.direction(),
           child: Scaffold(
             backgroundColor: Colors.white,
-            bottomNavigationBar: LecturerNavBar(
-              selectedIndex: _selectedIndex,
-              onItemTapped: _onItemTapped,
-            ),
             body: SafeArea(
               child: Column(
                 children: [

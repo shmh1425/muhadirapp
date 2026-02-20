@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
-import 'lecturer_nav_bar.dart';
 import '../student/components/notification_bell.dart';
 import '../student/notifications_screen.dart';
 import 'lecturer_language.dart';
-import 'lecturer_qr_screen.dart';
-import 'lecturer_profile_screen.dart';
 import '../../widgets/monthly_calendar.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../models/calendar_day.dart';
@@ -16,6 +13,7 @@ import '../../widgets/lecturer/lecturer_filter_buttons.dart';
 import '../../widgets/lecturer/manage_lectures_button.dart';
 import '../../widgets/lecturer/lecture_timeline.dart';
 import '../../widgets/lecturer/day_tap_handler.dart';
+import 'lecturer_navigation.dart';
 
 class LecturerHomeScreen extends StatefulWidget {
   const LecturerHomeScreen({super.key});
@@ -25,7 +23,6 @@ class LecturerHomeScreen extends StatefulWidget {
 }
 
 class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
-  int selectedIndex = 2; // Home selected by default
   String _selectedFilter = 'اليوم'; // اليوم، غدًا، الكل
   DateTime _currentCalendarMonth = DateTime.now(); // الشهر الحالي في التقويم
 
@@ -43,53 +40,6 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
     _calendarService = CalendarService(_repository);
     _dayTapHandler = DayTapHandler(repository: _repository);
     _allLectures = _repository.getAllLectures();
-  }
-
-  Future<void> _onItemTapped(int index) async {
-    setState(() {
-      selectedIndex = index;
-    });
-
-    switch (index) {
-      case 0:
-        await Future.delayed(const Duration(milliseconds: 160));
-        if (!mounted) return;
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const LecturerProfileScreen(
-              lecturer: LecturerProfile(
-                name: 'أنـاس بوقس',
-                email: 'username@example.com',
-                college: 'كلية الحاسبات',
-                department: 'هندسة البرمجيات',
-              ),
-            ),
-          ),
-        );
-        if (!mounted) return;
-        setState(() {
-          selectedIndex = 2; // الرجوع للهوم بعد الخروج من البروفايل
-        });
-        break;
-      case 1:
-        await Future.delayed(const Duration(milliseconds: 160));
-        if (!mounted) return;
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const LecturerQrScreen(lecture: null),
-          ),
-        );
-        if (!mounted) return;
-        setState(() {
-          selectedIndex = 2;
-        });
-        break;
-      case 2:
-        // Home الحالي
-        break;
-    }
   }
 
   void _handleFilterChanged(String filter) {
@@ -143,10 +93,6 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
           textDirection: LecturerLanguageController.direction(),
           child: Scaffold(
             backgroundColor: Colors.white,
-            bottomNavigationBar: LecturerNavBar(
-              selectedIndex: selectedIndex,
-              onItemTapped: _onItemTapped,
-            ),
             body: SafeArea(
               child: ListView(
                 padding: const EdgeInsets.symmetric(
@@ -209,7 +155,11 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
                         ),
                       ),
                     ),
-                    LectureTimeline(lectures: _getLecturesForDisplay()),
+                    LectureTimeline(
+                      lectures: _getLecturesForDisplay(),
+                      onLectureTap: (lecture) =>
+                          LecturerNavigation.goToAttendance(context, lecture),
+                    ),
                   ],
                 ],
               ),

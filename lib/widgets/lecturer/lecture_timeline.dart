@@ -7,8 +7,13 @@ import 'lecture_card.dart';
 /// Timeline component لعرض المحاضرات بترتيب زمني
 class LectureTimeline extends StatelessWidget {
   final List<LectureItem> lectures;
+  final void Function(LectureItem lecture)? onLectureTap;
 
-  const LectureTimeline({super.key, required this.lectures});
+  const LectureTimeline({
+    super.key,
+    required this.lectures,
+    this.onLectureTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -101,7 +106,14 @@ class LectureTimeline extends StatelessWidget {
                     ),
                     const SizedBox(width: 12),
                     // الكارد
-                    Expanded(child: LectureCard(lecture: lecture)),
+                    Expanded(
+                      child: LectureCard(
+                        lecture: lecture,
+                        onTap: onLectureTap != null
+                            ? () => onLectureTap!(lecture)
+                            : null,
+                      ),
+                    ),
                   ],
                 ),
               ),

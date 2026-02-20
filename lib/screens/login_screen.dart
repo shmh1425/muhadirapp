@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'student/home_screen.dart';
-import 'lecturer/lecturer_home_screen.dart';
+import 'lecturer/lecturer_main_shell.dart';
 import 'female_security/accepted_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -47,7 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } else if (_selectedRole == _UserRole.lecturer) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LecturerHomeScreen()),
+        MaterialPageRoute(builder: (_) => const LecturerMainShell(initialIndex: 2)),
       );
     }
   }

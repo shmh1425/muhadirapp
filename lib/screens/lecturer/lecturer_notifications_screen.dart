@@ -1,10 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'lecturer_nav_bar.dart';
-import 'lecturer_home_screen.dart';
 import 'lecturer_language.dart';
-import 'lecturer_qr_screen.dart';
-import 'lecturer_profile_screen.dart';
 import 'widgets/modern_popup_dialog.dart';
 import 'widgets/profile_back_button.dart';
 
@@ -18,7 +14,6 @@ class LecturerNotificationsScreen extends StatefulWidget {
 
 class _LecturerNotificationsScreenState
     extends State<LecturerNotificationsScreen> {
-  int _selectedIndex = 0; // البروفايل في اليسار
   String _selectedCategory = 'الكل';
 
   final List<_LecturerNotification> _allNotifications = List.of(
@@ -34,72 +29,14 @@ class _LecturerNotificationsScreenState
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
-  Future<void> _onItemTapped(int index) async {
-    if (index == _selectedIndex) return;
-
-    setState(() {
-      _selectedIndex = index;
-    });
-
-    switch (index) {
-      case 0:
-        await Future.delayed(const Duration(milliseconds: 160));
-        if (!mounted) return;
-        await Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const LecturerProfileScreen(
-              lecturer: LecturerProfile(
-                name: 'أنـاس بوقس',
-                email: 'username@example.com',
-                college: 'كلية الحاسبات',
-                department: 'هندسة البرمجيات',
-              ),
-            ),
-          ),
-        );
-        break;
-      case 1:
-        await Future.delayed(const Duration(milliseconds: 160));
-        if (!mounted) return;
-        await Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const LecturerQrScreen(lecture: null),
-          ),
-        );
-        break;
-      case 2:
-        await Future.delayed(const Duration(milliseconds: 160));
-        if (!mounted) return;
-        await Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const LecturerHomeScreen()),
-        );
-        break;
-    }
-  }
-
   void _changeCategory(String category) {
     setState(() {
       _selectedCategory = category;
     });
   }
 
-  Future<void> _goToProfile() async {
-    await Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const LecturerProfileScreen(
-          lecturer: LecturerProfile(
-            name: 'أنـاس بوقس',
-            email: 'username@example.com',
-            college: 'كلية الحاسبات',
-            department: 'هندسة البرمجيات',
-          ),
-        ),
-      ),
-    );
+  void _goBack() {
+    Navigator.of(context).pop();
   }
 
   Future<void> _openDetails(_LecturerNotification notification) async {
@@ -188,10 +125,6 @@ class _LecturerNotificationsScreenState
           textDirection: LecturerLanguageController.direction(),
           child: Scaffold(
             backgroundColor: const Color(0xFFF8FBFB),
-            bottomNavigationBar: LecturerNavBar(
-              selectedIndex: _selectedIndex,
-              onItemTapped: _onItemTapped,
-            ),
             body: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -203,7 +136,7 @@ class _LecturerNotificationsScreenState
                     const SizedBox(height: 6),
                     Align(
                       alignment: AlignmentDirectional.centerStart,
-                      child: ProfileBackButton(onTap: _goToProfile),
+                      child: ProfileBackButton(onTap: _goBack),
                     ),
                     const SizedBox(height: 10),
                     Container(
@@ -348,6 +281,8 @@ class _LecturerNotification {
     required this.date,
     required this.type,
     required this.category,
+    this.titleEn,
+    this.messageEn,
     this.isExcuseRequest = false,
     this.excuseDetails,
   });
@@ -355,6 +290,8 @@ class _LecturerNotification {
   final int id;
   final String title;
   final String message;
+  final String? titleEn;
+  final String? messageEn;
   final String date;
   final _NotificationType type;
   final _NotificationCategory category;
@@ -488,7 +425,9 @@ class _NotificationCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  item.title,
+                  LecturerLanguageController.isArabic
+                      ? item.title
+                      : (item.titleEn ?? item.title),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -529,7 +468,9 @@ class _NotificationCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            item.message,
+            LecturerLanguageController.isArabic
+                ? item.message
+                : (item.messageEn ?? item.message),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
@@ -657,7 +598,9 @@ class _LecturerNotificationDetailsScreen extends StatelessWidget {
               children: [
                 const SizedBox(height: 8),
                 Text(
-                  notification.title,
+                  LecturerLanguageController.isArabic
+                      ? notification.title
+                      : (notification.titleEn ?? notification.title),
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
@@ -667,7 +610,9 @@ class _LecturerNotificationDetailsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  notification.message,
+                  LecturerLanguageController.isArabic
+                      ? notification.message
+                      : (notification.messageEn ?? notification.message),
                   style: const TextStyle(
                     fontSize: 14,
                     color: Colors.black87,
@@ -1080,6 +1025,9 @@ const List<_LecturerNotification> _mockLecturerNotifications = [
     title: 'عذر طالب لمقرر الأمن السيبراني',
     message:
         'وصل عذر جديد من أحد الطلاب لمقرر "Cybersecurity". يمكنك مراجعة التفاصيل واتخاذ الإجراء المناسب.',
+    titleEn: 'Student excuse for Cybersecurity course',
+    messageEn:
+        'A new excuse was submitted by a student for "Cybersecurity". You can review and take action.',
     date: 'الأربعاء 14 مايو 2025 - 09:34 ص',
     type: _NotificationType.warning,
     category: _NotificationCategory.students,
@@ -1099,6 +1047,9 @@ const List<_LecturerNotification> _mockLecturerNotifications = [
     title: 'تذكير بموعد تسليم الدرجات',
     message:
         'تبقّى يومان على الموعد النهائي لرفع درجات مقرر "هندسة البرمجيات".',
+    titleEn: 'Reminder: grades submission deadline',
+    messageEn:
+        'Two days left until the deadline to upload grades for "Software Engineering".',
     date: 'الثلاثاء 13 مايو 2025 - 11:10 ص',
     type: _NotificationType.info,
     category: _NotificationCategory.academic,
@@ -1108,6 +1059,9 @@ const List<_LecturerNotification> _mockLecturerNotifications = [
     title: 'تنبيه أمني على حسابك',
     message:
         'تم رصد محاولة دخول غير معتادة على حسابك من جهاز جديد. إذا لم تكن أنت، يرجى تغيير كلمة المرور فوراً.',
+    titleEn: 'Security alert on your account',
+    messageEn:
+        'An unusual login attempt was detected from a new device. If this wasn\'t you, please change your password immediately.',
     date: 'الأحد 11 مايو 2025 - 04:22 م',
     type: _NotificationType.error,
     category: _NotificationCategory.personal,
@@ -1117,6 +1071,9 @@ const List<_LecturerNotification> _mockLecturerNotifications = [
     title: 'تنبيه غياب طالب',
     message:
         'الطالب "محمد علي" تجاوز نسبة الغياب المسموح بها في مقرر "بحوث العمليات".',
+    titleEn: 'Student absence alert',
+    messageEn:
+        'Student "Mohammed Ali" has exceeded the allowed absence rate for "Operations Research".',
     date: 'السبت 10 مايو 2025 - 01:15 م',
     type: _NotificationType.warning,
     category: _NotificationCategory.students,
@@ -1125,6 +1082,8 @@ const List<_LecturerNotification> _mockLecturerNotifications = [
     id: 5,
     title: 'قبول عذر طالب',
     message: 'تم قبول العذر المرفق لطالب في مقرر "الثقافة الإسلامية".',
+    titleEn: 'Student excuse accepted',
+    messageEn: 'The submitted excuse was accepted for a student in "Islamic Culture".',
     date: 'الخميس 8 مايو 2025 - 10:05 ص',
     type: _NotificationType.success,
     category: _NotificationCategory.students,

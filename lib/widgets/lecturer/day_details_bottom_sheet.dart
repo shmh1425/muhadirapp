@@ -2,17 +2,22 @@ import 'package:flutter/material.dart';
 import '../../models/calendar_day.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../screens/lecturer/lecturer_language.dart';
+import '../../screens/lecturer/lecturer_navigation.dart';
 import '../../utils/hijri_converter.dart';
 import 'lecture_detail_card.dart';
 
-/// BottomSheet component لعرض تفاصيل يوم معين
+/// BottomSheet component لعرض تفاصيل يوم معين (من صفحة الكل — التقويم).
+/// يفتح بحجم جزئي (Peek) مع handle وسكرول داخلي؛ التقويم يبقى ظاهراً فوق.
+/// عند الضغط على محاضرة: يغلق الـ sheet ويفتح صفحة التحضير (قابلة للتعديل أو عرض فقط حسب اليوم).
 class DayDetailsBottomSheet extends StatelessWidget {
+  final ScrollController scrollController;
   final CalendarDay day;
   final List<LectureItem> lectures;
   final bool canEdit;
 
   const DayDetailsBottomSheet({
     super.key,
+    required this.scrollController,
     required this.day,
     required this.lectures,
     required this.canEdit,
@@ -29,15 +34,11 @@ class DayDetailsBottomSheet extends StatelessWidget {
     final monthName = _hijriMonthName(day.hijriMonthName);
     final hijriSuffix = LecturerLanguageController.isArabic ? 'هـ' : ' AH';
 
-    // تحديد لون Header حسب حالة اليوم
     final headerColor = _getHeaderColor(day.status);
 
     return Directionality(
       textDirection: LecturerLanguageController.direction(),
       child: Container(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.9,
-        ),
         decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -45,26 +46,41 @@ class DayDetailsBottomSheet extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Handle صغير للأعلى
+            Padding(
+              padding: const EdgeInsets.only(top: 12, bottom: 4),
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade400,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
             // Header بلون مطابق لحالة اليوم
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               decoration: BoxDecoration(
                 color: headerColor,
                 borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(20),
+                  top: Radius.circular(16),
                 ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    '$dayName ${_hijriDayText(day.hijriDay)} $monthName $hijriYear$hijriSuffix',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      fontFamily: 'Cairo',
+                  Flexible(
+                    child: Text(
+                      '$dayName ${_hijriDayText(day.hijriDay)} $monthName $hijriYear$hijriSuffix',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontFamily: 'Cairo',
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   if (canEdit)
@@ -110,31 +126,44 @@ class DayDetailsBottomSheet extends StatelessWidget {
                 ],
               ),
             ),
-            // قائمة المحاضرات
-            Flexible(
+            // قائمة المحاضرات — سكرول داخل الـ Sheet فقط
+            Expanded(
               child: lectures.isEmpty
                   ? Padding(
                       padding: const EdgeInsets.all(32.0),
-                      child: Text(
-                        _tr(
-                          'لا توجد محاضرات في هذا اليوم',
-                          'No lectures for this day',
-                        ),
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey.shade600,
-                          fontFamily: 'Cairo',
+                      child: Center(
+                        child: Text(
+                          _tr(
+                            'لا توجد محاضرات في هذا اليوم',
+                            'No lectures for this day',
+                          ),
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey.shade600,
+                            fontFamily: 'Cairo',
+                          ),
                         ),
                       ),
                     )
                   : ListView.builder(
+                      controller: scrollController,
                       padding: const EdgeInsets.all(16),
-                      shrinkWrap: true,
                       itemCount: lectures.length,
                       itemBuilder: (context, index) {
+                        final lecture = lectures[index];
                         return LectureDetailCard(
-                          lecture: lectures[index],
+                          lecture: lecture,
                           canEdit: canEdit,
+                          onTap: () {
+                            final nav = Navigator.of(context);
+                            nav.pop();
+                            final ctx = nav.context;
+                            if (canEdit) {
+                              LecturerNavigation.goToAttendance(ctx, lecture);
+                            } else {
+                              LecturerNavigation.goToAttendanceViewOnly(ctx, lecture, day.date);
+                            }
+                          },
                         );
                       },
                     ),

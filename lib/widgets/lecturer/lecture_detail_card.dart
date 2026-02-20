@@ -7,11 +7,13 @@ import '../../utils/shared/time_utils.dart';
 class LectureDetailCard extends StatelessWidget {
   final LectureItem lecture;
   final bool canEdit;
+  final VoidCallback? onTap;
 
   const LectureDetailCard({
     super.key,
     required this.lecture,
     required this.canEdit,
+    this.onTap,
   });
 
   @override
@@ -37,25 +39,30 @@ class LectureDetailCard extends StatelessWidget {
         ? const Color(0xFF4A90E2) // أزرق
         : const Color(0xFF8B6F47); // بني/بيج
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // الصف العلوي: الوقت والأيقونة
-          Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // الصف العلوي: الوقت والأيقونة
+              Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -78,11 +85,11 @@ class LectureDetailCard extends StatelessWidget {
                 ),
                 child: Icon(iconData, size: 20, color: iconColor),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // عنوان المحاضرة
-          Text(
+              ],
+            ),
+              const SizedBox(height: 12),
+              // عنوان المحاضرة
+              Text(
             lecture.courseName,
             style: const TextStyle(
               fontSize: 18,
@@ -91,10 +98,10 @@ class LectureDetailCard extends StatelessWidget {
               fontFamily: 'Cairo',
               height: 1.3,
             ),
-          ),
-          const SizedBox(height: 8),
-          // وصف المحاضرة
-          Text(
+              ),
+              const SizedBox(height: 8),
+              // وصف المحاضرة
+              Text(
             courseDescription,
             style: TextStyle(
               fontSize: 14,
@@ -102,24 +109,26 @@ class LectureDetailCard extends StatelessWidget {
               fontFamily: 'Cairo',
               height: 1.5,
             ),
-          ),
-          const SizedBox(height: 16),
-          // الموقع في الأسفل
-          Row(
-            children: [
-              Icon(Icons.location_on, size: 18, color: Colors.grey.shade600),
-              const SizedBox(width: 6),
-              Text(
-                location,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade700,
-                  fontFamily: 'Cairo',
-                ),
+              ),
+              const SizedBox(height: 16),
+              // الموقع في الأسفل
+              Row(
+                children: [
+                  Icon(Icons.location_on, size: 18, color: Colors.grey.shade600),
+                  const SizedBox(width: 6),
+                  Text(
+                    location,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade700,
+                      fontFamily: 'Cairo',
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }

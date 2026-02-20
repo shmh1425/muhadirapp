@@ -2,11 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/lecturer/lecture_item.dart';
 import '../../services/lecturer/lecture_repository.dart';
-import 'lecturer_home_screen.dart';
 import 'lecturer_language.dart';
-import 'lecturer_nav_bar.dart';
-import 'lecturer_profile_screen.dart';
-import 'lecturer_qr_screen.dart';
 import 'widgets/modern_popup_dialog.dart';
 import 'widgets/profile_back_button.dart';
 
@@ -26,7 +22,6 @@ class _LecturerAttendanceReportScreenState
   late final List<LectureItem> _lectures;
   late final List<_LectureAttendanceGroup> _groups;
 
-  int _selectedNavIndex = 2;
   bool _isEditMode = false;
   bool _hasPendingChanges = false;
   String _selectedCourse = 'الكل';
@@ -161,10 +156,7 @@ class _LecturerAttendanceReportScreenState
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          _tr(
-            'تم حفظ تغييرات تقرير الحضور.',
-            'Attendance report changes saved.',
-          ),
+          _tr('تم حفظ تغييرات تقرير الحضور.', 'Attendance report changes saved.'),
         ),
         duration: const Duration(seconds: 2),
       ),
@@ -232,57 +224,8 @@ class _LecturerAttendanceReportScreenState
     setState(() => _resetEditState());
   }
 
-  Future<void> _onItemTapped(int index) async {
-    if (index == _selectedNavIndex) return;
-    setState(() => _selectedNavIndex = index);
-
-    switch (index) {
-      case 0:
-        await Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const LecturerProfileScreen(
-              lecturer: LecturerProfile(
-                name: 'أنـاس بوقس',
-                email: 'username@example.com',
-                college: 'كلية الحاسبات',
-                department: 'هندسة البرمجيات',
-              ),
-            ),
-          ),
-        );
-        break;
-      case 1:
-        await Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const LecturerQrScreen(lecture: null),
-          ),
-        );
-        break;
-      case 2:
-        await Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const LecturerHomeScreen()),
-        );
-        break;
-    }
-  }
-
-  Future<void> _goToProfile() async {
-    await Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const LecturerProfileScreen(
-          lecturer: LecturerProfile(
-            name: 'أنـاس بوقس',
-            email: 'username@example.com',
-            college: 'كلية الحاسبات',
-            department: 'هندسة البرمجيات',
-          ),
-        ),
-      ),
-    );
+  void _goBack() {
+    Navigator.of(context).pop();
   }
 
   @override
@@ -296,10 +239,6 @@ class _LecturerAttendanceReportScreenState
           textDirection: LecturerLanguageController.direction(),
           child: Scaffold(
             backgroundColor: const Color(0xFFF8FBFB),
-            bottomNavigationBar: LecturerNavBar(
-              selectedIndex: _selectedNavIndex,
-              onItemTapped: _onItemTapped,
-            ),
             body: SafeArea(
               child: LayoutBuilder(
                 builder: (context, constraints) {
@@ -315,7 +254,7 @@ class _LecturerAttendanceReportScreenState
                         const SizedBox(height: 6),
                         Align(
                           alignment: AlignmentDirectional.centerStart,
-                          child: ProfileBackButton(onTap: _goToProfile),
+                          child: ProfileBackButton(onTap: _goBack),
                         ),
                         const SizedBox(height: 10),
                         _buildFilters(),

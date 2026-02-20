@@ -2,11 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/lecturer/lecture_item.dart';
 import '../../services/lecturer/lecture_repository.dart';
-import 'lecturer_home_screen.dart';
 import 'lecturer_language.dart';
-import 'lecturer_nav_bar.dart';
-import 'lecturer_profile_screen.dart';
-import 'lecturer_qr_screen.dart';
 import 'widgets/profile_back_button.dart';
 
 class LecturerMyLecturesScreen extends StatefulWidget {
@@ -25,7 +21,6 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
   final LectureRepository _repository = LectureRepository();
   late final List<LectureItem> _allLectures;
 
-  int _selectedNavIndex = 2;
   String _selectedTab = 'الكل';
 
   final List<int> _dayOrder = const [7, 1, 2, 3, 4];
@@ -35,43 +30,6 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
   void initState() {
     super.initState();
     _allLectures = _repository.getAllLectures();
-  }
-
-  Future<void> _onItemTapped(int index) async {
-    if (index == _selectedNavIndex) return;
-    setState(() => _selectedNavIndex = index);
-
-    switch (index) {
-      case 0:
-        await Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const LecturerProfileScreen(
-              lecturer: LecturerProfile(
-                name: 'أنـاس بوقس',
-                email: 'username@example.com',
-                college: 'كلية الحاسبات',
-                department: 'هندسة البرمجيات',
-              ),
-            ),
-          ),
-        );
-        break;
-      case 1:
-        await Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const LecturerQrScreen(lecture: null),
-          ),
-        );
-        break;
-      case 2:
-        await Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const LecturerHomeScreen()),
-        );
-        break;
-    }
   }
 
   List<_DayTabItem> get _tabs => [
@@ -89,20 +47,8 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
     return _displayDayNameFromArabic(_dayName(weekday));
   }
 
-  Future<void> _goToProfile() async {
-    await Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const LecturerProfileScreen(
-          lecturer: LecturerProfile(
-            name: 'أنـاس بوقس',
-            email: 'username@example.com',
-            college: 'كلية الحاسبات',
-            department: 'هندسة البرمجيات',
-          ),
-        ),
-      ),
-    );
+  void _goBack() {
+    Navigator.of(context).pop();
   }
 
   @override
@@ -114,10 +60,6 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
           textDirection: LecturerLanguageController.direction(),
           child: Scaffold(
             backgroundColor: const Color(0xFFF8FBFB),
-            bottomNavigationBar: LecturerNavBar(
-              selectedIndex: _selectedNavIndex,
-              onItemTapped: _onItemTapped,
-            ),
             body: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -129,7 +71,7 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
                     const SizedBox(height: 6),
                     Align(
                       alignment: AlignmentDirectional.centerStart,
-                      child: ProfileBackButton(onTap: _goToProfile),
+                      child: ProfileBackButton(onTap: _goBack),
                     ),
                     const SizedBox(height: 10),
                     _buildTabsSection(),

@@ -25,11 +25,12 @@ class _LecturerManageLecturesScreenState
   final LectureRepository _repository = LectureRepository();
   late List<LectureItem> _allLectures;
 
-  // فلترة: اليوم = يوم الأسبوع الحالي، غداً، أو يوم محدد
-  int? _selectedDayOfWeek; // null = اليوم (today)
-  String _courseNameFilter = '';
-  final String _sectionFilter = '';
-  final String _crnFilter = '';
+  // فلترة: الأسبوع (تلقائي أو يدوي)، اليوم، الشعبة، المقرر
+  bool _weekIsAuto = true;
+  int? _selectedWeekNumber; // عند عدم التلقائي: أسبوع 1..53
+  late int _selectedDayOfWeek;
+  String? _selectedCourse;
+  String? _selectedSection;
 
   /// محاضرات تم إرسال إشعار لها في هذه الجلسة (لتجنب إرسال مرتين)
   final Set<String> _delaySentFor = {};
@@ -39,13 +40,28 @@ class _LecturerManageLecturesScreenState
   void initState() {
     super.initState();
     _allLectures = _repository.getAllLectures();
-    _selectedDayOfWeek = DateTime.now().weekday; // افتراضي: اليوم
+    _selectedDayOfWeek = DateTime.now().weekday;
     _applyFilters();
   }
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
-  int _getTargetWeekday() => _selectedDayOfWeek ?? DateTime.now().weekday;
+  int _getTargetWeekday() => _selectedDayOfWeek;
+
+  /// رقم الأسبوع (ISO) للتاريخ المرجعي لليوم المحدد
+  int get _weekNumber {
+    final d = _getReferenceDate();
+    final startOfYear = DateTime(d.year, 1, 1);
+    final dayOfYear = d.difference(startOfYear).inDays + 1;
+    final w = ((dayOfYear - d.weekday + 10) / 7).floor();
+    return w.clamp(1, 53);
+  }
+
+  /// القيمة المعروضة في الشريط: تلقائي = حسب اليوم، وإلا الأسبوع المختار يدوياً
+  int get _displayWeekNumber =>
+      _weekIsAuto ? _weekNumber : (_selectedWeekNumber ?? _weekNumber);
+
+  static const int _maxWeeks = 53;
 
   DateTime _getReferenceDate() {
     final now = DateTime.now();
@@ -84,23 +100,39 @@ class _LecturerManageLecturesScreenState
   List<LectureItem> _computeFilteredLectures() {
     final target = _getTargetWeekday();
     var list = _allLectures.where((l) => l.dayOfWeek == target).toList();
-    if (_courseNameFilter.trim().isNotEmpty) {
-      list = list
-          .where((l) =>
-              l.courseName.toLowerCase().contains(_courseNameFilter.trim().toLowerCase()))
-          .toList();
+    if (_selectedCourse != null &&
+        _selectedCourse!.trim().isNotEmpty &&
+        _selectedCourse != _tr('الكل', 'All')) {
+      list = list.where((l) => l.courseName == _selectedCourse).toList();
     }
-    if (_sectionFilter.trim().isNotEmpty) {
-      list =
-          list.where((l) => l.section.contains(_sectionFilter.trim())).toList();
-    }
-    if (_crnFilter.trim().isNotEmpty) {
-      list = list
-          .where((l) =>
-              l.crn.toLowerCase().contains(_crnFilter.trim().toLowerCase()))
-          .toList();
+    if (_selectedSection != null &&
+        _selectedSection!.trim().isNotEmpty &&
+        _selectedSection != _tr('الكل', 'All')) {
+      list = list.where((l) => l.section == _selectedSection).toList();
     }
     return TimeUtils.sortLecturesByTime(list, (l) => l.startTime);
+  }
+
+  /// محاضرات اليوم المحدد فقط (لخيارات المقرر والشعبة)
+  List<LectureItem> get _lecturesForSelectedDay {
+    final target = _getTargetWeekday();
+    return _allLectures.where((l) => l.dayOfWeek == target).toList();
+  }
+
+  List<String> get _uniqueCourseNames {
+    final names = _lecturesForSelectedDay
+        .map((l) => l.courseName)
+        .toSet()
+        .toList()
+      ..sort();
+    return names;
+  }
+
+  List<String> get _uniqueSections {
+    final sections =
+        _lecturesForSelectedDay.map((l) => l.section).toSet().toList()
+          ..sort();
+    return sections;
   }
 
   void _applyFilters() {
@@ -203,38 +235,155 @@ class _LecturerManageLecturesScreenState
     final newStart = (sh * 60 + sm + delayMinutes) % (24 * 60);
     final nh = newStart ~/ 60;
     final nm = newStart % 60;
-    final newTimeStr = '${nh.toString().padLeft(2, '0')}:${nm.toString().padLeft(2, '0')}';
-    final newTimeDisplay = TimeUtils.formatTimeRange(newTimeStr, lecture.endTime).split(' - ').first;
+    final newTimeStr =
+        '${nh.toString().padLeft(2, '0')}:${nm.toString().padLeft(2, '0')}';
+    final newTimeDisplay =
+        TimeUtils.formatTimeRange(newTimeStr, lecture.endTime).split(' - ').first;
 
-    Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => _SuccessScreen(
-          title: _tr('تم إرسال إشعار التأخير', 'Delay notification sent'),
-          courseName: lecture.courseName,
-          description: _getCourseDescription(lecture.courseName),
-          extraLines: [
-            '${_tr('وقت المحاضرة المحدث', 'Updated lecture time')}: $newTimeDisplay',
-            '${_tr('القاعة', 'Hall')}: ${lecture.hall}',
-          ],
-          backLabel: _tr('رجوع', 'Back'),
-          primary: _primary,
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: _primary.withValues(alpha: 0.35),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.check_circle_rounded,
+                  size: 56, color: _primary),
+              const SizedBox(height: 16),
+              Text(
+                _tr('تم إرسال إشعار التأخير', 'Delay notification sent'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF222222),
+                  fontFamily: 'Cairo',
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                lecture.courseName,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF222222),
+                  fontFamily: 'Cairo',
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${_tr('وقت المحاضرة المحدث', 'Updated time')}: $newTimeDisplay',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade700,
+                  fontFamily: 'Cairo',
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _primary,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(_tr('حسناً', 'OK')),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   void _showCancelSuccessScreen(LectureItem lecture) {
-    Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => _CancelSuccessScreen(
-          courseName: lecture.courseName,
-          description: _getCourseDescription(lecture.courseName),
-          backLabel: _tr('رجوع', 'Back'),
-          primary: _primary,
-          cancelRed: _cancelRed,
-          tr: _tr,
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: _cancelRed.withValues(alpha: 0.35),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.check_circle_rounded, size: 56, color: _cancelRed),
+              const SizedBox(height: 16),
+              Text(
+                _tr('تم إرسال إشعار الإلغاء', 'Cancellation notification sent'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF222222),
+                  fontFamily: 'Cairo',
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                lecture.courseName,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF222222),
+                  fontFamily: 'Cairo',
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _cancelRed,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(_tr('حسناً', 'OK')),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -274,7 +423,7 @@ class _LecturerManageLecturesScreenState
         );
   }
 
-  static const List<int> _weekdayOrder = [7, 1, 2, 3, 4, 5, 6];
+  static const List<int> _weekdayOrder = [7, 1, 2, 3, 4];
 
   @override
   Widget build(BuildContext context) {
@@ -284,12 +433,12 @@ class _LecturerManageLecturesScreenState
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
           child: Scaffold(
-            backgroundColor: Colors.white,
+            backgroundColor: const Color(0xFFF8FBFB),
             appBar: AppBar(
-              backgroundColor: Colors.white,
+              backgroundColor: const Color(0xFFF8FBFB),
               elevation: 0,
               leading: Padding(
-                padding: const EdgeInsets.only(left: 8),
+                padding: const EdgeInsetsDirectional.only(start: 8),
                 child: ProfileBackButton(
                   onTap: () => Navigator.of(context).pop(),
                   color: const Color(0xFF222222),
@@ -324,72 +473,445 @@ class _LecturerManageLecturesScreenState
   }
 
   Widget _buildFilterBar() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F5F5),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE8E8E8)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.search, size: 20, color: _primary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<int?>(
-                    value: _selectedDayOfWeek,
-                    isExpanded: true,
-                    hint: Text(_tr('اليوم', 'Day')),
-                    items: [
-                      DropdownMenuItem<int?>(
-                        value: DateTime.now().weekday,
-                        child: Text(_tr('اليوم', 'Today')),
-                      ),
-                      ..._weekdayOrder
-                          .where((w) => w != DateTime.now().weekday)
-                          .map((w) => DropdownMenuItem<int?>(
-                                value: w,
-                                child: Text(
-                                    LecturerLanguageController.dayNameFromWeekday(w)),
-                              )),
-                    ],
-                    onChanged: (v) {
-                      setState(() {
-                        _selectedDayOfWeek = v;
-                        _applyFilters();
-                      });
-                    },
+    final now = DateTime.now();
+    final todayWeekday = now.weekday;
+    final tomorrowWeekday = now.add(const Duration(days: 1)).weekday;
+    final dayLabel = _selectedDayOfWeek == todayWeekday
+        ? _tr('اليوم', 'Today')
+        : _selectedDayOfWeek == tomorrowWeekday
+            ? _tr('غداً', 'Tomorrow')
+            : LecturerLanguageController.dayNameFromWeekday(_selectedDayOfWeek);
+    const double barRadius = 14;
+    const double barPaddingH = 12;
+    const double barPaddingV = 10;
+
+    // عرض ثابت لكل فلتر (يمين → يسار: اليوم، الأسبوع، المقرر، الشعبة)
+    const double widthDay = 92;
+    const double widthWeek = 80;
+    const double widthCourse = 124;
+    const double widthSection = 68;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: barPaddingH,
+            vertical: barPaddingV,
+          ),
+          decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(barRadius),
+              border: Border.all(color: const Color(0xFFE8E8E8)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 12,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: widthDay,
+                  child: _FilterSegment(
+                    value: dayLabel,
+                    segmentWidth: widthDay,
+                    primary: _primary,
+                    onTap: () => _showDayPickerSheet(
+                      todayWeekday: todayWeekday,
+                      tomorrowWeekday: tomorrowWeekday,
+                    ),
                   ),
+                ),
+                _FilterBarDivider(),
+                SizedBox(
+                  width: widthWeek,
+                  child: _FilterSegment(
+                    value: '$_displayWeekNumber',
+                    label: _tr('أسبوع', 'Week'),
+                    segmentWidth: widthWeek,
+                    primary: _primary,
+                    onTap: () => _showWeekPickerSheet(),
+                  ),
+                ),
+                _FilterBarDivider(),
+                SizedBox(
+                  width: widthCourse,
+                  child: _FilterSegment(
+                    value: _selectedCourse ?? _tr('الكل', 'All'),
+                    segmentWidth: widthCourse,
+                    primary: _primary,
+                    onTap: () => _showCoursePickerSheet(),
+                  ),
+                ),
+                _FilterBarDivider(),
+                SizedBox(
+                  width: widthSection,
+                  child: _FilterSegment(
+                    value: _selectedSection ?? _tr('الكل', 'All'),
+                    segmentWidth: widthSection,
+                    primary: _primary,
+                    onTap: () => _showSectionPickerSheet(),
+                  ),
+                ),
+              ],
+            ),
+        ),
+      ),
+    );
+  }
+
+  void _showWeekPickerSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.35,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (_, scrollController) => Container(
+          padding: EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 12,
+            bottom: 24 + MediaQuery.paddingOf(ctx).bottom,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD8D8D8),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _tr('رقم الأسبوع', 'Week number'),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Cairo',
+                  color: Color(0xFF222222),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // تلقائي (Auto)
+              ListTile(
+                title: Text(
+                  _tr('تلقائي (حسب اليوم المحدد)', 'Auto (by selected day)'),
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontWeight:
+                        _weekIsAuto ? FontWeight.w600 : FontWeight.normal,
+                    color: _weekIsAuto ? _primary : const Color(0xFF222222),
+                  ),
+                ),
+                trailing: _weekIsAuto
+                    ? Icon(Icons.check_rounded, color: _primary, size: 22)
+                    : null,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    _weekIsAuto = true;
+                    _selectedWeekNumber = null;
+                    _applyFilters();
+                  });
+                },
+              ),
+              const Divider(height: 1),
+              // قائمة الأسابيع 1..53
+              Flexible(
+                child: ListView.builder(
+                  controller: scrollController,
+                  shrinkWrap: true,
+                  itemCount: _maxWeeks,
+                  itemBuilder: (_, index) {
+                    final week = index + 1;
+                    final selected =
+                        !_weekIsAuto && _selectedWeekNumber == week;
+                    return ListTile(
+                      title: Text(
+                        '${_tr('أسبوع', 'Week')} $week',
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontWeight:
+                              selected ? FontWeight.w600 : FontWeight.normal,
+                          color:
+                              selected ? _primary : const Color(0xFF222222),
+                        ),
+                      ),
+                      trailing: selected
+                          ? Icon(Icons.check_rounded,
+                              color: _primary, size: 22)
+                          : null,
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        setState(() {
+                          _weekIsAuto = false;
+                          _selectedWeekNumber = week;
+                          _applyFilters();
+                        });
+                      },
+                    );
+                  },
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          TextField(
-            onChanged: (v) {
-              setState(() {
-                _courseNameFilter = v;
-                _applyFilters();
-              });
-            },
-            decoration: InputDecoration(
-              hintText: _tr('اسم المقرر', 'Course name'),
-              hintStyle: TextStyle(color: Colors.grey.shade600, fontFamily: 'Cairo'),
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+      ),
+    );
+  }
+
+  void _showDayPickerSheet({
+    required int todayWeekday,
+    required int tomorrowWeekday,
+  }) {
+    final options = <int>[todayWeekday, tomorrowWeekday]
+      ..addAll(
+        _weekdayOrder.where(
+          (w) => w != todayWeekday && w != tomorrowWeekday,
+        ),
+      );
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 12,
+          bottom: 24 + MediaQuery.paddingOf(ctx).bottom,
+        ),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD8D8D8),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
-            style: const TextStyle(fontFamily: 'Cairo'),
-          ),
-        ],
+            const SizedBox(height: 12),
+            Text(
+              _tr('اليوم', 'Day'),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Cairo',
+                color: Color(0xFF222222),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 280),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: options.map((w) {
+                    final label = w == todayWeekday
+                        ? _tr('اليوم', 'Today')
+                        : w == tomorrowWeekday
+                            ? _tr('غداً', 'Tomorrow')
+                            : LecturerLanguageController.dayNameFromWeekday(w);
+                    final selected = _selectedDayOfWeek == w;
+                    return ListTile(
+                      title: Text(
+                        label,
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontWeight:
+                              selected ? FontWeight.w600 : FontWeight.normal,
+                          color: selected ? _primary : const Color(0xFF222222),
+                        ),
+                      ),
+                      trailing: selected
+                          ? Icon(Icons.check_rounded, color: _primary, size: 22)
+                          : null,
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        setState(() {
+                          _selectedDayOfWeek = w;
+                          _applyFilters();
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSectionPickerSheet() {
+    final options = [null, ..._uniqueSections];
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 12,
+          bottom: 24 + MediaQuery.paddingOf(ctx).bottom,
+        ),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD8D8D8),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _tr('الشعبة', 'Section'),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Cairo',
+                color: Color(0xFF222222),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...options.map((s) {
+              final label = s ?? _tr('الكل', 'All');
+              final selected = _selectedSection == s;
+              return ListTile(
+                title: Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                    color: selected ? _primary : const Color(0xFF222222),
+                  ),
+                ),
+                trailing: selected
+                    ? Icon(Icons.check_rounded, color: _primary, size: 22)
+                    : null,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    _selectedSection = s;
+                    _applyFilters();
+                  });
+                },
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCoursePickerSheet() {
+    final options = [null, ..._uniqueCourseNames];
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 12,
+          bottom: 24 + MediaQuery.paddingOf(ctx).bottom,
+        ),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD8D8D8),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _tr('المقرر', 'Course'),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Cairo',
+                color: Color(0xFF222222),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...options.map((name) {
+              final label = name ?? _tr('الكل', 'All');
+              final selected = _selectedCourse == name;
+              return ListTile(
+                title: Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontWeight:
+                        selected ? FontWeight.w600 : FontWeight.normal,
+                    color: selected ? _primary : const Color(0xFF222222),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: selected
+                    ? Icon(Icons.check_rounded, color: _primary, size: 22)
+                    : null,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    _selectedCourse = name;
+                    _applyFilters();
+                  });
+                },
+              );
+            }),
+          ],
+        ),
       ),
     );
   }
@@ -397,51 +919,179 @@ class _LecturerManageLecturesScreenState
   Widget _buildContent() {
     final list = _filteredLectures;
     if (list.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.event_busy, size: 56, color: Colors.grey.shade400),
-              const SizedBox(height: 16),
-              Text(
-                _tr(
-                  _selectedDayOfWeek == null || _selectedDayOfWeek == DateTime.now().weekday
-                      ? 'لا توجد محاضرات لهذا اليوم'
-                      : 'لا توجد محاضرات لليوم المحدد',
-                  'No lectures for the selected day',
-                ),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey.shade700,
-                  fontFamily: 'Cairo',
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
+      return _buildEmptyState();
     }
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
       itemCount: list.length,
       itemBuilder: (context, index) {
-        return _ManageLectureCard(
-          lecture: list[index],
-          description: _getCourseDescription(list[index].courseName),
-          isEnded: _isLectureEnded(list[index]),
-          delaySent: _delaySentFor.contains(list[index].crn),
-          cancelSent: _cancelSentFor.contains(list[index].crn),
-          onDelay: () => _openDelaySheet(list[index]),
-          onCancel: () => _openCancelConfirm(list[index]),
-          primary: _primary,
-          delayYellow: _delayYellow,
-          cancelRed: _cancelRed,
-          tr: _tr,
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: _ManageLectureCard(
+            lecture: list[index],
+            description: _getCourseDescription(list[index].courseName),
+            isEnded: _isLectureEnded(list[index]),
+            delaySent: _delaySentFor.contains(list[index].crn),
+            cancelSent: _cancelSentFor.contains(list[index].crn),
+            onDelay: () => _openDelaySheet(list[index]),
+            onCancel: () => _openCancelConfirm(list[index]),
+            primary: _primary,
+            delayYellow: _delayYellow,
+            cancelRed: _cancelRed,
+            tr: _tr,
+          ),
         );
       },
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 48),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: _primary.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.calendar_today_rounded,
+                size: 48,
+                color: _primary.withValues(alpha: 0.8),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              _tr(
+                _selectedDayOfWeek == DateTime.now().weekday
+                    ? 'لا توجد محاضرات لهذا اليوم'
+                    : 'لا توجد محاضرات لليوم المحدد',
+                'No lectures for the selected day',
+              ),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF516166),
+                fontFamily: 'Cairo',
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _tr(
+                'غيّر اليوم أو المقرر أو الشعبة للعثور على محاضرات',
+                'Change day, course or section to find lectures',
+              ),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade600,
+                fontFamily: 'Cairo',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// خانة فلتر بعرض ثابت: المحتوى يتكيّف (padding ديناميكي)، النص ellipsis، السهم بعرض ثابت.
+class _FilterSegment extends StatelessWidget {
+  final String value;
+  final String? label;
+  final double segmentWidth;
+  final Color primary;
+  final VoidCallback onTap;
+
+  const _FilterSegment({
+    required this.value,
+    this.label,
+    required this.segmentWidth,
+    required this.primary,
+    required this.onTap,
+  });
+
+  static const double _iconWidth = 20;
+  static const double _gap = 4;
+
+  /// padding أفقي يتكيّف مع عرض الخانة: واسع → مريح، ضيق → أقل
+  static double _paddingHForWidth(double w) {
+    if (w >= 100) return 12;
+    if (w >= 75) return 8;
+    return 4;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final display = label != null ? '$label $value' : value;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final availableW = constraints.maxWidth;
+            final dynamicPadding = _paddingHForWidth(availableW);
+            return Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: dynamicPadding,
+                vertical: 6,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.max,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Text(
+                      display,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF222222),
+                        fontFamily: 'Cairo',
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                  const SizedBox(width: _gap),
+                  SizedBox(
+                    width: _iconWidth,
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 18,
+                      color: primary,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// فاصل عمودي خفيف داخل شريط الفلتر
+class _FilterBarDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: 1,
+        height: 18,
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        color: const Color(0xFFE8E8E8),
+      ),
     );
   }
 }
@@ -481,11 +1131,10 @@ class _ManageLectureCard extends StatelessWidget {
     final canAct = !isEnded;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE8E8E8)),
         boxShadow: [
           BoxShadow(
@@ -498,9 +1147,23 @@ class _ManageLectureCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // اسم المقرر — واضح وكبير
+          Text(
+            lecture.courseName,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF222222),
+              fontFamily: 'Cairo',
+              height: 1.3,
+            ),
+          ),
+          const SizedBox(height: 12),
+          // الوقت، القاعة، الشعبة
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              Icon(Icons.schedule_rounded, size: 18, color: primary),
+              const SizedBox(width: 6),
               Text(
                 timeRange,
                 style: const TextStyle(
@@ -510,40 +1173,37 @@ class _ManageLectureCard extends StatelessWidget {
                   fontFamily: 'Cairo',
                 ),
               ),
-              Icon(Icons.access_time, size: 18, color: primary),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            lecture.courseName,
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF222222),
-              fontFamily: 'Cairo',
-              height: 1.3,
-            ),
-          ),
           const SizedBox(height: 6),
-          Text(
-            description,
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey.shade700,
-              fontFamily: 'Cairo',
-              height: 1.4,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+          Row(
+            children: [
+              Icon(Icons.room_rounded, size: 18, color: Colors.grey.shade600),
+              const SizedBox(width: 6),
+              Text(
+                '${tr('القاعة', 'Hall')} ${lecture.hall}',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade700,
+                  fontFamily: 'Cairo',
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            '${tr('القاعة', 'Hall')} ${lecture.hall}',
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey.shade600,
-              fontFamily: 'Cairo',
-            ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Icon(Icons.groups_rounded, size: 18, color: Colors.grey.shade600),
+              const SizedBox(width: 6),
+              Text(
+                '${tr('الشعبة', 'Section')} ${lecture.section}',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade700,
+                  fontFamily: 'Cairo',
+                ),
+              ),
+            ],
           ),
           if (isEnded) ...[
             const SizedBox(height: 12),
@@ -551,12 +1211,13 @@ class _ManageLectureCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE8E8E8)),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline, size: 18, color: Colors.grey.shade700),
+                  Icon(Icons.info_outline_rounded,
+                      size: 18, color: Colors.grey.shade700),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -580,8 +1241,8 @@ class _ManageLectureCard extends StatelessWidget {
             children: [
               Expanded(
                 child: _ActionButton(
-                  icon: Icons.notifications_active_outlined,
-                  label: tr('إشعار بتأخير المحاضرة', 'Notify lecture delay'),
+                  icon: Icons.schedule_rounded,
+                  label: tr('إشعار تأخير', 'Delay notification'),
                   color: delayYellow,
                   enabled: canAct && !delaySent,
                   onTap: onDelay,
@@ -590,8 +1251,8 @@ class _ManageLectureCard extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: _ActionButton(
-                  icon: Icons.cancel_outlined,
-                  label: tr('إشعار بإلغاء المحاضرة', 'Notify lecture cancellation'),
+                  icon: Icons.event_busy_rounded,
+                  label: tr('إشعار إلغاء', 'Cancel notification'),
                   color: cancelRed,
                   enabled: canAct && !cancelSent,
                   onTap: onCancel,
@@ -712,7 +1373,7 @@ class _DelayDurationSheetState extends State<_DelayDurationSheet> {
       padding: EdgeInsets.only(
         left: 24,
         right: 24,
-        top: 24,
+        top: 12,
         bottom: 24 + padding.bottom + viewInsets.bottom,
       ),
       decoration: const BoxDecoration(
@@ -724,6 +1385,17 @@ class _DelayDurationSheetState extends State<_DelayDurationSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD8D8D8),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
             Text(
               widget.tr('مدة التأخير', 'Delay duration'),
               style: const TextStyle(
@@ -865,215 +1537,3 @@ class _Option extends StatelessWidget {
   }
 }
 
-// --- شاشة النجاح للتأخير ---
-class _SuccessScreen extends StatelessWidget {
-  final String title;
-  final String courseName;
-  final String description;
-  final List<String> extraLines;
-  final String backLabel;
-  final Color primary;
-
-  const _SuccessScreen({
-    required this.title,
-    required this.courseName,
-    required this.description,
-    required this.extraLines,
-    required this.backLabel,
-    required this.primary,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-          color: const Color(0xFF222222),
-        ),
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF222222),
-                  fontFamily: 'Cairo',
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                courseName,
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF222222),
-                  fontFamily: 'Cairo',
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                description,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade700,
-                  fontFamily: 'Cairo',
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 16),
-              ...extraLines.map(
-                (line) => Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Text(
-                    line,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontFamily: 'Cairo',
-                      color: Color(0xFF222222),
-                    ),
-                  ),
-                ),
-              ),
-              const Spacer(),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF666666),
-                    side: BorderSide(color: Colors.grey.shade400),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(backLabel),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// --- شاشة النجاح للإلغاء ---
-class _CancelSuccessScreen extends StatelessWidget {
-  final String courseName;
-  final String description;
-  final String backLabel;
-  final Color primary;
-  final Color cancelRed;
-  final String Function(String ar, String en) tr;
-
-  const _CancelSuccessScreen({
-    required this.courseName,
-    required this.description,
-    required this.backLabel,
-    required this.primary,
-    required this.cancelRed,
-    required this.tr,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-          color: const Color(0xFF222222),
-        ),
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                tr('تم إرسال إشعار الإلغاء', 'Cancellation notification sent'),
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF222222),
-                  fontFamily: 'Cairo',
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                courseName,
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF222222),
-                  fontFamily: 'Cairo',
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                description,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade700,
-                  fontFamily: 'Cairo',
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                decoration: BoxDecoration(
-                  color: cancelRed.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: cancelRed.withValues(alpha: 0.3)),
-                ),
-                child: Text(
-                  tr('تم إلغاء المحاضرة', 'The lecture has been cancelled'),
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: cancelRed,
-                    fontFamily: 'Cairo',
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              const Spacer(),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF666666),
-                    side: BorderSide(color: Colors.grey.shade400),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(backLabel),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

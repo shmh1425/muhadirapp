@@ -3,10 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-import 'lecturer_nav_bar.dart';
-import 'lecturer_home_screen.dart';
 import 'lecturer_language.dart';
-import 'lecturer_profile_screen.dart';
 import '../../models/lecturer/lecture_item.dart';
 
 class LecturerQrScreen extends StatefulWidget {
@@ -20,7 +17,6 @@ class LecturerQrScreen extends StatefulWidget {
 
 class _LecturerQrScreenState extends State<LecturerQrScreen> {
   late String _qrData;
-  int _selectedIndex = 1; // QR في المنتصف
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
@@ -50,45 +46,6 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
     });
   }
 
-  Future<void> _onItemTapped(int index) async {
-    setState(() {
-      _selectedIndex = index;
-    });
-
-    switch (index) {
-      case 0:
-        await Future.delayed(const Duration(milliseconds: 160));
-        if (!mounted) return;
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const LecturerProfileScreen(
-              lecturer: LecturerProfile(
-                name: 'أنـاس بوقس',
-                email: 'username@example.com',
-                college: 'كلية الحاسبات',
-                department: 'هندسة البرمجيات',
-              ),
-            ),
-          ),
-        );
-        if (!mounted) return;
-        setState(() {
-          _selectedIndex = 1; // الرجوع لعلامة ال QR بعد الخروج من البروفايل
-        });
-        break;
-      case 1:
-        // شاشة QR الحالية
-        break;
-      case 2:
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute<void>(builder: (_) => const LecturerHomeScreen()),
-          (route) => false,
-        );
-        break;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     const primaryColor = Color(0xFF006571);
@@ -99,10 +56,6 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
         textDirection: LecturerLanguageController.direction(),
         child: Scaffold(
           backgroundColor: Colors.white,
-          bottomNavigationBar: LecturerNavBar(
-            selectedIndex: _selectedIndex,
-            onItemTapped: _onItemTapped,
-          ),
           body: SafeArea(
             child: Column(
               children: [
