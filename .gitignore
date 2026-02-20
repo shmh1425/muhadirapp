@@ -23,5 +23,18 @@ ios/Flutter/Flutter.podspec
 .DS_Store
 Thumbs.db
 
+# Cursor / AI / محلي — لا ترفعها للمستودع
+.cursor/
+*.cursorrules
+.cursorrules
+AGENTS.md
+agent-transcripts/
+
+# بيئة ومفاتيح (أمان)
+.env
+.env.*
+*.keystore
+key.properties
+
 # Snyk Security Extension - AI Rules (auto-generated)
 .github/instructions/snyk_rules.instructions.md
