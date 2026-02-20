@@ -116,6 +116,70 @@ class _LecturerNotificationsScreenState
     );
   }
 
+  void _confirmDeleteAll() {
+    if (_allNotifications.isEmpty) return;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return Directionality(
+          textDirection: LecturerLanguageController.direction(),
+          child: ModernPopupDialog(
+            title: Text(
+              _tr('حذف كل الإشعارات', 'Delete all notifications'),
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            accentColor: const Color(0xFFE53935),
+            actions: [
+              ModernPopupActionButton(
+                label: _tr('إلغاء', 'Cancel'),
+                onTap: () => Navigator.of(dialogContext).pop(),
+                isPrimary: false,
+              ),
+              ModernPopupActionButton(
+                label: _tr('حذف الكل', 'Delete all'),
+                onTap: () {
+                  Navigator.of(dialogContext).pop();
+                  setState(() {
+                    _allNotifications.clear();
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        _tr(
+                          'تم حذف جميع الإشعارات.',
+                          'All notifications have been deleted.',
+                        ),
+                      ),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+                isPrimary: true,
+                primaryColor: const Color(0xFFE53935),
+              ),
+            ],
+            child: Text(
+              _tr(
+                'سيتم حذف جميع الإشعارات نهائيًا. هل تريد المتابعة؟',
+                'This will permanently delete all notifications. Continue?',
+              ),
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 13,
+                color: Colors.black87,
+                height: 1.5,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<LecturerLanguage>(
@@ -160,6 +224,26 @@ class _LecturerNotificationsScreenState
                       ),
                     ),
                     const SizedBox(height: 10),
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: TextButton.icon(
+                        onPressed: _allNotifications.isEmpty
+                            ? null
+                            : _confirmDeleteAll,
+                        icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+                        label: Text(
+                          _tr('حذف كل الإشعارات', 'Delete all notifications'),
+                          style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFFE53935),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
                     Expanded(
                       child: _filteredNotifications.isEmpty
                           ? Center(
@@ -1083,7 +1167,8 @@ const List<_LecturerNotification> _mockLecturerNotifications = [
     title: 'قبول عذر طالب',
     message: 'تم قبول العذر المرفق لطالب في مقرر "الثقافة الإسلامية".',
     titleEn: 'Student excuse accepted',
-    messageEn: 'The submitted excuse was accepted for a student in "Islamic Culture".',
+    messageEn:
+        'The submitted excuse was accepted for a student in "Islamic Culture".',
     date: 'الخميس 8 مايو 2025 - 10:05 ص',
     type: _NotificationType.success,
     category: _NotificationCategory.students,

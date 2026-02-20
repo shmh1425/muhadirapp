@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/lecturer/lecture_item.dart';
 import '../../services/lecturer/lecture_repository.dart';
+import '../../utils/shared/time_utils.dart';
 import 'lecturer_language.dart';
 import 'widgets/modern_popup_dialog.dart';
 import 'widgets/profile_back_button.dart';
@@ -24,54 +25,167 @@ class _LecturerAttendanceReportScreenState
 
   bool _isEditMode = false;
   bool _hasPendingChanges = false;
-  String _selectedCourse = 'الكل';
-  String _selectedDay = 'اليوم';
+  bool _weekIsAuto = true;
+  int? _selectedWeekNumber;
+  late int _selectedDayOfWeek;
+  String? _selectedCourse;
+  String? _selectedSection;
   _StatusFilter _statusFilter = _StatusFilter.all;
   Map<String, _AttendanceStatus> _draftStatuses = {};
+  static const int _maxWeeks = 53;
+  static const List<int> _weekdayOrder = [7, 1, 2, 3, 4, 5, 6];
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
-
-  String _displayDay(String day) {
-    return LecturerLanguageController.dayNameFromArabic(day);
-  }
-
-  String _displayCourse(String course) {
-    if (course == 'الكل') {
-      return _tr('الكل', 'All');
-    }
-    return course;
-  }
 
   @override
   void initState() {
     super.initState();
     _lectures = _repository.getAllLectures();
     _groups = _buildMockGroups(_lectures);
+    _selectedDayOfWeek = DateTime.now().weekday;
+  }
+
+  int _getTargetWeekday() => _selectedDayOfWeek;
+
+  DateTime _getReferenceDate() {
+    final now = DateTime.now();
+    final target = _getTargetWeekday();
+    if (target == now.weekday) return now;
+    if (target == now.add(const Duration(days: 1)).weekday) {
+      return now.add(const Duration(days: 1));
+    }
+    int diff = target - now.weekday;
+    if (diff <= 0) diff += 7;
+    return now.add(Duration(days: diff));
+  }
+
+  int get _weekNumber {
+    final d = _getReferenceDate();
+    final startOfYear = DateTime(d.year, 1, 1);
+    final dayOfYear = d.difference(startOfYear).inDays + 1;
+    final w = ((dayOfYear - d.weekday + 10) / 7).floor();
+    return w.clamp(1, 53);
+  }
+
+  int get _displayWeekNumber =>
+      _weekIsAuto ? _weekNumber : (_selectedWeekNumber ?? _weekNumber);
+
+  List<_LectureAttendanceGroup> get _groupsForSelectedDay {
+    final target = _getTargetWeekday();
+    return _groups.where((group) => group.dayOfWeek == target).toList();
+  }
+
+  bool _hasMatchingGroup({String? course, String? section}) {
+    return _groupsForSelectedDay.any((group) {
+      final matchCourse = course == null || group.courseName == course;
+      final matchSection = section == null || group.section == section;
+      return matchCourse && matchSection;
+    });
+  }
+
+  List<String> _courseOptionsForSection(String? section) {
+    final names =
+        _groupsForSelectedDay
+            .where((group) => section == null || group.section == section)
+            .map((group) => group.courseName)
+            .toSet()
+            .toList()
+          ..sort();
+    return names;
+  }
+
+  List<String> _sectionOptionsForCourse(String? course) {
+    final sections =
+        _groupsForSelectedDay
+            .where((group) => course == null || group.courseName == course)
+            .map((group) => group.section)
+            .toSet()
+            .toList()
+          ..sort();
+    return sections;
   }
 
   List<String> get _courseOptions {
-    final courses = _groups.map((e) => e.courseName).toSet().toList()..sort();
-    return ['الكل', ...courses];
+    return _courseOptionsForSection(_selectedSection);
   }
 
-  List<String> get _dayOptions => [
-    'اليوم',
-    'الأحد',
-    'الاثنين',
-    'الثلاثاء',
-    'الأربعاء',
-    'الخميس',
-  ];
+  List<String> get _sectionOptions {
+    return _sectionOptionsForCourse(_selectedCourse);
+  }
+
+  void _normalizeLinkedSelections() {
+    if (_selectedCourse != null &&
+        !_groupsForSelectedDay.any(
+          (group) => group.courseName == _selectedCourse,
+        )) {
+      _selectedCourse = null;
+    }
+    if (_selectedSection != null &&
+        !_groupsForSelectedDay.any(
+          (group) => group.section == _selectedSection,
+        )) {
+      _selectedSection = null;
+    }
+    if (!_hasMatchingGroup(
+      course: _selectedCourse,
+      section: _selectedSection,
+    )) {
+      _selectedSection = null;
+      if (!_hasMatchingGroup(course: _selectedCourse, section: null)) {
+        _selectedCourse = null;
+      }
+    }
+  }
+
+  void _onSectionChanged(String? section) {
+    _selectedSection = section;
+    if (!_hasMatchingGroup(
+      course: _selectedCourse,
+      section: _selectedSection,
+    )) {
+      _selectedCourse = null;
+    }
+    final availableCourses = _courseOptionsForSection(_selectedSection);
+    if (_selectedCourse == null && availableCourses.length == 1) {
+      _selectedCourse = availableCourses.first;
+    }
+    _resetEditState();
+  }
+
+  void _onCourseChanged(String? course) {
+    _selectedCourse = course;
+    if (!_hasMatchingGroup(
+      course: _selectedCourse,
+      section: _selectedSection,
+    )) {
+      _selectedSection = null;
+    }
+    final availableSections = _sectionOptionsForCourse(_selectedCourse);
+    if (_selectedSection == null && availableSections.length == 1) {
+      _selectedSection = availableSections.first;
+    }
+    _resetEditState();
+  }
 
   List<_LectureAttendanceGroup> get _filteredGroups {
-    return _groups.where((group) {
-      final courseOk =
-          _selectedCourse == 'الكل' || group.courseName == _selectedCourse;
-      final dayOk = _selectedDay == 'اليوم'
-          ? group.dayOfWeek == DateTime.now().weekday
-          : group.dayOfWeek == _dayToWeekday(_selectedDay);
-      return courseOk && dayOk;
-    }).toList();
+    final target = _getTargetWeekday();
+    var list = _groups.where((group) => group.dayOfWeek == target).toList();
+    if (_selectedCourse != null && _selectedCourse!.trim().isNotEmpty) {
+      list = list
+          .where((group) => group.courseName == _selectedCourse)
+          .toList();
+    }
+    if (_selectedSection != null && _selectedSection!.trim().isNotEmpty) {
+      list = list.where((group) => group.section == _selectedSection).toList();
+    }
+    list.sort((a, b) {
+      final aTime = TimeUtils.parseTimeString(a.startTime);
+      final bTime = TimeUtils.parseTimeString(b.startTime);
+      final aMinutes = aTime.$1 * 60 + aTime.$2;
+      final bMinutes = bTime.$1 * 60 + bTime.$2;
+      return aMinutes.compareTo(bMinutes);
+    });
+    return list;
   }
 
   _LectureAttendanceGroup? get _activeGroup {
@@ -156,7 +270,10 @@ class _LecturerAttendanceReportScreenState
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          _tr('تم حفظ تغييرات تقرير الحضور.', 'Attendance report changes saved.'),
+          _tr(
+            'تم حفظ تغييرات تقرير الحضور.',
+            'Attendance report changes saved.',
+          ),
         ),
         duration: const Duration(seconds: 2),
       ),
@@ -186,18 +303,6 @@ class _LecturerAttendanceReportScreenState
               ),
             ),
             accentColor: _primary,
-            child: Text(
-              _tr(
-                'يوجد تعديلات لم يتم حفظها بعد. هل تريد حفظها قبل الخروج من وضع التعديل؟',
-                'You have unsaved changes. Save before leaving edit mode?',
-              ),
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 13,
-                color: Colors.black87,
-                height: 1.5,
-              ),
-            ),
             actions: [
               ModernPopupActionButton(
                 label: _tr('تجاهل', 'Discard'),
@@ -211,6 +316,18 @@ class _LecturerAttendanceReportScreenState
                 primaryColor: _primary,
               ),
             ],
+            child: Text(
+              _tr(
+                'يوجد تعديلات لم يتم حفظها بعد. هل تريد حفظها قبل الخروج من وضع التعديل؟',
+                'You have unsaved changes. Save before leaving edit mode?',
+              ),
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 13,
+                color: Colors.black87,
+                height: 1.5,
+              ),
+            ),
           ),
         );
       },
@@ -288,159 +405,294 @@ class _LecturerAttendanceReportScreenState
   }
 
   Widget _buildFilters() {
-    final hasCustomFilter =
-        _selectedCourse != 'الكل' || _selectedDay != 'اليوم';
+    final now = DateTime.now();
+    final todayWeekday = now.weekday;
+    final tomorrowWeekday = now.add(const Duration(days: 1)).weekday;
+    final dayLabel = _selectedDayOfWeek == todayWeekday
+        ? _tr('اليوم', 'Today')
+        : _selectedDayOfWeek == tomorrowWeekday
+        ? _tr('غداً', 'Tomorrow')
+        : LecturerLanguageController.dayNameFromWeekday(_selectedDayOfWeek);
+    const double barRadius = 14;
+    const double barPaddingH = 12;
+    const double barPaddingV = 10;
+    const double segmentWidth = 96;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFD4E5E8)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: barPaddingH,
+            vertical: barPaddingV,
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (hasCustomFilter)
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: TextButton(
-                onPressed: () {
-                  setState(() {
-                    _selectedCourse = 'الكل';
-                    _selectedDay = 'اليوم';
-                    _resetEditState();
-                  });
-                },
-                style: TextButton.styleFrom(
-                  foregroundColor: _primary,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: const Size(0, 30),
-                ),
-                child: Text(
-                  _tr('إعادة ضبط', 'Reset'),
-                  style: const TextStyle(
-                    fontFamily: 'Cairo',
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11.5,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(barRadius),
+            border: Border.all(color: const Color(0xFFE8E8E8)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 12,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: segmentWidth,
+                child: _FilterSegment(
+                  value: dayLabel,
+                  segmentWidth: segmentWidth,
+                  primary: _primary,
+                  onTap: () => _showDayPickerSheet(
+                    todayWeekday: todayWeekday,
+                    tomorrowWeekday: tomorrowWeekday,
                   ),
                 ),
               ),
-            ),
-          if (hasCustomFilter) const SizedBox(height: 6),
-          Row(
-            children: [
-              Expanded(
-                child: _buildFilterSelector(
-                  label: _tr('المقرر', 'Course'),
-                  value: _displayCourse(_selectedCourse),
-                  icon: Icons.menu_book_rounded,
-                  onTap: () async {
-                    final selected = await _showFilterSheet(
-                      title: _tr('اختيار المقرر', 'Select Course'),
-                      options: _courseOptions,
-                      current: _selectedCourse,
-                      displayLabel: _displayCourse,
-                    );
-                    if (selected != null) {
-                      setState(() {
-                        _selectedCourse = selected;
-                        _resetEditState();
-                      });
-                    }
-                  },
+              _FilterBarDivider(),
+              SizedBox(
+                width: segmentWidth,
+                child: _FilterSegment(
+                  value: '$_displayWeekNumber',
+                  label: _tr('أسبوع', 'Week'),
+                  segmentWidth: segmentWidth,
+                  primary: _primary,
+                  onTap: _showWeekPickerSheet,
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildFilterSelector(
-                  label: _tr('اليوم', 'Day'),
-                  value: _displayDay(_selectedDay),
-                  icon: Icons.calendar_today_rounded,
-                  onTap: () async {
-                    final selected = await _showFilterSheet(
-                      title: _tr('اختيار اليوم', 'Select Day'),
-                      options: _dayOptions,
-                      current: _selectedDay,
-                      displayLabel: _displayDay,
+              _FilterBarDivider(),
+              SizedBox(
+                width: segmentWidth,
+                child: _FilterSegment(
+                  value: _selectedSection ?? _tr('الشعبة', 'Section'),
+                  segmentWidth: segmentWidth,
+                  primary: _primary,
+                  onTap: _showSectionPickerSheet,
+                ),
+              ),
+              _FilterBarDivider(),
+              SizedBox(
+                width: segmentWidth,
+                child: _FilterSegment(
+                  value: _selectedCourse ?? _tr('المقرر', 'Course'),
+                  segmentWidth: segmentWidth,
+                  primary: _primary,
+                  onTap: _showCoursePickerSheet,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showWeekPickerSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.35,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (_, scrollController) => Container(
+          padding: EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 12,
+            bottom: 24 + MediaQuery.paddingOf(ctx).bottom,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD8D8D8),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _tr('رقم الأسبوع', 'Week number'),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Cairo',
+                  color: Color(0xFF222222),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                title: Text(
+                  _tr('تلقائي (حسب اليوم المحدد)', 'Auto (by selected day)'),
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontWeight: _weekIsAuto
+                        ? FontWeight.w600
+                        : FontWeight.normal,
+                    color: _weekIsAuto ? _primary : const Color(0xFF222222),
+                  ),
+                ),
+                trailing: _weekIsAuto
+                    ? Icon(Icons.check_rounded, color: _primary, size: 22)
+                    : null,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    _weekIsAuto = true;
+                    _selectedWeekNumber = null;
+                    _normalizeLinkedSelections();
+                    _resetEditState();
+                  });
+                },
+              ),
+              const Divider(height: 1),
+              Flexible(
+                child: ListView.builder(
+                  controller: scrollController,
+                  shrinkWrap: true,
+                  itemCount: _maxWeeks,
+                  itemBuilder: (_, index) {
+                    final week = index + 1;
+                    final selected =
+                        !_weekIsAuto && _selectedWeekNumber == week;
+                    return ListTile(
+                      title: Text(
+                        '${_tr('أسبوع', 'Week')} $week',
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontWeight: selected
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                          color: selected ? _primary : const Color(0xFF222222),
+                        ),
+                      ),
+                      trailing: selected
+                          ? Icon(Icons.check_rounded, color: _primary, size: 22)
+                          : null,
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        setState(() {
+                          _weekIsAuto = false;
+                          _selectedWeekNumber = week;
+                          _normalizeLinkedSelections();
+                          _resetEditState();
+                        });
+                      },
                     );
-                    if (selected != null) {
-                      setState(() {
-                        _selectedDay = selected;
-                        _resetEditState();
-                      });
-                    }
                   },
                 ),
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildFilterSelector({
-    required String label,
-    required String value,
-    required IconData icon,
-    required VoidCallback onTap,
+  void _showDayPickerSheet({
+    required int todayWeekday,
+    required int tomorrowWeekday,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        height: 42,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF4F8F9),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFDEE8EA)),
+    final options = <int>[
+      todayWeekday,
+      tomorrowWeekday,
+      ..._weekdayOrder.where((w) => w != todayWeekday && w != tomorrowWeekday),
+    ];
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 12,
+          bottom: 24 + MediaQuery.paddingOf(ctx).bottom,
         ),
-        child: Row(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Icon(icon, size: 16, color: _primary),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 10,
-                      color: Color(0xFF6D7D82),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 11.5,
-                      color: Color(0xFF1D3E45),
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD8D8D8),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
-            const Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 18,
-              color: Color(0xFF4F656B),
+            const SizedBox(height: 12),
+            Text(
+              _tr('اليوم', 'Day'),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Cairo',
+                color: Color(0xFF222222),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 280),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: options.map((w) {
+                    final label = w == todayWeekday
+                        ? _tr('اليوم', 'Today')
+                        : w == tomorrowWeekday
+                        ? _tr('غداً', 'Tomorrow')
+                        : LecturerLanguageController.dayNameFromWeekday(w);
+                    final selected = _selectedDayOfWeek == w;
+                    return ListTile(
+                      title: Text(
+                        label,
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontWeight: selected
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                          color: selected ? _primary : const Color(0xFF222222),
+                        ),
+                      ),
+                      trailing: selected
+                          ? Icon(Icons.check_rounded, color: _primary, size: 22)
+                          : null,
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        setState(() {
+                          _selectedDayOfWeek = w;
+                          _normalizeLinkedSelections();
+                          _resetEditState();
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
             ),
           ],
         ),
@@ -448,117 +700,144 @@ class _LecturerAttendanceReportScreenState
     );
   }
 
-  Future<String?> _showFilterSheet({
-    required String title,
-    required List<String> options,
-    required String current,
-    String Function(String value)? displayLabel,
-  }) {
-    return showModalBottomSheet<String>(
+  void _showSectionPickerSheet() {
+    final options = [null, ..._sectionOptions];
+    showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return Directionality(
-          textDirection: LecturerLanguageController.direction(),
-          child: Container(
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(22),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
-                  blurRadius: 16,
-                  offset: const Offset(0, 8),
+      builder: (ctx) => Container(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 12,
+          bottom: 24 + MediaQuery.paddingOf(ctx).bottom,
+        ),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD8D8D8),
+                  borderRadius: BorderRadius.circular(2),
                 ),
-              ],
+              ),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 44,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFD6D6D6),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                Text(
-                  title,
-                  style: const TextStyle(
+            const SizedBox(height: 12),
+            Text(
+              _tr('الشعبة', 'Section'),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Cairo',
+                color: Color(0xFF222222),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...options.map((section) {
+              final label = section ?? _tr('الشعبة', 'Section');
+              final selected = _selectedSection == section;
+              return ListTile(
+                title: Text(
+                  label,
+                  style: TextStyle(
                     fontFamily: 'Cairo',
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: _primary,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                    color: selected ? _primary : const Color(0xFF222222),
                   ),
                 ),
-                const SizedBox(height: 10),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 320),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: options.length,
-                    separatorBuilder: (_, __) =>
-                        const Divider(height: 1, color: Color(0xFFEAEFF0)),
-                    itemBuilder: (context, index) {
-                      final option = options[index];
-                      final isSelected = option == current;
-                      final shown = displayLabel == null
-                          ? option
-                          : displayLabel(option);
-                      return InkWell(
-                        borderRadius: BorderRadius.circular(10),
-                        onTap: () => Navigator.of(ctx).pop(option),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? const Color(0xFFE7F4F6)
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  shown,
-                                  style: TextStyle(
-                                    fontFamily: 'Cairo',
-                                    fontSize: 13,
-                                    fontWeight: isSelected
-                                        ? FontWeight.w800
-                                        : FontWeight.w600,
-                                    color: isSelected
-                                        ? _primary
-                                        : const Color(0xFF2F4349),
-                                  ),
-                                ),
-                              ),
-                              if (isSelected)
-                                const Icon(
-                                  Icons.check_circle_rounded,
-                                  size: 18,
-                                  color: _primary,
-                                ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                trailing: selected
+                    ? Icon(Icons.check_rounded, color: _primary, size: 22)
+                    : null,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    _onSectionChanged(section);
+                  });
+                },
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCoursePickerSheet() {
+    final options = [null, ..._courseOptions];
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 12,
+          bottom: 24 + MediaQuery.paddingOf(ctx).bottom,
+        ),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD8D8D8),
+                  borderRadius: BorderRadius.circular(2),
                 ),
-              ],
+              ),
             ),
-          ),
-        );
-      },
+            const SizedBox(height: 12),
+            Text(
+              _tr('المقرر', 'Course'),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Cairo',
+                color: Color(0xFF222222),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...options.map((course) {
+              final label = course ?? _tr('المقرر', 'Course');
+              final selected = _selectedCourse == course;
+              return ListTile(
+                title: Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                    color: selected ? _primary : const Color(0xFF222222),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: selected
+                    ? Icon(Icons.check_rounded, color: _primary, size: 22)
+                    : null,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    _onCourseChanged(course);
+                  });
+                },
+              );
+            }),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1302,23 +1581,6 @@ class _LecturerAttendanceReportScreenState
     }
   }
 
-  int _dayToWeekday(String dayName) {
-    switch (dayName) {
-      case 'الأحد':
-        return 7;
-      case 'الاثنين':
-        return 1;
-      case 'الثلاثاء':
-        return 2;
-      case 'الأربعاء':
-        return 3;
-      case 'الخميس':
-        return 4;
-      default:
-        return DateTime.now().weekday;
-    }
-  }
-
   String _dayName(int weekday) {
     return LecturerLanguageController.dayNameFromWeekday(weekday);
   }
@@ -1358,12 +1620,105 @@ class _LecturerAttendanceReportScreenState
           courseName: lecture.courseName,
           section: lecture.section,
           dayOfWeek: lecture.dayOfWeek,
+          startTime: lecture.startTime,
           timeRange: '${lecture.startTime} - ${lecture.endTime}',
           students: students,
         ),
       );
     }
     return groups;
+  }
+}
+
+class _FilterSegment extends StatelessWidget {
+  const _FilterSegment({
+    required this.value,
+    this.label,
+    required this.segmentWidth,
+    required this.primary,
+    required this.onTap,
+  });
+
+  final String value;
+  final String? label;
+  final double segmentWidth;
+  final Color primary;
+  final VoidCallback onTap;
+
+  static const double _iconWidth = 20;
+  static const double _gap = 4;
+
+  static double _paddingHForWidth(double width) {
+    if (width >= 100) return 12;
+    if (width >= 75) return 8;
+    return 4;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final display = label != null ? '$label $value' : value;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final availableW = constraints.maxWidth;
+            final dynamicPadding = _paddingHForWidth(availableW);
+            return Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: dynamicPadding,
+                vertical: 6,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.max,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Text(
+                      display,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF222222),
+                        fontFamily: 'Cairo',
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                  const SizedBox(width: _gap),
+                  SizedBox(
+                    width: _iconWidth,
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 18,
+                      color: primary,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterBarDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: 1,
+        height: 18,
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        color: const Color(0xFFE8E8E8),
+      ),
+    );
   }
 }
 
@@ -1384,6 +1739,7 @@ class _LectureAttendanceGroup {
     required this.courseName,
     required this.section,
     required this.dayOfWeek,
+    required this.startTime,
     required this.timeRange,
     required this.students,
   });
@@ -1392,6 +1748,7 @@ class _LectureAttendanceGroup {
   final String courseName;
   final String section;
   final int dayOfWeek;
+  final String startTime;
   final String timeRange;
   final List<_StudentAttendanceRecord> students;
 }

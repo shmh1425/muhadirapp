@@ -56,7 +56,9 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return Directionality(
-              textDirection: LecturerLanguageController.direction(draftLanguage),
+              textDirection: LecturerLanguageController.direction(
+                draftLanguage,
+              ),
               child: ModernPopupDialog(
                 title: Text(
                   _tr('تغيير اللغة', 'Change Language'),
@@ -143,13 +145,6 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
               ),
             ),
             accentColor: const Color(0xFFD32F2F),
-            child: Text(
-              _tr(
-                'هل أنت متأكد أنك تريد تسجيل الخروج؟',
-                'Are you sure you want to log out?',
-              ),
-              style: const TextStyle(fontFamily: 'Cairo', height: 1.4),
-            ),
             actions: [
               ModernPopupActionButton(
                 label: _tr('إلغاء', 'Cancel'),
@@ -163,6 +158,13 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
                 primaryColor: const Color(0xFFD32F2F),
               ),
             ],
+            child: Text(
+              _tr(
+                'هل أنت متأكد أنك تريد تسجيل الخروج؟',
+                'Are you sure you want to log out?',
+              ),
+              style: const TextStyle(fontFamily: 'Cairo', height: 1.4),
+            ),
           ),
         );
       },

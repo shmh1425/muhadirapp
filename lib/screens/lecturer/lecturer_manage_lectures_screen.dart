@@ -120,18 +120,15 @@ class _LecturerManageLecturesScreenState
   }
 
   List<String> get _uniqueCourseNames {
-    final names = _lecturesForSelectedDay
-        .map((l) => l.courseName)
-        .toSet()
-        .toList()
-      ..sort();
+    final names =
+        _lecturesForSelectedDay.map((l) => l.courseName).toSet().toList()
+          ..sort();
     return names;
   }
 
   List<String> get _uniqueSections {
     final sections =
-        _lecturesForSelectedDay.map((l) => l.section).toSet().toList()
-          ..sort();
+        _lecturesForSelectedDay.map((l) => l.section).toSet().toList()..sort();
     return sections;
   }
 
@@ -143,7 +140,12 @@ class _LecturerManageLecturesScreenState
     if (_isLectureEnded(lecture)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_tr('لا يمكن تأخير محاضرة منتهية', 'Cannot delay a finished lecture')),
+          content: Text(
+            _tr(
+              'لا يمكن تأخير محاضرة منتهية',
+              'Cannot delay a finished lecture',
+            ),
+          ),
           backgroundColor: _cancelRed,
         ),
       );
@@ -152,10 +154,12 @@ class _LecturerManageLecturesScreenState
     if (_delaySentFor.contains(lecture.crn)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_tr(
-            'تم إرسال إشعار التأخير لهذه المحاضرة مسبقاً',
-            'Delay notification was already sent for this lecture',
-          )),
+          content: Text(
+            _tr(
+              'تم إرسال إشعار التأخير لهذه المحاضرة مسبقاً',
+              'Delay notification was already sent for this lecture',
+            ),
+          ),
           backgroundColor: Colors.grey.shade700,
         ),
       );
@@ -183,7 +187,9 @@ class _LecturerManageLecturesScreenState
     if (_isLectureEnded(lecture)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_tr('لا يمكن إلغاء محاضرة ماضية', 'Cannot cancel a past lecture')),
+          content: Text(
+            _tr('لا يمكن إلغاء محاضرة ماضية', 'Cannot cancel a past lecture'),
+          ),
           backgroundColor: _cancelRed,
         ),
       );
@@ -192,10 +198,12 @@ class _LecturerManageLecturesScreenState
     if (_cancelSentFor.contains(lecture.crn)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_tr(
-            'تم إرسال إشعار الإلغاء لهذه المحاضرة مسبقاً',
-            'Cancellation notification was already sent for this lecture',
-          )),
+          content: Text(
+            _tr(
+              'تم إرسال إشعار الإلغاء لهذه المحاضرة مسبقاً',
+              'Cancellation notification was already sent for this lecture',
+            ),
+          ),
           backgroundColor: Colors.grey.shade700,
         ),
       );
@@ -237,8 +245,10 @@ class _LecturerManageLecturesScreenState
     final nm = newStart % 60;
     final newTimeStr =
         '${nh.toString().padLeft(2, '0')}:${nm.toString().padLeft(2, '0')}';
-    final newTimeDisplay =
-        TimeUtils.formatTimeRange(newTimeStr, lecture.endTime).split(' - ').first;
+    final newTimeDisplay = TimeUtils.formatTimeRange(
+      newTimeStr,
+      lecture.endTime,
+    ).split(' - ').first;
 
     showDialog<void>(
       context: context,
@@ -250,9 +260,7 @@ class _LecturerManageLecturesScreenState
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: _primary.withValues(alpha: 0.35),
-            ),
+            border: Border.all(color: _primary.withValues(alpha: 0.35)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.12),
@@ -264,8 +272,7 @@ class _LecturerManageLecturesScreenState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.check_circle_rounded,
-                  size: 56, color: _primary),
+              Icon(Icons.check_circle_rounded, size: 56, color: _primary),
               const SizedBox(height: 16),
               Text(
                 _tr('تم إرسال إشعار التأخير', 'Delay notification sent'),
@@ -330,9 +337,7 @@ class _LecturerManageLecturesScreenState
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: _cancelRed.withValues(alpha: 0.35),
-            ),
+            border: Border.all(color: _cancelRed.withValues(alpha: 0.35)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.12),
@@ -460,9 +465,7 @@ class _LecturerManageLecturesScreenState
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildFilterBar(),
-                  Expanded(
-                    child: _buildContent(),
-                  ),
+                  Expanded(child: _buildContent()),
                 ],
               ),
             ),
@@ -479,17 +482,14 @@ class _LecturerManageLecturesScreenState
     final dayLabel = _selectedDayOfWeek == todayWeekday
         ? _tr('اليوم', 'Today')
         : _selectedDayOfWeek == tomorrowWeekday
-            ? _tr('غداً', 'Tomorrow')
-            : LecturerLanguageController.dayNameFromWeekday(_selectedDayOfWeek);
+        ? _tr('غداً', 'Tomorrow')
+        : LecturerLanguageController.dayNameFromWeekday(_selectedDayOfWeek);
     const double barRadius = 14;
     const double barPaddingH = 12;
     const double barPaddingV = 10;
 
-    // عرض ثابت لكل فلتر (يمين → يسار: اليوم، الأسبوع، المقرر، الشعبة)
-    const double widthDay = 92;
-    const double widthWeek = 80;
-    const double widthCourse = 124;
-    const double widthSection = 68;
+    // تقسيم متساوٍ لكل الفلاتر
+    const double segmentWidth = 96;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
@@ -502,65 +502,65 @@ class _LecturerManageLecturesScreenState
             vertical: barPaddingV,
           ),
           decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(barRadius),
-              border: Border.all(color: const Color(0xFFE8E8E8)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 12,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: widthDay,
-                  child: _FilterSegment(
-                    value: dayLabel,
-                    segmentWidth: widthDay,
-                    primary: _primary,
-                    onTap: () => _showDayPickerSheet(
-                      todayWeekday: todayWeekday,
-                      tomorrowWeekday: tomorrowWeekday,
-                    ),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(barRadius),
+            border: Border.all(color: const Color(0xFFE8E8E8)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 12,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: segmentWidth,
+                child: _FilterSegment(
+                  value: dayLabel,
+                  segmentWidth: segmentWidth,
+                  primary: _primary,
+                  onTap: () => _showDayPickerSheet(
+                    todayWeekday: todayWeekday,
+                    tomorrowWeekday: tomorrowWeekday,
                   ),
                 ),
-                _FilterBarDivider(),
-                SizedBox(
-                  width: widthWeek,
-                  child: _FilterSegment(
-                    value: '$_displayWeekNumber',
-                    label: _tr('أسبوع', 'Week'),
-                    segmentWidth: widthWeek,
-                    primary: _primary,
-                    onTap: () => _showWeekPickerSheet(),
-                  ),
+              ),
+              _FilterBarDivider(),
+              SizedBox(
+                width: segmentWidth,
+                child: _FilterSegment(
+                  value: '$_displayWeekNumber',
+                  label: _tr('أسبوع', 'Week'),
+                  segmentWidth: segmentWidth,
+                  primary: _primary,
+                  onTap: () => _showWeekPickerSheet(),
                 ),
-                _FilterBarDivider(),
-                SizedBox(
-                  width: widthCourse,
-                  child: _FilterSegment(
-                    value: _selectedCourse ?? _tr('الكل', 'All'),
-                    segmentWidth: widthCourse,
-                    primary: _primary,
-                    onTap: () => _showCoursePickerSheet(),
-                  ),
+              ),
+              _FilterBarDivider(),
+              SizedBox(
+                width: segmentWidth,
+                child: _FilterSegment(
+                  value: _selectedCourse ?? _tr('الكل', 'All'),
+                  segmentWidth: segmentWidth,
+                  primary: _primary,
+                  onTap: () => _showCoursePickerSheet(),
                 ),
-                _FilterBarDivider(),
-                SizedBox(
-                  width: widthSection,
-                  child: _FilterSegment(
-                    value: _selectedSection ?? _tr('الكل', 'All'),
-                    segmentWidth: widthSection,
-                    primary: _primary,
-                    onTap: () => _showSectionPickerSheet(),
-                  ),
+              ),
+              _FilterBarDivider(),
+              SizedBox(
+                width: segmentWidth,
+                child: _FilterSegment(
+                  value: _selectedSection ?? _tr('الكل', 'All'),
+                  segmentWidth: segmentWidth,
+                  primary: _primary,
+                  onTap: () => _showSectionPickerSheet(),
                 ),
-              ],
-            ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -618,8 +618,9 @@ class _LecturerManageLecturesScreenState
                   _tr('تلقائي (حسب اليوم المحدد)', 'Auto (by selected day)'),
                   style: TextStyle(
                     fontFamily: 'Cairo',
-                    fontWeight:
-                        _weekIsAuto ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: _weekIsAuto
+                        ? FontWeight.w600
+                        : FontWeight.normal,
                     color: _weekIsAuto ? _primary : const Color(0xFF222222),
                   ),
                 ),
@@ -651,15 +652,14 @@ class _LecturerManageLecturesScreenState
                         '${_tr('أسبوع', 'Week')} $week',
                         style: TextStyle(
                           fontFamily: 'Cairo',
-                          fontWeight:
-                              selected ? FontWeight.w600 : FontWeight.normal,
-                          color:
-                              selected ? _primary : const Color(0xFF222222),
+                          fontWeight: selected
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                          color: selected ? _primary : const Color(0xFF222222),
                         ),
                       ),
                       trailing: selected
-                          ? Icon(Icons.check_rounded,
-                              color: _primary, size: 22)
+                          ? Icon(Icons.check_rounded, color: _primary, size: 22)
                           : null,
                       onTap: () {
                         Navigator.pop(ctx);
@@ -686,9 +686,7 @@ class _LecturerManageLecturesScreenState
   }) {
     final options = <int>[todayWeekday, tomorrowWeekday]
       ..addAll(
-        _weekdayOrder.where(
-          (w) => w != todayWeekday && w != tomorrowWeekday,
-        ),
+        _weekdayOrder.where((w) => w != todayWeekday && w != tomorrowWeekday),
       );
     showModalBottomSheet<void>(
       context: context,
@@ -738,16 +736,17 @@ class _LecturerManageLecturesScreenState
                     final label = w == todayWeekday
                         ? _tr('اليوم', 'Today')
                         : w == tomorrowWeekday
-                            ? _tr('غداً', 'Tomorrow')
-                            : LecturerLanguageController.dayNameFromWeekday(w);
+                        ? _tr('غداً', 'Tomorrow')
+                        : LecturerLanguageController.dayNameFromWeekday(w);
                     final selected = _selectedDayOfWeek == w;
                     return ListTile(
                       title: Text(
                         label,
                         style: TextStyle(
                           fontFamily: 'Cairo',
-                          fontWeight:
-                              selected ? FontWeight.w600 : FontWeight.normal,
+                          fontWeight: selected
+                              ? FontWeight.w600
+                              : FontWeight.normal,
                           color: selected ? _primary : const Color(0xFF222222),
                         ),
                       ),
@@ -892,8 +891,7 @@ class _LecturerManageLecturesScreenState
                   label,
                   style: TextStyle(
                     fontFamily: 'Cairo',
-                    fontWeight:
-                        selected ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
                     color: selected ? _primary : const Color(0xFF222222),
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -1126,8 +1124,10 @@ class _ManageLectureCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final timeRange =
-        TimeUtils.formatTimeRange(lecture.startTime, lecture.endTime);
+    final timeRange = TimeUtils.formatTimeRange(
+      lecture.startTime,
+      lecture.endTime,
+    );
     final canAct = !isEnded;
 
     return Container(
@@ -1216,8 +1216,11 @@ class _ManageLectureCard extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline_rounded,
-                      size: 18, color: Colors.grey.shade700),
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 18,
+                    color: Colors.grey.shade700,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -1445,8 +1448,10 @@ class _DelayDurationSheetState extends State<_DelayDurationSheet> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   isDense: true,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
                 ),
                 style: const TextStyle(fontFamily: 'Cairo'),
               ),
@@ -1536,4 +1541,3 @@ class _Option extends StatelessWidget {
     );
   }
 }
-

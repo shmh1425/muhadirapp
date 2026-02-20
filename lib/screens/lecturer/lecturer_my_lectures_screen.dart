@@ -118,6 +118,7 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
   }
 
   Widget _buildTabs() {
+    const double tabWidth = 78;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
@@ -128,25 +129,31 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
             padding: const EdgeInsets.only(left: 6),
             child: GestureDetector(
               onTap: () => setState(() => _selectedTab = tab.label),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: isActive ? _primaryColor : Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isActive ? _primaryColor : const Color(0xFFD9D9D9),
+              child: SizedBox(
+                width: tabWidth,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 5,
                   ),
-                ),
-                child: Text(
-                  _displayDayNameFromArabic(tab.label),
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: isActive ? Colors.white : const Color(0xFF444444),
+                  decoration: BoxDecoration(
+                    color: isActive ? _primaryColor : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isActive ? _primaryColor : const Color(0xFFD9D9D9),
+                    ),
+                  ),
+                  child: Text(
+                    _displayDayNameFromArabic(tab.label),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: isActive ? Colors.white : const Color(0xFF444444),
+                    ),
                   ),
                 ),
               ),
