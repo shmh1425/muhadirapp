@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/calendar_day.dart';
 import '../../models/lecturer/lecture_item.dart';
+import '../../screens/lecturer/lecturer_language.dart';
 import '../../services/lecturer/lecture_repository.dart';
 import 'day_details_bottom_sheet.dart';
 
@@ -19,7 +20,7 @@ class DayTapHandler {
         // 🔴 يوم مستقبلي: لا يفتح → تظهر رسالة "لا يمكن فتح هذا التاريخ الآن"
         _showSnackBar(
           context: context,
-          message: 'لا يمكن فتح هذا التاريخ الآن',
+          message: LecturerLanguageController.tr('لا يمكن فتح هذا التاريخ الآن', 'This date cannot be opened now'),
           icon: Icons.lock,
           backgroundColor: Colors.red.shade500,
         );
@@ -29,7 +30,7 @@ class DayTapHandler {
         // ⚪ عطلة: تظهر رسالة "عطلة رسمية"
         _showSnackBar(
           context: context,
-          message: 'عطلة رسمية',
+          message: LecturerLanguageController.tr('عطلة رسمية', 'Official holiday'),
           icon: Icons.event_busy,
           backgroundColor: Colors.grey.shade600,
         );
@@ -49,7 +50,7 @@ class DayTapHandler {
         // ⚪ بدون محاضرات: تظهر رسالة "لا توجد محاضرات في هذا اليوم"
         _showSnackBar(
           context: context,
-          message: 'لا توجد محاضرات في هذا اليوم',
+          message: LecturerLanguageController.tr('لا توجد محاضرات في هذا اليوم', 'No lectures on this day'),
           icon: Icons.info_outline,
           backgroundColor: Colors.grey.shade700,
         );
@@ -62,7 +63,7 @@ class DayTapHandler {
         } else {
           _showSnackBar(
             context: context,
-            message: 'لا توجد محاضرات في هذا اليوم',
+            message: LecturerLanguageController.tr('لا توجد محاضرات في هذا اليوم', 'No lectures on this day'),
             icon: Icons.calendar_today,
             backgroundColor: const Color(0xFF006571),
           );
@@ -79,10 +80,16 @@ class DayTapHandler {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => DayDetailsBottomSheet(
-        day: day,
-        lectures: lecturesForDay,
-        canEdit: canEdit,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.45,
+        minChildSize: 0.25,
+        maxChildSize: 0.75,
+        builder: (context, scrollController) => DayDetailsBottomSheet(
+          scrollController: scrollController,
+          day: day,
+          lectures: lecturesForDay,
+          canEdit: canEdit,
+        ),
       ),
     );
   }
