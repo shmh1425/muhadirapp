@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'female_security_nav_bar.dart';
 import 'accepted_screen.dart';
+import 'models/student_card_info.dart';
+import 'security_card_preview_screen.dart';
+import 'security_prefs.dart';
+import 'security_settings_screen.dart';
+import 'widgets/security_date_picker_dialog.dart'; // ✅ ADD
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -32,17 +37,50 @@ class _RejectedStudentsScreenState extends State<RejectedStudentsScreen> {
   bool _dateUpdated = true;
   OverlayEntry? _popupOverlay;
 
+  // ✅ NEW: selected date for header (temporary preview)
+  DateTime _selectedDate = DateTime.now();
+
   final List<_RejectedEntry> _students = [
     _RejectedEntry('فاطمة الأحمدي', '444000018', '09:15:22', 'الطالبة متخرجة'),
-    _RejectedEntry('نورة الغامدي', '444000019', '09:15:18', 'البطاقة منتهية الصلاحية'),
-    _RejectedEntry('سارة الشهري', '444000020', '09:15:10', 'غير مسجلة في النظام'),
+    _RejectedEntry(
+      'نورة الغامدي',
+      '444000019',
+      '09:15:18',
+      'البطاقة منتهية الصلاحية',
+    ),
+    _RejectedEntry(
+      'سارة الشهري',
+      '444000020',
+      '09:15:10',
+      'غير مسجلة في النظام',
+    ),
     _RejectedEntry('هند العتيبي', '444000021', '09:15:02', 'الطالبة متخرجة'),
-    _RejectedEntry('لمياء القرني', '444000022', '09:14:55', 'البطاقة غير صالحة'),
+    _RejectedEntry(
+      'لمياء القرني',
+      '444000022',
+      '09:14:55',
+      'البطاقة غير صالحة',
+    ),
     _RejectedEntry('غلا الحربي', '444000023', '09:14:48', 'الطالبة متخرجة'),
-    _RejectedEntry('وضوح الدوسري', '444000024', '09:14:40', 'غير مسجلة في النظام'),
-    _RejectedEntry('أسماء المطيري', '444000025', '09:14:32', 'البطاقة منتهية الصلاحية'),
+    _RejectedEntry(
+      'وضوح الدوسري',
+      '444000024',
+      '09:14:40',
+      'غير مسجلة في النظام',
+    ),
+    _RejectedEntry(
+      'أسماء المطيري',
+      '444000025',
+      '09:14:32',
+      'البطاقة منتهية الصلاحية',
+    ),
     _RejectedEntry('ريم القحطاني', '444000026', '09:14:25', 'الطالبة متخرجة'),
-    _RejectedEntry('نوف الغامدي', '444000027', '09:14:18', 'غير مسجلة في النظام'),
+    _RejectedEntry(
+      'نوف الغامدي',
+      '444000027',
+      '09:14:18',
+      'غير مسجلة في النظام',
+    ),
   ];
 
   List<_RejectedEntry> get _filteredStudents {
@@ -61,22 +99,52 @@ class _RejectedStudentsScreenState extends State<RejectedStudentsScreen> {
     super.dispose();
   }
 
-  String _getFormattedDate() {
-    final now = DateTime.now();
+  // ✅ UPDATED: now formats any given date
+  String _getFormattedDate(DateTime date) {
     const days = [
-      'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء',
-      'الخميس', 'الجمعة', 'السبت',
+      'الأحد',
+      'الإثنين',
+      'الثلاثاء',
+      'الأربعاء',
+      'الخميس',
+      'الجمعة',
+      'السبت',
     ];
-    final dayName = days[now.weekday % 7];
-    final d = now.day.toString().padLeft(2, '0');
-    final m = now.month.toString().padLeft(2, '0');
-    final y = now.year;
+    final dayName = days[date.weekday % 7];
+    final d = date.day.toString().padLeft(2, '0');
+    final m = date.month.toString().padLeft(2, '0');
+    final y = date.year;
     return '$dayName $d-$m-$y';
   }
 
-  void _onRefresh() => setState(() => _dateUpdated = true);
+  // ✅ UPDATED: refresh resets date to today (optional but useful)
+  void _onRefresh() => setState(() {
+    _dateUpdated = true;
+    _selectedDate = DateTime.now();
+  });
 
-  void _showReasonPopup(BuildContext context, RenderBox iconBox, String reason) {
+  // ✅ NEW: open date picker from calendar icon
+  Future<void> _openDatePicker() async {
+    final picked = await showDialog<DateTime>(
+      context: context,
+      useRootNavigator: true,
+      barrierDismissible: true,
+      builder: (_) => SecurityDatePickerDialog(initialDate: _selectedDate),
+    );
+
+    if (picked != null) {
+      setState(() {
+        _selectedDate = picked;
+        _dateUpdated = true;
+      });
+    }
+  }
+
+  void _showReasonPopup(
+    BuildContext context,
+    RenderBox iconBox,
+    String reason,
+  ) {
     _popupOverlay?.remove();
     final overlay = Overlay.of(context);
     final position = iconBox.localToGlobal(Offset.zero);
@@ -85,7 +153,10 @@ class _RejectedStudentsScreenState extends State<RejectedStudentsScreen> {
     const popupWidth = 220.0;
     const popupHeight = 56.0;
     final iconCenterX = position.dx + size.width / 2;
-    final left = (iconCenterX - popupWidth / 2).clamp(12.0, screenWidth - popupWidth - 12);
+    final left = (iconCenterX - popupWidth / 2).clamp(
+      12.0,
+      screenWidth - popupWidth - 12,
+    );
 
     _popupOverlay = OverlayEntry(
       builder: (ctx) => Stack(
@@ -100,10 +171,7 @@ class _RejectedStudentsScreenState extends State<RejectedStudentsScreen> {
             left: left,
             child: Material(
               color: Colors.transparent,
-              child: _ReasonPopup(
-                reason: reason,
-                onClose: _dismissPopup,
-              ),
+              child: _ReasonPopup(reason: reason, onClose: _dismissPopup),
             ),
           ),
         ],
@@ -133,7 +201,10 @@ class _RejectedStudentsScreenState extends State<RejectedStudentsScreen> {
                   children: [
                     _RejectedHeader(
                       onRefresh: _onRefresh,
-                      formattedDate: _getFormattedDate(),
+                      onPickDate: _openDatePicker, // ✅ NEW
+                      formattedDate: _getFormattedDate(
+                        _selectedDate,
+                      ), // ✅ UPDATED
                       isDateActive: _dateUpdated,
                     ),
                     const SizedBox(height: 20),
@@ -155,13 +226,20 @@ class _RejectedStudentsScreenState extends State<RejectedStudentsScreen> {
                 selectedIndex: _selectedNavIndex,
                 onItemTapped: (index) {
                   setState(() => _selectedNavIndex = index);
+
                   if (index == 0) {
                     Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => const AcceptedScreen()),
+                    );
+                  } else if (index == 3) {
+                    Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => const AcceptedScreen(),
+                        builder: (_) => const SecuritySettingsScreen(),
                       ),
                     );
                   }
+                  // index == 1: already on rejected
+                  // index == 2: later
                 },
               ),
             ],
@@ -173,37 +251,43 @@ class _RejectedStudentsScreenState extends State<RejectedStudentsScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _RejectedHeader
+// ✅ _RejectedHeader (TITLE CENTER + DETAILS RIGHT)
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _RejectedHeader extends StatelessWidget {
   const _RejectedHeader({
     required this.onRefresh,
+    required this.onPickDate, // ✅ NEW
     required this.formattedDate,
     this.isDateActive = true,
   });
 
   final VoidCallback onRefresh;
+  final VoidCallback onPickDate; // ✅ NEW
   final String formattedDate;
   final bool isDateActive;
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.end, // ⬅️ تفاصيل يمين
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.center,
+        // العنوان بالنص + زر التحديث يمين
+        Stack(
+          alignment: Alignment.center,
           children: [
-            IconButton(
-              onPressed: onRefresh,
-              icon: const Icon(Icons.refresh, color: _kTextMuted, size: 26),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            Align(
+              alignment: Alignment.centerRight,
+              child: IconButton(
+                onPressed: onRefresh,
+                icon: const Icon(Icons.refresh, color: _kTextMuted, size: 26),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+              ),
             ),
             const Text(
               'المرفوضين',
+              textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
@@ -213,45 +297,57 @@ class _RejectedHeader extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 14),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            const Text(
-              'الموقع: الزاهر',
-              style: TextStyle(
-                fontSize: 14,
-                color: _kTextDark,
-                fontFamily: 'Cairo',
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 6),
-            RichText(
-              text: const TextSpan(
+
+        const SizedBox(height: 18),
+
+        // ✅✅✅ التعديل المطلوب فقط: نجبر (الموقع + البوابة + التاريخ) يمين الشاشة فعلياً
+        Align(
+          alignment: Alignment.centerRight,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              const Text(
+                'الموقع: الزاهر',
+                textAlign: TextAlign.right,
                 style: TextStyle(
                   fontSize: 14,
                   color: _kTextDark,
                   fontFamily: 'Cairo',
+                  fontWeight: FontWeight.w500,
                 ),
-                children: [
-                  TextSpan(text: 'بوابة رقم '),
-                  TextSpan(
-                    text: '3',
-                    style: TextStyle(
-                      color: _kTeal,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
               ),
-            ),
-            const SizedBox(height: 6),
-            _DateRow(
-              formattedDate: formattedDate,
-              isActive: isDateActive,
-            ),
-          ],
+              const SizedBox(height: 6),
+              ValueListenableBuilder<int>(
+                valueListenable: selectedGate,
+                builder: (context, gate, _) => RichText(
+                  textAlign: TextAlign.right,
+                  text: TextSpan(
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: _kTextDark,
+                      fontFamily: 'Cairo',
+                    ),
+                    children: [
+                      const TextSpan(text: 'بوابة رقم '),
+                      TextSpan(
+                        text: '$gate',
+                        style: const TextStyle(
+                          color: _kTeal,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              _DateRow(
+                formattedDate: formattedDate,
+                isActive: isDateActive,
+                onTap: onPickDate, // ✅ NEW
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -259,47 +355,56 @@ class _RejectedHeader extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _DateRow
+// _DateRow (ICON AFTER TEXT + TAP OPENS PICKER)
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _DateRow extends StatelessWidget {
   const _DateRow({
     required this.formattedDate,
     this.isActive = true,
+    this.onTap, // ✅ NEW
   });
 
   final String formattedDate;
   final bool isActive;
+  final VoidCallback? onTap; // ✅ NEW
 
   @override
   Widget build(BuildContext context) {
     final iconColor = isActive ? _kTeal : _kTextMuted;
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: _kDateIconBg,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Center(
-            child: Icon(
-              Icons.calendar_today_rounded,
-              size: 16,
-              color: iconColor,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
         Text(
           'التاريخ: $formattedDate',
           style: const TextStyle(
             fontSize: 14,
             color: _kTextDark,
             fontFamily: 'Cairo',
+          ),
+        ),
+        const SizedBox(width: 8),
+
+        // ✅ icon AFTER text + tappable
+        InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: _kDateIconBg,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Center(
+              child: Icon(
+                Icons.calendar_today_rounded,
+                size: 16,
+                color: iconColor,
+              ),
+            ),
           ),
         ),
       ],
@@ -343,10 +448,7 @@ class _StatusBadge extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _RejectedSearchBar extends StatelessWidget {
-  const _RejectedSearchBar({
-    required this.controller,
-    required this.onChanged,
-  });
+  const _RejectedSearchBar({required this.controller, required this.onChanged});
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
@@ -375,11 +477,17 @@ class _RejectedSearchBar extends StatelessWidget {
             padding: EdgeInsets.only(left: 14, right: 14),
             child: Icon(Icons.search, color: Color(0xFF9E9E9E), size: 22),
           ),
-          prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 44),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 48,
+            minHeight: 44,
+          ),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
           focusedBorder: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
         ),
       ),
     );
@@ -391,13 +499,11 @@ class _RejectedSearchBar extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _RejectedList extends StatelessWidget {
-  const _RejectedList({
-    required this.students,
-    required this.onInfoTap,
-  });
+  const _RejectedList({required this.students, required this.onInfoTap});
 
   final List<_RejectedEntry> students;
-  final void Function(BuildContext context, RenderBox iconBox, String reason) onInfoTap;
+  final void Function(BuildContext context, RenderBox iconBox, String reason)
+  onInfoTap;
 
   @override
   Widget build(BuildContext context) {
@@ -418,7 +524,7 @@ class _RejectedList extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _RejectedTableHeader
+// _RejectedTableHeader (ORDER)
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _RejectedTableHeader extends StatelessWidget {
@@ -426,105 +532,44 @@ class _RejectedTableHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const iconColW = 40.0;
+
+    Text headerText(String t, {double size = 12}) => Text(
+      t,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: size,
+        fontWeight: FontWeight.bold,
+        color: Colors.white,
+        fontFamily: 'Cairo',
+      ),
+    );
+
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
       decoration: const BoxDecoration(
         color: _kTeal,
         borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
       child: Row(
         children: [
-          SizedBox(
-            width: 44,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 22,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.3),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'i',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        fontFamily: 'Cairo',
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'السبب',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                    fontFamily: 'Cairo',
-                  ),
-                ),
-              ],
+          Expanded(
+            flex: 4,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: headerText('اسم الطالب/ة'),
             ),
+          ),
+          Expanded(flex: 3, child: Center(child: headerText('الرقم الجامعي'))),
+          Expanded(flex: 2, child: Center(child: headerText('الوقت'))),
+          SizedBox(
+            width: iconColW,
+            child: Center(child: headerText('معاينة', size: 10)),
           ),
           SizedBox(
-            width: 44,
-            child: Center(
-              child: Text(
-                'معاينة البطاقة',
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                  fontFamily: 'Cairo',
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Center(
-              child: Text(
-                'الوقت',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  fontFamily: 'Cairo',
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Center(
-              child: Text(
-                'الرقم الجامعي',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  fontFamily: 'Cairo',
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              'اسم الطالب/ة',
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                fontFamily: 'Cairo',
-              ),
-            ),
+            width: iconColW,
+            child: Center(child: headerText('السبب', size: 10)),
           ),
         ],
       ),
@@ -533,7 +578,7 @@ class _RejectedTableHeader extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _RejectedRow
+// _RejectedRow (ORDER)
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _RejectedRow extends StatefulWidget {
@@ -547,7 +592,8 @@ class _RejectedRow extends StatefulWidget {
   final _RejectedEntry entry;
   final bool isLast;
   final bool isAlternate;
-  final void Function(BuildContext context, RenderBox iconBox, String reason) onInfoTap;
+  final void Function(BuildContext context, RenderBox iconBox, String reason)
+  onInfoTap;
 
   @override
   State<_RejectedRow> createState() => _RejectedRowState();
@@ -558,21 +604,107 @@ class _RejectedRowState extends State<_RejectedRow> {
 
   @override
   Widget build(BuildContext context) {
+    const iconColW = 40.0;
+
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
       decoration: BoxDecoration(
         color: widget.isAlternate ? const Color(0xFFFAFAFA) : Colors.white,
-        border: Border(
-          bottom: BorderSide(color: _kGreyBorder, width: 0.6),
-        ),
+        border: Border(bottom: BorderSide(color: _kGreyBorder, width: 0.6)),
         borderRadius: widget.isLast
             ? const BorderRadius.vertical(bottom: Radius.circular(12))
             : null,
       ),
       child: Row(
         children: [
+          Expanded(
+            flex: 4,
+            child: Text(
+              widget.entry.name,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 14,
+                color: _kTextDark,
+                fontFamily: 'Cairo',
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Center(
+              child: Text(
+                widget.entry.universityId,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: _kTextDark,
+                  fontFamily: 'Cairo',
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Center(
+              child: Text(
+                widget.entry.time,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: _kTextDark,
+                  fontFamily: 'Cairo',
+                ),
+              ),
+            ),
+          ),
           SizedBox(
-            width: 44,
+            width: iconColW,
+            child: Center(
+              child: Material(
+                color: _kGreyIconBg,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => SecurityCardPreviewScreen(
+                          isAccepted: false,
+                          student: StudentCardInfo(
+                            fullName: widget.entry.name,
+                            universityId: widget.entry.universityId,
+                            entryTime: widget.entry.time,
+                            dayLabel: 'اليوم: الإثنين',
+                            dateLabel: 'التاريخ: 2025-06-26',
+                            attendanceStatus: 'منتظم',
+                            college: 'كلية الحاسبات',
+                            major: 'هندسة البرمجيات',
+                            degree: 'بكالوريوس',
+                            nationality: 'سعودية',
+                            extraId: '1125241000',
+                            gateLabel: gateLabelWithLocation(
+                              selectedGate.value,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  customBorder: const CircleBorder(),
+                  child: const SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: Center(
+                      child: Icon(
+                        Icons.visibility_outlined,
+                        size: 17,
+                        color: _kTextMuted,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: iconColW,
             child: Center(
               child: Material(
                 key: _infoKey,
@@ -580,15 +712,17 @@ class _RejectedRowState extends State<_RejectedRow> {
                 shape: const CircleBorder(),
                 child: InkWell(
                   onTap: () {
-                    final box = _infoKey.currentContext?.findRenderObject() as RenderBox?;
+                    final box =
+                        _infoKey.currentContext?.findRenderObject()
+                            as RenderBox?;
                     if (box != null && box.hasSize) {
                       widget.onInfoTap(context, box, widget.entry.reason);
                     }
                   },
                   customBorder: const CircleBorder(),
                   child: const SizedBox(
-                    width: 34,
-                    height: 34,
+                    width: 32,
+                    height: 32,
                     child: Center(
                       child: Text(
                         'i',
@@ -605,64 +739,6 @@ class _RejectedRowState extends State<_RejectedRow> {
               ),
             ),
           ),
-          SizedBox(
-            width: 44,
-            child: Center(
-              child: Material(
-                color: _kGreyIconBg,
-                shape: const CircleBorder(),
-                child: InkWell(
-                  onTap: () {},
-                  customBorder: const CircleBorder(),
-                  child: const SizedBox(
-                    width: 34,
-                    height: 34,
-                    child: Center(
-                      child: Icon(Icons.visibility_outlined, size: 17, color: _kTextMuted),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Center(
-              child: Text(
-                widget.entry.time,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: _kTextDark,
-                  fontFamily: 'Cairo',
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Center(
-              child: Text(
-                widget.entry.universityId,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: _kTextDark,
-                  fontFamily: 'Cairo',
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              widget.entry.name,
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontSize: 14,
-                color: _kTextDark,
-                fontFamily: 'Cairo',
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -674,10 +750,7 @@ class _RejectedRowState extends State<_RejectedRow> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _ReasonPopup extends StatelessWidget {
-  const _ReasonPopup({
-    required this.reason,
-    required this.onClose,
-  });
+  const _ReasonPopup({required this.reason, required this.onClose});
 
   final String reason;
   final VoidCallback onClose;
