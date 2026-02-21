@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'female_security_nav_bar.dart';
 import 'rejected_students_screen.dart';
+import 'widgets/security_date_picker_dialog.dart';
+import 'models/student_card_info.dart';
+import 'security_card_preview_screen.dart';
+import 'security_settings_screen.dart';
+import 'security_prefs.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -30,6 +35,9 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
   final TextEditingController _searchController = TextEditingController();
   int _selectedNavIndex = 0;
   bool _dateUpdated = true;
+
+  // date shown in header (temporary preview)
+  DateTime _selectedDate = DateTime.now();
 
   final List<_StudentEntry> _students = [
     _StudentEntry('نورة الحارثي', '444000000', '09:15:22'),
@@ -61,27 +69,51 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
     super.dispose();
   }
 
-  String _getFormattedDate() {
-    final now = DateTime.now();
+  String _getFormattedDate(DateTime date) {
     const days = [
-      'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء',
-      'الخميس', 'الجمعة', 'السبت',
+      'الأحد',
+      'الإثنين',
+      'الثلاثاء',
+      'الأربعاء',
+      'الخميس',
+      'الجمعة',
+      'السبت',
     ];
-    final dayName = days[now.weekday % 7];
-    final d = now.day.toString().padLeft(2, '0');
-    final m = now.month.toString().padLeft(2, '0');
-    final y = now.year;
+    final dayName = days[date.weekday % 7];
+    final d = date.day.toString().padLeft(2, '0');
+    final m = date.month.toString().padLeft(2, '0');
+    final y = date.year;
     return '$dayName $d-$m-$y';
   }
 
   void _onRefresh() {
     setState(() {
       _dateUpdated = true;
+      _selectedDate = DateTime.now();
     });
+  }
+
+  Future<void> _openDatePicker() async {
+    final selected = await showDialog<DateTime>(
+      context: context,
+      useRootNavigator: true,
+      barrierDismissible: true,
+      builder: (_) => SecurityDatePickerDialog(initialDate: _selectedDate),
+    );
+
+    if (selected != null) {
+      setState(() {
+        _selectedDate = selected;
+        _dateUpdated = true;
+      });
+      debugPrint('Selected date: $selected');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final formattedDate = _getFormattedDate(_selectedDate);
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
@@ -95,7 +127,8 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
                   children: [
                     HeaderSection(
                       onRefresh: _onRefresh,
-                      formattedDate: _getFormattedDate(),
+                      onPickDate: _openDatePicker,
+                      formattedDate: formattedDate,
                       isDateActive: _dateUpdated,
                     ),
                     const SizedBox(height: 20),
@@ -106,7 +139,7 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 16),
-                    _AcceptedList(students: _filteredStudents),
+                    _AcceptedDataTable(students: _filteredStudents),
                   ],
                 ),
               ),
@@ -114,13 +147,22 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
                 selectedIndex: _selectedNavIndex,
                 onItemTapped: (index) {
                   setState(() => _selectedNavIndex = index);
+
                   if (index == 1) {
                     Navigator.of(context).pushReplacement(
                       MaterialPageRoute(
                         builder: (_) => const RejectedStudentsScreen(),
                       ),
                     );
+                  } else if (index == 3) {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const SecuritySettingsScreen(),
+                      ),
+                    );
                   }
+                  // index == 0: already on accepted
+                  // index == 2: later (notifications/announcements)
                 },
               ),
             ],
@@ -139,11 +181,13 @@ class HeaderSection extends StatelessWidget {
   const HeaderSection({
     super.key,
     required this.onRefresh,
+    required this.onPickDate,
     required this.formattedDate,
     this.isDateActive = true,
   });
 
   final VoidCallback onRefresh;
+  final VoidCallback onPickDate;
   final String formattedDate;
   final bool isDateActive;
 
@@ -161,9 +205,7 @@ class HeaderSection extends StatelessWidget {
               icon: const Icon(Icons.refresh, color: _kTealLight, size: 26),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-              style: IconButton.styleFrom(
-                foregroundColor: _kTealLight,
-              ),
+              style: IconButton.styleFrom(foregroundColor: _kTealLight),
             ),
             const Text(
               'المقبولين',
@@ -190,29 +232,33 @@ class HeaderSection extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 6),
-            RichText(
-              text: const TextSpan(
-                style: TextStyle(
-                  fontSize: 14,
-                  color: _kTextDark,
-                  fontFamily: 'Cairo',
-                ),
-                children: [
-                  TextSpan(text: 'بوابة رقم '),
-                  TextSpan(
-                    text: '3',
-                    style: TextStyle(
-                      color: _kTealLight,
-                      fontWeight: FontWeight.bold,
-                    ),
+            ValueListenableBuilder<int>(
+              valueListenable: selectedGate,
+              builder: (context, gate, _) => RichText(
+                text: TextSpan(
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: _kTextDark,
+                    fontFamily: 'Cairo',
                   ),
-                ],
+                  children: [
+                    const TextSpan(text: 'بوابة رقم '),
+                    TextSpan(
+                      text: '$gate',
+                      style: const TextStyle(
+                        color: _kTealLight,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 6),
             DateRow(
               formattedDate: formattedDate,
               isActive: isDateActive,
+              onTap: onPickDate,
             ),
           ],
         ),
@@ -230,43 +276,53 @@ class DateRow extends StatelessWidget {
     super.key,
     required this.formattedDate,
     this.isActive = true,
+    this.onTap,
   });
 
   final String formattedDate;
   final bool isActive;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final iconColor = isActive ? _kTealLight : _kTextMuted;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: _kDateIconBg,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Center(
-            child: Icon(
-              Icons.calendar_today_rounded,
-              size: 16,
-              color: iconColor,
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: _kDateIconBg,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.calendar_today_rounded,
+                  size: 16,
+                  color: iconColor,
+                ),
+              ),
             ),
-          ),
+            const SizedBox(width: 8),
+            Text(
+              'التاريخ: $formattedDate',
+              style: const TextStyle(
+                fontSize: 14,
+                color: _kTextDark,
+                fontFamily: 'Cairo',
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        Text(
-          'التاريخ: $formattedDate',
-          style: const TextStyle(
-            fontSize: 14,
-            color: _kTextDark,
-            fontFamily: 'Cairo',
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -338,10 +394,10 @@ class SearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 44,
+      height: 48,
       decoration: BoxDecoration(
         color: _kGreyFill,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(25.0),
         border: Border.all(color: _kGreyBorder.withOpacity(0.5), width: 0.5),
       ),
       child: TextField(
@@ -359,11 +415,17 @@ class SearchBar extends StatelessWidget {
             padding: EdgeInsets.only(left: 14, right: 14),
             child: Icon(Icons.search, color: Color(0xFF9E9E9E), size: 22),
           ),
-          prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 44),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 48,
+            minHeight: 48,
+          ),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
           focusedBorder: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
         ),
       ),
     );
@@ -371,199 +433,110 @@ class SearchBar extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _AcceptedList
+// _AcceptedDataTable
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _AcceptedList extends StatelessWidget {
-  const _AcceptedList({required this.students});
+class _AcceptedDataTable extends StatelessWidget {
+  const _AcceptedDataTable({required this.students});
 
   final List<_StudentEntry> students;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const TableHeader(),
-        ...List.generate(students.length, (i) {
-          return RowItem(
-            student: students[i],
-            isLast: i == students.length - 1,
-            isAlternate: i % 2 == 1,
-          );
-        }),
-      ],
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TableHeader
-// ─────────────────────────────────────────────────────────────────────────────
-
-class TableHeader extends StatelessWidget {
-  const TableHeader({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-      decoration: const BoxDecoration(
-        color: _kTealLight,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 52,
-            child: Center(
-              child: Text(
-                'معاينة البطاقة',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                  fontFamily: 'Cairo',
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Center(
-              child: Text(
-                'الوقت',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  fontFamily: 'Cairo',
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Center(
-              child: Text(
-                'الرقم الجامعي',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  fontFamily: 'Cairo',
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              'اسم الطالبة',
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                fontFamily: 'Cairo',
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// RowItem
-// ─────────────────────────────────────────────────────────────────────────────
-
-class RowItem extends StatelessWidget {
-  const RowItem({
-    super.key,
-    required this.student,
-    required this.isLast,
-    this.isAlternate = false,
-  });
-
-  final _StudentEntry student;
-  final bool isLast;
-  final bool isAlternate;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      decoration: BoxDecoration(
-        color: isAlternate ? const Color(0xFFFAFAFA) : Colors.white,
-        border: Border(
-          bottom: BorderSide(color: _kGreyBorder, width: 0.6),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: DataTable(
+        headingRowColor: WidgetStateProperty.all(_kTealLight),
+        headingTextStyle: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+          fontFamily: 'Cairo',
         ),
-        borderRadius: isLast
-            ? const BorderRadius.vertical(bottom: Radius.circular(12))
-            : null,
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 52,
-            child: Center(
-              child: Material(
-                color: _kGreyIconBg,
-                shape: const CircleBorder(),
-                child: InkWell(
-                  onTap: () {},
-                  customBorder: const CircleBorder(),
-                  child: const SizedBox(
-                    width: 34,
-                    height: 34,
-                    child: Center(
-                      child: Icon(Icons.visibility_outlined, size: 17, color: _kTextMuted),
+        dataTextStyle: const TextStyle(
+          fontSize: 13,
+          color: _kTextDark,
+          fontFamily: 'Cairo',
+        ),
+        columnSpacing: 12,
+        horizontalMargin: 16,
+        columns: const [
+          DataColumn(label: Text('اسم الطالب/ة'), numeric: false),
+          DataColumn(label: Text('الرقم الجامعي'), numeric: false),
+          DataColumn(label: Text('الوقت'), numeric: false),
+          DataColumn(label: Text('معاينة البطاقة'), numeric: false),
+        ],
+        rows: students.asMap().entries.map((entry) {
+          final index = entry.key;
+          final student = entry.value;
+          return DataRow(
+            color: WidgetStateProperty.all(
+              index % 2 == 1 ? const Color(0xFFFAFAFA) : Colors.white,
+            ),
+            cells: [
+              DataCell(
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    student.name,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: _kTextDark,
+                      fontFamily: 'Cairo',
                     ),
                   ),
                 ),
               ),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Center(
-              child: Text(
-                student.time,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: _kTextDark,
-                  fontFamily: 'Cairo',
+              DataCell(Text(student.universityId)),
+              DataCell(Text(student.time)),
+              DataCell(
+                Center(
+                  child: Material(
+                    color: _kGreyIconBg,
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => SecurityCardPreviewScreen(
+                              isAccepted: true,
+                              student: StudentCardInfo(
+                                fullName: student.name,
+                                universityId: student.universityId,
+                                entryTime: student.time,
+                                dayLabel: 'اليوم: الإثنين',
+                                dateLabel: 'التاريخ: 2025-06-26',
+                                attendanceStatus: 'منتظم',
+                                college: 'كلية الحاسبات',
+                                major: 'هندسة البرمجيات',
+                                degree: 'بكالوريوس',
+                                nationality: 'سعودية',
+                                extraId: '1125241000',
+                                gateLabel: gateLabelWithLocation(selectedGate.value),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                      customBorder: const CircleBorder(),
+                      child: const SizedBox(
+                        width: 34,
+                        height: 34,
+                        child: Center(
+                          child: Icon(
+                            Icons.visibility_outlined,
+                            size: 17,
+                            color: _kTextMuted,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Center(
-              child: Text(
-                student.universityId,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: _kTextDark,
-                  fontFamily: 'Cairo',
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(
-              student.name,
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontSize: 14,
-                color: _kTextDark,
-                fontFamily: 'Cairo',
-              ),
-            ),
-          ),
-        ],
+            ],
+          );
+        }).toList(),
       ),
     );
   }
