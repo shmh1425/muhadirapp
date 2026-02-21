@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../utils/shared/date_utils.dart' as date_utils;
+import '../../screens/lecturer/lecturer_language.dart';
 
 /// Header component للشاشة الرئيسية (التحية والتاريخ)
 class LecturerHomeHeader extends StatelessWidget {
@@ -12,6 +13,7 @@ class LecturerHomeHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final language = LecturerLanguageController.current;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -21,7 +23,7 @@ class LecturerHomeHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                date_utils.AppDateUtils.getGreeting(),
+                _getGreeting(language),
                 style: const TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
@@ -31,7 +33,7 @@ class LecturerHomeHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              _buildDateSection(),
+              _buildDateSection(language),
             ],
           ),
         ),
@@ -39,9 +41,9 @@ class LecturerHomeHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildDateSection() {
+  Widget _buildDateSection(LecturerLanguage language) {
     final date = _getSelectedDate();
-    final dateInfo = date_utils.AppDateUtils.getDateInfo(date);
+    final dateInfo = _getDateInfo(date, language);
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.start,
@@ -110,5 +112,46 @@ class LecturerHomeHeader extends StatelessWidget {
         return now;
     }
   }
-}
 
+  String _getGreeting(LecturerLanguage language) {
+    if (language == LecturerLanguage.arabic) {
+      return date_utils.AppDateUtils.getGreeting();
+    }
+    final hour = DateTime.now().hour;
+    return hour < 12 ? 'Good Morning' : 'Good Evening';
+  }
+
+  Map<String, String> _getDateInfo(DateTime date, LecturerLanguage language) {
+    if (language == LecturerLanguage.arabic) {
+      return date_utils.AppDateUtils.getDateInfo(date);
+    }
+    const days = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    return {
+      'dayName': days[date.weekday - 1],
+      'dayNumber': '${date.day}',
+      'monthName': months[date.month - 1],
+    };
+  }
+}

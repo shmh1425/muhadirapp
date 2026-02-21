@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/calendar_day.dart';
+import '../screens/lecturer/lecturer_language.dart';
 import '../utils/hijri_converter.dart';
 
 /// تقويم شهري تفاعلي
@@ -20,14 +21,20 @@ class MonthlyCalendar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hijriInfo = HijriConverter.gregorianToHijri(currentMonth);
-    final monthName = hijriInfo['monthName'] as String;
+    final monthNameAr = hijriInfo['monthName'] as String;
+    final monthNumber = hijriInfo['month'] as int;
     final year = hijriInfo['year'] as int;
-    final yearArabic = HijriConverter.toArabicNumber(year);
+    final monthName = LecturerLanguageController.isArabic
+        ? monthNameAr
+        : _hijriMonthNameEn(monthNumber);
+    final yearText = LecturerLanguageController.isArabic
+        ? HijriConverter.toArabicNumber(year)
+        : '$year';
 
     return Column(
       children: [
         // شريط الشهر مع الأسهم
-        _buildMonthHeader(monthName, yearArabic),
+        _buildMonthHeader(monthName, yearText),
         const SizedBox(height: 16),
         // صف أيام الأسبوع
         _buildWeekDaysHeader(),
@@ -45,7 +52,7 @@ class MonthlyCalendar extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // سهم الشهر السابق (يمين في RTL = الشهر السابق)
+        // سهم الشهر السابق: ← (الماضي)
         IconButton(
           onPressed: () {
             final prevMonth = DateTime(
@@ -55,7 +62,7 @@ class MonthlyCalendar extends StatelessWidget {
             );
             onMonthChanged(prevMonth);
           },
-          icon: const Icon(Icons.chevron_right),
+          icon: const Icon(Icons.chevron_left),
           style: IconButton.styleFrom(
             backgroundColor: const Color(0xFFF5F5F5),
             shape: RoundedRectangleBorder(
@@ -86,7 +93,7 @@ class MonthlyCalendar extends StatelessWidget {
             ),
           ],
         ),
-        // سهم الشهر التالي (يسار في RTL = الشهر التالي)
+        // سهم الشهر التالي: → (المستقبل)
         IconButton(
           onPressed: () {
             final nextMonth = DateTime(
@@ -96,7 +103,7 @@ class MonthlyCalendar extends StatelessWidget {
             );
             onMonthChanged(nextMonth);
           },
-          icon: const Icon(Icons.chevron_left),
+          icon: const Icon(Icons.chevron_right),
           style: IconButton.styleFrom(
             backgroundColor: const Color(0xFFF5F5F5),
             shape: RoundedRectangleBorder(
@@ -109,15 +116,17 @@ class MonthlyCalendar extends StatelessWidget {
   }
 
   Widget _buildWeekDaysHeader() {
-    const weekDays = [
-      'الاحد',
-      'الاثنين',
-      'الثلاثاء',
-      'الاربعاء',
-      'الخميس',
-      'الجمعة',
-      'السبت',
-    ];
+    final weekDays = LecturerLanguageController.isArabic
+        ? const [
+            'الاحد',
+            'الاثنين',
+            'الثلاثاء',
+            'الاربعاء',
+            'الخميس',
+            'الجمعة',
+            'السبت',
+          ]
+        : const ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     return Row(
       children: weekDays.map((day) {
@@ -192,9 +201,7 @@ class MonthlyCalendar extends StatelessWidget {
             child: Row(
               children: [
                 for (int col = 0; col < 7; col++)
-                  Expanded(
-                    child: dayWidgets[row * 7 + col],
-                  ),
+                  Expanded(child: dayWidgets[row * 7 + col]),
               ],
             ),
           ),
@@ -223,7 +230,8 @@ class MonthlyCalendar extends StatelessWidget {
     final today = DateTime(now.year, now.month, now.day);
 
     final bool isToday = date.isAtSameMomentAs(today);
-    final bool isWeekend = date.weekday == 5 || date.weekday == 6; // الجمعة أو السبت
+    final bool isWeekend =
+        date.weekday == 5 || date.weekday == 6; // الجمعة أو السبت
     final bool isFuture = date.isAfter(today);
 
     DayStatus status;
@@ -265,16 +273,10 @@ class MonthlyCalendar extends StatelessWidget {
           color: backgroundColor,
           borderRadius: BorderRadius.circular(10),
           border: isToday
-              ? Border.all(
-                  color: const Color(0xFF006571),
-                  width: 2.5,
-                )
+              ? Border.all(color: const Color(0xFF006571), width: 2.5)
               : isHoliday
-                  ? Border.all(
-                      color: const Color(0xFFB0B0B0),
-                      width: 1.5,
-                    )
-                  : null,
+              ? Border.all(color: const Color(0xFFB0B0B0), width: 1.5)
+              : null,
           // إضافة ظل خفيف للأيام التي تحتوي على محاضرات
           boxShadow: hasLectures && !isHoliday
               ? [
@@ -304,10 +306,7 @@ class MonthlyCalendar extends StatelessWidget {
             const SizedBox(height: 4),
             // النقاط الملوّنة (عدد النقاط = عدد المحاضرات)
             if (hasLectures)
-              SizedBox(
-                height: 8,
-                child: _buildDots(day.lecturesCount, status),
-              ),
+              SizedBox(height: 8, child: _buildDots(day.lecturesCount, status)),
           ],
         ),
       ),
@@ -359,7 +358,7 @@ class MonthlyCalendar extends StatelessWidget {
         final availableWidth = constraints.maxWidth;
         final dotSize = availableWidth > 30 ? 4.0 : 3.5;
         final dotSpacing = availableWidth > 30 ? 1.5 : 1.0;
-        
+
         return Row(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
@@ -410,24 +409,70 @@ class MonthlyCalendar extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFF9F9F9),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFFE0E0E0),
-          width: 1,
-        ),
+        border: Border.all(color: const Color(0xFFE0E0E0), width: 1),
       ),
       child: Wrap(
         spacing: 20,
         runSpacing: 10,
         alignment: WrapAlignment.center,
         children: [
-          _legendItem(const Color(0xFF006571), 'اليوم الحالي', true),
-          _legendItem(const Color(0xFFE5F5E5), 'قابل للتعديل', false),
-          _legendItem(const Color(0xFFE5F0FF), 'عرض فقط', false),
-          _legendItem(const Color(0xFFFFE5E5), 'تاريخ مستقبلي', false),
-          _legendItem(const Color(0xFFD0D0D0), 'عطلة', false),
+          _legendItem(
+            const Color(0xFF006571),
+            _tr('اليوم الحالي', 'Today'),
+            true,
+          ),
+          _legendItem(
+            const Color(0xFFE5F5E5),
+            _tr('قابل للتعديل', 'Editable'),
+            false,
+          ),
+          _legendItem(
+            const Color(0xFFE5F0FF),
+            _tr('عرض فقط', 'View only'),
+            false,
+          ),
+          _legendItem(
+            const Color(0xFFFFE5E5),
+            _tr('تاريخ مستقبلي', 'Future date'),
+            false,
+          ),
+          _legendItem(const Color(0xFFD0D0D0), _tr('عطلة', 'Holiday'), false),
         ],
       ),
     );
+  }
+
+  String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
+
+  String _hijriMonthNameEn(int month) {
+    switch (month) {
+      case 1:
+        return 'Muharram';
+      case 2:
+        return 'Safar';
+      case 3:
+        return 'Rabi I';
+      case 4:
+        return 'Rabi II';
+      case 5:
+        return 'Jumada I';
+      case 6:
+        return 'Jumada II';
+      case 7:
+        return 'Rajab';
+      case 8:
+        return 'Shaaban';
+      case 9:
+        return 'Ramadan';
+      case 10:
+        return 'Shawwal';
+      case 11:
+        return 'Dhul Qadah';
+      case 12:
+        return 'Dhul Hijjah';
+      default:
+        return 'Hijri';
+    }
   }
 
   Widget _legendItem(Color color, String label, bool isToday) {

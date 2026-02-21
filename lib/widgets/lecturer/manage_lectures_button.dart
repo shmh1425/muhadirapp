@@ -1,27 +1,15 @@
 import 'package:flutter/material.dart';
+import '../../screens/lecturer/lecturer_language.dart';
+import '../../screens/lecturer/lecturer_navigation.dart';
 
-/// Button لإدارة المحاضرات
+/// زر إدارة المحاضرات — يستدعي التنقل الموحد لصفحة إدارة المحاضرات.
 class ManageLecturesButton extends StatelessWidget {
-  final VoidCallback? onTap;
-
-  const ManageLecturesButton({
-    super.key,
-    this.onTap,
-  });
+  const ManageLecturesButton({super.key});
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: onTap ??
-          () {
-            // Placeholder - يمكن ربطه بشاشة إدارة المحاضرات لاحقاً
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('شاشة إدارة المحاضرات - قيد التطوير'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-          },
+      onTap: () => LecturerNavigation.goToManageLectures(context),
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -49,9 +37,9 @@ class ManageLecturesButton extends StatelessWidget {
               size: 20,
             ),
             const SizedBox(width: 8),
-            const Text(
-              'ادارة المحاضرات',
-              style: TextStyle(
+            Text(
+              LecturerLanguageController.tr('ادارة المحاضرات', 'Manage Lectures'),
+              style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
                 color: Colors.white,
@@ -64,4 +52,3 @@ class ManageLecturesButton extends StatelessWidget {
     );
   }
 }
-
