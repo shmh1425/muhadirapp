@@ -4,9 +4,35 @@ import 'package:flutter/material.dart';
 import 'app_settings.dart';
 import 'components/notification_bell.dart';
 import 'notifications_screen.dart';
+import '../../services/student_auth_service.dart';
+import '../login_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
+
+  Widget _buildStudentDataSection() {
+    final student = StudentAuthService.instance.currentStudent;
+    if (student == null) return const SizedBox.shrink();
+
+    return _SettingsTile(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _DataRow(label: 'الاسم', value: student.name),
+          const SizedBox(height: 10),
+          _DataRow(label: 'الإيميل', value: student.email),
+          const SizedBox(height: 10),
+          _DataRow(label: 'رقم الطالب', value: '${student.studentId}'),
+          const SizedBox(height: 10),
+          _DataRow(label: 'التخصص', value: student.major),
+          const SizedBox(height: 10),
+          _DataRow(label: 'المستوى', value: '${student.level}'),
+          const SizedBox(height: 10),
+          _DataRow(label: 'الجنس', value: student.gender),
+        ],
+      ),
+    );
+  }
 
   void _showLogoutDialog(BuildContext context) {
     showDialog<void>(
@@ -41,7 +67,11 @@ class SettingsScreen extends StatelessWidget {
                 child: ElevatedButton(
                   onPressed: () {
                     Navigator.pop(context);
-                    // TODO: إضافة منطق تسجيل الخروج هنا
+                    StudentAuthService.instance.logout();
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      (_) => false,
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFB71C1C),
@@ -156,15 +186,19 @@ class SettingsScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              const Center(
+              Center(
                 child: Text(
-                  'نورة محمد - Noura Mohamed',
-                  style: TextStyle(
+                  StudentAuthService.instance.currentStudent?.name ??
+                      'لم يتم تحميل البيانات',
+                  style: const TextStyle(
                     color: Color(0xFF006571),
                     fontWeight: FontWeight.w600,
                   ),
+                  textAlign: TextAlign.center,
                 ),
               ),
+              const SizedBox(height: 16),
+              _buildStudentDataSection(),
               const SizedBox(height: 24),
               _SettingsTile(
                 child: Row(
@@ -262,6 +296,38 @@ class SettingsScreen extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _DataRow extends StatelessWidget {
+  const _DataRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Text(
+            '$label:',
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF006571),
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.left,
+            style: const TextStyle(color: Color(0xFF444444)),
+          ),
+        ),
+      ],
     );
   }
 }

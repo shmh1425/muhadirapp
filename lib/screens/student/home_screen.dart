@@ -12,6 +12,7 @@ import 'schedule_screen.dart';
 import 'excuse_screen.dart';
 import 'submit_excuse_screen.dart';
 import 'app_settings.dart';
+import '../../services/student_auth_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -87,9 +88,10 @@ class _HomeScreenState extends State<HomeScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'أهلاً نورة',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  Text(
+                    'أهلاً ${(StudentAuthService.instance.currentStudent?.name.trim().isNotEmpty ?? false) ? StudentAuthService.instance.currentStudent!.name.trim().split(' ').first : 'طالب'}',
+                    style: const TextStyle(
+                        fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   NotificationBell(
                     onTap: () {
@@ -352,22 +354,18 @@ class _HomeScreenState extends State<HomeScreen> {
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
+                        children: [
                           Text(
-                            'Noura Mohamed Al-Harthi',
-                            style: TextStyle(
+                            StudentAuthService.instance.currentStudent?.name ??
+                                '-',
+                            style: const TextStyle(
                                 fontWeight: FontWeight.bold, fontSize: 14),
                           ),
+                          const SizedBox(height: 4),
                           Text(
-                            'نورة محمد الحارثي',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 15),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            'رقم الطالبة : 440020446',
-                            style:
-                                TextStyle(fontSize: 13, color: Colors.black54),
+                            'رقم الطالب : ${StudentAuthService.instance.currentStudent?.studentId ?? '-'}',
+                            style: const TextStyle(
+                                fontSize: 13, color: Colors.black54),
                           ),
                         ],
                       ),
