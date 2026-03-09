@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
 import 'theme/app_theme_controller.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
 }
 
@@ -11,13 +15,19 @@ class MyApp extends StatelessWidget {
 
   static final ThemeData _lightTheme = ThemeData(
     useMaterial3: true,
-    colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF27A2A9), brightness: Brightness.light),
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: const Color(0xFF27A2A9),
+      brightness: Brightness.light,
+    ),
     fontFamily: 'Cairo',
   );
 
   static final ThemeData _darkTheme = ThemeData(
     useMaterial3: true,
-    colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF27A2A9), brightness: Brightness.dark),
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: const Color(0xFF27A2A9),
+      brightness: Brightness.dark,
+    ),
     fontFamily: 'Cairo',
   );
 

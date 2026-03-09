@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyAeX_boQNVAzE4mq_Jc1hVxU4dk27YIjcA</string>
+	<key>GCM_SENDER_ID</key>
+	<string>645899667333</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.example.muhadirapp</string>
+	<key>PROJECT_ID</key>
+	<string>muhadir-7f83e</string>
+	<key>STORAGE_BUCKET</key>
+	<string>muhadir-7f83e.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:645899667333:ios:d43a4ef988a284c9d626ec</string>
+	<key>DATABASE_URL</key>
+	<string>https://muhadir-7f83e-default-rtdb.asia-southeast1.firebasedatabase.app</string>
+</dict>
+</plist>
