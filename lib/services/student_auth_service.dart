@@ -14,14 +14,15 @@ class StudentAuthService {
 
   ExternalStudent _fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data();
+    if (data == null) return _fromDocSnapshot(doc);
     data['studentId'] ??= int.tryParse(doc.id);
-    return ExternalStudent.fromMap(data);
+    return ExternalStudent.fromMap(Map<String, dynamic>.from(data));
   }
 
   ExternalStudent _fromDocSnapshot(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? <String, dynamic>{};
     data['studentId'] ??= int.tryParse(doc.id);
-    return ExternalStudent.fromMap(data);
+    return ExternalStudent.fromMap(Map<String, dynamic>.from(data));
   }
 
   /// التحقق من الإيميل واسترجاع بيانات الطالب من Firestore
