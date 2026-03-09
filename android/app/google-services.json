@@ -1,0 +1,49 @@
+{
+  "project_info": {
+    "project_number": "645899667333",
+    "firebase_url": "https://muhadir-7f83e-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "muhadir-7f83e",
+    "storage_bucket": "muhadir-7f83e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:645899667333:android:6c70d5fb875d9b17d626ec",
+        "android_client_info": {
+          "package_name": "com.example.muhadirapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAtQOjXsTI3LUsfml_Sav2-4mN2J4Z9mOY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:645899667333:android:dab89d9e9f0ff5b3d626ec",
+        "android_client_info": {
+          "package_name": "com.grad_proj.muhadirapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAtQOjXsTI3LUsfml_Sav2-4mN2J4Z9mOY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
