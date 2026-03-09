@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'student/home_screen.dart';
 import 'lecturer/lecturer_main_shell.dart';
 import 'female_security/accepted_screen.dart';
+import '../services/student_auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,6 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   String? _emailError;
   bool _termsError = false;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -23,7 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _onLoginPressed() {
+  Future<void> _onLoginPressed() async {
     final email = _emailController.text.trim();
     final hasEmail = email.isNotEmpty;
     final hasTerms = _agreeToTerms;
@@ -38,16 +41,52 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     if (_selectedRole == _UserRole.student) {
-      Navigator.of(
-        context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => const HomeScreen()));
+      setState(() => _isLoading = true);
+      try {
+        final student = await StudentAuthService.instance
+            .verifyEmailAndGetStudent(email);
+        if (!mounted) return;
+        if (student != null) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+          );
+        } else {
+          setState(() {
+            _isLoading = false;
+            _emailError = 'الإيميل غير مسجل في النظام';
+          });
+        }
+      } on FirebaseException catch (e) {
+        if (!mounted) return;
+        debugPrint('Firestore error [${e.code}]: ${e.message}');
+        final message = switch (e.code) {
+          'permission-denied' =>
+            'لا توجد صلاحية لقراءة البيانات (Firestore Rules).',
+          'unavailable' => 'الخدمة غير متاحة حالياً، تأكد من الاتصال وحاول مرة أخرى.',
+          'failed-precondition' =>
+            'Firestore يحتاج إعداد إضافي (غالباً فهرس/Index).',
+          _ => 'حدث خطأ (${e.code})، حاول مرة أخرى.',
+        };
+        setState(() {
+          _isLoading = false;
+          _emailError = message;
+        });
+      } catch (e) {
+        if (!mounted) return;
+        debugPrint('Unknown login error: $e');
+        setState(() {
+          _isLoading = false;
+          _emailError = 'حدث خطأ غير متوقع، حاول مرة أخرى';
+        });
+      }
     } else if (_selectedRole == _UserRole.security) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const AcceptedScreen()),
       );
     } else if (_selectedRole == _UserRole.lecturer) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LecturerMainShell(initialIndex: 2)),
+        MaterialPageRoute(
+            builder: (_) => const LecturerMainShell(initialIndex: 2)),
       );
     }
   }
@@ -198,32 +237,34 @@ class _LoginScreenState extends State<LoginScreen> {
                         }
                       },
                     ),
-                    const SizedBox(height: 18),
-                    const Text(
-                      'الرقم السري :',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF222222),
-                        fontFamily: 'Cairo',
+                    if (_selectedRole != _UserRole.student) ...[
+                      const SizedBox(height: 18),
+                      const Text(
+                        'الرقم السري :',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF222222),
+                          fontFamily: 'Cairo',
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    _InputField(hintText: '••••••••', obscureText: true),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: () {},
-                        child: const Text(
-                          'نسيت كلمة المرور؟',
-                          style: TextStyle(
-                            color: Color(0xFF444444),
-                            fontFamily: 'Cairo',
+                      const SizedBox(height: 10),
+                      _InputField(hintText: '••••••••', obscureText: true),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () {},
+                          child: const Text(
+                            'نسيت كلمة المرور؟',
+                            style: TextStyle(
+                              color: Color(0xFF444444),
+                              fontFamily: 'Cairo',
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                     Row(
                       children: [
                         Checkbox(
@@ -274,15 +315,24 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderRadius: BorderRadius.circular(28),
                         ),
                         child: TextButton(
-                          onPressed: _onLoginPressed,
-                          child: const Text(
-                            'تسجيل الدخول',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontFamily: 'Cairo',
-                            ),
-                          ),
+                          onPressed: _isLoading ? null : _onLoginPressed,
+                          child: _isLoading
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text(
+                                  'تسجيل الدخول',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                    fontFamily: 'Cairo',
+                                  ),
+                                ),
                         ),
                       ),
                     ),
