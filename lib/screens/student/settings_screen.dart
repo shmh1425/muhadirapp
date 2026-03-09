@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'app_settings.dart';
 import 'components/notification_bell.dart';
 import 'notifications_screen.dart';
@@ -14,23 +15,28 @@ class SettingsScreen extends StatelessWidget {
     final student = StudentAuthService.instance.currentStudent;
     if (student == null) return const SizedBox.shrink();
 
-    return _SettingsTile(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _DataRow(label: 'الاسم', value: student.name),
-          const SizedBox(height: 10),
-          _DataRow(label: 'الإيميل', value: student.email),
-          const SizedBox(height: 10),
-          _DataRow(label: 'رقم الطالب', value: '${student.studentId}'),
-          const SizedBox(height: 10),
-          _DataRow(label: 'التخصص', value: student.major),
-          const SizedBox(height: 10),
-          _DataRow(label: 'المستوى', value: '${student.level}'),
-          const SizedBox(height: 10),
-          _DataRow(label: 'الجنس', value: student.gender),
-        ],
-      ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          student.name.isNotEmpty ? student.name : '-',
+          style: const TextStyle(
+            color: Color(0xFF444444),
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          student.major,
+          style: const TextStyle(
+            color: Color(0xFF444444),
+            fontSize: 14,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 
@@ -65,9 +71,11 @@ class SettingsScreen extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     Navigator.pop(context);
+                    await FirebaseAuth.instance.signOut();
                     StudentAuthService.instance.logout();
+                    if (!context.mounted) return;
                     Navigator.of(context).pushAndRemoveUntil(
                       MaterialPageRoute(builder: (_) => const LoginScreen()),
                       (_) => false,
@@ -187,18 +195,25 @@ class SettingsScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Center(
-                child: Text(
-                  StudentAuthService.instance.currentStudent?.name ??
-                      'لم يتم تحميل البيانات',
-                  style: const TextStyle(
-                    color: Color(0xFF006571),
-                    fontWeight: FontWeight.w600,
-                  ),
-                  textAlign: TextAlign.center,
+                child: Builder(
+                  builder: (context) {
+                    final s = StudentAuthService.instance.currentStudent;
+                    final nameAr = s?.nameAr ?? '';
+                    final nameDisplay = nameAr.isNotEmpty ? nameAr : (s?.name ?? 'لم يتم تحميل البيانات');
+                    return Text(
+                      nameDisplay,
+                      style: const TextStyle(
+                        color: Color(0xFF006571),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 18,
+                      ),
+                      textAlign: TextAlign.center,
+                    );
+                  },
                 ),
               ),
-              const SizedBox(height: 16),
-              _buildStudentDataSection(),
+              const SizedBox(height: 10),
+              Center(child: _buildStudentDataSection()),
               const SizedBox(height: 24),
               _SettingsTile(
                 child: Row(

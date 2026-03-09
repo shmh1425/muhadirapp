@@ -3,12 +3,15 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'app_settings.dart';
+import '../../services/student_auth_service.dart';
+import '../../models/external_student.dart';
 
 class StudentCardPage extends StatelessWidget {
   const StudentCardPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final student = StudentAuthService.instance.currentStudent;
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
@@ -43,9 +46,9 @@ class StudentCardPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildStudentCard(),
+                _buildStudentCard(student),
                 const SizedBox(height: 20),
-                _buildElectronicWalletSection(context),
+                _buildElectronicWalletSection(context, student),
               ],
             ),
           ),
@@ -54,7 +57,12 @@ class StudentCardPage extends StatelessWidget {
     );
   }
 
-  Widget _buildStudentCard() {
+  Widget _buildStudentCard(ExternalStudent? student) {
+    final nameAr = student?.nameAr ?? '';
+    final nameEn = student?.name ?? '';
+    final studentId = student?.studentId?.toString() ?? '-';
+    final major = student?.major ?? 'هندسة البرمجيات';
+    final majorEn = student?.major ?? 'Software Engineering';
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -109,11 +117,11 @@ class StudentCardPage extends StatelessWidget {
                 Expanded(
                   child: Column(
                     crossAxisAlignment:
-                        CrossAxisAlignment.start, // ← لأن النصوص صارت يسار
+                        CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'نورة محمد الحارثي',
-                        style: TextStyle(
+                      Text(
+                        nameAr.isNotEmpty ? nameAr : nameEn,
+                        style: const TextStyle(
                           color: Colors.black,
                           fontSize: 16,
                           fontFamily: 'Cairo',
@@ -121,9 +129,9 @@ class StudentCardPage extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      const Text(
-                        'Noura Mohamed Al-Harthi',
-                        style: TextStyle(
+                      Text(
+                        nameEn.isNotEmpty ? nameEn : nameAr,
+                        style: const TextStyle(
                           color: Colors.grey,
                           fontSize: 14,
                           fontFamily: 'Cairo',
@@ -132,7 +140,7 @@ class StudentCardPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'رقم الطالبة : 444002446',
+                        'رقم الطالب : $studentId',
                         style: TextStyle(
                           color: Colors.black.withOpacity(0.82),
                           fontSize: 14,
@@ -154,7 +162,7 @@ class StudentCardPage extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'Faculty: College of Computers\nDepartment: Software Engineering\nMajor: Software Engineering',
+                  'Faculty: College of Computers\nDepartment: $majorEn\nMajor: $majorEn',
                   style: TextStyle(
                     color: Colors.black.withOpacity(0.88),
                     fontSize: 12,
@@ -166,7 +174,7 @@ class StudentCardPage extends StatelessWidget {
               const SizedBox(width: 20),
               Expanded(
                 child: Text(
-                  'الكلية: كلية الحاسبات\nقسم هندسة البرمجيات\nالتخصص: هندسة البرمجيات',
+                  'الكلية: كلية الحاسبات\nقسم $major\nالتخصص: $major',
                   textAlign: TextAlign.right,
                   style: TextStyle(
                     color: Colors.black.withOpacity(0.88),
@@ -199,7 +207,11 @@ class StudentCardPage extends StatelessWidget {
     );
   }
 
-  Widget _buildElectronicWalletSection(BuildContext context) {
+  Widget _buildElectronicWalletSection(BuildContext context, ExternalStudent? student) {
+    final nameAr = student?.nameAr ?? '-';
+    final nameEn = student?.name ?? '-';
+    final studentId = student?.studentId?.toString() ?? '-';
+    final email = student?.email ?? '-';
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -253,20 +265,16 @@ class StudentCardPage extends StatelessWidget {
               ),
             ),
           ),
-          _buildWalletRow(context, 'الاسم', 'نورة محمد خالد الحارثي'),
-          _buildWalletRow(
-            context,
-            'الاسم بالإنجليزي',
-            'Al-Harthi, Noura Mohammed Khalied',
-          ),
-          _buildWalletRow(context, 'رقم الطالبة', '444002446'),
-          _buildWalletRow(context, 'البريد الإلكتروني', 's444002446@uqu.edu.sa'),
+          _buildWalletRow(context, 'الاسم', nameAr),
+          _buildWalletRow(context, 'الاسم بالإنجليزي', nameEn, valueLtr: true),
+          _buildWalletRow(context, 'رقم الطالب', studentId, valueLtr: true),
+          _buildWalletRow(context, 'البريد الإلكتروني', email, valueLtr: true),
         ],
       ),
     );
   }
 
-  Widget _buildWalletRow(BuildContext context, String label, String value) {
+  Widget _buildWalletRow(BuildContext context, String label, String value, {bool valueLtr = false}) {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Container(
@@ -295,15 +303,29 @@ class StudentCardPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    value,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      color: Colors.black,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: 'Cairo',
-                    ),
-                  ),
+                  valueLtr
+                      ? Directionality(
+                          textDirection: TextDirection.ltr,
+                          child: Text(
+                            value,
+                            textAlign: TextAlign.left,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              color: Colors.black,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'Cairo',
+                            ),
+                          ),
+                        )
+                      : Text(
+                          value,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: Colors.black,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'Cairo',
+                          ),
+                        ),
                 ],
               ),
             ),

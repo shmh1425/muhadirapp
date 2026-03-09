@@ -69,6 +69,15 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// أول كلمة من الاسم للترحيب (عربي إن وُجد)
+  String _greetingName() {
+    final s = StudentAuthService.instance.currentStudent;
+    if (s == null) return 'طالب';
+    final raw = s.nameAr.trim().isNotEmpty ? s.nameAr : s.name;
+    if (raw.isEmpty) return 'طالب';
+    return raw.split(' ').first;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -89,7 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'أهلاً ${(StudentAuthService.instance.currentStudent?.name.trim().isNotEmpty ?? false) ? StudentAuthService.instance.currentStudent!.name.trim().split(' ').first : 'طالب'}',
+                    'أهلاً ${_greetingName()}',
                     style: const TextStyle(
                         fontSize: 24, fontWeight: FontWeight.bold),
                   ),
@@ -356,8 +365,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            StudentAuthService.instance.currentStudent?.name ??
-                                '-',
+                            StudentAuthService.instance.currentStudent?.displayName ?? '-',
                             style: const TextStyle(
                                 fontWeight: FontWeight.bold, fontSize: 14),
                           ),

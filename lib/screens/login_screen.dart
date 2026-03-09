@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'student/home_screen.dart';
 import 'lecturer/lecturer_main_shell.dart';
 import 'female_security/accepted_screen.dart';
@@ -16,6 +17,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _agreeToTerms = false;
   _UserRole _selectedRole = _UserRole.lecturer;
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   String? _emailError;
   bool _termsError = false;
   bool _isLoading = false;
@@ -23,11 +25,13 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void dispose() {
     _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
   Future<void> _onLoginPressed() async {
     final email = _emailController.text.trim();
+    final password = _passwordController.text;
     final hasEmail = email.isNotEmpty;
     final hasTerms = _agreeToTerms;
 
@@ -41,21 +45,36 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     if (_selectedRole == _UserRole.student) {
+      if (password.isEmpty) {
+        setState(() => _emailError = 'أدخل كلمة المرور');
+        return;
+      }
       setState(() => _isLoading = true);
       try {
-        final student = await StudentAuthService.instance
-            .verifyEmailAndGetStudent(email);
+        await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
         if (!mounted) return;
-        if (student != null) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const HomeScreen()),
-          );
-        } else {
-          setState(() {
-            _isLoading = false;
-            _emailError = 'الإيميل غير مسجل في النظام';
-          });
-        }
+        // جلب بيانات الطالب من Firestore للعرض في الإعدادات
+        await StudentAuthService.instance.verifyEmailAndGetStudent(email);
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+        );
+      } on FirebaseAuthException catch (e) {
+        if (!mounted) return;
+        final message = switch (e.code) {
+          'user-not-found' => 'لا يوجد حساب بهذا الإيميل، سجّل أولاً',
+          'wrong-password' => 'كلمة المرور غير صحيحة',
+          'invalid-email' => 'صيغة الإيميل غير صحيحة',
+          'invalid-credential' => 'الإيميل أو كلمة المرور غير صحيحة',
+          _ => e.message ?? 'فشل تسجيل الدخول',
+        };
+        setState(() {
+          _isLoading = false;
+          _emailError = message;
+        });
       } on FirebaseException catch (e) {
         if (!mounted) return;
         debugPrint('Firestore error [${e.code}]: ${e.message}');
@@ -237,6 +256,38 @@ class _LoginScreenState extends State<LoginScreen> {
                         }
                       },
                     ),
+                    if (_selectedRole == _UserRole.student) ...[
+                      const SizedBox(height: 18),
+                      const Text(
+                        'الرقم السري :',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF222222),
+                          fontFamily: 'Cairo',
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      _InputField(
+                        hintText: '••••••••',
+                        obscureText: true,
+                        controller: _passwordController,
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () {},
+                          child: const Text(
+                            'نسيت كلمة المرور؟',
+                            style: TextStyle(
+                              color: Color(0xFF444444),
+                              fontFamily: 'Cairo',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                     if (_selectedRole != _UserRole.student) ...[
                       const SizedBox(height: 18),
                       const Text(
