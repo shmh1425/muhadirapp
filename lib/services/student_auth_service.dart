@@ -14,7 +14,6 @@ class StudentAuthService {
 
   ExternalStudent _fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data();
-    if (data == null) return _fromDocSnapshot(doc);
     data['studentId'] ??= int.tryParse(doc.id);
     return ExternalStudent.fromMap(Map<String, dynamic>.from(data));
   }
@@ -23,6 +22,11 @@ class StudentAuthService {
     final data = doc.data() ?? <String, dynamic>{};
     data['studentId'] ??= int.tryParse(doc.id);
     return ExternalStudent.fromMap(Map<String, dynamic>.from(data));
+  }
+
+  bool _hasStudentRole(Map<String, dynamic>? data) {
+    final role = (data?['role'] ?? '').toString().trim().toLowerCase();
+    return role == 'student';
   }
 
   /// التحقق من الإيميل واسترجاع بيانات الطالب من Firestore
@@ -39,6 +43,9 @@ class StudentAuthService {
         .get();
 
     if (snapshot.docs.isNotEmpty) {
+      if (!_hasStudentRole(snapshot.docs.first.data())) {
+        return null;
+      }
       _currentStudent = _fromDoc(snapshot.docs.first);
       return _currentStudent;
     }
@@ -54,6 +61,9 @@ class StudentAuthService {
           .doc(localPart)
           .get();
       if (docSnap.exists) {
+        if (!_hasStudentRole(docSnap.data())) {
+          return null;
+        }
         _currentStudent = _fromDocSnapshot(docSnap);
         // إذا كان الإيميل محفوظ لكنه مختلف، نخليه ينعكس في الإعدادات كما هو
         return _currentStudent;
@@ -66,6 +76,9 @@ class StudentAuthService {
           .limit(1)
           .get();
       if (snapshotById.docs.isNotEmpty) {
+        if (!_hasStudentRole(snapshotById.docs.first.data())) {
+          return null;
+        }
         _currentStudent = _fromDoc(snapshotById.docs.first);
         return _currentStudent;
       }

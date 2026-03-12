@@ -16,7 +16,9 @@ import '../../widgets/lecturer/day_tap_handler.dart';
 import 'lecturer_navigation.dart';
 
 class LecturerHomeScreen extends StatefulWidget {
-  const LecturerHomeScreen({super.key});
+  const LecturerHomeScreen({super.key, this.lecturerName});
+
+  final String? lecturerName;
 
   @override
   State<LecturerHomeScreen> createState() => _LecturerHomeScreenState();
@@ -107,6 +109,7 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
                       Expanded(
                         child: LecturerHomeHeader(
                           selectedFilter: _selectedFilter,
+                          lecturerName: widget.lecturerName,
                         ),
                       ),
                       NotificationBell(

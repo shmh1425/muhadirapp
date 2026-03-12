@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'student/home_screen.dart';
 import 'lecturer/lecturer_main_shell.dart';
+import 'lecturer/lecturer_profile_screen.dart';
+import 'admin/admin_dashboard_screen.dart';
 import 'female_security/accepted_screen.dart';
+import '../services/admin/admin_auth_service.dart';
 import '../services/student_auth_service.dart';
+import '../services/lecturer_auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -34,6 +37,8 @@ class _LoginScreenState extends State<LoginScreen> {
     final password = _passwordController.text;
     final hasEmail = email.isNotEmpty;
     final hasTerms = _agreeToTerms;
+    final needsPassword =
+        _selectedRole == _UserRole.student || _selectedRole == _UserRole.admin;
 
     setState(() {
       _emailError = hasEmail ? null : 'اكتب ايميل';
@@ -44,11 +49,12 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    if (needsPassword && password.isEmpty) {
+      setState(() => _emailError = 'أدخل كلمة المرور');
+      return;
+    }
+
     if (_selectedRole == _UserRole.student) {
-      if (password.isEmpty) {
-        setState(() => _emailError = 'أدخل كلمة المرور');
-        return;
-      }
       setState(() => _isLoading = true);
       try {
         await FirebaseAuth.instance.signInWithEmailAndPassword(
@@ -57,8 +63,20 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         if (!mounted) return;
         // جلب بيانات الطالب من Firestore للعرض في الإعدادات
-        await StudentAuthService.instance.verifyEmailAndGetStudent(email);
+        final student = await StudentAuthService.instance
+            .verifyEmailAndGetStudent(email);
         if (!mounted) return;
+
+        if (student == null) {
+          await FirebaseAuth.instance.signOut();
+          if (!mounted) return;
+          setState(() {
+            _isLoading = false;
+            _emailError = 'الحساب ليس طالباً أو الدور غير صحيح';
+          });
+          return;
+        }
+
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const HomeScreen()),
         );
@@ -81,7 +99,8 @@ class _LoginScreenState extends State<LoginScreen> {
         final message = switch (e.code) {
           'permission-denied' =>
             'لا توجد صلاحية لقراءة البيانات (Firestore Rules).',
-          'unavailable' => 'الخدمة غير متاحة حالياً، تأكد من الاتصال وحاول مرة أخرى.',
+          'unavailable' =>
+            'الخدمة غير متاحة حالياً، تأكد من الاتصال وحاول مرة أخرى.',
           'failed-precondition' =>
             'Firestore يحتاج إعداد إضافي (غالباً فهرس/Index).',
           _ => 'حدث خطأ (${e.code})، حاول مرة أخرى.',
@@ -98,20 +117,119 @@ class _LoginScreenState extends State<LoginScreen> {
           _emailError = 'حدث خطأ غير متوقع، حاول مرة أخرى';
         });
       }
+    } else if (_selectedRole == _UserRole.admin) {
+      setState(() => _isLoading = true);
+      try {
+        final isAdmin = await AdminAuthService.instance.signInAndVerifyAdmin(
+          email: email,
+          password: password,
+        );
+        if (!mounted) return;
+
+        if (!isAdmin) {
+          setState(() {
+            _isLoading = false;
+            _emailError = 'هذا الحساب ليس لديه صلاحية أدمن';
+          });
+          return;
+        }
+
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+        );
+      } on FirebaseAuthException catch (e) {
+        if (!mounted) return;
+        final message = switch (e.code) {
+          'user-not-found' => 'لا يوجد حساب بهذا الإيميل',
+          'wrong-password' => 'كلمة المرور غير صحيحة',
+          'invalid-email' => 'صيغة الإيميل غير صحيحة',
+          'invalid-credential' => 'الإيميل أو كلمة المرور غير صحيحة',
+          _ => e.message ?? 'فشل تسجيل دخول الأدمن',
+        };
+        setState(() {
+          _isLoading = false;
+          _emailError = message;
+        });
+      } on FirebaseException catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          _emailError = 'فشل التحقق من صلاحيات الأدمن (${e.code})';
+        });
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          _emailError = 'حدث خطأ غير متوقع، حاول مرة أخرى';
+        });
+      }
     } else if (_selectedRole == _UserRole.security) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const AcceptedScreen()),
       );
     } else if (_selectedRole == _UserRole.lecturer) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-            builder: (_) => const LecturerMainShell(initialIndex: 2)),
-      );
+      setState(() => _isLoading = true);
+      try {
+        final lecturer = await LecturerAuthService.instance
+            .verifyEmailAndGetLecturer(email);
+        if (!mounted) return;
+
+        if (lecturer == null) {
+          setState(() {
+            _isLoading = false;
+            _emailError = 'المحاضر غير موجود أو الدور غير صحيح';
+          });
+          return;
+        }
+
+        final displayName = lecturer.nameAr.trim().isNotEmpty
+            ? lecturer.nameAr
+            : lecturer.nameEn;
+        final profile = LecturerProfile(
+          name: displayName.isNotEmpty ? displayName : 'محاضر',
+          email: lecturer.email,
+          college: lecturer.college,
+          department: lecturer.department,
+        );
+
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) =>
+                LecturerMainShell(initialIndex: 2, profile: profile),
+          ),
+        );
+      } on FirebaseException catch (e) {
+        if (!mounted) return;
+        debugPrint('Lecturer Firestore error [${e.code}]: ${e.message}');
+        final message = switch (e.code) {
+          'permission-denied' =>
+            'لا توجد صلاحية لقراءة بيانات المحاضرين (Firestore Rules).',
+          'unavailable' =>
+            'الخدمة غير متاحة حالياً، تأكد من الاتصال وحاول مرة أخرى.',
+          'failed-precondition' =>
+            'Firestore يحتاج إعداد إضافي (غالباً فهرس/Index).',
+          _ => 'حدث خطأ (${e.code})، حاول مرة أخرى.',
+        };
+        setState(() {
+          _isLoading = false;
+          _emailError = message;
+        });
+      } catch (e) {
+        if (!mounted) return;
+        debugPrint('Unknown lecturer login error: $e');
+        setState(() {
+          _isLoading = false;
+          _emailError = 'حدث خطأ غير متوقع، حاول مرة أخرى';
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final needsPassword =
+        _selectedRole == _UserRole.student || _selectedRole == _UserRole.admin;
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
@@ -153,7 +271,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: Container(
                         margin: const EdgeInsets.all(2),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                           borderRadius: BorderRadius.circular(28),
                         ),
                         child: Row(
@@ -176,6 +294,17 @@ class _LoginScreenState extends State<LoginScreen> {
                                 onTap: () {
                                   setState(() {
                                     _selectedRole = _UserRole.student;
+                                  });
+                                },
+                              ),
+                            ),
+                            Expanded(
+                              child: _RoleChip(
+                                label: 'الأدمن',
+                                isActive: _selectedRole == _UserRole.admin,
+                                onTap: () {
+                                  setState(() {
+                                    _selectedRole = _UserRole.admin;
                                   });
                                 },
                               ),
@@ -256,7 +385,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         }
                       },
                     ),
-                    if (_selectedRole == _UserRole.student) ...[
+                    if (needsPassword) ...[
                       const SizedBox(height: 18),
                       const Text(
                         'الرقم السري :',
@@ -273,34 +402,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         obscureText: true,
                         controller: _passwordController,
                       ),
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () {},
-                          child: const Text(
-                            'نسيت كلمة المرور؟',
-                            style: TextStyle(
-                              color: Color(0xFF444444),
-                              fontFamily: 'Cairo',
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (_selectedRole != _UserRole.student) ...[
-                      const SizedBox(height: 18),
-                      const Text(
-                        'الرقم السري :',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF222222),
-                          fontFamily: 'Cairo',
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      _InputField(hintText: '••••••••', obscureText: true),
                       const SizedBox(height: 8),
                       Align(
                         alignment: Alignment.centerRight,
@@ -443,7 +544,7 @@ class _RoleChip extends StatelessWidget {
   }
 }
 
-enum _UserRole { lecturer, student, security }
+enum _UserRole { lecturer, student, admin, security }
 
 class _InputField extends StatelessWidget {
   const _InputField({
@@ -491,7 +592,7 @@ class _InputField extends StatelessWidget {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.black.withOpacity(0.08)),
+          borderSide: BorderSide(color: Colors.black.withValues(alpha: 0.08)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),

@@ -8,6 +8,7 @@ import 'lecturer_language.dart';
 import 'lecturer_my_lectures_screen.dart';
 import 'lecturer_navigation.dart';
 import 'lecturer_notifications_screen.dart';
+import '../../services/lecturer_auth_service.dart';
 import 'widgets/modern_popup_dialog.dart';
 
 class LecturerProfile {
@@ -171,6 +172,7 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
     );
 
     if (confirmed != true || !mounted) return;
+    LecturerAuthService.instance.logout();
 
     // استخدام الـ root navigator لمسح الـ stack بالكامل (بما فيه LecturerMainShell والـ BottomNav)
     // وإظهار شاشة الترحيب فقط — منع تكرار الـ BottomNav أو بقائه ظاهراً بعد الخروج.
