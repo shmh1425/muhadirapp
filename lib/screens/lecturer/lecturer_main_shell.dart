@@ -9,13 +9,11 @@ import 'lecturer_profile_screen.dart';
 /// التنقل بين التبويبات بتغيير الـ index فقط — لا push للتبويبات.
 /// الصفحات الفرعية (مثل التحضير، التقارير) تُفتح داخل نفس التبويب عبر الـ Navigator المخصص لكل تبويب.
 class LecturerMainShell extends StatefulWidget {
-  const LecturerMainShell({
-    super.key,
-    this.initialIndex = 2,
-  });
+  const LecturerMainShell({super.key, this.initialIndex = 2, this.profile});
 
   /// 0 = Profile, 1 = QR, 2 = Home. افتراضي 2 (Home).
   final int initialIndex;
+  final LecturerProfile? profile;
 
   @override
   State<LecturerMainShell> createState() => _LecturerMainShellState();
@@ -23,13 +21,6 @@ class LecturerMainShell extends StatefulWidget {
 
 class _LecturerMainShellState extends State<LecturerMainShell> {
   late int _selectedIndex;
-
-  static const LecturerProfile _profile = LecturerProfile(
-    name: 'أنـاس بوقس',
-    email: 'username@example.com',
-    college: 'كلية الحاسبات',
-    department: 'هندسة البرمجيات',
-  );
 
   @override
   void initState() {
@@ -52,14 +43,23 @@ class _LecturerMainShellState extends State<LecturerMainShell> {
 
   @override
   Widget build(BuildContext context) {
+    final profile =
+        widget.profile ??
+        const LecturerProfile(
+          name: 'محاضر',
+          email: 'lecturer@uqu.edu.sa',
+          college: 'كلية الحاسبات',
+          department: 'غير محدد',
+        );
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: IndexedStack(
         index: _selectedIndex,
         children: [
-          _buildTabNavigator(0, const LecturerProfileScreen(lecturer: _profile)),
+          _buildTabNavigator(0, LecturerProfileScreen(lecturer: profile)),
           _buildTabNavigator(1, const LecturerQrScreen(lecture: null)),
-          _buildTabNavigator(2, const LecturerHomeScreen()),
+          _buildTabNavigator(2, LecturerHomeScreen(lecturerName: profile.name)),
         ],
       ),
       bottomNavigationBar: LecturerNavBar(

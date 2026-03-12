@@ -5,10 +5,12 @@ import '../../screens/lecturer/lecturer_language.dart';
 /// Header component للشاشة الرئيسية (التحية والتاريخ)
 class LecturerHomeHeader extends StatelessWidget {
   final String selectedFilter;
+  final String? lecturerName;
 
   const LecturerHomeHeader({
     super.key,
     required this.selectedFilter,
+    this.lecturerName,
   });
 
   @override
@@ -32,6 +34,18 @@ class LecturerHomeHeader extends StatelessWidget {
                   height: 1.2,
                 ),
               ),
+              if (lecturerName != null && lecturerName!.trim().isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  lecturerName!,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1F7F86),
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               _buildDateSection(language),
             ],
