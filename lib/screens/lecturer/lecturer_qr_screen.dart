@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../models/lecturer/lecture_item.dart';
-import '../../services/lecturer/lecture_repository.dart';
+import '../../services/lecturer/lecturer_sections_service.dart';
 import '../../utils/shared/time_utils.dart';
 import 'lecturer_language.dart';
 
@@ -18,7 +18,7 @@ class LecturerQrScreen extends StatefulWidget {
 }
 
 class _LecturerQrScreenState extends State<LecturerQrScreen> {
-  final LectureRepository _repository = LectureRepository();
+  List<LectureItem> _allLectures = [];
   late String _qrData;
   LectureItem? _activeLecture;
 
@@ -28,7 +28,21 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
   void initState() {
     super.initState();
     _qrData = '';
-    _syncLectureAndCode(generateCode: true);
+    _loadLectures();
+  }
+
+  Future<void> _loadLectures() async {
+    try {
+      final list = await LecturerSectionsService.instance.getLecturesForCurrentLecturer();
+      if (!mounted) return;
+      setState(() {
+        _allLectures = list;
+        _syncLectureAndCode(generateCode: true);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _syncLectureAndCode(generateCode: true));
+    }
   }
 
   void _syncLectureAndCode({required bool generateCode}) {
@@ -47,7 +61,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
 
     final now = DateTime.now();
     final dayLectures = TimeUtils.sortLecturesByTime(
-      _repository.getLecturesForDay(now.weekday),
+      _allLectures.where((l) => l.dayOfWeek == now.weekday).toList(),
       (l) => l.startTime,
     );
     for (final lecture in dayLectures) {

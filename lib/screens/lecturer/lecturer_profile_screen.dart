@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../welcome_screen.dart';
@@ -172,6 +173,7 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
     );
 
     if (confirmed != true || !mounted) return;
+    await FirebaseAuth.instance.signOut();
     LecturerAuthService.instance.logout();
 
     // استخدام الـ root navigator لمسح الـ stack بالكامل (بما فيه LecturerMainShell والـ BottomNav)

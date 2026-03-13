@@ -24,6 +24,7 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _emailError;
   bool _termsError = false;
   bool _isLoading = false;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -38,7 +39,9 @@ class _LoginScreenState extends State<LoginScreen> {
     final hasEmail = email.isNotEmpty;
     final hasTerms = _agreeToTerms;
     final needsPassword =
-        _selectedRole == _UserRole.student || _selectedRole == _UserRole.admin;
+        _selectedRole == _UserRole.student ||
+        _selectedRole == _UserRole.admin ||
+        _selectedRole == _UserRole.lecturer;
 
     setState(() {
       _emailError = hasEmail ? null : 'اكتب ايميل';
@@ -170,14 +173,22 @@ class _LoginScreenState extends State<LoginScreen> {
     } else if (_selectedRole == _UserRole.lecturer) {
       setState(() => _isLoading = true);
       try {
+        await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+        if (!mounted) return;
+        // جلب بيانات المحاضر من Firestore والتحقق من الدور
         final lecturer = await LecturerAuthService.instance
             .verifyEmailAndGetLecturer(email);
         if (!mounted) return;
 
         if (lecturer == null) {
+          await FirebaseAuth.instance.signOut();
+          if (!mounted) return;
           setState(() {
             _isLoading = false;
-            _emailError = 'المحاضر غير موجود أو الدور غير صحيح';
+            _emailError = 'الحساب ليس محاضراً أو الدور غير صحيح';
           });
           return;
         }
@@ -198,12 +209,25 @@ class _LoginScreenState extends State<LoginScreen> {
                 LecturerMainShell(initialIndex: 2, profile: profile),
           ),
         );
+      } on FirebaseAuthException catch (e) {
+        if (!mounted) return;
+        final message = switch (e.code) {
+          'user-not-found' => 'لا يوجد حساب بهذا الإيميل، سجّل أولاً',
+          'wrong-password' => 'كلمة المرور غير صحيحة',
+          'invalid-email' => 'صيغة الإيميل غير صحيحة',
+          'invalid-credential' => 'الإيميل أو كلمة المرور غير صحيحة',
+          _ => e.message ?? 'فشل تسجيل الدخول',
+        };
+        setState(() {
+          _isLoading = false;
+          _emailError = message;
+        });
       } on FirebaseException catch (e) {
         if (!mounted) return;
         debugPrint('Lecturer Firestore error [${e.code}]: ${e.message}');
         final message = switch (e.code) {
           'permission-denied' =>
-            'لا توجد صلاحية لقراءة بيانات المحاضرين (Firestore Rules).',
+            'لا توجد صلاحية لقراءة البيانات (Firestore Rules).',
           'unavailable' =>
             'الخدمة غير متاحة حالياً، تأكد من الاتصال وحاول مرة أخرى.',
           'failed-precondition' =>
@@ -228,7 +252,9 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final needsPassword =
-        _selectedRole == _UserRole.student || _selectedRole == _UserRole.admin;
+        _selectedRole == _UserRole.student ||
+        _selectedRole == _UserRole.admin ||
+        _selectedRole == _UserRole.lecturer;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -399,8 +425,23 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 10),
                       _InputField(
                         hintText: '••••••••',
-                        obscureText: true,
+                        obscureText: _obscurePassword,
                         controller: _passwordController,
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            color: const Color(0xFF006571),
+                            size: 22,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _obscurePassword = !_obscurePassword;
+                            });
+                          },
+                          splashRadius: 20,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Align(
@@ -556,6 +597,7 @@ class _InputField extends StatelessWidget {
     this.textAlign = TextAlign.right,
     this.errorText,
     this.onChanged,
+    this.suffixIcon,
   });
 
   final String hintText;
@@ -566,6 +608,12 @@ class _InputField extends StatelessWidget {
   final TextAlign textAlign;
   final String? errorText;
   final ValueChanged<String>? onChanged;
+  final Widget? suffixIcon;
+
+  static const Color _borderEnabled = Color(0xFFD0D0D0);
+  static const Color _borderFocused = Color(0xFF006571);
+  static const Color _textColor = Color(0xFF1a1a1a);
+  static const Color _hintColor = Color(0xFF757575);
 
   @override
   Widget build(BuildContext context) {
@@ -576,27 +624,48 @@ class _InputField extends StatelessWidget {
       textDirection: textDirection,
       textAlign: textAlign,
       onChanged: onChanged,
+      style: const TextStyle(
+        color: _textColor,
+        fontSize: 16,
+        fontWeight: FontWeight.w500,
+        fontFamily: 'Cairo',
+      ),
+      cursorColor: _borderFocused,
       decoration: InputDecoration(
         hintText: hintText,
-        hintStyle: const TextStyle(color: Color(0xFFB0B0B0)),
+        hintStyle: const TextStyle(
+          color: _hintColor,
+          fontSize: 16,
+          fontWeight: FontWeight.w400,
+          fontFamily: 'Cairo',
+        ),
         errorText: errorText,
         errorStyle: const TextStyle(
           color: Color(0xFFD32F2F),
           fontFamily: 'Cairo',
         ),
+        suffixIcon: suffixIcon,
         filled: true,
         fillColor: Colors.white,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
-          vertical: 14,
+          vertical: 16,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.black.withValues(alpha: 0.08)),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: _borderEnabled, width: 1.2),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF006571)),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: _borderFocused, width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFD32F2F), width: 1.2),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFD32F2F), width: 2),
         ),
       ),
     );

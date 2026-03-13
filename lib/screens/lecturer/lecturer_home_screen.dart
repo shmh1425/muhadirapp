@@ -8,6 +8,7 @@ import '../../models/calendar_day.dart';
 import '../../services/lecturer/lecture_repository.dart';
 import '../../services/lecturer/calendar_service.dart';
 import '../../services/lecturer/filter_service.dart';
+import '../../services/lecturer/lecturer_sections_service.dart';
 import '../../widgets/lecturer/lecturer_home_header.dart';
 import '../../widgets/lecturer/lecturer_filter_buttons.dart';
 import '../../widgets/lecturer/manage_lectures_button.dart';
@@ -33,15 +34,39 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
   late final CalendarService _calendarService;
   late final DayTapHandler _dayTapHandler;
 
-  // Data
-  late List<LectureItem> _allLectures;
+  // Data: محاضرات المحاضر من sections (Firebase)
+  List<LectureItem> _allLectures = [];
+  bool _isLoadingLectures = true;
+  String? _loadError;
 
   @override
   void initState() {
     super.initState();
     _calendarService = CalendarService(_repository);
     _dayTapHandler = DayTapHandler(repository: _repository);
-    _allLectures = _repository.getAllLectures();
+    _loadLectures();
+  }
+
+  Future<void> _loadLectures() async {
+    setState(() {
+      _isLoadingLectures = true;
+      _loadError = null;
+    });
+    try {
+      final list = await LecturerSectionsService.instance.getLecturesForCurrentLecturer();
+      if (!mounted) return;
+      setState(() {
+        _allLectures = list;
+        _isLoadingLectures = false;
+        _loadError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingLectures = false;
+        _loadError = e.toString();
+      });
+    }
   }
 
   void _handleFilterChanged(String filter) {
@@ -96,7 +121,43 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
           child: Scaffold(
             backgroundColor: Colors.white,
             body: SafeArea(
-              child: ListView(
+              child: _isLoadingLectures
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: CircularProgressIndicator(color: Color(0xFF006571)),
+                      ),
+                    )
+                  : _loadError != null
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  LecturerLanguageController.tr(
+                                    'حدث خطأ في تحميل المحاضرات',
+                                    'Failed to load lectures',
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _loadError!,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
+                                const SizedBox(height: 16),
+                                TextButton.icon(
+                                  onPressed: _loadLectures,
+                                  icon: const Icon(Icons.refresh),
+                                  label: Text(LecturerLanguageController.tr('إعادة المحاولة', 'Retry')),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ListView(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
                   vertical: 20,
