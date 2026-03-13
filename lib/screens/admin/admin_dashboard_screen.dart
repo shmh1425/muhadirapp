@@ -40,6 +40,13 @@ const List<String> _termOptions = <String>[
   '2027-2',
 ];
 
+/// نوع المقرر: نظري، عملي، مشروع التخرج
+const List<MapEntry<String, String>> _courseTypeOptions = <MapEntry<String, String>>[
+  MapEntry('theoretical', 'نظري'),
+  MapEntry('practical', 'عملي'),
+  MapEntry('graduation_project', 'مشروع التخرج'),
+];
+
 /// استخراج قيم مميزة غير فارغة من وثائق (للكلية/القسم/التخصص) — من المحاضرين والمقررات والطلاب
 List<String> _distinctFromDocs(
   List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
@@ -613,6 +620,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
   String? _selectedCourseCollege;
   String? _selectedCourseDepartment;
   String? _selectedCourseMajor;
+  String? _selectedCourseType;
 
   String? _selectedSectionCourseCode;
   String _selectedSectionNumber = '01';
@@ -642,9 +650,10 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
     final creditHours = int.tryParse(_courseHoursController.text.trim());
 
     final major = _selectedCourseMajor?.trim() ?? '';
-    if (courseCode.isEmpty || courseName.isEmpty || college.isEmpty || department.isEmpty || major.isEmpty) {
+    final courseType = _selectedCourseType?.trim() ?? '';
+    if (courseCode.isEmpty || courseName.isEmpty || college.isEmpty || department.isEmpty || major.isEmpty || courseType.isEmpty) {
       _showMessage(
-        'أكملي بيانات المقرر: الرمز، الاسم، الكلية، القسم، التخصص، المستوى',
+        'أكملي بيانات المقرر: الرمز، الاسم، الكلية، القسم، التخصص، نوع المقرر، المستوى',
       );
       return;
     }
@@ -666,6 +675,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
         'courseCode': courseCode,
         'courseName': courseName,
         'courseName_Ar': courseNameAr,
+        'courseType': courseType,
         'college': college,
         'department': department,
         'major': major,
@@ -688,6 +698,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
       _selectedCourseCollege = null;
       _selectedCourseDepartment = null;
       _selectedCourseMajor = null;
+      _selectedCourseType = null;
       if (!mounted) return;
       _showMessage(existing.exists ? 'تم تحديث المقرر' : 'تم حفظ المقرر');
     } on FirebaseException catch (e) {
@@ -757,6 +768,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
         'sectionId': sectionId,
         'courseCode': courseCode,
         'courseName': (courseData['courseName'] ?? '').toString(),
+        'courseType': (courseData['courseType'] ?? '').toString(),
         'college': (courseData['college'] ?? courseData['major'] ?? '').toString(),
         'department': (courseData['department'] ?? courseData['major'] ?? '').toString(),
         'major': _selectedSectionMajor,
@@ -795,6 +807,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
         {
           'courseCode': 'SE3321',
           'courseName': 'Operations Research',
+          'courseType': 'theoretical',
           'college': 'College of Computing and Information',
           'department': 'Software Engineering',
           'level': 8,
@@ -803,6 +816,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
         {
           'courseCode': 'SE3322',
           'courseName': 'Software Quality',
+          'courseType': 'theoretical',
           'college': 'College of Computing and Information',
           'department': 'Software Engineering',
           'level': 8,
@@ -811,6 +825,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
         {
           'courseCode': 'SE3323',
           'courseName': 'Data Engineering',
+          'courseType': 'practical',
           'college': 'College of Computing and Information',
           'department': 'Software Engineering',
           'level': 8,
@@ -1031,6 +1046,29 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
         _AdminTextField(
           controller: _courseNameArController,
           label: 'اسم المقرر بالعربي',
+        ),
+        const SizedBox(height: 10),
+        DropdownButtonFormField<String?>(
+          value: _selectedCourseType,
+          decoration: const InputDecoration(
+            labelText: 'نوع المقرر',
+            border: OutlineInputBorder(),
+          ),
+          items: [
+            const DropdownMenuItem<String?>(
+              value: null,
+              child: Text('اختر نوع المقرر'),
+            ),
+            ..._courseTypeOptions.map(
+              (e) => DropdownMenuItem<String?>(
+                value: e.key,
+                child: Text('${e.value} (${e.key})'),
+              ),
+            ),
+          ],
+          onChanged: (value) {
+            setState(() => _selectedCourseType = value);
+          },
         ),
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: _lecturersRef.snapshots(),
