@@ -611,6 +611,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
   int _selectedCourseLevel = 1;
   String? _selectedCourseCollege;
   String? _selectedCourseDepartment;
+  String? _selectedCourseMajor;
 
   String? _selectedSectionCourseCode;
   String _selectedSectionNumber = '01';
@@ -637,9 +638,10 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
     final department = _selectedCourseDepartment?.trim() ?? '';
     final creditHours = int.tryParse(_courseHoursController.text.trim());
 
-    if (courseCode.isEmpty || courseName.isEmpty || college.isEmpty || department.isEmpty) {
+    final major = _selectedCourseMajor?.trim() ?? '';
+    if (courseCode.isEmpty || courseName.isEmpty || college.isEmpty || department.isEmpty || major.isEmpty) {
       _showMessage(
-        'أكملي بيانات المقرر: الرمز، الاسم، الكلية، القسم، المستوى',
+        'أكملي بيانات المقرر: الرمز، الاسم، الكلية، القسم، التخصص، المستوى',
       );
       return;
     }
@@ -662,6 +664,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
         'courseName': courseName,
         'college': college,
         'department': department,
+        'major': major,
         'level': _selectedCourseLevel,
         'creditHours': creditHours ?? 0,
         'isActive': true,
@@ -679,6 +682,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
       _selectedCourseLevel = 1;
       _selectedCourseCollege = null;
       _selectedCourseDepartment = null;
+      _selectedCourseMajor = null;
       if (!mounted) return;
       _showMessage(existing.exists ? 'تم تحديث المقرر' : 'تم حفظ المقرر');
     } on FirebaseException catch (e) {
@@ -1023,51 +1027,92 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
           stream: _lecturersRef.snapshots(),
           builder: (context, lSnap) {
             final lDocs = lSnap.data?.docs ?? const [];
-            final colleges = _distinctFromDocs(lDocs, 'college');
-            final departments = _distinctFromDocs(lDocs, 'department');
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                DropdownButtonFormField<String?>(
-                  value: _selectedCourseCollege,
-                  decoration: const InputDecoration(
-                    labelText: 'الكلية',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text('اختر الكلية'),
-                    ),
-                    ...colleges.map(
-                      (c) => DropdownMenuItem<String?>(value: c, child: Text(c)),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _selectedCourseCollege = value);
+            final collegesFromLecturers = _distinctFromDocs(lDocs, 'college');
+            final depsFromLecturers = _distinctFromDocs(lDocs, 'department');
+            return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _coursesRef.snapshots(),
+              builder: (context, cSnap) {
+                final cDocs = cSnap.data?.docs ?? const [];
+                final collegesFromCourses = _distinctFromDocs(cDocs, 'college');
+                final depsFromCourses = _distinctFromDocs(cDocs, 'department');
+                return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: _studentsRef.snapshots(),
+                  builder: (context, sSnap) {
+                    final sDocs = sSnap.data?.docs ?? const [];
+                    final majorsFromStudents = _distinctFromDocs(sDocs, 'major');
+                    final colleges = <String>{...collegesFromLecturers, ...collegesFromCourses}.toList()..sort();
+                    final departments = <String>{
+                      ...depsFromLecturers,
+                      ...depsFromCourses,
+                      ...majorsFromStudents,
+                    }.toList()..sort();
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        DropdownButtonFormField<String?>(
+                          value: _selectedCourseCollege,
+                          decoration: const InputDecoration(
+                            labelText: 'الكلية',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            const DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text('اختر الكلية'),
+                            ),
+                            ...colleges.map(
+                              (c) => DropdownMenuItem<String?>(value: c, child: Text(c)),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            setState(() => _selectedCourseCollege = value);
+                          },
+                        ),
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<String?>(
+                          value: _selectedCourseDepartment,
+                          decoration: const InputDecoration(
+                            labelText: 'القسم',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            const DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text('اختر القسم'),
+                            ),
+                            ...departments.map(
+                              (d) => DropdownMenuItem<String?>(value: d, child: Text(d)),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            setState(() => _selectedCourseDepartment = value);
+                          },
+                        ),
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<String?>(
+                          value: _selectedCourseMajor,
+                          decoration: const InputDecoration(
+                            labelText: 'التخصص',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            const DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text('اختر التخصص'),
+                            ),
+                            ...departments.map(
+                              (m) => DropdownMenuItem<String?>(value: m, child: Text(m)),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            setState(() => _selectedCourseMajor = value);
+                          },
+                        ),
+                      ],
+                    );
                   },
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String?>(
-                  value: _selectedCourseDepartment,
-                  decoration: const InputDecoration(
-                    labelText: 'القسم',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text('اختر القسم'),
-                    ),
-                    ...departments.map(
-                      (d) => DropdownMenuItem<String?>(value: d, child: Text(d)),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _selectedCourseDepartment = value);
-                  },
-                ),
-              ],
+                );
+              },
             );
           },
         ),
@@ -1169,14 +1214,18 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
           builder: (context, coursesSnapshot) {
             final allCourseDocs = coursesSnapshot.data?.docs ?? const [];
             final majorFilter = _selectedSectionMajor?.trim() ?? '';
-            // المقررات حسب القسم (التخصص)
+            // المقررات حسب التخصص: يظهر المقرر إذا تطابق التخصص مع أي من (major أو department أو college)
+            final majorFilterLower = majorFilter.toLowerCase();
             final courseDocs = majorFilter.isEmpty
                 ? <QueryDocumentSnapshot<Map<String, dynamic>>>[]
                 : allCourseDocs.where((doc) {
-                    final dep = (doc.data()['department'] ?? doc.data()['college'] ?? doc.data()['major'] ?? '')
-                        .toString()
-                        .trim();
-                    return dep == majorFilter;
+                    final d = doc.data();
+                    final majorVal = (d['major'] ?? '').toString().trim().toLowerCase();
+                    final depVal = (d['department'] ?? '').toString().trim().toLowerCase();
+                    final colVal = (d['college'] ?? '').toString().trim().toLowerCase();
+                    return majorVal == majorFilterLower ||
+                        depVal == majorFilterLower ||
+                        colVal == majorFilterLower;
                   }).toList();
             final selectedCourseExists = courseDocs.any(
               (doc) => doc.id == _selectedSectionCourseCode,
