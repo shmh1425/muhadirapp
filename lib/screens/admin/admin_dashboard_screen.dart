@@ -607,6 +607,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
 
   final _courseCodeController = TextEditingController();
   final _courseNameController = TextEditingController();
+  final _courseNameArController = TextEditingController();
   final _courseHoursController = TextEditingController();
   int _selectedCourseLevel = 1;
   String? _selectedCourseCollege;
@@ -627,6 +628,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
   void dispose() {
     _courseCodeController.dispose();
     _courseNameController.dispose();
+    _courseNameArController.dispose();
     _courseHoursController.dispose();
     super.dispose();
   }
@@ -634,6 +636,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
   Future<void> _saveCourse() async {
     final courseCode = _courseCodeController.text.trim().toUpperCase();
     final courseName = _courseNameController.text.trim();
+    final courseNameAr = _courseNameArController.text.trim();
     final college = _selectedCourseCollege?.trim() ?? '';
     final department = _selectedCourseDepartment?.trim() ?? '';
     final creditHours = int.tryParse(_courseHoursController.text.trim());
@@ -662,6 +665,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
       final data = <String, dynamic>{
         'courseCode': courseCode,
         'courseName': courseName,
+        'courseName_Ar': courseNameAr,
         'college': college,
         'department': department,
         'major': major,
@@ -678,6 +682,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
 
       _courseCodeController.clear();
       _courseNameController.clear();
+      _courseNameArController.clear();
       _courseHoursController.clear();
       _selectedCourseLevel = 1;
       _selectedCourseCollege = null;
@@ -1023,6 +1028,10 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
           label: 'رمز المقرر (SE3321)',
         ),
         _AdminTextField(controller: _courseNameController, label: 'اسم المقرر'),
+        _AdminTextField(
+          controller: _courseNameArController,
+          label: 'اسم المقرر بالعربي',
+        ),
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: _lecturersRef.snapshots(),
           builder: (context, lSnap) {
