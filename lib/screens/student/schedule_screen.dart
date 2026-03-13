@@ -1,9 +1,11 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'components/notification_bell.dart';
 import 'components/custom_nav_bar_icons.dart';
 import 'home_screen.dart';
 import 'settings_screen.dart';
 import 'notifications_screen.dart';
+import '../../services/student_auth_service.dart';
 
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
@@ -49,101 +51,89 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     TimeSlot(start: '2:00', end: '2:50'),
   ];
 
-  List<CourseSchedule> _courses = <CourseSchedule>[];
+  static const Map<int, String> _dayOfWeekToName = <int, String>{
+    7: 'الأحد',
+    1: 'الأثنين',
+    2: 'الثلاثاء',
+    3: 'الأربعاء',
+    4: 'الخميس',
+  };
+  static const List<Color> _courseColors = <Color>[
+    Color(0xFF4CAF50),
+    Color(0xFF2196F3),
+    Color(0xFF03A9F4),
+    Color(0xFF673AB7),
+    Color(0xFFE91E63),
+    Color(0xFFFF9800),
+    Color(0xFF009688),
+  ];
 
-  @override
-  void initState() {
-    super.initState();
-    _loadSchedule();
+  String _dayNameFromDayOfWeek(int dayOfWeek) {
+    return _dayOfWeekToName[dayOfWeek] ?? '$dayOfWeek';
   }
 
-  void _loadSchedule() {
-    _courses = <CourseSchedule>[
-      CourseSchedule(
-        courseName: 'بحوث العمليات',
-        day: 'الأحد',
-        startTime: '8:00',
-        endTime: '9:50',
-        color: const Color(0xFF4CAF50),
-        courseCode: 'SE3321',
-        activity: 'نظري',
-        section: '1',
-        hours: '4',
-        lecturer: 'إناس محمد طاهر بوقس',
-        location: 'الزاهر - طالبات',
-        room: '102 ط',
-      ),
-      CourseSchedule(
-        courseName: 'جودة البرمجيات',
-        day: 'الأحد',
-        startTime: '10:00',
-        endTime: '10:50',
-        color: const Color(0xFF2196F3),
-        courseCode: 'SE3322',
-        activity: 'نظري',
-        section: '1',
-        hours: '3',
-        lecturer: 'محاضر',
-        location: 'الزاهر - طالبات',
-        room: '103 ط',
-      ),
-      CourseSchedule(
-        courseName: 'بحوث العمليات',
-        day: 'الأثنين',
-        startTime: '8:00',
-        endTime: '9:50',
-        color: const Color(0xFF4CAF50),
-        courseCode: 'SE3321',
-        activity: 'نظري',
-        section: '1',
-        hours: '4',
-        lecturer: 'إناس محمد طاهر بوقس',
-        location: 'الزاهر - طالبات',
-        room: '102 ط',
-      ),
-      CourseSchedule(
-        courseName: 'هندسة البيانات',
-        day: 'الخميس',
-        startTime: '8:00',
-        endTime: '9:50',
-        color: const Color(0xFF03A9F4),
-        courseCode: 'SE3323',
-        activity: 'نظري',
-        section: '1',
-        hours: '3',
-        lecturer: 'محاضر',
-        location: 'الزاهر - طالبات',
-        room: '104 ط',
-      ),
-      CourseSchedule(
-        courseName: 'جودة البرمجيات',
-        day: 'الثلاثاء',
-        startTime: '12:00',
-        endTime: '12:50',
-        color: const Color(0xFF673AB7),
-        courseCode: 'SE3322',
-        activity: 'نظري',
-        section: '1',
-        hours: '3',
-        lecturer: 'محاضر',
-        location: 'الزاهر - طالبات',
-        room: '103 ط',
-      ),
-      CourseSchedule(
-        courseName: 'الثقافة الإسلامية',
-        day: 'الأربعاء',
-        startTime: '10:00',
-        endTime: '11:50',
-        color: const Color(0xFFE91E63),
-        courseCode: 'ISL101',
-        activity: 'نظري',
-        section: '1',
-        hours: '2',
-        lecturer: 'محاضر',
-        location: 'الزاهر - طالبات',
-        room: '105 ط',
-      ),
-    ];
+  Future<List<CourseSchedule>> _fetchCoursesFromSectionIds(List<String> sectionIds) async {
+    if (sectionIds.isEmpty) return <CourseSchedule>[];
+    final sectionsRef = FirebaseFirestore.instance.collection('sections');
+    final coursesRef = FirebaseFirestore.instance.collection('courses');
+    final List<CourseSchedule> courses = <CourseSchedule>[];
+    int colorIndex = 0;
+    for (final sectionId in sectionIds) {
+      final sectionSnap = await sectionsRef.doc(sectionId).get();
+      if (!sectionSnap.exists) continue;
+      final data = sectionSnap.data() ?? <String, dynamic>{};
+      final courseName = (data['courseName'] ?? '').toString();
+      final courseCode = (data['courseCode'] ?? '').toString();
+      final lecturerName = (data['lecturerName'] ?? '').toString();
+      // عدد الساعات من جدول المقرر (courses) وليس من السكشن
+      String creditHours = '';
+      if (courseCode.isNotEmpty) {
+        final courseSnap = await coursesRef.doc(courseCode).get();
+        if (courseSnap.exists) {
+          final courseData = courseSnap.data() ?? <String, dynamic>{};
+          final ch = courseData['creditHours'];
+          if (ch is int) {
+            creditHours = ch.toString();
+          } else if (ch is num) {
+            creditHours = ch.toInt().toString();
+          }
+        }
+      }
+      final schedule = data['schedule'] as List<dynamic>?;
+      final color = _courseColors[colorIndex % _courseColors.length];
+      colorIndex++;
+      if (schedule == null || schedule.isEmpty) continue;
+      for (final e in schedule) {
+        final m = Map<String, dynamic>.from(e is Map ? e as Map : <String, dynamic>{});
+        final dayOfWeek = m['dayOfWeek'] is int
+            ? m['dayOfWeek'] as int
+            : int.tryParse((m['dayOfWeek'] ?? '').toString()) ?? 0;
+        String startTime = (m['startTime'] ?? '08:00').toString();
+        if (startTime.length == 4 && startTime[0] != '0') startTime = '0$startTime';
+        String endTime = (m['endTime'] ?? '10:00').toString();
+        if (endTime.length == 4 && endTime[0] != '0') endTime = '0$endTime';
+        final hall = (m['hall'] ?? '').toString();
+        final location = (m['location'] ?? m['مقر'] ?? '').toString().trim(); 
+        final dayName = _dayNameFromDayOfWeek(dayOfWeek);
+        if (!_days.contains(dayName)) continue;
+        final sectionNum = sectionId.contains('-') ? sectionId.split('-').last : '1';
+        courses.add(CourseSchedule(
+          courseName: courseName.isNotEmpty ? courseName : courseCode,
+          day: dayName,
+          startTime: startTime,
+          endTime: endTime,
+          color: color,
+          courseCode: courseCode,
+          activity: 'نظري',
+          section: sectionNum,
+          hours: creditHours.isNotEmpty ? creditHours : '—',
+          lecturer: lecturerName,
+          location: location.isNotEmpty ? location : '—',
+          room: hall.isNotEmpty ? hall : '—',
+        ));
+      }
+    }
+    return courses;
   }
 
   @override
@@ -174,7 +164,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             children: <Widget>[
               _buildHeader(context),
               Expanded(
-                child: _buildSchedule(),
+                child: _buildScheduleBody(),
               ),
             ],
           ),
@@ -228,12 +218,58 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
-  Widget _buildSchedule() {
+  Widget _buildScheduleBody() {
+    final student = StudentAuthService.instance.currentStudent;
+    if (student == null) {
+      return const Center(
+        child: Text('سجّل دخولك لعرض جدولك', style: TextStyle(fontSize: 16)),
+      );
+    }
+    final enrollmentsRef = FirebaseFirestore.instance
+        .collection('student_section_enrollments');
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: enrollmentsRef
+          .where('studentId', isEqualTo: student.studentId)
+          .snapshots(),
+      builder: (context, enrollSnap) {
+        if (enrollSnap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: _primaryColor));
+        }
+        final sectionIds = (enrollSnap.data?.docs ?? [])
+            .map((d) => (d.data()['sectionId'] ?? '').toString())
+            .where((id) => id.isNotEmpty)
+            .toSet()
+            .toList();
+        return FutureBuilder<List<CourseSchedule>>(
+          future: _fetchCoursesFromSectionIds(sectionIds),
+          builder: (context, courseSnap) {
+            if (courseSnap.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator(color: _primaryColor));
+            }
+            final courses = courseSnap.data ?? [];
+            if (courses.isEmpty) {
+              return Center(
+                child: Text(
+                  sectionIds.isEmpty
+                      ? 'لا توجد تسجيلات في مقررات لهذا الفصل'
+                      : 'لا يوجد جدول معرّف للسكاشن المسجّل فيها',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 16),
+                ),
+              );
+            }
+            return _buildSchedule(courses);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSchedule(List<CourseSchedule> courses) {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final screenWidth = MediaQuery.of(context).size.width;
         final dayWidth = (screenWidth - _timeColWidth - 32) / _days.length;
-        // عرض وارتفاع محددان حتى لا يحصل الـ Column على قيود غير محدودة (تفشل التخطيط ثم hit test)
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: SingleChildScrollView(
@@ -250,7 +286,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   children: <Widget>[
                     _buildSemesterRow(),
                     const SizedBox(height: 10),
-                    _buildTable(dayWidth),
+                    _buildTable(dayWidth, courses),
                   ],
                 ),
               ),
@@ -275,7 +311,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
-  Widget _buildTable(double dayWidth) {
+  Widget _buildTable(double dayWidth, List<CourseSchedule> courses) {
     final tableHeight = _timeSlots.length * _rowHeight;
 
     return ClipRRect(
@@ -292,18 +328,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                // عمود الأوقات أولاً ليظهر على اليمين في RTL
                 SizedBox(
                   width: _timeColWidth,
                   height: tableHeight,
                   child: _buildTimeColumn(),
                 ),
-                // أعمدة الأيام
                 ..._days.map((day) {
                   return SizedBox(
                     width: dayWidth,
                     height: tableHeight,
-                    child: _buildDayStack(day, dayWidth, tableHeight),
+                    child: _buildDayStack(day, dayWidth, tableHeight, courses),
                   );
                 }),
               ],
@@ -370,11 +404,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
-  Widget _buildDayStack(String day, double dayWidth, double tableHeight) {
+  Widget _buildDayStack(String day, double dayWidth, double tableHeight, List<CourseSchedule> courses) {
     final firstSlotMinutes = _parseTimeToMinutes(_timeSlots.first.start);
     const int slotMinutes = 50;
 
-    final dayCourses = _courses.where((c) => c.day == day).toList();
+    final dayCourses = courses.where((c) => c.day == day).toList();
     dayCourses.sort((a, b) => _parseTimeToMinutes(a.startTime) - _parseTimeToMinutes(b.startTime));
 
     return Stack(
@@ -432,17 +466,37 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     children: <Widget>[
                       Expanded(
                         child: Center(
-                          child: Text(
-                            course.courseName,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                              height: 1.2,
-                            ),
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                course.courseName,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                  height: 1.2,
+                                ),
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (course.location.isNotEmpty && course.location != '—') ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  course.location,
+                                  style: const TextStyle(
+                                    fontSize: 9,
+                                    color: Colors.white70,
+                                    height: 1.1,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                       ),

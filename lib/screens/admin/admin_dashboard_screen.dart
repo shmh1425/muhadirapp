@@ -40,6 +40,35 @@ const List<String> _termOptions = <String>[
   '2027-2',
 ];
 
+/// استخراج قيم مميزة غير فارغة من وثائق (للكلية/القسم/التخصص) — من المحاضرين والمقررات والطلاب
+List<String> _distinctFromDocs(
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  String field,
+) {
+  final set = <String>{};
+  for (final doc in docs) {
+    final v = (doc.data()[field] ?? '').toString().trim();
+    if (v.isNotEmpty) set.add(v);
+  }
+  final list = set.toList()..sort();
+  return list;
+}
+
+/// أيام الدراسة: الأحد للخميس فقط (1=الاثنين .. 7=الأحد)
+const List<MapEntry<int, String>> _weekDays = <MapEntry<int, String>>[
+  MapEntry(7, 'الأحد'),
+  MapEntry(1, 'الاثنين'),
+  MapEntry(2, 'الثلاثاء'),
+  MapEntry(3, 'الأربعاء'),
+  MapEntry(4, 'الخميس'),
+];
+
+/// الساعات من 7 صباحاً إلى 6 مساءً، ساعة ساعة (كل محاضرة ساعتين أو أربع ساعات)
+const List<String> _timeSlots = <String>[
+  '07:00', '08:00', '09:00', '10:00', '11:00', '12:00',
+  '13:00', '14:00', '15:00', '16:00', '17:00', '18:00',
+];
+
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
 
@@ -223,7 +252,7 @@ class _AdminStudentsTabState extends State<_AdminStudentsTab> {
           ),
           _AdminTextField(controller: _majorController, label: 'التخصص'),
           DropdownButtonFormField<int>(
-            initialValue: _selectedLevel,
+            value: _selectedLevel,
             decoration: const InputDecoration(
               labelText: 'المستوى',
               border: OutlineInputBorder(),
@@ -339,8 +368,9 @@ class _AdminLecturersTabState extends State<_AdminLecturersTab> {
   final _nameArController = TextEditingController();
   final _nameEnController = TextEditingController();
   final _emailController = TextEditingController();
-  final _collegeController = TextEditingController();
-  final _departmentController = TextEditingController();
+
+  String? _selectedLecturerCollege;
+  String? _selectedLecturerDepartment;
 
   bool _isSaving = false;
 
@@ -350,8 +380,6 @@ class _AdminLecturersTabState extends State<_AdminLecturersTab> {
     _nameArController.dispose();
     _nameEnController.dispose();
     _emailController.dispose();
-    _collegeController.dispose();
-    _departmentController.dispose();
     super.dispose();
   }
 
@@ -360,8 +388,8 @@ class _AdminLecturersTabState extends State<_AdminLecturersTab> {
     final nameAr = _nameArController.text.trim();
     final nameEn = _nameEnController.text.trim();
     final email = _emailController.text.trim().toLowerCase();
-    final college = _collegeController.text.trim();
-    final department = _departmentController.text.trim();
+    final college = _selectedLecturerCollege?.trim() ?? '';
+    final department = _selectedLecturerDepartment?.trim() ?? '';
 
     if (lecturerId.isEmpty || nameAr.isEmpty || email.isEmpty) {
       _showMessage(
@@ -393,8 +421,10 @@ class _AdminLecturersTabState extends State<_AdminLecturersTab> {
       _nameArController.clear();
       _nameEnController.clear();
       _emailController.clear();
-      _collegeController.clear();
-      _departmentController.clear();
+      setState(() {
+        _selectedLecturerCollege = null;
+        _selectedLecturerDepartment = null;
+      });
       if (!mounted) return;
       _showMessage('تم حفظ بيانات المحاضر');
     } on FirebaseException catch (e) {
@@ -446,8 +476,59 @@ class _AdminLecturersTabState extends State<_AdminLecturersTab> {
             textDirection: TextDirection.ltr,
             textAlign: TextAlign.left,
           ),
-          _AdminTextField(controller: _collegeController, label: 'الكلية'),
-          _AdminTextField(controller: _departmentController, label: 'القسم'),
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: _lecturersRef.snapshots(),
+            builder: (context, snap) {
+              final docs = snap.data?.docs ?? const [];
+              final colleges = _distinctFromDocs(docs, 'college');
+              final departments = _distinctFromDocs(docs, 'department');
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  DropdownButtonFormField<String?>(
+                    value: _selectedLecturerCollege,
+                    decoration: const InputDecoration(
+                      labelText: 'الكلية',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('اختر الكلية'),
+                      ),
+                      ...colleges.map(
+                        (c) => DropdownMenuItem<String?>(value: c, child: Text(c)),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() => _selectedLecturerCollege = value);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String?>(
+                    value: _selectedLecturerDepartment,
+                    decoration: const InputDecoration(
+                      labelText: 'القسم',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('اختر القسم'),
+                      ),
+                      ...departments.map(
+                        (d) => DropdownMenuItem<String?>(value: d, child: Text(d)),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() => _selectedLecturerDepartment = value);
+                    },
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 10),
           Align(
             alignment: Alignment.centerRight,
             child: FilledButton(
@@ -522,17 +603,20 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
   final _lecturersRef = FirebaseFirestore.instance.collection(
     'external_lecturers',
   );
+  final _studentsRef = FirebaseFirestore.instance.collection('external_students');
 
   final _courseCodeController = TextEditingController();
   final _courseNameController = TextEditingController();
-  final _courseMajorController = TextEditingController();
   final _courseHoursController = TextEditingController();
   int _selectedCourseLevel = 1;
+  String? _selectedCourseCollege;
+  String? _selectedCourseDepartment;
 
   String? _selectedSectionCourseCode;
   String _selectedSectionNumber = '01';
   String? _selectedSectionLecturerId;
   String _selectedSectionTerm = '2026-2';
+  String? _selectedSectionMajor;
 
   bool _isSavingCourse = false;
   bool _isSavingSection = false;
@@ -542,7 +626,6 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
   void dispose() {
     _courseCodeController.dispose();
     _courseNameController.dispose();
-    _courseMajorController.dispose();
     _courseHoursController.dispose();
     super.dispose();
   }
@@ -550,12 +633,13 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
   Future<void> _saveCourse() async {
     final courseCode = _courseCodeController.text.trim().toUpperCase();
     final courseName = _courseNameController.text.trim();
-    final major = _courseMajorController.text.trim();
+    final college = _selectedCourseCollege?.trim() ?? '';
+    final department = _selectedCourseDepartment?.trim() ?? '';
     final creditHours = int.tryParse(_courseHoursController.text.trim());
 
-    if (courseCode.isEmpty || courseName.isEmpty || major.isEmpty) {
+    if (courseCode.isEmpty || courseName.isEmpty || college.isEmpty || department.isEmpty) {
       _showMessage(
-        'أكملي بيانات المقرر الأساسية: الرمز، الاسم، التخصص، المستوى',
+        'أكملي بيانات المقرر: الرمز، الاسم، الكلية، القسم، المستوى',
       );
       return;
     }
@@ -576,7 +660,8 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
       final data = <String, dynamic>{
         'courseCode': courseCode,
         'courseName': courseName,
-        'major': major,
+        'college': college,
+        'department': department,
         'level': _selectedCourseLevel,
         'creditHours': creditHours ?? 0,
         'isActive': true,
@@ -590,9 +675,10 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
 
       _courseCodeController.clear();
       _courseNameController.clear();
-      _courseMajorController.clear();
       _courseHoursController.clear();
       _selectedCourseLevel = 1;
+      _selectedCourseCollege = null;
+      _selectedCourseDepartment = null;
       if (!mounted) return;
       _showMessage(existing.exists ? 'تم تحديث المقرر' : 'تم حفظ المقرر');
     } on FirebaseException catch (e) {
@@ -616,10 +702,25 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
       _showMessage('اختاري المحاضر أولاً');
       return;
     }
+    if (_selectedSectionMajor == null || _selectedSectionMajor!.isEmpty) {
+      _showMessage('اختاري التخصص أولاً');
+      return;
+    }
 
     final courseCode = _selectedSectionCourseCode!;
     final sectionNumber = _selectedSectionNumber;
     final sectionId = '$courseCode-$sectionNumber';
+
+    final schedule = await showDialog<List<Map<String, dynamic>>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const _SectionScheduleDialog(),
+    );
+    if (!mounted) return;
+    if (schedule == null || schedule.isEmpty) {
+      _showMessage('تم إلغاء إضافة السكشن أو لم يتم تعبئة الجدول');
+      return;
+    }
 
     setState(() => _isSavingSection = true);
     try {
@@ -647,11 +748,15 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
         'sectionId': sectionId,
         'courseCode': courseCode,
         'courseName': (courseData['courseName'] ?? '').toString(),
-        'major': (courseData['major'] ?? '').toString(),
+        'college': (courseData['college'] ?? courseData['major'] ?? '').toString(),
+        'department': (courseData['department'] ?? courseData['major'] ?? '').toString(),
+        'major': _selectedSectionMajor,
         'level': (courseData['level'] as num?)?.toInt() ?? 0,
         'lecturerId': _selectedSectionLecturerId,
         'lecturerName': lecturerName,
         'term': _selectedSectionTerm,
+        'schedule': schedule,
+        'creditHours': (courseData['creditHours'] as num?)?.toInt() ?? 0,
         'isActive': true,
         'updatedAt': FieldValue.serverTimestamp(),
       };
@@ -661,7 +766,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
 
       await _sectionsRef.doc(sectionId).set(data, SetOptions(merge: true));
       if (!mounted) return;
-      _showMessage(existing.exists ? 'تم تحديث السكشن' : 'تم حفظ السكشن');
+      _showMessage(existing.exists ? 'تم تحديث السكشن والجدول' : 'تم حفظ السكشن والجدول');
     } on FirebaseException catch (e) {
       _showMessage(_firebaseErrorMessage(e));
     } finally {
@@ -680,22 +785,25 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
       final courses = <Map<String, dynamic>>[
         {
           'courseCode': 'SE3321',
-          'courseName': 'بحوث العمليات',
-          'major': 'هندسة البرمجيات',
+          'courseName': 'Operations Research',
+          'college': 'College of Computing and Information',
+          'department': 'Software Engineering',
           'level': 8,
           'creditHours': 3,
         },
         {
           'courseCode': 'SE3322',
-          'courseName': 'جودة البرمجيات',
-          'major': 'هندسة البرمجيات',
+          'courseName': 'Software Quality',
+          'college': 'College of Computing and Information',
+          'department': 'Software Engineering',
           'level': 8,
           'creditHours': 3,
         },
         {
           'courseCode': 'SE3323',
-          'courseName': 'هندسة البيانات',
-          'major': 'هندسة البرمجيات',
+          'courseName': 'Data Engineering',
+          'college': 'College of Computing and Information',
+          'department': 'Software Engineering',
           'level': 8,
           'creditHours': 3,
         },
@@ -705,21 +813,23 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
         {
           'sectionId': 'SE3321-01',
           'courseCode': 'SE3321',
-          'courseName': 'بحوث العمليات',
-          'major': 'هندسة البرمجيات',
+          'courseName': 'Operations Research',
+          'college': 'College of Computing and Information',
+          'department': 'Software Engineering',
           'level': 8,
           'lecturerId': 'L1001',
-          'lecturerName': 'د. فاطمة أحمد',
+          'lecturerName': 'Dr. Fatimah Ahmed',
           'term': '2026-2',
         },
         {
           'sectionId': 'SE3322-01',
           'courseCode': 'SE3322',
-          'courseName': 'جودة البرمجيات',
-          'major': 'هندسة البرمجيات',
+          'courseName': 'Software Quality',
+          'college': 'College of Computing and Information',
+          'department': 'Software Engineering',
           'level': 8,
           'lecturerId': 'L1002',
-          'lecturerName': 'د. نورة علي',
+          'lecturerName': 'Dr. Nora Ali',
           'term': '2026-2',
         },
       ];
@@ -731,7 +841,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
           'name': 'Sara Alqahtani',
           'email': '441000111@uqu.edu.sa',
           'role': 'student',
-          'major': 'هندسة البرمجيات',
+          'major': 'Software Engineering',
           'level': 8,
           'gender': 'F',
         },
@@ -741,7 +851,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
           'name': 'Reem Alghamdi',
           'email': '441000112@uqu.edu.sa',
           'role': 'student',
-          'major': 'هندسة البرمجيات',
+          'major': 'Software Engineering',
           'level': 8,
           'gender': 'F',
         },
@@ -751,7 +861,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
           'name': 'Najla Alzahrani',
           'email': '441000113@uqu.edu.sa',
           'role': 'student',
-          'major': 'هندسة البرمجيات',
+          'major': 'Software Engineering',
           'level': 8,
           'gender': 'F',
         },
@@ -764,8 +874,8 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
           'nameEn': 'Dr. Fatimah Ahmed',
           'email': 'l1001@uqu.edu.sa',
           'role': 'lecturer',
-          'college': 'كلية الحاسبات',
-          'department': 'هندسة البرمجيات',
+          'college': 'College of Computing and Information',
+          'department': 'Software Engineering',
         },
         {
           'lecturerId': 'L1002',
@@ -773,8 +883,8 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
           'nameEn': 'Dr. Nora Ali',
           'email': 'l1002@uqu.edu.sa',
           'role': 'lecturer',
-          'college': 'كلية الحاسبات',
-          'department': 'هندسة البرمجيات',
+          'college': 'College of Computing and Information',
+          'department': 'Software Engineering',
         },
       ];
 
@@ -860,6 +970,25 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
     }
   }
 
+  Future<void> _editSectionSchedule(String sectionDocId, List<dynamic>? currentSchedule) async {
+    final schedule = await showDialog<List<Map<String, dynamic>>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _SectionScheduleDialog(initialSchedule: currentSchedule),
+    );
+    if (!mounted || schedule == null || schedule.isEmpty) return;
+    try {
+      await _sectionsRef.doc(sectionDocId).update({
+        'schedule': schedule,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      if (!mounted) return;
+      _showMessage('تم تحديث جدول السكشن');
+    } on FirebaseException catch (e) {
+      _showMessage(_firebaseErrorMessage(e));
+    }
+  }
+
   void _showMessage(String text) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
@@ -890,9 +1019,61 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
           label: 'رمز المقرر (SE3321)',
         ),
         _AdminTextField(controller: _courseNameController, label: 'اسم المقرر'),
-        _AdminTextField(controller: _courseMajorController, label: 'التخصص'),
+        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _lecturersRef.snapshots(),
+          builder: (context, lSnap) {
+            final lDocs = lSnap.data?.docs ?? const [];
+            final colleges = _distinctFromDocs(lDocs, 'college');
+            final departments = _distinctFromDocs(lDocs, 'department');
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DropdownButtonFormField<String?>(
+                  value: _selectedCourseCollege,
+                  decoration: const InputDecoration(
+                    labelText: 'الكلية',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('اختر الكلية'),
+                    ),
+                    ...colleges.map(
+                      (c) => DropdownMenuItem<String?>(value: c, child: Text(c)),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _selectedCourseCollege = value);
+                  },
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String?>(
+                  value: _selectedCourseDepartment,
+                  decoration: const InputDecoration(
+                    labelText: 'القسم',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('اختر القسم'),
+                    ),
+                    ...departments.map(
+                      (d) => DropdownMenuItem<String?>(value: d, child: Text(d)),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _selectedCourseDepartment = value);
+                  },
+                ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 10),
         DropdownButtonFormField<int>(
-          initialValue: _selectedCourseLevel,
+          value: _selectedCourseLevel,
           decoration: const InputDecoration(
             labelText: 'المستوى',
             border: OutlineInputBorder(),
@@ -931,10 +1112,72 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
         ),
         const SizedBox(height: 20),
         const _SectionTitle('إضافة سكشن'),
+        // ١) التخصص — من المحاضرين والمقررات والطلاب
+        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _lecturersRef.snapshots(),
+          builder: (context, lSnap) {
+            final lDocs = lSnap.data?.docs ?? const [];
+            final depsFromLecturers = _distinctFromDocs(lDocs, 'department');
+            return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _coursesRef.snapshots(),
+              builder: (context, cSnap) {
+                final cDocs = cSnap.data?.docs ?? const [];
+                final depsFromCourses = _distinctFromDocs(cDocs, 'department');
+                return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: _studentsRef.snapshots(),
+                  builder: (context, sSnap) {
+                    final sDocs = sSnap.data?.docs ?? const [];
+                    final majorsFromStudents = _distinctFromDocs(sDocs, 'major');
+                    final allMajors = <String>{
+                      ...depsFromLecturers,
+                      ...depsFromCourses,
+                      ...majorsFromStudents,
+                    }.toList()..sort();
+                    return DropdownButtonFormField<String?>(
+                      value: _selectedSectionMajor,
+                      decoration: const InputDecoration(
+                        labelText: 'التخصص',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('اختر التخصص'),
+                        ),
+                        ...allMajors.map(
+                          (m) => DropdownMenuItem<String?>(value: m, child: Text(m)),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedSectionMajor = value;
+                          _selectedSectionCourseCode = null;
+                          _selectedSectionLecturerId = null;
+                        });
+                      },
+                    );
+                  },
+                );
+              },
+            );
+          },
+        ),
+        const SizedBox(height: 10),
+        // ٢) المقررات حسب التخصص
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: _coursesRef.orderBy('courseCode').snapshots(),
           builder: (context, coursesSnapshot) {
-            final courseDocs = coursesSnapshot.data?.docs ?? const [];
+            final allCourseDocs = coursesSnapshot.data?.docs ?? const [];
+            final majorFilter = _selectedSectionMajor?.trim() ?? '';
+            // المقررات حسب القسم (التخصص)
+            final courseDocs = majorFilter.isEmpty
+                ? <QueryDocumentSnapshot<Map<String, dynamic>>>[]
+                : allCourseDocs.where((doc) {
+                    final dep = (doc.data()['department'] ?? doc.data()['college'] ?? doc.data()['major'] ?? '')
+                        .toString()
+                        .trim();
+                    return dep == majorFilter;
+                  }).toList();
             final selectedCourseExists = courseDocs.any(
               (doc) => doc.id == _selectedSectionCourseCode,
             );
@@ -951,28 +1194,53 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                 : null;
 
             return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                DropdownButtonFormField<String>(
-                  initialValue: selectedCourseCode,
-                  decoration: const InputDecoration(
+                DropdownButtonFormField<String?>(
+                  value: selectedCourseCode,
+                  decoration: InputDecoration(
                     labelText: 'المقرر',
-                    border: OutlineInputBorder(),
+                    hintText: majorFilter.isEmpty
+                        ? 'اختر التخصص أولاً'
+                        : null,
+                    border: const OutlineInputBorder(),
                   ),
-                  items: courseDocs.map((doc) {
-                    final data = doc.data();
-                    final code = (data['courseCode'] ?? doc.id).toString();
-                    final name = (data['courseName'] ?? '').toString();
-                    return DropdownMenuItem<String>(
-                      value: doc.id,
-                      child: Text('$code - $name'),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedSectionCourseCode = value;
-                    });
-                  },
+                  items: majorFilter.isEmpty
+                      ? [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('اختر التخصص أولاً'),
+                          ),
+                        ]
+                      : [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('اختر المقرر'),
+                          ),
+                          ...courseDocs.map((doc) {
+                            final data = doc.data();
+                            final code = (data['courseCode'] ?? doc.id).toString();
+                            final name = (data['courseName'] ?? '').toString();
+                            return DropdownMenuItem<String?>(
+                              value: doc.id,
+                              child: Text('$code - $name'),
+                            );
+                          }),
+                        ],
+                  onChanged: majorFilter.isEmpty
+                      ? null
+                      : (value) {
+                          setState(() => _selectedSectionCourseCode = value);
+                        },
                 ),
+                if (majorFilter.isNotEmpty && courseDocs.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      'لا توجد مقررات لهذا التخصص',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ),
                 const SizedBox(height: 10),
                 if (courseData != null)
                   Container(
@@ -983,12 +1251,12 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      'تخصص: ${(courseData['major'] ?? '')} | مستوى: ${(courseData['level'] ?? '')}',
+                      'الكلية: ${(courseData['college'] ?? '')} | القسم: ${(courseData['department'] ?? courseData['major'] ?? '')} | مستوى: ${(courseData['level'] ?? '')}',
                     ),
                   ),
-                const SizedBox(height: 10),
+                if (courseData != null) const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
-                  initialValue: _selectedSectionNumber,
+                  value: _selectedSectionNumber,
                   decoration: const InputDecoration(
                     labelText: 'رقم السكشن',
                     border: OutlineInputBorder(),
@@ -1007,11 +1275,22 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                   },
                 ),
                 const SizedBox(height: 10),
+                // المحاضرون حسب كلية وقسم المقرر
                 StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  stream: _lecturersRef.orderBy('nameAr').snapshots(),
+                  stream: _lecturersRef.snapshots(),
                   builder: (context, lecturersSnapshot) {
-                    final lecturerDocs =
+                    final allLecturerDocs =
                         lecturersSnapshot.data?.docs ?? const [];
+                    final courseCollege = (courseData?['college'] ?? '').toString().trim();
+                    final courseDepartment = (courseData?['department'] ?? courseData?['major'] ?? '').toString().trim();
+                    final hasFilter = courseCollege.isNotEmpty && courseDepartment.isNotEmpty;
+                    final lecturerDocs = !hasFilter
+                        ? <QueryDocumentSnapshot<Map<String, dynamic>>>[]
+                        : allLecturerDocs.where((doc) {
+                            final col = (doc.data()['college'] ?? '').toString().trim();
+                            final dep = (doc.data()['department'] ?? '').toString().trim();
+                            return col == courseCollege && dep == courseDepartment;
+                          }).toList();
                     final selectedLecturerExists = lecturerDocs.any(
                       (doc) => doc.id == _selectedSectionLecturerId,
                     );
@@ -1019,62 +1298,103 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                         ? _selectedSectionLecturerId
                         : null;
 
-                    return DropdownButtonFormField<String>(
-                      initialValue: selectedLecturerId,
-                      decoration: const InputDecoration(
-                        labelText: 'المحاضر',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: lecturerDocs.map((doc) {
-                        final data = doc.data();
-                        final name = (data['nameAr'] ?? data['nameEn'] ?? '')
-                            .toString();
-                        final lecturerId = (data['lecturerId'] ?? doc.id)
-                            .toString();
-                        return DropdownMenuItem<String>(
-                          value: doc.id,
-                          child: Text('$name ($lecturerId)'),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        setState(() => _selectedSectionLecturerId = value);
-                      },
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (hasFilter)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: Text(
+                              'المحاضرون: كلية $courseCollege، قسم $courseDepartment',
+                              style: const TextStyle(fontSize: 12, color: Colors.black54),
+                            ),
+                          ),
+                        DropdownButtonFormField<String?>(
+                          value: selectedLecturerId,
+                          decoration: InputDecoration(
+                            labelText: 'المحاضر',
+                            hintText: courseData == null
+                                ? 'اختر المقرر أولاً'
+                                : !hasFilter
+                                    ? 'المقرر بدون كلية/قسم'
+                                    : null,
+                            border: const OutlineInputBorder(),
+                          ),
+                          items: !hasFilter
+                              ? [
+                                  const DropdownMenuItem<String?>(
+                                    value: null,
+                                    child: Text('اختر المقرر أولاً'),
+                                  ),
+                                ]
+                              : [
+                                  const DropdownMenuItem<String?>(
+                                    value: null,
+                                    child: Text('اختر المحاضر'),
+                                  ),
+                                  ...lecturerDocs.map((doc) {
+                                    final data = doc.data();
+                                    final nameAr =
+                                        (data['nameAr'] ?? '').toString().trim();
+                                    final nameEn =
+                                        (data['nameEn'] ?? '').toString().trim();
+                                    final lecturerId = (data['lecturerId'] ?? doc.id)
+                                        .toString();
+                                    String displayName;
+                                    if (nameAr.isNotEmpty && nameEn.isNotEmpty) {
+                                      displayName = '$nameAr ($nameEn)';
+                                    } else if (nameAr.isNotEmpty) {
+                                      displayName = nameAr;
+                                    } else if (nameEn.isNotEmpty) {
+                                      displayName = nameEn;
+                                    } else {
+                                      displayName = lecturerId;
+                                    }
+                                    return DropdownMenuItem<String?>(
+                                      value: doc.id,
+                                      child: Text('$displayName - $lecturerId'),
+                                    );
+                                  }),
+                                ],
+                          onChanged: !hasFilter
+                              ? null
+                              : (value) {
+                                  setState(() => _selectedSectionLecturerId = value);
+                                },
+                        ),
+                      ],
                     );
                   },
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
-                  initialValue: _selectedSectionTerm,
-                  decoration: const InputDecoration(
-                    labelText: 'الفصل الدراسي',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: _termOptions
-                      .map(
-                        (term) => DropdownMenuItem<String>(
-                          value: term,
-                          child: Text(term),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() => _selectedSectionTerm = value);
-                  },
+          value: _selectedSectionTerm,
+          decoration: const InputDecoration(
+            labelText: 'الفصل الدراسي',
+            border: OutlineInputBorder(),
+          ),
+          items: _termOptions
+              .map(
+                (term) => DropdownMenuItem<String>(
+                  value: term,
+                  child: Text(term),
                 ),
-                const SizedBox(height: 10),
-                if (_selectedSectionCourseCode != null)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      'معرف السكشن النهائي: $_selectedSectionCourseCode-$_selectedSectionNumber',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-              ],
-            );
+              )
+              .toList(),
+          onChanged: (value) {
+            if (value == null) return;
+            setState(() => _selectedSectionTerm = value);
           },
         ),
+        const SizedBox(height: 10),
+        if (_selectedSectionCourseCode != null)
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              'معرف السكشن النهائي: $_selectedSectionCourseCode-$_selectedSectionNumber',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
         const SizedBox(height: 10),
         Align(
           alignment: Alignment.centerRight,
@@ -1088,6 +1408,10 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                   )
                 : const Text('حفظ السكشن'),
           ),
+        ),
+              ],
+            );
+          },
         ),
         const SizedBox(height: 20),
         const _SectionTitle('المقررات الحالية'),
@@ -1112,13 +1436,13 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                   final data = doc.data();
                   final courseCode = (data['courseCode'] ?? doc.id).toString();
                   final courseName = (data['courseName'] ?? '').toString();
-                  final major = (data['major'] ?? '').toString();
+                  final college = (data['college'] ?? data['major'] ?? '').toString();
                   final level = (data['level'] ?? '').toString();
 
                   return ListTile(
                     dense: true,
                     title: Text('$courseCode - $courseName'),
-                    subtitle: Text('تخصص: $major | مستوى: $level'),
+                    subtitle: Text('كلية: $college | مستوى: $level'),
                     trailing: IconButton(
                       icon: const Icon(Icons.delete_outline, color: Colors.red),
                       onPressed: () => _deleteCourse(doc.id),
@@ -1154,16 +1478,54 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                   final data = doc.data();
                   final sectionId = (data['sectionId'] ?? doc.id).toString();
                   final courseCode = (data['courseCode'] ?? '').toString();
-                  final major = (data['major'] ?? '').toString();
+                  final college = (data['college'] ?? data['major'] ?? '').toString();
                   final level = (data['level'] ?? '').toString();
+                  final schedule = data['schedule'] as List<dynamic>?;
+                  String scheduleSummary = '';
+                  if (schedule != null && schedule.isNotEmpty) {
+                    final parts = <String>[];
+                    for (final e in schedule) {
+                      final m = e is Map ? e as Map : <String, dynamic>{};
+                      final dayVal = m['dayOfWeek'];
+                      final day = dayVal is int ? dayVal : (dayVal is num ? dayVal.toInt() : int.tryParse(dayVal.toString()) ?? 0);
+                      String dayName = '$day';
+                      for (final entry in _weekDays) {
+                        if (entry.key == day) {
+                          dayName = entry.value;
+                          break;
+                        }
+                      }
+                      final start = (m['startTime'] ?? '').toString();
+                      final end = (m['endTime'] ?? '').toString();
+                      final hall = (m['hall'] ?? '').toString();
+                      parts.add('$dayName $start–$end${hall.isNotEmpty ? ' ($hall)' : ''}');
+                    }
+                    scheduleSummary = parts.join(' · ');
+                  } else {
+                    scheduleSummary = 'لا يوجد جدول';
+                  }
 
                   return ListTile(
                     dense: true,
                     title: Text('سكشن $sectionId - $courseCode'),
-                    subtitle: Text('تخصص: $major | مستوى: $level'),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                      onPressed: () => _deleteSection(doc.id),
+                    subtitle: Text(
+                      'كلية: $college | مستوى: $level\n$scheduleSummary',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.calendar_month_outlined, color: Color(0xFF006571)),
+                          tooltip: 'تعديل الجدول',
+                          onPressed: () => _editSectionSchedule(doc.id, schedule),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          onPressed: () => _deleteSection(doc.id),
+                        ),
+                      ],
                     ),
                   );
                 },
@@ -1337,7 +1699,7 @@ class _AdminEnrollmentTabState extends State<_AdminEnrollmentTab> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   DropdownButtonFormField<String?>(
-                    initialValue: _selectedMajor,
+                    value: _selectedMajor,
                     decoration: const InputDecoration(
                       labelText: 'التخصص',
                       border: OutlineInputBorder(),
@@ -1364,7 +1726,7 @@ class _AdminEnrollmentTabState extends State<_AdminEnrollmentTab> {
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<int?>(
-                    initialValue: _selectedLevel,
+                    value: _selectedLevel,
                     decoration: const InputDecoration(
                       labelText: 'المستوى',
                       border: OutlineInputBorder(),
@@ -1449,7 +1811,7 @@ class _AdminEnrollmentTabState extends State<_AdminEnrollmentTab> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     DropdownButtonFormField<String>(
-                      initialValue: sectionValue,
+                      value: sectionValue,
                       decoration: const InputDecoration(
                         labelText: 'اختيار السكشن',
                         border: OutlineInputBorder(),
@@ -1674,6 +2036,262 @@ class _AdminEnrollmentTabState extends State<_AdminEnrollmentTab> {
                 );
               },
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Dialog to set section weekly schedule: days per week + for each day: day, start time, double period, hall.
+/// Returns list of schedule entries for Firestore or null if cancelled.
+/// [initialSchedule] pre-fills the form when editing an existing section.
+class _SectionScheduleDialog extends StatefulWidget {
+  const _SectionScheduleDialog({this.initialSchedule});
+
+  final List<dynamic>? initialSchedule;
+
+  @override
+  State<_SectionScheduleDialog> createState() => _SectionScheduleDialogState();
+}
+
+class _SectionScheduleDialogState extends State<_SectionScheduleDialog> {
+  late int _daysPerWeek;
+  final List<int> _dayOfWeek = [];
+  final List<String> _startTime = [];
+  final List<String> _endTime = [];
+  final List<TextEditingController> _hallControllers = [];
+  final List<TextEditingController> _locationControllers = [];
+
+  @override
+  void initState() {
+    super.initState();
+    final init = widget.initialSchedule;
+    if (init != null && init.isNotEmpty) {
+      _daysPerWeek = init.length > 5 ? 5 : init.length;
+      for (final e in init) {
+        final m = e is Map ? e as Map : <String, dynamic>{};
+        _dayOfWeek.add(_parseInt(m['dayOfWeek'], 1));
+        _startTime.add((m['startTime'] ?? '08:00').toString());
+        _endTime.add((m['endTime'] ?? '10:00').toString());
+        _hallControllers.add(TextEditingController(text: (m['hall'] ?? '').toString()));
+        _locationControllers.add(TextEditingController(text: (m['location'] ?? m['مقر'] ?? '').toString()));
+      }
+    } else {
+      _daysPerWeek = 2;
+      _dayOfWeek.addAll([1, 2]);
+      _startTime.addAll(['08:00', '10:00']);
+      _endTime.addAll(['10:00', '12:00']);
+      _hallControllers.add(TextEditingController(text: 'DEN01'));
+      _hallControllers.add(TextEditingController(text: 'DEN02'));
+      _locationControllers.add(TextEditingController(text: ''));
+      _locationControllers.add(TextEditingController(text: ''));
+    }
+    _syncRows();
+  }
+
+  int _parseInt(dynamic v, int fallback) {
+    if (v == null) return fallback;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString()) ?? fallback;
+  }
+
+  void _syncRows() {
+    final n = _daysPerWeek;
+    while (_dayOfWeek.length < n) {
+      _dayOfWeek.add(1);
+      _startTime.add('08:00');
+      _endTime.add('10:00');
+      _hallControllers.add(TextEditingController(text: ''));
+      _locationControllers.add(TextEditingController(text: ''));
+    }
+    while (_dayOfWeek.length > n) {
+      _hallControllers.removeLast().dispose();
+      _locationControllers.removeLast().dispose();
+      _dayOfWeek.removeLast();
+      _startTime.removeLast();
+      _endTime.removeLast();
+    }
+  }
+
+  List<String> _endTimeOptionsFor(String start) {
+    final idx = _timeSlots.indexOf(start);
+    if (idx < 0) return _timeSlots;
+    final after = _timeSlots.skip(idx + 1).toList();
+    return after.isEmpty ? [start] : after;
+  }
+
+  @override
+  void dispose() {
+    for (final c in _hallControllers) c.dispose();
+    for (final c in _locationControllers) c.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> _buildSchedule() {
+    final list = <Map<String, dynamic>>[];
+    for (int i = 0; i < _daysPerWeek; i++) {
+      var end = _endTime[i];
+      final startIdx = _timeSlots.indexOf(_startTime[i]);
+      final endIdx = _timeSlots.indexOf(end);
+      if (endIdx <= startIdx) end = _timeSlots.length > startIdx + 1 ? _timeSlots[startIdx + 1] : _startTime[i];
+      list.add({
+        'dayOfWeek': _dayOfWeek[i],
+        'startTime': _startTime[i],
+        'endTime': end,
+        'hall': _hallControllers[i].text.trim().isEmpty ? 'قاعة' : _hallControllers[i].text.trim(),
+        'location': _locationControllers[i].text.trim(),
+      });
+    }
+    return list;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: AlertDialog(
+        title: const Text('جدول السكشن الأسبوعي'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'أيام الأسبوع عندنا 5: أحد، اثنين، ثلاثاء، أربعاء، خميس',
+                style: TextStyle(fontSize: 12, color: Colors.black54),
+              ),
+              const SizedBox(height: 8),
+              const Text('عدد أيام المحاضرات في الأسبوع:'),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<int>(
+                value: _daysPerWeek,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                ),
+                items: List.generate(5, (i) => i + 1).map((v) {
+                  return DropdownMenuItem<int>(value: v, child: Text('$v يوم'));
+                }).toList(),
+                onChanged: (v) {
+                  if (v == null) return;
+                  setState(() {
+                    _daysPerWeek = v;
+                    _syncRows();
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              ...List.generate(_daysPerWeek, (i) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('اليوم ${i + 1}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: DropdownButtonFormField<int>(
+                                value: _dayOfWeek[i],
+                                decoration: const InputDecoration(
+                                  labelText: 'اليوم',
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                ),
+                                isExpanded: true,
+                                items: _weekDays.map((e) => DropdownMenuItem<int>(value: e.key, child: Text(e.value))).toList(),
+                                onChanged: (v) {
+                                  if (v != null) setState(() => _dayOfWeek[i] = v);
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                value: _startTime[i],
+                                decoration: const InputDecoration(
+                                  labelText: 'بداية',
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                ),
+                                isExpanded: true,
+                                items: _timeSlots.map((t) => DropdownMenuItem<String>(value: t, child: Text(t))).toList(),
+                                onChanged: (v) {
+                                  if (v != null) {
+                                    setState(() {
+                                      _startTime[i] = v;
+                                      final opts = _endTimeOptionsFor(v);
+                                      if (opts.isNotEmpty && !opts.contains(_endTime[i])) {
+                                        _endTime[i] = opts.first;
+                                      }
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                value: _endTimeOptionsFor(_startTime[i]).contains(_endTime[i])
+                                    ? _endTime[i]
+                                    : (_endTimeOptionsFor(_startTime[i]).isNotEmpty
+                                        ? _endTimeOptionsFor(_startTime[i]).first
+                                        : _endTime[i]),
+                                decoration: const InputDecoration(
+                                  labelText: 'نهاية',
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                ),
+                                isExpanded: true,
+                                items: _endTimeOptionsFor(_startTime[i])
+                                    .map((t) => DropdownMenuItem<String>(value: t, child: Text(t)))
+                                    .toList(),
+                                onChanged: (v) {
+                                  if (v != null) setState(() => _endTime[i] = v);
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _hallControllers[i],
+                          decoration: const InputDecoration(
+                            labelText: 'القاعة',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _locationControllers[i],
+                          decoration: const InputDecoration(
+                            labelText: 'المقر',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('إلغاء')),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(_buildSchedule()),
+            child: const Text('حفظ الجدول'),
           ),
         ],
       ),
