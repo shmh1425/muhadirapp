@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../../models/attendance/manual_attendance_record.dart';
 import '../../models/lecturer/lecture_item.dart';
+import '../../services/attendance/manual_attendance_service.dart';
 import 'lecturer_language.dart';
 import 'lecturer_navigation.dart';
 import 'widgets/profile_back_button.dart';
@@ -30,8 +34,10 @@ class LecturerAttendanceScreen extends StatefulWidget {
   });
 
   final LectureItem lecture;
+
   /// عند true (من صفحة الكل — يوم أزرق): عرض تقارير الحضور فقط دون تعديل.
   final bool viewOnly;
+
   /// تاريخ اليوم المعروضة تقاريره (للوضع View Only من التقويم).
   final DateTime? selectedDate;
 
@@ -50,11 +56,18 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   static const double _colPctWidth = 42.0;
   static const double _cellHPad = 6.0;
 
-  late List<_StudentRow> _students;
+  final ManualAttendanceService _manualAttendanceService =
+      ManualAttendanceService.instance;
+  StreamSubscription<List<ManualAttendanceRecord>>? _recordsSubscription;
+
+  String? _sessionId;
+  List<_StudentRow> _students = <_StudentRow>[];
   AttendanceStatusFilter _statusFilter = AttendanceStatusFilter.all;
   Map<String, AttendanceStatus> _draftStatuses = {};
   bool _hasPendingChanges = false;
   bool _isSaving = false;
+  bool _isLoadingAttendance = true;
+  String? _attendanceLoadError;
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
@@ -100,8 +113,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   }
 
   /// هل يوجد طلاب حالتهم Pending Sync (Offline)؟
-  bool get _hasPendingSyncStudents =>
-      _students.any((s) => s.isOffline);
+  bool get _hasPendingSyncStudents => _students.any((s) => s.isOffline);
 
   /// حفظ التعديلات للجلسة الحالية فقط (مربوط بـ CRN + تاريخ اليوم).
   /// التعديل على أيام سابقة من [Attendance Reports].
@@ -115,22 +127,48 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       return;
     }
     if (_isSaving) return;
+    final sessionId = _sessionId;
+    if (sessionId == null || sessionId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _tr(
+              'تعذر معرفة جلسة التحضير الحالية.',
+              'Could not resolve the current attendance session.',
+            ),
+          ),
+        ),
+      );
+      return;
+    }
 
     setState(() => _isSaving = true);
 
     try {
-      // محاكاة طلب حفظ (لاحقاً: API بمفتاح lectureId/CRN + تاريخ اليوم فقط)
-      await Future.delayed(const Duration(milliseconds: 600));
+      final updates = <int, ManualAttendanceStatus>{};
+      for (final entry in _draftStatuses.entries) {
+        final studentId = int.tryParse(entry.key);
+        if (studentId == null) continue;
+        updates[studentId] = _manualStatusFromUi(entry.value);
+      }
+      await _manualAttendanceService.updateSessionStatuses(
+        sessionId: sessionId,
+        updates: updates,
+      );
 
       if (!mounted) return;
 
       setState(() {
         for (final s in _students) {
           final updated = _draftStatuses[s.academicNumber];
-          if (updated != null) s.status = updated;
+          if (updated != null) {
+            s.status = updated;
+            s.attendanceTime = _timeTextForStatus(updated);
+            s.percentage = _percentageForStatus(updated);
+          }
         }
         _draftStatuses = {};
-        _hasPendingChanges = false; // تصفير حالة التغييرات فعلياً حتى يظهر الزر غير نشط بعد الحفظ
+        _hasPendingChanges = false;
       });
 
       final hasPendingSync = _hasPendingSyncStudents;
@@ -152,7 +190,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_tr('فشل الحفظ. حاول مرة أخرى.', 'Save failed. Please try again.')),
+          content: Text(
+            _tr('فشل الحفظ. حاول مرة أخرى.', 'Save failed. Please try again.'),
+          ),
           backgroundColor: const Color(0xFFD32F2F),
           duration: const Duration(seconds: 3),
         ),
@@ -164,7 +204,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
   Future<void> _openPreviewExcuses() async {
     final saved = await LecturerNavigation.goToExcuseManagement(
-        context, widget.lecture);
+      context,
+      widget.lecture,
+    );
     if (saved == true && mounted) {
       setState(() {});
     }
@@ -173,67 +215,152 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   @override
   void initState() {
     super.initState();
-    _students = _buildStudentsForLecture(_lecture);
+    _loadManualAttendance();
   }
 
-  /// بناء قائمة الطلاب المسجلين في هذه المحاضرة فقط (ديناميكي حسب المحاضرة). حد أدنى 30 طالب، أسماء متنوعة (طويلة/قصيرة) لاختبار overflow.
-  List<_StudentRow> _buildStudentsForLecture(LectureItem lecture) {
-    const names = [
-      'غلا القرني',
-      'أحمد علي',
-      'محمد سامي',
-      'عبدالله خالد',
-      'ريم فهد',
-      'نورة سالم',
-      'سارة عبدالعزيز',
-      'لينا عادل',
-      'فاطمة حسن',
-      'خالد العمري',
-      'مريم الشهري',
-      'عمر الزهراني',
-      'هند القحطاني',
-      'يوسف المالكي',
-      'داليا الحربي',
-      'رائد العتيبي',
-      'لمى الغامدي',
-      'سعد الدوسري',
-      'جواهر الشمري',
-      'بدر العنزي',
-      'منى البقمي',
-      'نايف الراجحي',
-      'هناء السعيد',
-      'وليد النمر',
-      'رنا الحارثي',
-      'فيصل الحازمي',
-      'أسماء الزهراني',
-      'تركي المطيري',
-      'شيماء العلي',
-      'مازن الشهري',
-      'لطيفة الغامدي',
-      'عبدالرحمن القحطاني',
-      'عائشة محمد العتيبي',
-      'ناصر',
-      'فهد عبدالعزيز الحربي',
-      'هيا',
-    ];
-    const statuses = AttendanceStatus.values;
-    const pctPool = [0, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100];
-    final list = <_StudentRow>[];
-    for (int i = 0; i < names.length; i++) {
-      final status = statuses[i % statuses.length];
-      final hasTime = status != AttendanceStatus.absent && status != AttendanceStatus.excused;
-      list.add(_StudentRow(
-        id: '${lecture.crn}-$i',
-        name: names[i],
-        academicNumber: '444${(100000 + i).toString().padLeft(6, '0')}',
-        attendanceTime: hasTime ? lecture.startTime : '--',
-        percentage: pctPool[i % pctPool.length],
-        status: status,
-        isOffline: (i == 1 || i == 8 || i == 14) && status == AttendanceStatus.present,
-        isSuspended: i == 2 || i == 7,
-      ));
+  @override
+  void dispose() {
+    _recordsSubscription?.cancel();
+    super.dispose();
+  }
+
+  DateTime get _sessionDate => DateTime(
+    (_selectedDate ?? DateTime.now()).year,
+    (_selectedDate ?? DateTime.now()).month,
+    (_selectedDate ?? DateTime.now()).day,
+  );
+
+  Future<void> _loadManualAttendance() async {
+    setState(() {
+      _isLoadingAttendance = true;
+      _attendanceLoadError = null;
+    });
+
+    try {
+      final sectionId = (_lecture.sectionId ?? '').trim();
+      if (sectionId.isEmpty) {
+        throw StateError(
+          _tr(
+            'لا يوجد معرف سكشن لهذه المحاضرة.',
+            'Section id is missing for this lecture.',
+          ),
+        );
+      }
+
+      final targetDate = _sessionDate;
+      final sessionId = ManualAttendanceService.buildSessionId(
+        sectionId: sectionId,
+        sessionDate: targetDate,
+        lectureStartTime: _lecture.startTime,
+      );
+      if (!_viewOnly) {
+        await _manualAttendanceService.prepareSessionForLecture(
+          lecture: _lecture,
+          sessionDate: targetDate,
+        );
+      }
+
+      if (!mounted) return;
+      _attachSessionStream(sessionId);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingAttendance = false;
+        _attendanceLoadError = e.toString();
+      });
     }
-    return list;
+  }
+
+  void _attachSessionStream(String sessionId) {
+    _recordsSubscription?.cancel();
+    _sessionId = sessionId;
+    _recordsSubscription = _manualAttendanceService
+        .watchSessionRecords(sessionId)
+        .listen(
+          (records) {
+            if (!mounted) return;
+            setState(() {
+              _students = records.map(_studentFromRecord).toList();
+              _isLoadingAttendance = false;
+              _attendanceLoadError = null;
+            });
+          },
+          onError: (error) {
+            if (!mounted) return;
+            setState(() {
+              _isLoadingAttendance = false;
+              _attendanceLoadError = error.toString();
+            });
+          },
+        );
+  }
+
+  _StudentRow _studentFromRecord(ManualAttendanceRecord record) {
+    final uiStatus = _uiStatusFromManual(record.status);
+    final fallbackName = record.studentName.trim().isEmpty
+        ? record.studentId.toString()
+        : record.studentName;
+    return _StudentRow(
+      id: record.recordId,
+      name: fallbackName,
+      academicNumber: record.studentId.toString(),
+      attendanceTime: record.attendanceTime.trim().isNotEmpty
+          ? record.attendanceTime
+          : _timeTextForStatus(uiStatus),
+      percentage: _percentageForStatus(uiStatus),
+      status: uiStatus,
+      isOffline: false,
+      isSuspended: false,
+    );
+  }
+
+  AttendanceStatus _uiStatusFromManual(ManualAttendanceStatus status) {
+    switch (status) {
+      case ManualAttendanceStatus.present:
+        return AttendanceStatus.present;
+      case ManualAttendanceStatus.absent:
+        return AttendanceStatus.absent;
+      case ManualAttendanceStatus.excused:
+        return AttendanceStatus.excused;
+      case ManualAttendanceStatus.late:
+        return AttendanceStatus.late;
+    }
+  }
+
+  ManualAttendanceStatus _manualStatusFromUi(AttendanceStatus status) {
+    switch (status) {
+      case AttendanceStatus.present:
+        return ManualAttendanceStatus.present;
+      case AttendanceStatus.absent:
+        return ManualAttendanceStatus.absent;
+      case AttendanceStatus.excused:
+        return ManualAttendanceStatus.excused;
+      case AttendanceStatus.late:
+        return ManualAttendanceStatus.late;
+    }
+  }
+
+  int _percentageForStatus(AttendanceStatus status) {
+    switch (status) {
+      case AttendanceStatus.present:
+        return 100;
+      case AttendanceStatus.late:
+        return 90;
+      case AttendanceStatus.absent:
+      case AttendanceStatus.excused:
+        return 0;
+    }
+  }
+
+  String _timeTextForStatus(AttendanceStatus status) {
+    switch (status) {
+      case AttendanceStatus.present:
+      case AttendanceStatus.late:
+        return _lecture.startTime;
+      case AttendanceStatus.absent:
+      case AttendanceStatus.excused:
+        return '--';
+    }
   }
 
   @override
@@ -283,9 +410,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: const Color(0xFFE8E8E8)),
-        ),
+        border: Border(bottom: BorderSide(color: const Color(0xFFE8E8E8))),
       ),
       child: Row(
         children: [
@@ -314,9 +439,14 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                     ),
                     if (_viewOnly)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF4A90E2).withValues(alpha: 0.15),
+                          color: const Color(
+                            0xFF4A90E2,
+                          ).withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: const Color(0xFF4A90E2)),
                         ),
@@ -455,6 +585,52 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
   /// عنصر سكرول واحد: CustomScrollView مع هيدر الجدول + قائمة الطلاب كـ Slivers (لا فراغ بين الهيدر وأول صف).
   Widget _buildTableSection() {
+    if (_isLoadingAttendance) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFF006571)),
+      );
+    }
+    if (_attendanceLoadError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _tr(
+                  'تعذر تحميل بيانات التحضير.',
+                  'Failed to load attendance data.',
+                ),
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF3F3F3F),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                _attendanceLoadError!,
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 12,
+                  color: Color(0xFF808080),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: _loadManualAttendance,
+                icon: const Icon(Icons.refresh_rounded),
+                label: Text(_tr('إعادة المحاولة', 'Retry')),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
@@ -474,7 +650,10 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                       child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Text(
-                          _tr('لا يوجد طلاب في هذا الفلتر.', 'No students in this filter.'),
+                          _tr(
+                            'لا يوجد طلاب في هذا الفلتر.',
+                            'No students in this filter.',
+                          ),
                           style: const TextStyle(
                             fontFamily: 'Cairo',
                             color: Color(0xFF666666),
@@ -492,22 +671,25 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                 slivers: [
                   SliverToBoxAdapter(child: _buildTableHeader()),
                   SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final student = _filteredStudents[index];
-                        final statusStyle = _statusStyle(_effectiveStatus(student));
-                        final row = _buildTableRow(student, statusStyle, index.isEven);
-                        if (index == 0) return row;
-                        return Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Divider(height: 1, color: Color(0xFFEAEFF0)),
-                            row,
-                          ],
-                        );
-                      },
-                      childCount: _filteredStudents.length,
-                    ),
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final student = _filteredStudents[index];
+                      final statusStyle = _statusStyle(
+                        _effectiveStatus(student),
+                      );
+                      final row = _buildTableRow(
+                        student,
+                        statusStyle,
+                        index.isEven,
+                      );
+                      if (index == 0) return row;
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Divider(height: 1, color: Color(0xFFEAEFF0)),
+                          row,
+                        ],
+                      );
+                    }, childCount: _filteredStudents.length),
                   ),
                 ],
               ),
@@ -531,22 +713,70 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
             flex: 4,
             child: Align(
               alignment: AlignmentDirectional.centerStart,
-              child: Text(_tr('اسم الطالب/ة', 'Student Name'), style: _tableHeaderStyle, textAlign: TextAlign.start),
+              child: Text(
+                _tr('اسم الطالب/ة', 'Student Name'),
+                style: _tableHeaderStyle,
+                textAlign: TextAlign.start,
+              ),
             ),
           ),
-          SizedBox(width: _colIdWidth, child: Center(child: Text(_tr('الرقم الجامعي', 'ID'), style: _tableHeaderStyle, textAlign: TextAlign.center))),
-          SizedBox(width: _colTimeWidth, child: Center(child: Text(_tr('وقت التحضير', 'Time'), style: _tableHeaderStyle, textAlign: TextAlign.center))),
-          SizedBox(width: _colStatusWidth, child: Center(child: Text(_tr('الحالة', 'Status'), style: _tableHeaderStyle, textAlign: TextAlign.center))),
-          SizedBox(width: _colPctWidth, child: Center(child: Text(_tr('النسبة', '%'), style: _tableHeaderStyle, textAlign: TextAlign.center))),
+          SizedBox(
+            width: _colIdWidth,
+            child: Center(
+              child: Text(
+                _tr('الرقم الجامعي', 'ID'),
+                style: _tableHeaderStyle,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: _colTimeWidth,
+            child: Center(
+              child: Text(
+                _tr('وقت التحضير', 'Time'),
+                style: _tableHeaderStyle,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: _colStatusWidth,
+            child: Center(
+              child: Text(
+                _tr('الحالة', 'Status'),
+                style: _tableHeaderStyle,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: _colPctWidth,
+            child: Center(
+              child: Text(
+                _tr('النسبة', '%'),
+                style: _tableHeaderStyle,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildTableRow(_StudentRow student, _StatusStyle statusStyle, bool isEven) {
-    final timeText = student.attendanceTime.trim().isEmpty ? '--' : student.attendanceTime.trim();
+  Widget _buildTableRow(
+    _StudentRow student,
+    _StatusStyle statusStyle,
+    bool isEven,
+  ) {
+    final timeText = student.attendanceTime.trim().isEmpty
+        ? '--'
+        : student.attendanceTime.trim();
     final suspended = student.isSuspended ?? false;
-    final baseBg = suspended ? const Color(0xFFFFEBEE) : (isEven ? Colors.white : const Color(0xFFFCFEFE));
+    final baseBg = suspended
+        ? const Color(0xFFFFEBEE)
+        : (isEven ? Colors.white : const Color(0xFFFCFEFE));
     return Container(
       color: baseBg,
       padding: EdgeInsets.symmetric(horizontal: _cellHPad, vertical: 8),
@@ -623,23 +853,34 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
   /// خلية الحالة: عرض ثابت. الطالب المحروم (صفه أحمر) غير قابل لتعديل الحالة؛ رمز Sync لـ Pending sync؛ الضغط = منتقي الحالة.
   Widget _buildStatusChipCell(_StudentRow student, _StatusStyle? statusStyle) {
-    final effectiveStyle = statusStyle ?? _statusStyle(AttendanceStatus.present);
+    final effectiveStyle =
+        statusStyle ?? _statusStyle(AttendanceStatus.present);
     final showSync = student.isOffline;
     final chipLabel = effectiveStyle.chipLabel;
     final isSuspended = student.isSuspended ?? false;
     final VoidCallback onChipTap = _viewOnly
         ? () => ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(_tr('عرض فقط — لا يمكن تعديل الحضور.', 'View only — attendance cannot be edited.')),
+            SnackBar(
+              content: Text(
+                _tr(
+                  'عرض فقط — لا يمكن تعديل الحضور.',
+                  'View only — attendance cannot be edited.',
+                ),
               ),
-            )
+            ),
+          )
         : (isSuspended
-            ? () => ScaffoldMessenger.of(context).showSnackBar(
+              ? () => ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text(_tr('لا يمكن تعديل حالة المحروم.', 'Suspended status cannot be changed.')),
+                    content: Text(
+                      _tr(
+                        'لا يمكن تعديل حالة المحروم.',
+                        'Suspended status cannot be changed.',
+                      ),
+                    ),
                   ),
                 )
-            : () => _showStatusPicker(student));
+              : () => _showStatusPicker(student));
     return _statusChip(
       chipLabel,
       effectiveStyle.bg,
@@ -653,14 +894,26 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   void _showPendingSyncSnack() {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(_tr('تم تسجيل الحضور دون اتصال. سيُحدَّث السجل تلقائياً عند عودة الإنترنت.', 'Attendance was recorded offline. The record will update automatically when online.')),
+        content: Text(
+          _tr(
+            'تم تسجيل الحضور دون اتصال. سيُحدَّث السجل تلقائياً عند عودة الإنترنت.',
+            'Attendance was recorded offline. The record will update automatically when online.',
+          ),
+        ),
         duration: const Duration(seconds: 2),
       ),
     );
   }
 
   /// Chip بحجم مناسب وتباعد عن الأعمدة المجاورة (داخل عمود بعرض ثابت).
-  Widget _statusChip(String label, Color bg, Color fg, {bool showSync = false, VoidCallback? onSyncTap, required VoidCallback onChipTap}) {
+  Widget _statusChip(
+    String label,
+    Color bg,
+    Color fg, {
+    bool showSync = false,
+    VoidCallback? onSyncTap,
+    required VoidCallback onChipTap,
+  }) {
     return Container(
       height: 26,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -675,13 +928,20 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         children: [
           if (showSync && onSyncTap != null)
             Tooltip(
-              message: _tr('تسجيل دخول دون اتصال — سيتم التحديث عند المزامنة', 'Checked in offline — will update when synced'),
+              message: _tr(
+                'تسجيل دخول دون اتصال — سيتم التحديث عند المزامنة',
+                'Checked in offline — will update when synced',
+              ),
               child: GestureDetector(
                 onTap: onSyncTap,
                 behavior: HitTestBehavior.opaque,
                 child: Padding(
                   padding: const EdgeInsetsDirectional.only(start: 2),
-                  child: Icon(Icons.sync_rounded, size: 16, color: Colors.orange.shade700),
+                  child: Icon(
+                    Icons.sync_rounded,
+                    size: 16,
+                    color: Colors.orange.shade700,
+                  ),
                 ),
               ),
             ),
@@ -693,7 +953,10 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                 onTap: onChipTap,
                 borderRadius: BorderRadius.circular(6),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 2,
+                  ),
                   child: Text(
                     label,
                     style: TextStyle(
@@ -772,7 +1035,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                           end: Alignment.bottomCenter,
                         )
                       : null,
-                  color: (hasChanges && canTap) ? null : const Color(0xFFE3E8EA),
+                  color: (hasChanges && canTap)
+                      ? null
+                      : const Color(0xFFE3E8EA),
                   borderRadius: BorderRadius.circular(radius),
                   boxShadow: (hasChanges && canTap)
                       ? [
@@ -790,7 +1055,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                         width: 22,
                         child: CircularProgressIndicator(
                           strokeWidth: 2.5,
-                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF006571)),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFF006571),
+                          ),
                         ),
                       )
                     : Text(
@@ -799,7 +1066,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                           fontFamily: 'Cairo',
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
-                          color: (hasChanges && canTap) ? Colors.white : const Color(0xFF92A2A7),
+                          color: (hasChanges && canTap)
+                              ? Colors.white
+                              : const Color(0xFF92A2A7),
                         ),
                       ),
               ),
@@ -1027,10 +1296,11 @@ class _StudentRow {
   final String id;
   final String name;
   final String academicNumber;
-  final String attendanceTime;
-  final int percentage;
+  String attendanceTime;
+  int percentage;
   AttendanceStatus status;
   final bool isOffline;
+
   /// عندما true يُلوّن صف الطالب بالأحمر فقط — لا توجد حالة "محروم" في الحالات (حاضر/غائب/غياب بعذر/تأخر).
   /// nullable للتوافق مع Hot Reload عند وجود نسخ قديمة من الصفوف.
   final bool? isSuspended;
@@ -1046,10 +1316,12 @@ class _StatusStyle {
   });
 
   final String label;
+
   /// نص مختصر داخل الـ chip (مثلاً "بعذر")؛ الفلتر يبقى label كامل ("غياب بعذر")
   final String chipLabel;
   final Color bg;
   final Color fg;
+
   /// لون خلفية الفلتر عند التفعيل (للتباين مع النص الأبيض)
   final Color activeBg;
 }

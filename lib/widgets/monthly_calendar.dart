@@ -20,16 +20,12 @@ class MonthlyCalendar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hijriInfo = HijriConverter.gregorianToHijri(currentMonth);
-    final monthNameAr = hijriInfo['monthName'] as String;
-    final monthNumber = hijriInfo['month'] as int;
-    final year = hijriInfo['year'] as int;
     final monthName = LecturerLanguageController.isArabic
-        ? monthNameAr
-        : _hijriMonthNameEn(monthNumber);
+        ? _gregorianMonthNameAr(currentMonth.month)
+        : _gregorianMonthNameEn(currentMonth.month);
     final yearText = LecturerLanguageController.isArabic
-        ? HijriConverter.toArabicNumber(year)
-        : '$year';
+        ? HijriConverter.toArabicNumber(currentMonth.year)
+        : '${currentMonth.year}';
 
     return Column(
       children: [
@@ -258,7 +254,9 @@ class MonthlyCalendar extends StatelessWidget {
 
   Widget _buildDayCell(CalendarDay day) {
     final isToday = day.isToday;
-    final hijriDay = HijriConverter.toArabicNumber(day.hijriDay);
+    final dayNumber = LecturerLanguageController.isArabic
+        ? HijriConverter.toArabicNumber(day.date.day)
+        : '${day.date.day}';
     final status = day.status;
     final backgroundColor = status.color;
     final hasLectures = day.lecturesCount > 0;
@@ -294,7 +292,7 @@ class MonthlyCalendar extends StatelessWidget {
           children: [
             // رقم اليوم
             Text(
-              hijriDay,
+              dayNumber,
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: isToday ? FontWeight.bold : FontWeight.w600,
@@ -444,34 +442,65 @@ class MonthlyCalendar extends StatelessWidget {
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
-  String _hijriMonthNameEn(int month) {
+  String _gregorianMonthNameAr(int month) {
     switch (month) {
       case 1:
-        return 'Muharram';
+        return 'يناير';
       case 2:
-        return 'Safar';
+        return 'فبراير';
       case 3:
-        return 'Rabi I';
+        return 'مارس';
       case 4:
-        return 'Rabi II';
+        return 'أبريل';
       case 5:
-        return 'Jumada I';
+        return 'مايو';
       case 6:
-        return 'Jumada II';
+        return 'يونيو';
       case 7:
-        return 'Rajab';
+        return 'يوليو';
       case 8:
-        return 'Shaaban';
+        return 'أغسطس';
       case 9:
-        return 'Ramadan';
+        return 'سبتمبر';
       case 10:
-        return 'Shawwal';
+        return 'أكتوبر';
       case 11:
-        return 'Dhul Qadah';
+        return 'نوفمبر';
       case 12:
-        return 'Dhul Hijjah';
+        return 'ديسمبر';
       default:
-        return 'Hijri';
+        return 'شهر';
+    }
+  }
+
+  String _gregorianMonthNameEn(int month) {
+    switch (month) {
+      case 1:
+        return 'January';
+      case 2:
+        return 'February';
+      case 3:
+        return 'March';
+      case 4:
+        return 'April';
+      case 5:
+        return 'May';
+      case 6:
+        return 'June';
+      case 7:
+        return 'July';
+      case 8:
+        return 'August';
+      case 9:
+        return 'September';
+      case 10:
+        return 'October';
+      case 11:
+        return 'November';
+      case 12:
+        return 'December';
+      default:
+        return 'Month';
     }
   }
 
