@@ -41,14 +41,18 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     'الخميس',
   ];
 
+  // أوقات الجدول ساعة ساعة من 08:00 إلى 18:00 (المحاضرات تبدأ من 8)
   final List<TimeSlot> _timeSlots = <TimeSlot>[
-    TimeSlot(start: '8:00', end: '8:50'),
-    TimeSlot(start: '9:00', end: '9:50'),
-    TimeSlot(start: '10:00', end: '10:50'),
-    TimeSlot(start: '11:00', end: '11:50'),
-    TimeSlot(start: '12:00', end: '12:50'),
-    TimeSlot(start: '1:00', end: '1:50'),
-    TimeSlot(start: '2:00', end: '2:50'),
+    TimeSlot(start: '08:00', end: '09:00'),
+    TimeSlot(start: '09:00', end: '10:00'),
+    TimeSlot(start: '10:00', end: '11:00'),
+    TimeSlot(start: '11:00', end: '12:00'),
+    TimeSlot(start: '12:00', end: '13:00'),
+    TimeSlot(start: '13:00', end: '14:00'),
+    TimeSlot(start: '14:00', end: '15:00'),
+    TimeSlot(start: '15:00', end: '16:00'),
+    TimeSlot(start: '16:00', end: '17:00'),
+    TimeSlot(start: '17:00', end: '18:00'),
   ];
 
   static const Map<int, String> _dayOfWeekToName = <int, String>{
@@ -58,6 +62,21 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     3: 'الأربعاء',
     4: 'الخميس',
   };
+
+  /// تحويل courseType من الداتابيس إلى عرض عربي للنشاط
+  static String _activityFromCourseType(String? courseType) {
+    final t = (courseType ?? '').toString().trim().toLowerCase();
+    switch (t) {
+      case 'theoretical':
+        return 'نظري';
+      case 'practical':
+        return 'عملي';
+      case 'graduation_project':
+        return 'مشروع التخرج';
+      default:
+        return 'نظري';
+    }
+  }
   static const List<Color> _courseColors = <Color>[
     Color(0xFF4CAF50),
     Color(0xFF2196F3),
@@ -85,12 +104,21 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       final courseName = (data['courseName'] ?? '').toString();
       final courseCode = (data['courseCode'] ?? '').toString();
       final lecturerName = (data['lecturerName'] ?? '').toString();
-      // عدد الساعات من جدول المقرر (courses) وليس من السكشن
+      String courseNameAr = (data['courseName_Ar'] ?? '').toString().trim();
       String creditHours = '';
+      String? courseType = (data['courseType'] ?? '').toString().trim();
+      if (courseType?.isEmpty ?? true) courseType = null;
       if (courseCode.isNotEmpty) {
         final courseSnap = await coursesRef.doc(courseCode).get();
         if (courseSnap.exists) {
           final courseData = courseSnap.data() ?? <String, dynamic>{};
+          if (courseNameAr.isEmpty) {
+            courseNameAr = (courseData['courseName_Ar'] ?? '').toString().trim();
+          }
+          if (courseType == null || courseType.isEmpty) {
+            courseType = (courseData['courseType'] ?? '').toString().trim();
+            if (courseType?.isEmpty ?? true) courseType = null;
+          }
           final ch = courseData['creditHours'];
           if (ch is int) {
             creditHours = ch.toString();
@@ -99,6 +127,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           }
         }
       }
+      final displayName = courseNameAr.isNotEmpty ? courseNameAr : (courseName.isNotEmpty ? courseName : courseCode);
       final schedule = data['schedule'] as List<dynamic>?;
       final color = _courseColors[colorIndex % _courseColors.length];
       colorIndex++;
@@ -118,13 +147,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         if (!_days.contains(dayName)) continue;
         final sectionNum = sectionId.contains('-') ? sectionId.split('-').last : '1';
         courses.add(CourseSchedule(
-          courseName: courseName.isNotEmpty ? courseName : courseCode,
+          courseName: displayName,
           day: dayName,
           startTime: startTime,
           endTime: endTime,
           color: color,
           courseCode: courseCode,
-          activity: 'نظري',
+          activity: _activityFromCourseType(courseType),
           section: sectionNum,
           hours: creditHours.isNotEmpty ? creditHours : '—',
           lecturer: lecturerName,
@@ -270,25 +299,22 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       builder: (BuildContext context, BoxConstraints constraints) {
         final screenWidth = MediaQuery.of(context).size.width;
         final dayWidth = (screenWidth - _timeColWidth - 32) / _days.length;
+        final viewportHeight = constraints.maxHeight;
         return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
+          scrollDirection: Axis.vertical,
+          physics: const AlwaysScrollableScrollPhysics(),
           child: SingleChildScrollView(
-            scrollDirection: Axis.vertical,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: constraints.maxWidth,
-                minHeight: constraints.maxHeight,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    _buildSemesterRow(),
-                    const SizedBox(height: 10),
-                    _buildTable(dayWidth, courses),
-                  ],
-                ),
+            scrollDirection: Axis.horizontal,
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  _buildSemesterRow(),
+                  const SizedBox(height: 10),
+                  _buildTable(dayWidth, courses),
+                ],
               ),
             ),
           ),
@@ -406,7 +432,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   Widget _buildDayStack(String day, double dayWidth, double tableHeight, List<CourseSchedule> courses) {
     final firstSlotMinutes = _parseTimeToMinutes(_timeSlots.first.start);
-    const int slotMinutes = 50;
+    const int slotMinutes = 60;
 
     final dayCourses = courses.where((c) => c.day == day).toList();
     dayCourses.sort((a, b) => _parseTimeToMinutes(a.startTime) - _parseTimeToMinutes(b.startTime));
@@ -520,9 +546,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   int _parseTimeToMinutes(String time) {
-    final parts = time.split(':');
-    final hour = int.parse(parts[0]);
-    final minute = int.parse(parts[1]);
+    final t = time.trim();
+    final parts = t.split(':');
+    if (parts.length < 2) return 0;
+    final hour = int.tryParse(parts[0].trim()) ?? 0;
+    final minute = int.tryParse(parts[1].trim()) ?? 0;
     return hour * 60 + minute;
   }
 
