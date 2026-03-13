@@ -62,6 +62,21 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     3: 'الأربعاء',
     4: 'الخميس',
   };
+
+  /// تحويل courseType من الداتابيس إلى عرض عربي للنشاط
+  static String _activityFromCourseType(String? courseType) {
+    final t = (courseType ?? '').toString().trim().toLowerCase();
+    switch (t) {
+      case 'theoretical':
+        return 'نظري';
+      case 'practical':
+        return 'عملي';
+      case 'graduation_project':
+        return 'مشروع التخرج';
+      default:
+        return 'نظري';
+    }
+  }
   static const List<Color> _courseColors = <Color>[
     Color(0xFF4CAF50),
     Color(0xFF2196F3),
@@ -91,12 +106,18 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       final lecturerName = (data['lecturerName'] ?? '').toString();
       String courseNameAr = (data['courseName_Ar'] ?? '').toString().trim();
       String creditHours = '';
+      String? courseType = (data['courseType'] ?? '').toString().trim();
+      if (courseType?.isEmpty ?? true) courseType = null;
       if (courseCode.isNotEmpty) {
         final courseSnap = await coursesRef.doc(courseCode).get();
         if (courseSnap.exists) {
           final courseData = courseSnap.data() ?? <String, dynamic>{};
           if (courseNameAr.isEmpty) {
             courseNameAr = (courseData['courseName_Ar'] ?? '').toString().trim();
+          }
+          if (courseType == null || courseType.isEmpty) {
+            courseType = (courseData['courseType'] ?? '').toString().trim();
+            if (courseType?.isEmpty ?? true) courseType = null;
           }
           final ch = courseData['creditHours'];
           if (ch is int) {
@@ -132,7 +153,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           endTime: endTime,
           color: color,
           courseCode: courseCode,
-          activity: 'نظري',
+          activity: _activityFromCourseType(courseType),
           section: sectionNum,
           hours: creditHours.isNotEmpty ? creditHours : '—',
           lecturer: lecturerName,
