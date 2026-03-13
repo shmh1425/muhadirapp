@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/lecturer/lecture_item.dart';
-import '../../services/lecturer/lecture_repository.dart';
+import '../../services/lecturer/lecturer_sections_service.dart';
 import '../../utils/shared/time_utils.dart';
 import 'lecturer_language.dart';
 import 'widgets/profile_back_button.dart';
@@ -22,8 +22,9 @@ class _LecturerManageLecturesScreenState
   static const Color _delayYellow = Color(0xFFF9A825);
   static const Color _cancelRed = Color(0xFFD32F2F);
 
-  final LectureRepository _repository = LectureRepository();
-  late List<LectureItem> _allLectures;
+  List<LectureItem> _allLectures = [];
+  bool _isLoadingLectures = true;
+  String? _loadError;
 
   // فلترة: الأسبوع (تلقائي أو يدوي)، اليوم، الشعبة، المقرر
   bool _weekIsAuto = true;
@@ -39,9 +40,31 @@ class _LecturerManageLecturesScreenState
   @override
   void initState() {
     super.initState();
-    _allLectures = _repository.getAllLectures();
     _selectedDayOfWeek = DateTime.now().weekday;
-    _applyFilters();
+    _loadLectures();
+  }
+
+  Future<void> _loadLectures() async {
+    setState(() {
+      _isLoadingLectures = true;
+      _loadError = null;
+    });
+    try {
+      final list = await LecturerSectionsService.instance.getLecturesForCurrentLecturer();
+      if (!mounted) return;
+      setState(() {
+        _allLectures = list;
+        _isLoadingLectures = false;
+        _loadError = null;
+        _applyFilters();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingLectures = false;
+        _loadError = e.toString();
+      });
+    }
   }
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
@@ -394,40 +417,6 @@ class _LecturerManageLecturesScreenState
     );
   }
 
-  String _getCourseDescription(String courseName) {
-    final map = <String, String>{
-      'هندسة البرمجيات': _tr(
-        'مقر تمهيدي يعرف الطلاب على المبادئ الأساسية في هندسة البرمجيات.',
-        'Introductory course on core software engineering principles.',
-      ),
-      'قواعد البيانات': _tr(
-        'مقرر يركز على تصميم وإدارة قواعد البيانات وأنظمة المعلومات.',
-        'Focuses on database design and information systems management.',
-      ),
-      'الذكاء الاصطناعي': _tr(
-        'مقرر يعرف الطلاب على مفاهيم وتقنيات الذكاء الاصطناعي والتعلم الآلي.',
-        'Introduces AI concepts and machine learning techniques.',
-      ),
-      'أمن المعلومات': _tr(
-        'مقرر يغطي أساسيات أمن المعلومات وحماية الأنظمة والشبكات.',
-        'Covers information security fundamentals and systems protection.',
-      ),
-      'الشبكات الحاسوبية': _tr(
-        'مقرر يتناول مبادئ الشبكات وبروتوكولات الاتصال.',
-        'Covers networking principles and communication protocols.',
-      ),
-      'تطوير التطبيقات': _tr(
-        'مقرر يركز على تطوير التطبيقات الحديثة وتقنيات الويب.',
-        'Focuses on modern app development and web technologies.',
-      ),
-    };
-    return map[courseName] ??
-        _tr(
-          'مقرر أكاديمي في مجال الحاسوب وتقنية المعلومات.',
-          'Academic course in computing and information technology.',
-        );
-  }
-
   static const List<int> _weekdayOrder = [7, 1, 2, 3, 4];
 
   @override
@@ -461,7 +450,40 @@ class _LecturerManageLecturesScreenState
               centerTitle: true,
             ),
             body: SafeArea(
-              child: Column(
+              child: _isLoadingLectures
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: CircularProgressIndicator(color: Color(0xFF006571)),
+                      ),
+                    )
+                  : _loadError != null
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  _tr('حدث خطأ في تحميل المحاضرات', 'Failed to load lectures'),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _loadError!,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
+                                const SizedBox(height: 16),
+                                TextButton.icon(
+                                  onPressed: _loadLectures,
+                                  icon: const Icon(Icons.refresh),
+                                  label: Text(_tr('إعادة المحاولة', 'Retry')),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildFilterBar(),
@@ -927,7 +949,6 @@ class _LecturerManageLecturesScreenState
           padding: const EdgeInsets.only(bottom: 14),
           child: _ManageLectureCard(
             lecture: list[index],
-            description: _getCourseDescription(list[index].courseName),
             isEnded: _isLectureEnded(list[index]),
             delaySent: _delaySentFor.contains(list[index].crn),
             cancelSent: _cancelSentFor.contains(list[index].crn),
@@ -1097,7 +1118,6 @@ class _FilterBarDivider extends StatelessWidget {
 // --- بطاقة محاضرة واحدة مع أزرار التأخير والإلغاء ---
 class _ManageLectureCard extends StatelessWidget {
   final LectureItem lecture;
-  final String description;
   final bool isEnded;
   final bool delaySent;
   final bool cancelSent;
@@ -1110,7 +1130,6 @@ class _ManageLectureCard extends StatelessWidget {
 
   const _ManageLectureCard({
     required this.lecture,
-    required this.description,
     required this.isEnded,
     required this.delaySent,
     required this.cancelSent,
@@ -1205,6 +1224,25 @@ class _ManageLectureCard extends StatelessWidget {
               ),
             ],
           ),
+          if (lecture.location != null && lecture.location!.trim().isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.location_on_outlined, size: 18, color: Colors.grey.shade600),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    lecture.location!.trim(),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.shade700,
+                      fontFamily: 'Cairo',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (isEnded) ...[
             const SizedBox(height: 12),
             Container(

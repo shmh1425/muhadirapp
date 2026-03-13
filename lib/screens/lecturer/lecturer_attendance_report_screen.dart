@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/lecturer/lecture_item.dart';
-import '../../services/lecturer/lecture_repository.dart';
+import '../../services/lecturer/lecturer_sections_service.dart';
 import '../../utils/shared/time_utils.dart';
 import 'lecturer_language.dart';
 import 'widgets/modern_popup_dialog.dart';
@@ -19,9 +19,10 @@ class _LecturerAttendanceReportScreenState
     extends State<LecturerAttendanceReportScreen> {
   static const Color _primary = Color(0xFF006571);
 
-  final LectureRepository _repository = LectureRepository();
-  late final List<LectureItem> _lectures;
-  late final List<_LectureAttendanceGroup> _groups;
+  List<LectureItem> _lectures = [];
+  List<_LectureAttendanceGroup> _groups = [];
+  bool _isLoadingLectures = true;
+  String? _loadError;
 
   bool _isEditMode = false;
   bool _hasPendingChanges = false;
@@ -40,9 +41,31 @@ class _LecturerAttendanceReportScreenState
   @override
   void initState() {
     super.initState();
-    _lectures = _repository.getAllLectures();
-    _groups = _buildMockGroups(_lectures);
     _selectedDayOfWeek = DateTime.now().weekday;
+    _loadLectures();
+  }
+
+  Future<void> _loadLectures() async {
+    setState(() {
+      _isLoadingLectures = true;
+      _loadError = null;
+    });
+    try {
+      final list = await LecturerSectionsService.instance.getLecturesForCurrentLecturer();
+      if (!mounted) return;
+      setState(() {
+        _lectures = list;
+        _groups = _buildMockGroups(_lectures);
+        _isLoadingLectures = false;
+        _loadError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingLectures = false;
+        _loadError = e.toString();
+      });
+    }
   }
 
   int _getTargetWeekday() => _selectedDayOfWeek;
@@ -357,7 +380,38 @@ class _LecturerAttendanceReportScreenState
           child: Scaffold(
             backgroundColor: const Color(0xFFF8FBFB),
             body: SafeArea(
-              child: LayoutBuilder(
+              child: _isLoadingLectures
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: CircularProgressIndicator(color: Color(0xFF006571)),
+                      ),
+                    )
+                  : _loadError != null
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(_tr('حدث خطأ في تحميل المحاضرات', 'Failed to load lectures')),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _loadError!,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
+                                const SizedBox(height: 16),
+                                TextButton.icon(
+                                  onPressed: _loadLectures,
+                                  icon: const Icon(Icons.refresh),
+                                  label: Text(_tr('إعادة المحاولة', 'Retry')),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : LayoutBuilder(
                 builder: (context, constraints) {
                   final tableHeight = constraints.maxHeight * 0.58;
                   return SingleChildScrollView(

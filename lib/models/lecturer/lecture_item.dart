@@ -7,7 +7,12 @@ class LectureItem {
   final String activity;
   final String startTime;
   final bool isDouble; // true = محاضرة زوجية (حصتان), false = محاضرة فردية (حصة واحدة)
-  final int dayOfWeek; // 1=الاثنين, 2=الثلاثاء, 3=الأربعاء, 4=الخميس, 5=الجمعة, 6=السبت, 7=الأحد
+  final int dayOfWeek; // 1=الاثنين, 2=الثلاثاء, 3=الأربعاء, 4=الخميس, 5=الجمعة, 6=السبت, 7=الأحد  /// معرّف السكشن في Firestore (عند جلب المحاضرات من sections) — يُستخدم للحضور والتقارير
+  final String? sectionId;
+  /// موقع المحاضرة من section.schedule[].location
+  final String? location;
+  /// وقت النهاية الفعلي من section.schedule[].endTime (عند الجلب من Firestore)
+  final String? scheduleEndTime;
 
   LectureItem({
     required this.courseName,
@@ -18,10 +23,16 @@ class LectureItem {
     required this.startTime,
     this.isDouble = false, // افتراضياً محاضرة فردية
     required this.dayOfWeek,
+    this.sectionId,
+    this.location,
+    this.scheduleEndTime,
   });
 
-  // حساب الوقت النهائي للمحاضرة
+  // حساب الوقت النهائي للمحاضرة (من schedule إن وُجد، وإلا من isDouble)
   String get endTime {
+    if (scheduleEndTime != null && scheduleEndTime!.trim().isNotEmpty) {
+      return scheduleEndTime!.trim();
+    }
     if (isDouble) {
       // محاضرة زوجية: من startTime إلى startTime+50 ثم من startTime+60 إلى startTime+110
       final start = _parseTime(startTime);
