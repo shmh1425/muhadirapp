@@ -13,18 +13,23 @@ class LecturerNavigation {
   static void goToManageLectures(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const LecturerManageLecturesScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const LecturerManageLecturesScreen()),
     );
   }
 
-  /// الانتقال إلى صفحة التحضير لمحاضرة محددة (من صفحة اليوم/غداً عند الضغط على الكارد).
-  static void goToAttendance(BuildContext context, LectureItem lecture) {
+  /// الانتقال إلى صفحة التحضير لمحاضرة محددة (من صفحة اليوم/غداً أو من التقويم).
+  static void goToAttendance(
+    BuildContext context,
+    LectureItem lecture, {
+    DateTime? selectedDate,
+  }) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => LecturerAttendanceScreen(lecture: lecture),
+        builder: (_) => LecturerAttendanceScreen(
+          lecture: lecture,
+          selectedDate: selectedDate,
+        ),
       ),
     );
   }
@@ -51,7 +56,9 @@ class LecturerNavigation {
   /// الانتقال إلى شاشة إدارة الأعذار (Figure 11) من صفحة التحضير — مرتبطة بنفس المحاضرة.
   /// يُرجع [true] عند الحفظ الناجح لتمكين صفحة التحضير من تحديث الحالات (مثلاً غياب بعذر).
   static Future<bool?> goToExcuseManagement(
-      BuildContext context, LectureItem lecture) {
+    BuildContext context,
+    LectureItem lecture,
+  ) {
     return Navigator.push<bool>(
       context,
       MaterialPageRoute(

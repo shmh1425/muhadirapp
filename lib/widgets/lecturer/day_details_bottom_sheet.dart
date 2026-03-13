@@ -25,6 +25,9 @@ class DayDetailsBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final gregorianDateText = LecturerLanguageController.isArabic
+        ? '${HijriConverter.toArabicNumber(day.date.day)}/${HijriConverter.toArabicNumber(day.date.month)}/${HijriConverter.toArabicNumber(day.date.year)}'
+        : '${day.date.day}/${day.date.month}/${day.date.year}';
     final hijriYear = LecturerLanguageController.isArabic
         ? HijriConverter.toArabicNumber(day.hijriYear)
         : '${day.hijriYear}';
@@ -72,15 +75,31 @@ class DayDetailsBottomSheet extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Flexible(
-                    child: Text(
-                      '$dayName ${_hijriDayText(day.hijriDay)} $monthName $hijriYear$hijriSuffix',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        fontFamily: 'Cairo',
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '$dayName • $gregorianDateText',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            fontFamily: 'Cairo',
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_hijriDayText(day.hijriDay)} $monthName $hijriYear$hijriSuffix',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                            fontFamily: 'Cairo',
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
                   ),
                   if (canEdit)
@@ -159,9 +178,17 @@ class DayDetailsBottomSheet extends StatelessWidget {
                             nav.pop();
                             final ctx = nav.context;
                             if (canEdit) {
-                              LecturerNavigation.goToAttendance(ctx, lecture);
+                              LecturerNavigation.goToAttendance(
+                                ctx,
+                                lecture,
+                                selectedDate: day.date,
+                              );
                             } else {
-                              LecturerNavigation.goToAttendanceViewOnly(ctx, lecture, day.date);
+                              LecturerNavigation.goToAttendanceViewOnly(
+                                ctx,
+                                lecture,
+                                day.date,
+                              );
                             }
                           },
                         );

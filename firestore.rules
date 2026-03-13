@@ -51,6 +51,16 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Manual attendance sessions (one per section/day/lecture start time).
+    match /manual_attendance_sessions/{sessionId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Manual attendance records per student per session.
+    match /manual_attendance_records/{recordId} {
+      allow read, write: if isSignedIn();
+    }
+
     // Deny everything else by default.
     match /{document=**} {
       allow read, write: if false;

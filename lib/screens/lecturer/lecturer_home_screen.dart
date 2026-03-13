@@ -53,7 +53,8 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
       _loadError = null;
     });
     try {
-      final list = await LecturerSectionsService.instance.getLecturesForCurrentLecturer();
+      final list = await LecturerSectionsService.instance
+          .getLecturesForCurrentLecturer();
       if (!mounted) return;
       setState(() {
         _allLectures = list;
@@ -82,6 +83,11 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
       if (_repository.isHoliday(tomorrow)) return [];
     }
     return FilterService.filterLectures(_allLectures, _selectedFilter);
+  }
+
+  DateTime _selectedLectureDateForFilter() {
+    final d = FilterService.getSelectedDate(_selectedFilter);
+    return DateTime(d.year, d.month, d.day);
   }
 
   void _handleDayTap(CalendarDay day) {
@@ -125,108 +131,122 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
                   ? const Center(
                       child: Padding(
                         padding: EdgeInsets.all(24),
-                        child: CircularProgressIndicator(color: Color(0xFF006571)),
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF006571),
+                        ),
                       ),
                     )
                   : _loadError != null
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  LecturerLanguageController.tr(
-                                    'حدث خطأ في تحميل المحاضرات',
-                                    'Failed to load lectures',
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              LecturerLanguageController.tr(
+                                'حدث خطأ في تحميل المحاضرات',
+                                'Failed to load lectures',
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              _loadError!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            TextButton.icon(
+                              onPressed: _loadLectures,
+                              icon: const Icon(Icons.refresh),
+                              label: Text(
+                                LecturerLanguageController.tr(
+                                  'إعادة المحاولة',
+                                  'Retry',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : ListView(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 20,
+                      ),
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: LecturerHomeHeader(
+                                selectedFilter: _selectedFilter,
+                                lecturerName: widget.lecturerName,
+                              ),
+                            ),
+                            NotificationBell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const NotificationsScreen(),
                                   ),
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  _loadError!,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                ),
-                                const SizedBox(height: 16),
-                                TextButton.icon(
-                                  onPressed: _loadLectures,
-                                  icon: const Icon(Icons.refresh),
-                                  label: Text(LecturerLanguageController.tr('إعادة المحاولة', 'Retry')),
-                                ),
-                              ],
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 28),
+                        LecturerFilterButtons(
+                          selectedFilter: _selectedFilter,
+                          onFilterChanged: _handleFilterChanged,
+                        ),
+                        const SizedBox(height: 16),
+                        if (_selectedFilter != 'الكل') ...[
+                          const ManageLecturesButton(),
+                          const SizedBox(height: 28),
+                        ] else
+                          const SizedBox(height: 16),
+                        if (_selectedFilter == 'الكل') ...[
+                          MonthlyCalendar(
+                            currentMonth: _currentCalendarMonth,
+                            calendarDays: _calendarService.buildCalendarDays(
+                              _currentCalendarMonth,
+                              _allLectures,
+                            ),
+                            onDayTap: _handleDayTap,
+                            onMonthChanged: _handleMonthChanged,
+                          ),
+                        ] else ...[
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Text(
+                              _sectionTitle(_selectedFilter),
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF222222),
+                                fontFamily: 'Cairo',
+                              ),
                             ),
                           ),
-                        )
-                      : ListView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 20,
-                ),
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: LecturerHomeHeader(
-                          selectedFilter: _selectedFilter,
-                          lecturerName: widget.lecturerName,
-                        ),
-                      ),
-                      NotificationBell(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const NotificationsScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 28),
-                  LecturerFilterButtons(
-                    selectedFilter: _selectedFilter,
-                    onFilterChanged: _handleFilterChanged,
-                  ),
-                  const SizedBox(height: 16),
-                  if (_selectedFilter != 'الكل') ...[
-                    const ManageLecturesButton(),
-                    const SizedBox(height: 28),
-                  ] else
-                    const SizedBox(height: 16),
-                  if (_selectedFilter == 'الكل') ...[
-                    MonthlyCalendar(
-                      currentMonth: _currentCalendarMonth,
-                      calendarDays: _calendarService.buildCalendarDays(
-                        _currentCalendarMonth,
-                        _allLectures,
-                      ),
-                      onDayTap: _handleDayTap,
-                      onMonthChanged: _handleMonthChanged,
+                          LectureTimeline(
+                            lectures: _getLecturesForDisplay(),
+                            onLectureTap: (lecture) =>
+                                LecturerNavigation.goToAttendance(
+                                  context,
+                                  lecture,
+                                  selectedDate: _selectedLectureDateForFilter(),
+                                ),
+                          ),
+                        ],
+                      ],
                     ),
-                  ] else ...[
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: Text(
-                        _sectionTitle(_selectedFilter),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF222222),
-                          fontFamily: 'Cairo',
-                        ),
-                      ),
-                    ),
-                    LectureTimeline(
-                      lectures: _getLecturesForDisplay(),
-                      onLectureTap: (lecture) =>
-                          LecturerNavigation.goToAttendance(context, lecture),
-                    ),
-                  ],
-                ],
-              ),
             ),
           ),
         );
