@@ -11,6 +11,7 @@ import 'components/notification_bell.dart';
 import 'home_screen.dart';
 import 'notifications_screen.dart';
 import 'settings_screen.dart';
+import '../../shared/widgets/chat_fab.dart';
 
 class AttendanceTrackingScreen extends StatefulWidget {
   const AttendanceTrackingScreen({super.key});
@@ -180,6 +181,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: Colors.white,
+        floatingActionButton: const ChatFAB(),
         bottomNavigationBar: NavBarSettingsArabic(
           selectedIndex: 1,
           onItemTapped: (index) {

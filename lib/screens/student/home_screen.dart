@@ -13,6 +13,7 @@ import 'excuse_screen.dart';
 import 'submit_excuse_screen.dart';
 import 'app_settings.dart';
 import '../../services/student_auth_service.dart';
+import '../../shared/widgets/chat_fab.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -84,6 +85,7 @@ class _HomeScreenState extends State<HomeScreen> {
       textDirection: TextDirection.rtl, // Force RTL direction
       child: Scaffold(
         backgroundColor: Colors.white,
+        floatingActionButton: const ChatFAB(),
         bottomNavigationBar: NavBarSettingsArabic(
           selectedIndex: selectedIndex,
           onItemTapped: _onItemTapped,

@@ -6,6 +6,7 @@ import 'home_screen.dart';
 import 'settings_screen.dart';
 import 'notifications_screen.dart';
 import '../../services/student_auth_service.dart';
+import '../../shared/widgets/chat_fab.dart';
 
 /// جلب محاضرات اليوم للطالب (للاستخدام من الصفحة الرئيسية)
 Future<List<CourseSchedule>> fetchTodayCoursesForStudent(String studentId) async {
@@ -303,6 +304,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: Colors.white,
+        floatingActionButton: const ChatFAB(),
         bottomNavigationBar: NavBarSettingsArabic(
           selectedIndex: 1,
           onItemTapped: (index) {

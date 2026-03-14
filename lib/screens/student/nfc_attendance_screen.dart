@@ -5,6 +5,7 @@ import 'home_screen.dart';
 import 'notifications_screen.dart';
 import 'services_screen.dart';
 import 'settings_screen.dart';
+import '../../shared/widgets/chat_fab.dart';
 
 class NfcAttendanceScreen extends StatefulWidget {
   const NfcAttendanceScreen({super.key});
@@ -96,6 +97,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: Colors.white,
+        floatingActionButton: const ChatFAB(),
         bottomNavigationBar: NavBarSettingsArabic(
           selectedIndex: selectedIndex,
           onItemTapped: _onItemTapped,

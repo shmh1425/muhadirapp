@@ -8,6 +8,7 @@ import 'settings_screen.dart';
 import 'excuse_screen.dart';
 import 'attendance_tracking_screen.dart';
 import 'schedule_screen.dart';
+import '../../shared/widgets/chat_fab.dart';
 
 class ServicesScreen extends StatelessWidget {
   const ServicesScreen({super.key});
@@ -21,6 +22,7 @@ class ServicesScreen extends StatelessWidget {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: Colors.white,
+        floatingActionButton: const ChatFAB(),
         bottomNavigationBar: NavBarSettingsArabic(
           selectedIndex: 1,
           onItemTapped: (index) {

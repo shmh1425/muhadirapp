@@ -6,6 +6,7 @@ import 'app_settings.dart';
 import 'components/notification_bell.dart';
 import 'notifications_screen.dart';
 import '../../services/student_auth_service.dart';
+import '../../shared/widgets/chat_fab.dart';
 import '../login_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -123,6 +124,7 @@ class SettingsScreen extends StatelessWidget {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: Colors.white,
+        floatingActionButton: const ChatFAB(),
         body: SafeArea(
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
