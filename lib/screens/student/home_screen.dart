@@ -200,23 +200,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 12),
 
-              SizedBox(
-                height: 150,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: [
-                    buildLectureCard('هندسة البيانات', '1', '108'),
-                    buildLectureCard('بحوث عمليات', '1', '102 ط'),
-                    buildLectureCard('مشروع جماعي 1', '2', 'عن بعد'),
-                    buildLectureCard('جودة البرمجيات', '1', '103'),
-                  ].map((card) {
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: card,
-                    );
-                  }).toList(),
-                ),
-              ),
+              _buildTodayLecturesSection(context),
 
               const SizedBox(height: 8),
 
@@ -299,6 +283,64 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildTodayLecturesSection(BuildContext context) {
+    final studentId = StudentAuthService.instance.currentStudent?.studentId?.toString() ?? '';
+    return SizedBox(
+      height: 150,
+      child: FutureBuilder<List<CourseSchedule>>(
+        future: studentId.isEmpty ? Future.value(<CourseSchedule>[]) : fetchTodayCoursesForStudent(studentId),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(color: Color(0xFF006571)),
+              ),
+            );
+          }
+          final courses = snapshot.data ?? [];
+          if (courses.isEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Text(
+                  'لا توجد محاضرات اليوم',
+                  style: TextStyle(fontSize: 15, color: Colors.grey[600]),
+                ),
+              ),
+            );
+          }
+          return ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: courses.length,
+            itemBuilder: (context, index) {
+              final course = courses[index];
+              return Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ScheduleScreen(),
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(16),
+                  child: buildLectureCard(
+                    course.courseName,
+                    course.section,
+                    course.room,
+                  ),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }

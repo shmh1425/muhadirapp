@@ -7,6 +7,138 @@ import 'settings_screen.dart';
 import 'notifications_screen.dart';
 import '../../services/student_auth_service.dart';
 
+/// جلب محاضرات اليوم للطالب (للاستخدام من الصفحة الرئيسية)
+Future<List<CourseSchedule>> fetchTodayCoursesForStudent(String studentId) async {
+  if (studentId.isEmpty) return <CourseSchedule>[];
+  final enrollmentsRef = FirebaseFirestore.instance
+      .collection('student_section_enrollments');
+  final enrollSnap = await enrollmentsRef
+      .where('studentId', isEqualTo: studentId)
+      .get();
+  final sectionIds = (enrollSnap.docs)
+      .map((d) => (d.data()['sectionId'] ?? '').toString())
+      .where((id) => id.isNotEmpty)
+      .toSet()
+      .toList();
+  final todayWeekday = DateTime.now().weekday;
+  final courses = await _fetchTodayCoursesFromSectionIds(
+    sectionIds,
+    filterDayOfWeek: todayWeekday,
+  );
+  courses.sort((a, b) => a.startTime.compareTo(b.startTime));
+  return courses;
+}
+
+const List<Color> _todayCourseColors = <Color>[
+  Color(0xFF4CAF50),
+  Color(0xFF2196F3),
+  Color(0xFF03A9F4),
+  Color(0xFF673AB7),
+  Color(0xFFE91E63),
+  Color(0xFFFF9800),
+  Color(0xFF009688),
+];
+
+String _activityLabelFromCourseType(String? courseType) {
+  final t = (courseType ?? '').toString().trim().toLowerCase();
+  switch (t) {
+    case 'theoretical':
+      return 'نظري';
+    case 'practical':
+      return 'عملي';
+    case 'graduation_project':
+      return 'مشروع التخرج';
+    default:
+      return 'نظري';
+  }
+}
+
+Future<List<CourseSchedule>> _fetchTodayCoursesFromSectionIds(
+  List<String> sectionIds, {
+  int? filterDayOfWeek,
+}) async {
+  if (sectionIds.isEmpty) return <CourseSchedule>[];
+  final sectionsRef = FirebaseFirestore.instance.collection('sections');
+  final coursesRef = FirebaseFirestore.instance.collection('courses');
+  const days = ['الأحد', 'الأثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
+  const dayOfWeekToName = <int, String>{
+    7: 'الأحد',
+    1: 'الأثنين',
+    2: 'الثلاثاء',
+    3: 'الأربعاء',
+    4: 'الخميس',
+  };
+  final List<CourseSchedule> courses = <CourseSchedule>[];
+  int colorIndex = 0;
+  for (final sectionId in sectionIds) {
+    final sectionSnap = await sectionsRef.doc(sectionId).get();
+    if (!sectionSnap.exists) continue;
+    final data = sectionSnap.data() ?? <String, dynamic>{};
+    final courseName = (data['courseName'] ?? '').toString();
+    final courseCode = (data['courseCode'] ?? '').toString();
+    final lecturerName = (data['lecturerName'] ?? '').toString();
+    String courseNameAr = (data['courseName_Ar'] ?? '').toString().trim();
+    String creditHours = '';
+    String? courseType = (data['courseType'] ?? '').toString().trim();
+    if (courseType?.isEmpty ?? true) courseType = null;
+    if (courseCode.isNotEmpty) {
+      final courseSnap = await coursesRef.doc(courseCode).get();
+      if (courseSnap.exists) {
+        final courseData = courseSnap.data() ?? <String, dynamic>{};
+        if (courseNameAr.isEmpty) {
+          courseNameAr = (courseData['courseName_Ar'] ?? '').toString().trim();
+        }
+        if (courseType == null || courseType.isEmpty) {
+          courseType = (courseData['courseType'] ?? '').toString().trim();
+          if (courseType?.isEmpty ?? true) courseType = null;
+        }
+        final ch = courseData['creditHours'];
+        if (ch is int) {
+          creditHours = ch.toString();
+        } else if (ch is num) {
+          creditHours = ch.toInt().toString();
+        }
+      }
+    }
+    final displayName = courseNameAr.isNotEmpty ? courseNameAr : (courseName.isNotEmpty ? courseName : courseCode);
+    final schedule = data['schedule'] as List<dynamic>?;
+    final color = _todayCourseColors[colorIndex % _todayCourseColors.length];
+    colorIndex++;
+    if (schedule == null || schedule.isEmpty) continue;
+    for (final e in schedule) {
+      final m = Map<String, dynamic>.from(e is Map ? e as Map : <String, dynamic>{});
+      final dayOfWeek = m['dayOfWeek'] is int
+          ? m['dayOfWeek'] as int
+          : int.tryParse((m['dayOfWeek'] ?? '').toString()) ?? 0;
+      if (filterDayOfWeek != null && dayOfWeek != filterDayOfWeek) continue;
+      String startTime = (m['startTime'] ?? '08:00').toString();
+      if (startTime.length == 4 && startTime[0] != '0') startTime = '0$startTime';
+      String endTime = (m['endTime'] ?? '10:00').toString();
+      if (endTime.length == 4 && endTime[0] != '0') endTime = '0$endTime';
+      final hall = (m['hall'] ?? '').toString();
+      final location = (m['location'] ?? m['مقر'] ?? '').toString().trim();
+      final dayName = dayOfWeekToName[dayOfWeek] ?? '$dayOfWeek';
+      if (!days.contains(dayName)) continue;
+      final sectionNum = sectionId.contains('-') ? sectionId.split('-').last : '1';
+      courses.add(CourseSchedule(
+        courseName: displayName,
+        day: dayName,
+        startTime: startTime,
+        endTime: endTime,
+        color: color,
+        courseCode: courseCode,
+        activity: _activityLabelFromCourseType(courseType),
+        section: sectionNum,
+        hours: creditHours.isNotEmpty ? creditHours : '—',
+        lecturer: lecturerName,
+        location: location.isNotEmpty ? location : '—',
+        room: hall.isNotEmpty ? hall : '—',
+      ));
+    }
+  }
+  return courses;
+}
+
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key});
 
