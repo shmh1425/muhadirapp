@@ -631,13 +631,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                               Text(
                                 course.courseName,
                                 style: const TextStyle(
-                                  fontSize: 10,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.w600,
                                   color: Colors.white,
                                   height: 1.2,
                                 ),
                                 textAlign: TextAlign.center,
-                                maxLines: 2,
+                                maxLines: 4,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               if (course.location.isNotEmpty && course.location != '—') ...[
