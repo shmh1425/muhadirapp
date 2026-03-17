@@ -34,6 +34,17 @@ class AttendanceContext {
   const AttendanceContext({
     required this.studentId,
     required this.studentName,
+    required this.universityId,
+    required this.major,
+    required this.todaySchedule,
+    required this.weekSchedule,
+    required this.currentTermName,
+    required this.termStartDate,
+    required this.termEndDate,
+    required this.currentWeekNumber,
+    required this.totalWeeks,
+    required this.remainingWeeks,
+    required this.coursesWithLecturers,
     required this.courses,
     required this.warningPercent,
     required this.deprivationPercent,
@@ -42,6 +53,20 @@ class AttendanceContext {
 
   final String studentId;
   final String studentName;
+  final String universityId;
+  final String major;
+
+  final List<Map<String, dynamic>> todaySchedule;
+  final List<Map<String, dynamic>> weekSchedule;
+
+  final String currentTermName;
+  final String termStartDate;
+  final String termEndDate;
+  final int currentWeekNumber;
+  final int totalWeeks;
+  final int remainingWeeks;
+
+  final List<Map<String, dynamic>> coursesWithLecturers;
   final List<CourseAttendanceSummary> courses;
   final int warningPercent;
   final int deprivationPercent;

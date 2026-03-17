@@ -3,169 +3,179 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../../core/constants/api_constants.dart';
-import '../models/attendance_context.dart';
 
 /// Timeout for OpenAI API call (seconds).
 const int _timeoutSeconds = 60;
 
-const String _systemPrompt = '''
-You are MUHADIR, a smart and friendly bilingual academic assistant for a Saudi university app.
+const String _systemPrompt = r'''
+You are MUHADIR (محاضر), a smart bilingual academic assistant.
 
-Rules:
-- Always respond in the same language the student used (Arabic or English)
-- Never invent or guess numbers — only use the data provided to you
-- Be concise, warm, and clear
-- If absence rate > 15%, add ⚠️ warning
-- If absence rate > 25%, add 🚫 deprivation alert
-- Format responses clearly with emojis and line breaks
+You have access to the student's complete academic data including:
+- Personal profile (name, university ID, major)
+- Current semester info (which week we are in, how many weeks left)
+- Full course schedule (today's classes, all enrolled courses)
+- Lecturer information for each course
+- Complete attendance records
 
-When showing attendance for a course, always use this format:
+Your personality:
+- Warm, helpful, and encouraging
+- Professional but not stiff
+- Like a helpful senior student who knows everything about the university
 
-Arabic format:
-مادة: [اسم المادة]
+Your rules:
+- Always respond in the SAME language the student used
+  (Arabic → reply Arabic, English → reply English)
+- Use ONLY the data provided to you in the context. Never guess or invent numbers.
+- Answer ANY student question using this data (profile, schedule, lecturers, term, attendance).
+- Do NOT use Markdown formatting at all (no **bold**, no bullet \"-\", no numbered lists). Write plain text sentences and simple line breaks فقط.
+- For greetings: respond warmly and offer help
+- Keep responses concise and clear
+- Use emojis naturally (not excessively)
+- If absence rate > 15%: add ⚠️ warning
+- If absence rate >= 25%: add 🚫 deprivation alert
+- For schedule questions (\"today's classes\", \"وش عندي اليوم\"): always include course name, time, room, location, and lecturer.
+
+When showing attendance for a course always use this format:
+
+Arabic:
+📘 مادة: [اسم المادة]
 ──────────────────
 📚 إجمالي المحاضرات: X
-❌ غياب بدون عذر: X
-✅ غياب بعذر: X
+❌ غياب: X  |  ✅ بعذر: X
 📊 نسبة الغياب: X%
-[⚠️ or 🚫 or ✅] الحالة: [رسالة مناسبة]
 📌 متبقي قبل الحرمان: X محاضرة
+[⚠️ تحذير / 🚫 حرمان / ✅ وضعك مرتاح]
 
-English format:
-Course: [Course Name]
+English:
+📘 Course: [Course Name]
 ──────────────────────
 📚 Total Lectures: X
-❌ Unexcused Absences: X
-✅ Excused Absences: X
+❌ Absences: X  |  ✅ Excused: X
 📊 Absence Rate: X%
-[⚠️ or 🚫 or ✅] Status: [appropriate message]
 📌 Remaining Before Deprivation: X lectures
+[⚠️ Warning / 🚫 Deprived / ✅ You're safe]
 ''';
 
-/// Calls OpenAI Chat Completions API with attendance context.
+/// Calls OpenAI Chat Completions API (GPT-4o) with system prompt, attendance context, and chat history.
 class OpenAIService {
   OpenAIService._();
   static final OpenAIService instance = OpenAIService._();
 
   String get _apiKey => ApiConstants.openAiKey.trim();
-  final String _endpoint = ApiConstants.openAiChatEndpoint;
-  final String _model = ApiConstants.openAiModel;
-  final int _maxTokens = ApiConstants.openAiMaxTokens;
 
-  /// Returns the assistant reply or throws ChatbotException on error.
-  Future<String> chat({
+  /// Sends a message to OpenAI with attendance context and conversation history.
+  /// Returns the assistant reply or throws on error.
+  Future<String> sendMessage({
     required String userMessage,
-    required String contextData,
-    String? studentName,
+    required String attendanceContext,
+    required List<Map<String, String>> chatHistory,
   }) async {
-    try {
-      return await _chatImpl(
-        userMessage: userMessage,
-        contextData: contextData,
-        studentName: studentName,
+    if (_apiKey.isEmpty ||
+        _apiKey.toUpperCase().contains('YOUR_KEY_HERE') ||
+        !_apiKey.startsWith('sk-')) {
+      throw ChatbotException(
+        'مفتاح OpenAI غير مضبوط. انسخ .env.example إلى .env وضع مفتاحك في OPENAI_KEY ثم أعد تشغيل التطبيق (Stop ثم Run وليس Hot Reload).',
       );
-    } catch (e) {
-      if (e is ChatbotException) rethrow;
-      final msg = e.toString();
-      if (msg.contains('SocketException') || msg.contains('Failed host lookup') || msg.contains('Connection') || msg.contains('connection')) {
-        throw ChatbotException('لا يوجد اتصال بالإنترنت. تحقق من الشبكة أو جرّب شبكة أخرى.');
-      }
-      if (msg.contains('TimeoutException') || msg.contains('timeout')) {
-        throw ChatbotException('انتهت مهلة الاتصال. جرّب مرة أخرى.');
-      }
-      if (msg.contains('HandshakeException') || msg.contains('TlsException') || msg.contains('Certificate')) {
-        throw ChatbotException('خطأ أمان الاتصال (TLS). جرّب شبكة أخرى أو تحديث الجهاز.');
-      }
-      throw ChatbotException('خطأ: ${msg.length > 120 ? msg.substring(0, 120) + '...' : msg}');
-    }
-  }
-
-  Future<String> _chatImpl({
-    required String userMessage,
-    required String contextData,
-    String? studentName,
-  }) async {
-    final key = _apiKey;
-    if (key.isEmpty || key.toUpperCase().contains('YOUR_KEY_HERE') || !key.startsWith('sk-')) {
-      throw ChatbotException('المفتاح غير مضبوط. تأكد من وضع OpenAI API key في lib/core/constants/api_constants.dart ثم أعد تشغيل التطبيق (لا Hot Reload).');
     }
 
-    final contextBlock = '''
-Current student: ${studentName ?? 'Unknown'}
-Attendance data (use ONLY these numbers):
-$contextData
-''';
+    final List<Map<String, dynamic>> messages = [];
 
-    final body = <String, dynamic>{
-      'model': _model,
-      'max_tokens': _maxTokens,
-      'messages': [
-        <String, String>{'role': 'system', 'content': _systemPrompt + '\n\n' + contextBlock},
-        <String, String>{'role': 'user', 'content': userMessage},
-      ],
-    };
+    // 1. System prompt (personality + rules)
+    messages.add({'role': 'system', 'content': _systemPrompt});
+
+    // 2. Attendance context as first assistant-facing info
+    if (attendanceContext.isNotEmpty) {
+      messages.add({
+        'role': 'system',
+        'content': '''
+Current student attendance data from the university database:
+$attendanceContext
+
+Use this data when answering attendance-related questions.
+For other questions, respond naturally without mentioning this data.
+'''
+      });
+    }
+
+    // 3. Chat history (last 10 messages for memory)
+    final recentHistory = chatHistory.length > 10
+        ? chatHistory.sublist(chatHistory.length - 10)
+        : chatHistory;
+    messages.addAll(recentHistory.map((m) => {
+          'role': m['role']!,
+          'content': m['content']!,
+        }));
+
+    // 4. Current user message
+    messages.add({'role': 'user', 'content': userMessage});
 
     http.Response response;
     try {
       response = await http
           .post(
-            Uri.parse(_endpoint),
+            Uri.parse(ApiConstants.openAiChatEndpoint),
             headers: {
-              'Content-Type': 'application/json',
               'Authorization': 'Bearer $_apiKey',
+              'Content-Type': 'application/json; charset=utf-8',
             },
-            body: jsonEncode(body),
+            body: jsonEncode({
+              'model': ApiConstants.openAiModel,
+              'max_tokens': ApiConstants.openAiMaxTokens,
+              'temperature': 0.7,
+              'messages': messages,
+            }),
           )
-          .timeout(Duration(seconds: _timeoutSeconds));
+          .timeout(const Duration(seconds: _timeoutSeconds));
     } catch (e) {
       final msg = e.toString();
-      if (msg.contains('SocketException') || msg.contains('Failed host lookup') || msg.contains('Connection')) {
-        throw ChatbotException('لا يوجد اتصال بالإنترنت. تحقق من الشبكة.');
+      if (msg.contains('SocketException') ||
+          msg.contains('Failed host lookup') ||
+          msg.contains('Connection')) {
+        throw ChatbotException(
+          'لا يوجد اتصال بالإنترنت. تحقق من الشبكة أو جرّب شبكة أخرى.',
+        );
       }
       if (msg.contains('TimeoutException') || msg.contains('timeout')) {
         throw ChatbotException('انتهت مهلة الاتصال. جرّب مرة أخرى.');
       }
-      throw ChatbotException('اتصال: $msg');
+      rethrow;
     }
 
-    if (response.statusCode != 200) {
-      String errMsg = response.body;
-      try {
-        final map = jsonDecode(response.body) as Map<String, dynamic>?;
-        final error = map?['error'];
-        if (error is Map<String, dynamic>) {
-          final message = error['message']?.toString();
-          if (message != null && message.isNotEmpty) errMsg = message;
-        }
-      } catch (_) {}
-      if (response.statusCode == 401) {
-        throw ChatbotException('مفتاح API غير صحيح أو منتهي. تحقق من المفتاح في api_constants.dart');
+    if (response.statusCode == 200) {
+      final data = jsonDecode(utf8.decode(response.bodyBytes))
+          as Map<String, dynamic>;
+      final choices = data['choices'] as List<dynamic>?;
+      if (choices == null || choices.isEmpty) {
+        throw ChatbotException('لم يرد الخادم برد صحيح. جرّب مرة أخرى.');
       }
-      if (response.statusCode == 429) {
-        throw ChatbotException('تجاوز حد الاستخدام أو انتهى الرصيد. تحقق من حساب OpenAI.');
+      final first = choices.first;
+      if (first is! Map<String, dynamic>) {
+        throw ChatbotException('صيغة الرد خاطئة.');
       }
-      throw ChatbotException('خطأ من الخادم ($errMsg)');
+      final messageMap = first['message'];
+      if (messageMap is! Map<String, dynamic>) {
+        throw ChatbotException('لم يرد الخادم بنص.');
+      }
+      final content = messageMap['content']?.toString().trim();
+      if (content == null || content.isEmpty) {
+        throw ChatbotException('لم يرد الخادم بنص.');
+      }
+      return content;
     }
 
-    Map<String, dynamic> map;
-    try {
-      map = jsonDecode(response.body) as Map<String, dynamic>;
-    } catch (e) {
-      throw ChatbotException('رد غير صحيح من الخادم. جرّب لاحقاً.');
+    if (response.statusCode == 401) {
+      throw ChatbotException(
+        'مفتاح API غير صحيح أو منتهي. تحقق من المفتاح في api_constants.dart',
+      );
     }
-
-    final choices = map['choices'] as List<dynamic>?;
-    if (choices == null || choices.isEmpty) {
-      throw ChatbotException('لم يرد الخادم برد صحيح. جرّب مرة أخرى.');
+    if (response.statusCode == 429) {
+      throw ChatbotException(
+        'تجاوز حد الاستخدام أو انتهى الرصيد. تحقق من حساب OpenAI.',
+      );
     }
-
-    final first = choices.first;
-    if (first is! Map<String, dynamic>) throw ChatbotException('صيغة الرد خاطئة.');
-    final messageMap = first['message'];
-    if (messageMap is! Map<String, dynamic>) throw ChatbotException('لم يرد الخادم بنص.');
-    final content = messageMap['content'];
-    if (content == null) throw ChatbotException('لم يرد الخادم بنص.');
-    return content.toString().trim();
+    throw ChatbotException(
+      'OpenAI error: ${response.statusCode} — ${response.body.length > 80 ? response.body.substring(0, 80) + '...' : response.body}',
+    );
   }
 }
 

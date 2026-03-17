@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
 import 'theme/app_theme_controller.dart';
@@ -7,6 +8,11 @@ import 'theme/app_theme_controller.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (_) {
+    // .env missing — copy .env.example to .env and add OPENAI_KEY
+  }
   runApp(const MyApp());
 }
 

@@ -51,14 +51,45 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Attendance records (للشات بوت وواجهة الحضور — قراءة للجميع، الكتابة للأدمن فقط).
+    match /attendance_records/{recordId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // قواعد الحرمان والنسب (قراءة للشات بوت والواجهات).
+    match /academic_rules/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // التقويم الأكاديمي (أسابيع الفصل — للشات بوت).
+    match /academic_calendar/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Manual attendance sessions (one per section/day/lecture start time).
     match /manual_attendance_sessions/{sessionId} {
       allow read, write: if isSignedIn();
     }
 
-    // Manual attendance records per student per session.
+    // Manual attendance records — قراءة للشات بوت وواجهة الحضور (الطلاب يدخلون بالإيميل بدون Firebase Auth).
     match /manual_attendance_records/{recordId} {
-      allow read, write: if isSignedIn();
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // QR Code attendance records (coming soon).
+    match /qr_attendance_records/{recordId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // NFC attendance records (coming soon).
+    match /nfc_attendance_records/{recordId} {
+      allow read: if true;
+      allow write: if isSignedIn();
     }
 
     // Deny everything else by default.

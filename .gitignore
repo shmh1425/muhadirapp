@@ -33,6 +33,7 @@ agent-transcripts/
 # بيئة ومفاتيح (أمان)
 .env
 .env.*
+!.env.example
 *.keystore
 key.properties
 

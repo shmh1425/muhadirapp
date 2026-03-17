@@ -33,26 +33,7 @@ class ChatbotScreen extends StatelessWidget {
             title: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: _primaryColor,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: _primaryColor.withValues(alpha: 0.3),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.smart_toy_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
+                _ChatbotAvatar(size: 36),
                 const SizedBox(width: 10),
                 const Text(
                   'MUHADIR AI',
@@ -148,16 +129,40 @@ class _EmptyState extends StatelessWidget {
             runSpacing: 10,
             children: [
               _SuggestionChip(
+                label: 'سلام 👋',
+                onTap: () => onSuggestionTap('سلام 👋'),
+              ),
+              _SuggestionChip(
                 label: 'كم غيابي؟',
                 onTap: () => onSuggestionTap('كم غيابي؟'),
               ),
               _SuggestionChip(
-                label: 'هل أنا بخطر؟',
-                onTap: () => onSuggestionTap('هل أنا بخطر؟'),
+                label: 'هل أنا بخطر من الحرمان؟',
+                onTap: () => onSuggestionTap('هل أنا بخطر من الحرمان؟'),
               ),
               _SuggestionChip(
-                label: 'ملخص موادي',
-                onTap: () => onSuggestionTap('ملخص موادي'),
+                label: 'ملخص كل موادي',
+                onTap: () => onSuggestionTap('ملخص كل موادي'),
+              ),
+              _SuggestionChip(
+                label: 'نصيحة للدراسة',
+                onTap: () => onSuggestionTap('نصيحة للدراسة'),
+              ),
+              _SuggestionChip(
+                label: 'Hello 👋',
+                onTap: () => onSuggestionTap('Hello 👋'),
+              ),
+              _SuggestionChip(
+                label: 'How many absences do I have?',
+                onTap: () => onSuggestionTap('How many absences do I have?'),
+              ),
+              _SuggestionChip(
+                label: 'Am I at risk of deprivation?',
+                onTap: () => onSuggestionTap('Am I at risk of deprivation?'),
+              ),
+              _SuggestionChip(
+                label: 'Summary of all my courses',
+                onTap: () => onSuggestionTap('Summary of all my courses'),
               ),
             ],
           ),
@@ -276,21 +281,33 @@ class _MessageBubble extends StatelessWidget {
   }
 }
 
-class _BotAvatar extends StatelessWidget {
+/// الهوية البصرية: دائرة تيل + فقاعة + روبوت (صورة بخلفية شفافة).
+class _ChatbotAvatar extends StatelessWidget {
+  const _ChatbotAvatar({this.size = 36});
+
+  final double size;
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 36,
-      height: 36,
-      child: CircleAvatar(
-        backgroundColor: ChatbotScreen._primaryColor.withValues(alpha: 0.2),
-        child: const Icon(
-          Icons.smart_toy_rounded,
-          color: ChatbotScreen._primaryColor,
-          size: 20,
+      width: size,
+      height: size,
+      child: Image.asset(
+        'assets/images/chatbot_icon.png',
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => CircleAvatar(
+          backgroundColor: ChatbotScreen._primaryColor,
+          child: Icon(Icons.smart_toy_rounded, color: Colors.white, size: size * 0.55),
         ),
       ),
     );
+  }
+}
+
+class _BotAvatar extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return _ChatbotAvatar(size: 36);
   }
 }
 

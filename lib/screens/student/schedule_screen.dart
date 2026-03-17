@@ -9,8 +9,8 @@ import '../../services/student_auth_service.dart';
 import '../../shared/widgets/chat_fab.dart';
 
 /// جلب محاضرات اليوم للطالب (للاستخدام من الصفحة الرئيسية)
-Future<List<CourseSchedule>> fetchTodayCoursesForStudent(String studentId) async {
-  if (studentId.isEmpty) return <CourseSchedule>[];
+Future<List<CourseSchedule>> fetchTodayCoursesForStudent(int studentId) async {
+  if (studentId <= 0) return <CourseSchedule>[];
   final enrollmentsRef = FirebaseFirestore.instance
       .collection('student_section_enrollments');
   final enrollSnap = await enrollmentsRef

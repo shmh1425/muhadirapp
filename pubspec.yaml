@@ -41,6 +41,7 @@ dependencies:
   firebase_storage: ^13.1.0
   provider: ^6.1.2
   http: ^1.2.2
+  flutter_dotenv: ^5.2.0
 
 dev_dependencies:
   flutter_test:
@@ -67,6 +68,7 @@ flutter:
   assets:
     - assets/images/
     - assets/langs/
+    - .env
 
   fonts:
     - family: Cairo

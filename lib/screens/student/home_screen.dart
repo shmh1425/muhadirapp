@@ -290,11 +290,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildTodayLecturesSection(BuildContext context) {
-    final studentId = StudentAuthService.instance.currentStudent?.studentId?.toString() ?? '';
+    final studentId = StudentAuthService.instance.currentStudent?.studentId ?? 0;
     return SizedBox(
       height: 150,
       child: FutureBuilder<List<CourseSchedule>>(
-        future: studentId.isEmpty ? Future.value(<CourseSchedule>[]) : fetchTodayCoursesForStudent(studentId),
+        future: studentId <= 0
+            ? Future.value(<CourseSchedule>[])
+            : fetchTodayCoursesForStudent(studentId),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(

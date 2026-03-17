@@ -2,27 +2,48 @@ import 'package:flutter/material.dart';
 
 import '../../features/chatbot/screens/chatbot_screen.dart';
 
-/// Floating action button to open MUHADIR AI chatbot from any screen.
+/// زر عائم = الصورة فقط (هوية محاضر) بدون خلفية ولا مربع.
 class ChatFAB extends StatelessWidget {
   const ChatFAB({super.key});
 
-  static const Color _primaryColor = Color(0xFF006571);
-
   @override
   Widget build(BuildContext context) {
-    return FloatingActionButton(
-      onPressed: () {
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => const ChatbotScreen(),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const ChatbotScreen(),
+            ),
+          );
+        },
+        customBorder: const CircleBorder(),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Image.asset(
+              'assets/images/chatbot_icon.png',
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.chat_bubble_rounded,
+                color: Color(0xFF006571),
+                size: 32,
+              ),
+            ),
           ),
-        );
-      },
-      backgroundColor: _primaryColor,
-      child: const Icon(
-        Icons.chat_bubble_rounded,
-        color: Colors.white,
-        size: 28,
+        ),
       ),
     );
   }
