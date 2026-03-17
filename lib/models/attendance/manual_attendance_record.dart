@@ -13,14 +13,18 @@ class ManualAttendanceRecord {
     required this.lectureDate,
     required this.courseName,
     required this.sectionLabel,
-    required this.lectureStartTime,
-    required this.lectureEndTime,
-    required this.attendanceTime,
+  required this.lectureStartTime,
+  required this.lectureEndTime,
+  required this.attendanceTime,
+  this.courseType,
+  this.courseCode,
   });
 
   final String recordId;
   final String sessionId;
   final String sectionId;
+  /// رمز المقرر (لجلب courseType من مجموعة courses عند غيابه)
+  final String? courseCode;
   final int studentId;
   final String studentName;
   final ManualAttendanceStatus status;
@@ -30,6 +34,8 @@ class ManualAttendanceRecord {
   final String lectureStartTime;
   final String lectureEndTime;
   final String attendanceTime;
+  /// theoretical | practical | graduation_project (from section/course)
+  final String? courseType;
 
   bool get isPresentLike =>
       status == ManualAttendanceStatus.present ||
@@ -80,6 +86,12 @@ class ManualAttendanceRecord {
       lectureStartTime: (data['lectureStartTime'] ?? '').toString(),
       lectureEndTime: (data['lectureEndTime'] ?? '').toString(),
       attendanceTime: (data['attendanceTime'] ?? '').toString(),
+      courseType: (data['courseType'] ?? '').toString().trim().isEmpty
+          ? null
+          : (data['courseType'] ?? '').toString().trim(),
+      courseCode: (data['courseCode'] ?? '').toString().trim().isEmpty
+          ? null
+          : (data['courseCode'] ?? '').toString().trim(),
     );
   }
 

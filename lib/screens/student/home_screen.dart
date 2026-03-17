@@ -73,7 +73,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String _greetingName() {
     final s = StudentAuthService.instance.currentStudent;
     if (s == null) return 'طالب';
-    final raw = s.nameAr.trim().isNotEmpty ? s.nameAr : s.name;
+    final nameAr = (s.nameAr).trim();
+    final nameEn = (s.name).trim();
+    final raw = nameAr.isNotEmpty ? nameAr : nameEn;
     if (raw.isEmpty) return 'طالب';
     return raw.split(' ').first;
   }
