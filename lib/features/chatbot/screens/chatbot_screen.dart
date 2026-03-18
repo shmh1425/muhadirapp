@@ -30,22 +30,26 @@ class ChatbotScreen extends StatelessWidget {
               ),
               onPressed: () => Navigator.of(context).pop(),
             ),
-            title: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _ChatbotAvatar(size: 36),
-                const SizedBox(width: 10),
-                const Text(
-                  'MUHADIR AI',
-                  style: TextStyle(
-                    color: Color(0xFF1A1A1A),
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+            titleSpacing: 0,
+            title: Align(
+              alignment: Alignment.centerRight,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _ChatbotAvatar(size: 70),
+                  const SizedBox(width: 4),
+                  const Text(
+                    'مساعدك الذكي',
+                    style: TextStyle(
+                      color: Color(0xFF1A1A1A),
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-            centerTitle: true,
+            centerTitle: false,
           ),
           body: Column(
             children: [
@@ -219,6 +223,7 @@ class _MessageBubble extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
+        textDirection: TextDirection.ltr,
         mainAxisAlignment:
             isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -266,8 +271,6 @@ class _MessageBubble extends StatelessWidget {
               ],
             ),
           ),
-          if (isUser) const SizedBox(width: 8),
-          if (isUser) const SizedBox(width: 36),
         ],
       ),
     );
@@ -307,7 +310,7 @@ class _ChatbotAvatar extends StatelessWidget {
 class _BotAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return _ChatbotAvatar(size: 36);
+    return _ChatbotAvatar(size: 57);
   }
 }
 
@@ -317,6 +320,7 @@ class _TypingIndicator extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
+        textDirection: TextDirection.ltr,
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [

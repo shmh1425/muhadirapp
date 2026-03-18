@@ -19,28 +19,16 @@ class ChatFAB extends StatelessWidget {
           );
         },
         customBorder: const CircleBorder(),
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.15),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Image.asset(
-              'assets/images/chatbot_icon.png',
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => const Icon(
-                Icons.chat_bubble_rounded,
-                color: Color(0xFF006571),
-                size: 32,
-              ),
+        child: SizedBox(
+          width: 80,
+          height: 80,
+          child: Image.asset(
+            'assets/images/chatbot_icon.png',
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => const Icon(
+              Icons.chat_bubble_rounded,
+              color: Color(0xFF006571),
+              size: 36,
             ),
           ),
         ),
