@@ -39,3 +39,4 @@ key.properties
 
 # Snyk Security Extension - AI Rules (auto-generated)
 .github/instructions/snyk_rules.instructions.md
+lib/core/constants/api_constants.dart
