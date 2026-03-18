@@ -219,6 +219,8 @@ class ManualAttendanceService {
     required LectureItem lecture,
     required DateTime date,
   }) async {
+    final sectionSnap = await _firestore.collection('sections').doc(sectionId).get();
+    final sectionData = sectionSnap.data() ?? <String, dynamic>{};
     final existingSnapshot = await _firestore
         .collection(_recordsCollection)
         .where('sessionId', isEqualTo: sessionId)
@@ -272,6 +274,9 @@ class ManualAttendanceService {
           'studentEmail': (data['studentEmail'] ?? '').toString(),
           'courseName': lecture.courseName,
           'courseCode': lecture.crn,
+          'courseType': ((sectionData['courseType'] ?? '').toString().trim().isEmpty)
+              ? null
+              : (sectionData['courseType'] ?? '').toString().trim(),
           'section': lecture.section,
           'lectureDate': Timestamp.fromDate(date),
           'lectureYear': date.year,
