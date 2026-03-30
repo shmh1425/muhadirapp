@@ -90,6 +90,10 @@ class _LoginScreenState extends State<LoginScreen> {
           'wrong-password' => 'كلمة المرور غير صحيحة',
           'invalid-email' => 'صيغة الإيميل غير صحيحة',
           'invalid-credential' => 'الإيميل أو كلمة المرور غير صحيحة',
+          'network-request-failed' =>
+            'تعذر الاتصال بالإنترنت. تأكد من الشبكة وحاول مرة أخرى.',
+          'keychain-error' =>
+            'تعذر الوصول إلى Keychain على macOS. أعد تشغيل التطبيق واسمح بالصلاحية.',
           _ => e.message ?? 'فشل تسجيل الدخول',
         };
         setState(() {
@@ -147,6 +151,10 @@ class _LoginScreenState extends State<LoginScreen> {
           'wrong-password' => 'كلمة المرور غير صحيحة',
           'invalid-email' => 'صيغة الإيميل غير صحيحة',
           'invalid-credential' => 'الإيميل أو كلمة المرور غير صحيحة',
+          'network-request-failed' =>
+            'تعذر الاتصال بالإنترنت. تأكد من الشبكة وحاول مرة أخرى.',
+          'keychain-error' =>
+            'تعذر الوصول إلى Keychain على macOS. أعد تشغيل التطبيق واسمح بالصلاحية.',
           _ => e.message ?? 'فشل تسجيل دخول الأدمن',
         };
         setState(() {
@@ -216,6 +224,10 @@ class _LoginScreenState extends State<LoginScreen> {
           'wrong-password' => 'كلمة المرور غير صحيحة',
           'invalid-email' => 'صيغة الإيميل غير صحيحة',
           'invalid-credential' => 'الإيميل أو كلمة المرور غير صحيحة',
+          'network-request-failed' =>
+            'تعذر الاتصال بالإنترنت. تأكد من الشبكة وحاول مرة أخرى.',
+          'keychain-error' =>
+            'تعذر الوصول إلى Keychain على macOS. أعد تشغيل التطبيق واسمح بالصلاحية.',
           _ => e.message ?? 'فشل تسجيل الدخول',
         };
         setState(() {
