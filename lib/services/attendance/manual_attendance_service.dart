@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/attendance/manual_attendance_record.dart';
 import '../../models/attendance/manual_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
+import '../../models/term_week.dart';
+import '../../repositories/academic_term_repository.dart';
 import '../lecturer_auth_service.dart';
 
 class ManualAttendanceService {
@@ -189,9 +191,9 @@ class ManualAttendanceService {
     final sectionSnap = await sectionRef.get();
     final sectionData = sectionSnap.data() ?? <String, dynamic>{};
 
-    final updater =
-        LecturerAuthService.instance.currentLecturer?.lecturerId ?? '';
-    await _firestore.collection(_sessionsCollection).doc(sessionId).set({
+    final termLabel = (sectionData['term'] ?? '').toString();
+    final termId = (sectionData['termId'] ?? '').toString().trim();
+    final payload = <String, dynamic>{
       'sessionId': sessionId,
       'sectionId': sectionId,
       'courseName': lecture.courseName,
@@ -206,11 +208,52 @@ class ManualAttendanceService {
       'lectureDay': date.day,
       'dateKey': _dateKey(date),
       'attendanceMethod': 'manual',
-      'lecturerId': updater,
-      'term': (sectionData['term'] ?? '').toString(),
+      'lecturerId': LecturerAuthService.instance.currentLecturer?.lecturerId ?? '',
+      'term': termLabel,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    };
+
+    if (termId.isNotEmpty) {
+      final term = await AcademicTermRepository.instance.getTerm(termId);
+      if (term != null) {
+        payload['termId'] = termId;
+        final weeks = await AcademicTermRepository.instance.getWeeks(termId);
+        final officialWeekNumber = _officialWeekFromDate(term.startDate, date, term.officialWeeksCount);
+        payload['officialWeekNumber'] = officialWeekNumber;
+        TermWeek? week;
+        for (final w in weeks) {
+          if (w.officialWeekNumber == officialWeekNumber) {
+            week = w;
+            break;
+          }
+        }
+        bool countInAttendance = false;
+        if (week != null) {
+          payload['effectiveWeekNumber'] = week.effectiveWeekNumber;
+          countInAttendance = week.countInAttendance;
+        }
+        if (countInAttendance) {
+          final dateExcluded = await AcademicTermRepository.instance.isDateExcludedFromAttendance(termId, date);
+          if (dateExcluded) countInAttendance = false;
+        }
+        payload['countInAttendance'] = countInAttendance;
+        payload['attendanceFinalized'] = true;
+      }
+    }
+
+    await _firestore.collection(_sessionsCollection).doc(sessionId).set(payload, SetOptions(merge: true));
+  }
+
+  /// Compute 1-based official week number from term start and session date.
+  static int _officialWeekFromDate(DateTime termStart, DateTime sessionDate, int officialWeeksCount) {
+    final start = DateTime(termStart.year, termStart.month, termStart.day);
+    final session = DateTime(sessionDate.year, sessionDate.month, sessionDate.day);
+    final days = session.difference(start).inDays;
+    if (days < 0) return 1;
+    final week = (days / 7).floor() + 1;
+    if (week > officialWeeksCount) return officialWeeksCount;
+    return week;
   }
 
   Future<void> _ensureDefaultPresentRecords({
@@ -334,5 +377,71 @@ class ManualAttendanceService {
       result.add(source.sublist(i, end));
     }
     return result;
+  }
+
+  // ─── Admin/database-side: countable sessions and absence percentage ───
+
+  /// Returns sessions that count toward attendance (instructional, finalized).
+  /// Break weeks and non-finalized sessions excluded. Backward compatible: sessions
+  /// without these fields are treated as countable.
+  Future<List<ManualAttendanceSession>> getCountableSessionsForSection(
+    String sectionId, {
+    String? termId,
+  }) async {
+    Query<Map<String, dynamic>> q = _firestore
+        .collection(_sessionsCollection)
+        .where('sectionId', isEqualTo: sectionId);
+    if (termId != null && termId.trim().isNotEmpty) {
+      q = q.where('termId', isEqualTo: termId.trim());
+    }
+    final snapshot = await q.get();
+    final sessions = snapshot.docs
+        .map(ManualAttendanceSession.fromDoc)
+        .where((s) => s.countInAttendance && s.attendanceFinalized)
+        .toList();
+    sessions.sort((a, b) {
+      final byDate = a.lectureDate.compareTo(b.lectureDate);
+      if (byDate != 0) return byDate;
+      return a.lectureStartTime.compareTo(b.lectureStartTime);
+    });
+    return sessions;
+  }
+
+  /// Absence stats for a student in a section. Admin/database side only.
+  /// totalCountableSessions = finalized instructional sessions;
+  /// unexcusedAbsenceCount = records with status absent (excused/present/late excluded);
+  /// absencePercentage = unexcusedAbsenceCount / totalCountableSessions * 100.
+  Future<({int totalCountableSessions, int unexcusedAbsenceCount, double absencePercentage})>
+      getAbsenceStatsForStudentInSection(
+    int studentId,
+    String sectionId, {
+    String? termId,
+  }) async {
+    final countableSessions = await getCountableSessionsForSection(sectionId, termId: termId);
+    final totalCountableSessions = countableSessions.length;
+    if (totalCountableSessions == 0) {
+      return (totalCountableSessions: 0, unexcusedAbsenceCount: 0, absencePercentage: 0.0);
+    }
+    final sessionIds = countableSessions.map((s) => s.sessionId).toSet();
+    int unexcusedAbsenceCount = 0;
+    for (final chunk in _chunk(sessionIds.toList(), 10)) {
+      final snapshot = await _firestore
+          .collection(_recordsCollection)
+          .where('sessionId', whereIn: chunk)
+          .where('studentId', isEqualTo: studentId)
+          .get();
+      for (final doc in snapshot.docs) {
+        final status = (doc.data()['status'] ?? '').toString().toLowerCase();
+        if (status == 'absent') unexcusedAbsenceCount++;
+      }
+    }
+    final absencePercentage = totalCountableSessions > 0
+        ? (unexcusedAbsenceCount / totalCountableSessions) * 100.0
+        : 0.0;
+    return (
+      totalCountableSessions: totalCountableSessions,
+      unexcusedAbsenceCount: unexcusedAbsenceCount,
+      absencePercentage: absencePercentage,
+    );
   }
 }

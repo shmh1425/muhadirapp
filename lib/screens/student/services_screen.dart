@@ -15,7 +15,6 @@ class ServicesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const primaryColor = Color(0xFF006571);
-    const borderColor = Color(0xFFD9D9D9);
 
     return Directionality(
       textDirection: TextDirection.rtl,

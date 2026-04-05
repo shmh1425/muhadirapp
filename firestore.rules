@@ -51,6 +51,20 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Academic terms, weeks, and calendar exceptions (admin-managed; lecturers read for session week resolution).
+    match /academic_terms/{termId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+      match /weeks/{weekId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
+      }
+      match /calendar_exceptions/{exceptionId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
+      }
+    }
+
     // Manual attendance sessions (one per section/day/lecture start time).
     match /manual_attendance_sessions/{sessionId} {
       allow read, write: if isSignedIn();

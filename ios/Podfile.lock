@@ -1435,11 +1435,11 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   abseil: a05cc83bf02079535e17169a73c5be5ba47f714b
   BoringSSL-GRPC: dded2a44897e45f28f08ae87a55ee4bcd19bc508
-  cloud_firestore: 90c4f245978a00fdfba814984b699890dd140d70
+  cloud_firestore: d5c7f731e71034665afe74e3a1d0ff334f9b7799
   Firebase: 065f2bb395062046623036d8e6dc857bc2521d56
-  firebase_auth: 02c5b4d8663f270e2f843d9cf650a368e1984574
-  firebase_core: 8f0a8c3aca22e29012e419ee18109b4aa021f777
-  firebase_storage: 0c12fe01694a70c9778f2bdaf3b6f7a080b84d49
+  firebase_auth: eeb19010b5aa7c83cc85f23b6c4f009ea28461f1
+  firebase_core: afac1aac13c931e0401c7e74ed1276112030efab
+  firebase_storage: 85d65a656f88f9bdf1fb0d7f537ae7ebf4266709
   FirebaseAppCheckInterop: 4bade10286cc977e516f75d2d8312cbdfa534789
   FirebaseAuth: 3a39f6436c21ebfd7919b698228b4f89ff94c23b
   FirebaseAuthInterop: f8f6ff72dc24621906497fbe5cf3c42ee815e59c
@@ -1461,4 +1461,4 @@ SPEC CHECKSUMS:
 
 PODFILE CHECKSUM: 288656d4464589360115d6f81dd5d8f559352730
 
-COCOAPODS: 1.15.2
+COCOAPODS: 1.16.2
