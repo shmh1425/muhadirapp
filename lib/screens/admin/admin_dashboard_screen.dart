@@ -45,11 +45,12 @@ const List<String> _termOptions = <String>[
 ];
 
 /// نوع المقرر: نظري، عملي، مشروع التخرج
-const List<MapEntry<String, String>> _courseTypeOptions = <MapEntry<String, String>>[
-  MapEntry('theoretical', 'نظري'),
-  MapEntry('practical', 'عملي'),
-  MapEntry('graduation_project', 'مشروع التخرج'),
-];
+const List<MapEntry<String, String>> _courseTypeOptions =
+    <MapEntry<String, String>>[
+      MapEntry('theoretical', 'نظري'),
+      MapEntry('practical', 'عملي'),
+      MapEntry('graduation_project', 'مشروع التخرج'),
+    ];
 
 /// استخراج قيم مميزة غير فارغة من وثائق (للكلية/القسم/التخصص) — من المحاضرين والمقررات والطلاب
 List<String> _distinctFromDocs(
@@ -76,8 +77,18 @@ const List<MapEntry<int, String>> _weekDays = <MapEntry<int, String>>[
 
 /// الساعات من 7 صباحاً إلى 6 مساءً، ساعة ساعة (كل محاضرة ساعتين أو أربع ساعات)
 const List<String> _timeSlots = <String>[
-  '07:00', '08:00', '09:00', '10:00', '11:00', '12:00',
-  '13:00', '14:00', '15:00', '16:00', '17:00', '18:00',
+  '07:00',
+  '08:00',
+  '09:00',
+  '10:00',
+  '11:00',
+  '12:00',
+  '13:00',
+  '14:00',
+  '15:00',
+  '16:00',
+  '17:00',
+  '18:00',
 ];
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -217,7 +228,9 @@ class _AdminStudentsTabState extends State<_AdminStudentsTab> {
       if (!mounted) return;
       _showMessage('تم حفظ بيانات الطالب');
     } on FirebaseException catch (e) {
-      debugPrint('[Admin Save] FAILED path: external_students/${studentId.toString()} code: ${e.code} message: ${e.message}');
+      debugPrint(
+        '[Admin Save] FAILED path: external_students/${studentId.toString()} code: ${e.code} message: ${e.message}',
+      );
       _showMessage(_firebaseErrorMessage(e));
     } finally {
       if (mounted) {
@@ -447,7 +460,9 @@ class _AdminLecturersTabState extends State<_AdminLecturersTab> {
       if (!mounted) return;
       _showMessage('تم حفظ بيانات المحاضر');
     } on FirebaseException catch (e) {
-      debugPrint('[Admin Save] FAILED path: external_lecturers/$lecturerId code: ${e.code} message: ${e.message}');
+      debugPrint(
+        '[Admin Save] FAILED path: external_lecturers/$lecturerId code: ${e.code} message: ${e.message}',
+      );
       _showMessage(_firebaseErrorMessage(e));
     } finally {
       if (mounted) {
@@ -517,7 +532,8 @@ class _AdminLecturersTabState extends State<_AdminLecturersTab> {
                         child: Text('اختر الكلية'),
                       ),
                       ...colleges.map(
-                        (c) => DropdownMenuItem<String?>(value: c, child: Text(c)),
+                        (c) =>
+                            DropdownMenuItem<String?>(value: c, child: Text(c)),
                       ),
                     ],
                     onChanged: (value) {
@@ -537,7 +553,8 @@ class _AdminLecturersTabState extends State<_AdminLecturersTab> {
                         child: Text('اختر القسم'),
                       ),
                       ...departments.map(
-                        (d) => DropdownMenuItem<String?>(value: d, child: Text(d)),
+                        (d) =>
+                            DropdownMenuItem<String?>(value: d, child: Text(d)),
                       ),
                     ],
                     onChanged: (value) {
@@ -623,7 +640,9 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
   final _lecturersRef = FirebaseFirestore.instance.collection(
     'external_lecturers',
   );
-  final _studentsRef = FirebaseFirestore.instance.collection('external_students');
+  final _studentsRef = FirebaseFirestore.instance.collection(
+    'external_students',
+  );
 
   final _courseCodeController = TextEditingController();
   final _courseNameController = TextEditingController();
@@ -665,7 +684,12 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
 
     final major = _selectedCourseMajor?.trim() ?? '';
     final courseType = _selectedCourseType?.trim() ?? '';
-    if (courseCode.isEmpty || courseName.isEmpty || college.isEmpty || department.isEmpty || major.isEmpty || courseType.isEmpty) {
+    if (courseCode.isEmpty ||
+        courseName.isEmpty ||
+        college.isEmpty ||
+        department.isEmpty ||
+        major.isEmpty ||
+        courseType.isEmpty) {
       _showMessage(
         'أكملي بيانات المقرر: الرمز، الاسم، الكلية، القسم، التخصص، نوع المقرر، المستوى',
       );
@@ -718,7 +742,9 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
       if (!mounted) return;
       _showMessage(existing.exists ? 'تم تحديث المقرر' : 'تم حفظ المقرر');
     } on FirebaseException catch (e) {
-      debugPrint('[Admin Save] FAILED path: courses/$courseCode code: ${e.code} message: ${e.message}');
+      debugPrint(
+        '[Admin Save] FAILED path: courses/$courseCode code: ${e.code} message: ${e.message}',
+      );
       _showMessage(_firebaseErrorMessage(e));
     } finally {
       if (mounted) {
@@ -786,8 +812,10 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
         'courseCode': courseCode,
         'courseName': (courseData['courseName'] ?? '').toString(),
         'courseType': (courseData['courseType'] ?? '').toString(),
-        'college': (courseData['college'] ?? courseData['major'] ?? '').toString(),
-        'department': (courseData['department'] ?? courseData['major'] ?? '').toString(),
+        'college': (courseData['college'] ?? courseData['major'] ?? '')
+            .toString(),
+        'department': (courseData['department'] ?? courseData['major'] ?? '')
+            .toString(),
         'major': _selectedSectionMajor,
         'level': (courseData['level'] as num?)?.toInt() ?? 0,
         'lecturerId': _selectedSectionLecturerId,
@@ -807,9 +835,13 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
       debugPrint('[Admin Save] path: sections/$sectionId');
       await _sectionsRef.doc(sectionId).set(data, SetOptions(merge: true));
       if (!mounted) return;
-      _showMessage(existing.exists ? 'تم تحديث السكشن والجدول' : 'تم حفظ السكشن والجدول');
+      _showMessage(
+        existing.exists ? 'تم تحديث السكشن والجدول' : 'تم حفظ السكشن والجدول',
+      );
     } on FirebaseException catch (e) {
-      debugPrint('[Admin Save] FAILED path: sections/$sectionId code: ${e.code} message: ${e.message}');
+      debugPrint(
+        '[Admin Save] FAILED path: sections/$sectionId code: ${e.code} message: ${e.message}',
+      );
       _showMessage(_firebaseErrorMessage(e));
     } finally {
       if (mounted) {
@@ -1015,11 +1047,15 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
     }
   }
 
-  Future<void> _editSectionSchedule(String sectionDocId, List<dynamic>? currentSchedule) async {
+  Future<void> _editSectionSchedule(
+    String sectionDocId,
+    List<dynamic>? currentSchedule,
+  ) async {
     final schedule = await showDialog<List<Map<String, dynamic>>>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => _SectionScheduleDialog(initialSchedule: currentSchedule),
+      builder: (context) =>
+          _SectionScheduleDialog(initialSchedule: currentSchedule),
     );
     if (!mounted || schedule == null || schedule.isEmpty) return;
     try {
@@ -1107,8 +1143,14 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                   stream: _studentsRef.snapshots(),
                   builder: (context, sSnap) {
                     final sDocs = sSnap.data?.docs ?? const [];
-                    final majorsFromStudents = _distinctFromDocs(sDocs, 'major');
-                    final colleges = <String>{...collegesFromLecturers, ...collegesFromCourses}.toList()..sort();
+                    final majorsFromStudents = _distinctFromDocs(
+                      sDocs,
+                      'major',
+                    );
+                    final colleges = <String>{
+                      ...collegesFromLecturers,
+                      ...collegesFromCourses,
+                    }.toList()..sort();
                     final departments = <String>{
                       ...depsFromLecturers,
                       ...depsFromCourses,
@@ -1129,7 +1171,10 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                               child: Text('اختر الكلية'),
                             ),
                             ...colleges.map(
-                              (c) => DropdownMenuItem<String?>(value: c, child: Text(c)),
+                              (c) => DropdownMenuItem<String?>(
+                                value: c,
+                                child: Text(c),
+                              ),
                             ),
                           ],
                           onChanged: (value) {
@@ -1149,7 +1194,10 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                               child: Text('اختر القسم'),
                             ),
                             ...departments.map(
-                              (d) => DropdownMenuItem<String?>(value: d, child: Text(d)),
+                              (d) => DropdownMenuItem<String?>(
+                                value: d,
+                                child: Text(d),
+                              ),
                             ),
                           ],
                           onChanged: (value) {
@@ -1169,7 +1217,10 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                               child: Text('اختر التخصص'),
                             ),
                             ...departments.map(
-                              (m) => DropdownMenuItem<String?>(value: m, child: Text(m)),
+                              (m) => DropdownMenuItem<String?>(
+                                value: m,
+                                child: Text(m),
+                              ),
                             ),
                           ],
                           onChanged: (value) {
@@ -1240,7 +1291,10 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                   stream: _studentsRef.snapshots(),
                   builder: (context, sSnap) {
                     final sDocs = sSnap.data?.docs ?? const [];
-                    final majorsFromStudents = _distinctFromDocs(sDocs, 'major');
+                    final majorsFromStudents = _distinctFromDocs(
+                      sDocs,
+                      'major',
+                    );
                     final allMajors = <String>{
                       ...depsFromLecturers,
                       ...depsFromCourses,
@@ -1258,7 +1312,10 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                           child: Text('اختر التخصص'),
                         ),
                         ...allMajors.map(
-                          (m) => DropdownMenuItem<String?>(value: m, child: Text(m)),
+                          (m) => DropdownMenuItem<String?>(
+                            value: m,
+                            child: Text(m),
+                          ),
                         ),
                       ],
                       onChanged: (value) {
@@ -1288,9 +1345,18 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                 ? <QueryDocumentSnapshot<Map<String, dynamic>>>[]
                 : allCourseDocs.where((doc) {
                     final d = doc.data();
-                    final majorVal = (d['major'] ?? '').toString().trim().toLowerCase();
-                    final depVal = (d['department'] ?? '').toString().trim().toLowerCase();
-                    final colVal = (d['college'] ?? '').toString().trim().toLowerCase();
+                    final majorVal = (d['major'] ?? '')
+                        .toString()
+                        .trim()
+                        .toLowerCase();
+                    final depVal = (d['department'] ?? '')
+                        .toString()
+                        .trim()
+                        .toLowerCase();
+                    final colVal = (d['college'] ?? '')
+                        .toString()
+                        .trim()
+                        .toLowerCase();
                     return majorVal == majorFilterLower ||
                         depVal == majorFilterLower ||
                         colVal == majorFilterLower;
@@ -1317,9 +1383,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                   initialValue: selectedCourseCode,
                   decoration: InputDecoration(
                     labelText: 'المقرر',
-                    hintText: majorFilter.isEmpty
-                        ? 'اختر التخصص أولاً'
-                        : null,
+                    hintText: majorFilter.isEmpty ? 'اختر التخصص أولاً' : null,
                     border: const OutlineInputBorder(),
                   ),
                   items: majorFilter.isEmpty
@@ -1336,7 +1400,8 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                           ),
                           ...courseDocs.map((doc) {
                             final data = doc.data();
-                            final code = (data['courseCode'] ?? doc.id).toString();
+                            final code = (data['courseCode'] ?? doc.id)
+                                .toString();
                             final name = (data['courseName'] ?? '').toString();
                             return DropdownMenuItem<String?>(
                               value: doc.id,
@@ -1398,15 +1463,28 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                   builder: (context, lecturersSnapshot) {
                     final allLecturerDocs =
                         lecturersSnapshot.data?.docs ?? const [];
-                    final courseCollege = (courseData?['college'] ?? '').toString().trim();
-                    final courseDepartment = (courseData?['department'] ?? courseData?['major'] ?? '').toString().trim();
-                    final hasFilter = courseCollege.isNotEmpty && courseDepartment.isNotEmpty;
+                    final courseCollege = (courseData?['college'] ?? '')
+                        .toString()
+                        .trim();
+                    final courseDepartment =
+                        (courseData?['department'] ??
+                                courseData?['major'] ??
+                                '')
+                            .toString()
+                            .trim();
+                    final hasFilter =
+                        courseCollege.isNotEmpty && courseDepartment.isNotEmpty;
                     final lecturerDocs = !hasFilter
                         ? <QueryDocumentSnapshot<Map<String, dynamic>>>[]
                         : allLecturerDocs.where((doc) {
-                            final col = (doc.data()['college'] ?? '').toString().trim();
-                            final dep = (doc.data()['department'] ?? '').toString().trim();
-                            return col == courseCollege && dep == courseDepartment;
+                            final col = (doc.data()['college'] ?? '')
+                                .toString()
+                                .trim();
+                            final dep = (doc.data()['department'] ?? '')
+                                .toString()
+                                .trim();
+                            return col == courseCollege &&
+                                dep == courseDepartment;
                           }).toList();
                     final selectedLecturerExists = lecturerDocs.any(
                       (doc) => doc.id == _selectedSectionLecturerId,
@@ -1423,7 +1501,10 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                             padding: const EdgeInsets.only(bottom: 6),
                             child: Text(
                               'المحاضرون: كلية $courseCollege، قسم $courseDepartment',
-                              style: const TextStyle(fontSize: 12, color: Colors.black54),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.black54,
+                              ),
                             ),
                           ),
                         DropdownButtonFormField<String?>(
@@ -1433,8 +1514,8 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                             hintText: courseData == null
                                 ? 'اختر المقرر أولاً'
                                 : !hasFilter
-                                    ? 'المقرر بدون كلية/قسم'
-                                    : null,
+                                ? 'المقرر بدون كلية/قسم'
+                                : null,
                             border: const OutlineInputBorder(),
                           ),
                           items: !hasFilter
@@ -1451,14 +1532,18 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                                   ),
                                   ...lecturerDocs.map((doc) {
                                     final data = doc.data();
-                                    final nameAr =
-                                        (data['nameAr'] ?? '').toString().trim();
-                                    final nameEn =
-                                        (data['nameEn'] ?? '').toString().trim();
-                                    final lecturerId = (data['lecturerId'] ?? doc.id)
-                                        .toString();
+                                    final nameAr = (data['nameAr'] ?? '')
+                                        .toString()
+                                        .trim();
+                                    final nameEn = (data['nameEn'] ?? '')
+                                        .toString()
+                                        .trim();
+                                    final lecturerId =
+                                        (data['lecturerId'] ?? doc.id)
+                                            .toString();
                                     String displayName;
-                                    if (nameAr.isNotEmpty && nameEn.isNotEmpty) {
+                                    if (nameAr.isNotEmpty &&
+                                        nameEn.isNotEmpty) {
                                       displayName = '$nameAr ($nameEn)';
                                     } else if (nameAr.isNotEmpty) {
                                       displayName = nameAr;
@@ -1476,7 +1561,9 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                           onChanged: !hasFilter
                               ? null
                               : (value) {
-                                  setState(() => _selectedSectionLecturerId = value);
+                                  setState(
+                                    () => _selectedSectionLecturerId = value,
+                                  );
                                 },
                         ),
                       ],
@@ -1488,29 +1575,34 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                   stream: AcademicTermRepository.instance.watchTerms(),
                   builder: (context, termSnap) {
                     final terms = termSnap.data ?? [];
-                    final effectiveTermId = terms.any((t) => t.termId == _selectedSectionTermId)
+                    final effectiveTermId =
+                        terms.any((t) => t.termId == _selectedSectionTermId)
                         ? _selectedSectionTermId
                         : (terms.isNotEmpty ? terms.first.termId : null);
                     return DropdownButtonFormField<String>(
-                      value: terms.isEmpty ? _selectedSectionTerm : effectiveTermId,
+                      value: terms.isEmpty
+                          ? _selectedSectionTerm
+                          : effectiveTermId,
                       decoration: const InputDecoration(
                         labelText: 'الفصل الدراسي',
                         border: OutlineInputBorder(),
                       ),
                       items: terms.isEmpty
                           ? _termOptions
-                              .map(
-                                (term) => DropdownMenuItem<String>(
-                                  value: term,
-                                  child: Text(term),
-                                ),
-                              )
-                              .toList()
+                                .map(
+                                  (term) => DropdownMenuItem<String>(
+                                    value: term,
+                                    child: Text(term),
+                                  ),
+                                )
+                                .toList()
                           : [
                               ...terms.map(
                                 (t) => DropdownMenuItem<String>(
                                   value: t.termId,
-                                  child: Text('${t.termNameAr} (${t.termSlug})'),
+                                  child: Text(
+                                    '${t.termNameAr} (${t.termSlug})',
+                                  ),
                                 ),
                               ),
                             ],
@@ -1535,28 +1627,28 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                   },
                 ),
                 const SizedBox(height: 10),
-        if (_selectedSectionCourseCode != null)
-          Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              'معرف السكشن النهائي: $_selectedSectionCourseCode-$_selectedSectionNumber',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-        const SizedBox(height: 10),
-        Align(
-          alignment: Alignment.centerRight,
-          child: FilledButton(
-            onPressed: _isSavingSection ? null : _saveSection,
-            child: _isSavingSection
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('حفظ السكشن'),
-          ),
-        ),
+                if (_selectedSectionCourseCode != null)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      'معرف السكشن النهائي: $_selectedSectionCourseCode-$_selectedSectionNumber',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton(
+                    onPressed: _isSavingSection ? null : _saveSection,
+                    child: _isSavingSection
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('حفظ السكشن'),
+                  ),
+                ),
               ],
             );
           },
@@ -1584,7 +1676,8 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                   final data = doc.data();
                   final courseCode = (data['courseCode'] ?? doc.id).toString();
                   final courseName = (data['courseName'] ?? '').toString();
-                  final college = (data['college'] ?? data['major'] ?? '').toString();
+                  final college = (data['college'] ?? data['major'] ?? '')
+                      .toString();
                   final level = (data['level'] ?? '').toString();
 
                   return ListTile(
@@ -1626,7 +1719,8 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                   final data = doc.data();
                   final sectionId = (data['sectionId'] ?? doc.id).toString();
                   final courseCode = (data['courseCode'] ?? '').toString();
-                  final college = (data['college'] ?? data['major'] ?? '').toString();
+                  final college = (data['college'] ?? data['major'] ?? '')
+                      .toString();
                   final level = (data['level'] ?? '').toString();
                   final schedule = data['schedule'] as List<dynamic>?;
                   String scheduleSummary = '';
@@ -1635,7 +1729,11 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                     for (final e in schedule) {
                       final m = e is Map ? e : <String, dynamic>{};
                       final dayVal = m['dayOfWeek'];
-                      final day = dayVal is int ? dayVal : (dayVal is num ? dayVal.toInt() : int.tryParse(dayVal.toString()) ?? 0);
+                      final day = dayVal is int
+                          ? dayVal
+                          : (dayVal is num
+                                ? dayVal.toInt()
+                                : int.tryParse(dayVal.toString()) ?? 0);
                       String dayName = '$day';
                       for (final entry in _weekDays) {
                         if (entry.key == day) {
@@ -1646,7 +1744,9 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                       final start = (m['startTime'] ?? '').toString();
                       final end = (m['endTime'] ?? '').toString();
                       final hall = (m['hall'] ?? '').toString();
-                      parts.add('$dayName $start–$end${hall.isNotEmpty ? ' ($hall)' : ''}');
+                      parts.add(
+                        '$dayName $start–$end${hall.isNotEmpty ? ' ($hall)' : ''}',
+                      );
                     }
                     scheduleSummary = parts.join(' · ');
                   } else {
@@ -1665,12 +1765,19 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.calendar_month_outlined, color: Color(0xFF006571)),
+                          icon: const Icon(
+                            Icons.calendar_month_outlined,
+                            color: Color(0xFF006571),
+                          ),
                           tooltip: 'تعديل الجدول',
-                          onPressed: () => _editSectionSchedule(doc.id, schedule),
+                          onPressed: () =>
+                              _editSectionSchedule(doc.id, schedule),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.red,
+                          ),
                           onPressed: () => _deleteSection(doc.id),
                         ),
                       ],
@@ -1794,7 +1901,9 @@ class _AdminEnrollmentTabState extends State<_AdminEnrollmentTab> {
       setState(() {});
       _showMessage('تم تسجيل الطلاب في السكشن بنجاح');
     } on FirebaseException catch (e) {
-      debugPrint('[Admin Save] FAILED path: batch student_section_enrollments (one or more) code: ${e.code} message: ${e.message}');
+      debugPrint(
+        '[Admin Save] FAILED path: batch student_section_enrollments (one or more) code: ${e.code} message: ${e.message}',
+      );
       _showMessage(_firebaseErrorMessage(e));
     } finally {
       if (mounted) {
@@ -1806,12 +1915,16 @@ class _AdminEnrollmentTabState extends State<_AdminEnrollmentTab> {
   Future<void> _removeEnrollment(String enrollmentDocId) async {
     try {
       await AdminAuthService.instance.debugLogAdminState();
-      debugPrint('[Admin Save] path: student_section_enrollments/$enrollmentDocId (delete)');
+      debugPrint(
+        '[Admin Save] path: student_section_enrollments/$enrollmentDocId (delete)',
+      );
       await _enrollmentsRef.doc(enrollmentDocId).delete();
       if (!mounted) return;
       _showMessage('تم حذف تسجيل الطالب من السكشن');
     } on FirebaseException catch (e) {
-      debugPrint('[Admin Save] FAILED path: student_section_enrollments/$enrollmentDocId delete code: ${e.code} message: ${e.message}');
+      debugPrint(
+        '[Admin Save] FAILED path: student_section_enrollments/$enrollmentDocId delete code: ${e.code} message: ${e.message}',
+      );
       _showMessage(_firebaseErrorMessage(e));
     }
   }
@@ -2230,8 +2343,14 @@ class _SectionScheduleDialogState extends State<_SectionScheduleDialog> {
         _dayOfWeek.add(_parseInt(m['dayOfWeek'], 1));
         _startTime.add((m['startTime'] ?? '08:00').toString());
         _endTime.add((m['endTime'] ?? '10:00').toString());
-        _hallControllers.add(TextEditingController(text: (m['hall'] ?? '').toString()));
-        _locationControllers.add(TextEditingController(text: (m['location'] ?? m['مقر'] ?? '').toString()));
+        _hallControllers.add(
+          TextEditingController(text: (m['hall'] ?? '').toString()),
+        );
+        _locationControllers.add(
+          TextEditingController(
+            text: (m['location'] ?? m['مقر'] ?? '').toString(),
+          ),
+        );
       }
     } else {
       _daysPerWeek = 2;
@@ -2295,12 +2414,17 @@ class _SectionScheduleDialogState extends State<_SectionScheduleDialog> {
       var end = _endTime[i];
       final startIdx = _timeSlots.indexOf(_startTime[i]);
       final endIdx = _timeSlots.indexOf(end);
-      if (endIdx <= startIdx) end = _timeSlots.length > startIdx + 1 ? _timeSlots[startIdx + 1] : _startTime[i];
+      if (endIdx <= startIdx)
+        end = _timeSlots.length > startIdx + 1
+            ? _timeSlots[startIdx + 1]
+            : _startTime[i];
       list.add({
         'dayOfWeek': _dayOfWeek[i],
         'startTime': _startTime[i],
         'endTime': end,
-        'hall': _hallControllers[i].text.trim().isEmpty ? 'قاعة' : _hallControllers[i].text.trim(),
+        'hall': _hallControllers[i].text.trim().isEmpty
+            ? 'قاعة'
+            : _hallControllers[i].text.trim(),
         'location': _locationControllers[i].text.trim(),
       });
     }
@@ -2327,9 +2451,7 @@ class _SectionScheduleDialogState extends State<_SectionScheduleDialog> {
               const SizedBox(height: 8),
               DropdownButtonFormField<int>(
                 initialValue: _daysPerWeek,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                ),
+                decoration: const InputDecoration(border: OutlineInputBorder()),
                 items: List.generate(5, (i) => i + 1).map((v) {
                   return DropdownMenuItem<int>(value: v, child: Text('$v يوم'));
                 }).toList(),
@@ -2354,7 +2476,10 @@ class _SectionScheduleDialogState extends State<_SectionScheduleDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('اليوم ${i + 1}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                        Text(
+                          'اليوم ${i + 1}',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
                         const SizedBox(height: 8),
                         Row(
                           children: [
@@ -2364,12 +2489,23 @@ class _SectionScheduleDialogState extends State<_SectionScheduleDialog> {
                                 decoration: const InputDecoration(
                                   labelText: 'اليوم',
                                   border: OutlineInputBorder(),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
                                 ),
                                 isExpanded: true,
-                                items: _weekDays.map((e) => DropdownMenuItem<int>(value: e.key, child: Text(e.value))).toList(),
+                                items: _weekDays
+                                    .map(
+                                      (e) => DropdownMenuItem<int>(
+                                        value: e.key,
+                                        child: Text(e.value),
+                                      ),
+                                    )
+                                    .toList(),
                                 onChanged: (v) {
-                                  if (v != null) setState(() => _dayOfWeek[i] = v);
+                                  if (v != null)
+                                    setState(() => _dayOfWeek[i] = v);
                                 },
                               ),
                             ),
@@ -2380,16 +2516,27 @@ class _SectionScheduleDialogState extends State<_SectionScheduleDialog> {
                                 decoration: const InputDecoration(
                                   labelText: 'بداية',
                                   border: OutlineInputBorder(),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
                                 ),
                                 isExpanded: true,
-                                items: _timeSlots.map((t) => DropdownMenuItem<String>(value: t, child: Text(t))).toList(),
+                                items: _timeSlots
+                                    .map(
+                                      (t) => DropdownMenuItem<String>(
+                                        value: t,
+                                        child: Text(t),
+                                      ),
+                                    )
+                                    .toList(),
                                 onChanged: (v) {
                                   if (v != null) {
                                     setState(() {
                                       _startTime[i] = v;
                                       final opts = _endTimeOptionsFor(v);
-                                      if (opts.isNotEmpty && !opts.contains(_endTime[i])) {
+                                      if (opts.isNotEmpty &&
+                                          !opts.contains(_endTime[i])) {
                                         _endTime[i] = opts.first;
                                       }
                                     });
@@ -2400,22 +2547,38 @@ class _SectionScheduleDialogState extends State<_SectionScheduleDialog> {
                             const SizedBox(width: 8),
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                initialValue: _endTimeOptionsFor(_startTime[i]).contains(_endTime[i])
+                                initialValue:
+                                    _endTimeOptionsFor(
+                                      _startTime[i],
+                                    ).contains(_endTime[i])
                                     ? _endTime[i]
-                                    : (_endTimeOptionsFor(_startTime[i]).isNotEmpty
-                                        ? _endTimeOptionsFor(_startTime[i]).first
-                                        : _endTime[i]),
+                                    : (_endTimeOptionsFor(
+                                            _startTime[i],
+                                          ).isNotEmpty
+                                          ? _endTimeOptionsFor(
+                                              _startTime[i],
+                                            ).first
+                                          : _endTime[i]),
                                 decoration: const InputDecoration(
                                   labelText: 'نهاية',
                                   border: OutlineInputBorder(),
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
                                 ),
                                 isExpanded: true,
                                 items: _endTimeOptionsFor(_startTime[i])
-                                    .map((t) => DropdownMenuItem<String>(value: t, child: Text(t)))
+                                    .map(
+                                      (t) => DropdownMenuItem<String>(
+                                        value: t,
+                                        child: Text(t),
+                                      ),
+                                    )
                                     .toList(),
                                 onChanged: (v) {
-                                  if (v != null) setState(() => _endTime[i] = v);
+                                  if (v != null)
+                                    setState(() => _endTime[i] = v);
                                 },
                               ),
                             ),
@@ -2427,7 +2590,10 @@ class _SectionScheduleDialogState extends State<_SectionScheduleDialog> {
                           decoration: const InputDecoration(
                             labelText: 'القاعة',
                             border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 8,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -2436,7 +2602,10 @@ class _SectionScheduleDialogState extends State<_SectionScheduleDialog> {
                           decoration: const InputDecoration(
                             labelText: 'المقر',
                             border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 8,
+                            ),
                           ),
                         ),
                       ],
@@ -2448,7 +2617,10 @@ class _SectionScheduleDialogState extends State<_SectionScheduleDialog> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('إلغاء')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('إلغاء'),
+          ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(_buildSchedule()),
             child: const Text('حفظ الجدول'),
@@ -2471,20 +2643,169 @@ class _AdminTermsTab extends StatefulWidget {
 }
 
 class _AdminTermsTabState extends State<_AdminTermsTab> {
+  bool _isReplacingCalendar = false;
+
+  List<CalendarException> _officialSecondSemesterCalendarTemplate() {
+    return [
+      CalendarException(
+        exceptionId: 'OFFICIAL_2026_S2_DELAY_START',
+        titleAr: 'تأجيل الدراسة',
+        titleEn: 'Study deferred',
+        startDate: DateTime(2026, 1, 18),
+        endDate: DateTime(2026, 1, 24),
+        type: CalendarExceptionType.break_,
+        excludeFromAttendance: true,
+        notes: 'من التقويم الجامعي الرسمي 2025/2026 (الفصل الثاني)',
+      ),
+      CalendarException(
+        exceptionId: 'OFFICIAL_2026_S2_FOUNDATION_DAY',
+        titleAr: 'إجازة يوم التأسيس',
+        titleEn: 'Founding Day holiday',
+        startDate: DateTime(2026, 2, 22),
+        endDate: DateTime(2026, 2, 22),
+        type: CalendarExceptionType.holiday,
+        excludeFromAttendance: true,
+        notes: 'من التقويم الجامعي الرسمي 2025/2026 (الفصل الثاني)',
+      ),
+      CalendarException(
+        exceptionId: 'OFFICIAL_2026_S2_EID_FITR',
+        titleAr: 'إجازة عيد الفطر',
+        titleEn: 'Eid al-Fitr holiday',
+        startDate: DateTime(2026, 3, 5),
+        endDate: DateTime(2026, 3, 28),
+        type: CalendarExceptionType.holiday,
+        excludeFromAttendance: true,
+        notes: 'تبدأ من نهاية يوم الخميس حسب التقويم الرسمي',
+      ),
+      CalendarException(
+        exceptionId: 'OFFICIAL_2026_S2_MIDTERMS',
+        titleAr: 'الاختبارات النصفية',
+        titleEn: 'Midterm exams',
+        startDate: DateTime(2026, 4, 5),
+        endDate: DateTime(2026, 4, 16),
+        type: CalendarExceptionType.suspension,
+        excludeFromAttendance: true,
+        notes: 'من التقويم الجامعي الرسمي 2025/2026 (الفصل الثاني)',
+      ),
+      CalendarException(
+        exceptionId: 'OFFICIAL_2026_S2_EID_ADHA',
+        titleAr: 'إجازة عيد الأضحى',
+        titleEn: 'Eid al-Adha holiday',
+        startDate: DateTime(2026, 5, 14),
+        endDate: DateTime(2026, 6, 1),
+        type: CalendarExceptionType.holiday,
+        excludeFromAttendance: true,
+        notes: 'تبدأ من نهاية يوم الخميس حسب التقويم الرسمي',
+      ),
+      CalendarException(
+        exceptionId: 'OFFICIAL_2026_S2_FINALS',
+        titleAr: 'الاختبارات النهائية',
+        titleEn: 'Final exams',
+        startDate: DateTime(2026, 6, 14),
+        endDate: DateTime(2026, 6, 25),
+        type: CalendarExceptionType.suspension,
+        excludeFromAttendance: true,
+        notes: 'من التقويم الجامعي الرسمي 2025/2026 (الفصل الثاني)',
+      ),
+      CalendarException(
+        exceptionId: 'OFFICIAL_2026_S2_SUMMER_BREAK',
+        titleAr: 'إجازة صيفية للعام الدراسي',
+        titleEn: 'Academic year summer break',
+        startDate: DateTime(2026, 6, 25),
+        endDate: DateTime(2026, 8, 22),
+        type: CalendarExceptionType.break_,
+        excludeFromAttendance: true,
+        notes: 'حتى ما قبل بداية العام الجامعي التالي (2026-08-23)',
+      ),
+    ];
+  }
+
+  Future<void> _replaceCalendarWithOfficialTemplate(AcademicTerm term) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('استبدال كامل للتقويم'),
+          content: Text(
+            'سيتم حذف كل استثناءات التقويم الحالية للفصل "${term.termNameAr}" '
+            'ثم تعبئة التقويم الرسمي 2025/2026 (الفصل الثاني).',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('استبدال'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isReplacingCalendar = true);
+    try {
+      await AdminAuthService.instance.debugLogAdminState();
+      final template = _officialSecondSemesterCalendarTemplate();
+      debugPrint(
+        '[Admin Save] path: academic_terms/${term.termId}/calendar_exceptions/* (replace from official template)',
+      );
+      await AcademicTermRepository.instance.replaceCalendarExceptions(
+        term.termId,
+        template,
+      );
+      await AcademicTermRepository.instance.syncCurrentCalendarToTerm(
+        term.termId,
+      );
+      if (!mounted) return;
+      _showMessage('تم استبدال التقويم بالكامل من الصورة الرسمية');
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+      debugPrint(
+        '[Admin Save] FAILED path: academic_terms/${term.termId}/calendar_exceptions/* replace code: ${e.code} message: ${e.message}',
+      );
+      _showMessage(_firebaseErrorMessage(e));
+    } catch (e) {
+      if (!mounted) return;
+      debugPrint(
+        '[Admin Save] FAILED path: academic_terms/${term.termId}/calendar_exceptions/* replace error: $e',
+      );
+      _showMessage('خطأ أثناء استبدال التقويم: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isReplacingCalendar = false);
+      }
+    }
+  }
+
   void _showMessage(String text) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   Future<void> _addOrEditTerm([AcademicTerm? existing]) async {
-    final termIdController = TextEditingController(text: existing?.termId ?? '');
-    final nameArController = TextEditingController(text: existing?.termNameAr ?? '');
-    final nameEnController = TextEditingController(text: existing?.termNameEn ?? '');
-    final yearController = TextEditingController(text: existing?.academicYear ?? '');
-    final officialWeeksController = TextEditingController(text: '${existing?.officialWeeksCount ?? 14}');
+    final termIdController = TextEditingController(
+      text: existing?.termId ?? '',
+    );
+    final nameArController = TextEditingController(
+      text: existing?.termNameAr ?? '',
+    );
+    final nameEnController = TextEditingController(
+      text: existing?.termNameEn ?? '',
+    );
+    final yearController = TextEditingController(
+      text: existing?.academicYear ?? '',
+    );
+    final officialWeeksController = TextEditingController(
+      text: '${existing?.officialWeeksCount ?? 14}',
+    );
     var semesterType = existing?.semesterType ?? SemesterType.first;
     var officialWeeks = existing?.officialWeeksCount ?? 14;
     var startDate = existing?.startDate ?? DateTime.now();
-    var endDate = existing?.endDate ?? DateTime.now().add(const Duration(days: 120));
+    var endDate =
+        existing?.endDate ?? DateTime.now().add(const Duration(days: 120));
 
     await showDialog<void>(
       context: context,
@@ -2493,7 +2814,9 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: Text(existing == null ? 'إضافة فصل دراسي' : 'تعديل الفصل الدراسي'),
+              title: Text(
+                existing == null ? 'إضافة فصل دراسي' : 'تعديل الفصل الدراسي',
+              ),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -2502,22 +2825,30 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
                     if (existing == null)
                       TextField(
                         controller: termIdController,
-                        decoration: const InputDecoration(labelText: 'معرف الفصل (مثال: 2026-1)'),
+                        decoration: const InputDecoration(
+                          labelText: 'معرف الفصل (مثال: 2026-1)',
+                        ),
                       ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: nameArController,
-                      decoration: const InputDecoration(labelText: 'اسم الفصل بالعربي'),
+                      decoration: const InputDecoration(
+                        labelText: 'اسم الفصل بالعربي',
+                      ),
                     ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: nameEnController,
-                      decoration: const InputDecoration(labelText: 'اسم الفصل بالإنجليزي'),
+                      decoration: const InputDecoration(
+                        labelText: 'اسم الفصل بالإنجليزي',
+                      ),
                     ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: yearController,
-                      decoration: const InputDecoration(labelText: 'السنة الدراسية (مثال: 2026)'),
+                      decoration: const InputDecoration(
+                        labelText: 'السنة الدراسية (مثال: 2026)',
+                      ),
                       keyboardType: TextInputType.number,
                     ),
                     const SizedBox(height: 8),
@@ -2525,22 +2856,39 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
                       value: semesterType,
                       decoration: const InputDecoration(labelText: 'نوع الفصل'),
                       items: const [
-                        DropdownMenuItem(value: SemesterType.first, child: Text('الأول')),
-                        DropdownMenuItem(value: SemesterType.second, child: Text('الثاني')),
-                        DropdownMenuItem(value: SemesterType.summer, child: Text('الصيفي')),
+                        DropdownMenuItem(
+                          value: SemesterType.first,
+                          child: Text('الأول'),
+                        ),
+                        DropdownMenuItem(
+                          value: SemesterType.second,
+                          child: Text('الثاني'),
+                        ),
+                        DropdownMenuItem(
+                          value: SemesterType.summer,
+                          child: Text('الصيفي'),
+                        ),
                       ],
-                      onChanged: (v) => setDialogState(() => semesterType = v ?? SemesterType.first),
+                      onChanged: (v) => setDialogState(
+                        () => semesterType = v ?? SemesterType.first,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: officialWeeksController,
-                      decoration: const InputDecoration(labelText: 'عدد الأسابيع الرسمية'),
+                      decoration: const InputDecoration(
+                        labelText: 'عدد الأسابيع الرسمية',
+                      ),
                       keyboardType: TextInputType.number,
-                      onChanged: (v) => setDialogState(() => officialWeeks = int.tryParse(v) ?? officialWeeks),
+                      onChanged: (v) => setDialogState(
+                        () => officialWeeks = int.tryParse(v) ?? officialWeeks,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     ListTile(
-                      title: Text('تاريخ البداية: ${startDate.toString().substring(0, 10)}'),
+                      title: Text(
+                        'تاريخ البداية: ${startDate.toString().substring(0, 10)}',
+                      ),
                       trailing: const Icon(Icons.calendar_today),
                       onTap: () async {
                         final d = await showDatePicker(
@@ -2553,7 +2901,9 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
                       },
                     ),
                     ListTile(
-                      title: Text('تاريخ النهاية: ${endDate.toString().substring(0, 10)}'),
+                      title: Text(
+                        'تاريخ النهاية: ${endDate.toString().substring(0, 10)}',
+                      ),
                       trailing: const Icon(Icons.calendar_today),
                       onTap: () async {
                         final d = await showDatePicker(
@@ -2569,10 +2919,15 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('إلغاء')),
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('إلغاء'),
+                ),
                 FilledButton(
                   onPressed: () async {
-                    final termId = (existing?.termId ?? termIdController.text.trim()).trim();
+                    final termId =
+                        (existing?.termId ?? termIdController.text.trim())
+                            .trim();
                     final nameAr = nameArController.text.trim();
                     final nameEn = nameEnController.text.trim();
                     final year = yearController.text.trim();
@@ -2584,7 +2939,9 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
                       _showMessage('أدخلي معرف الفصل');
                       return;
                     }
-                    final weeksCount = int.tryParse(officialWeeksController.text.trim()) ?? officialWeeks;
+                    final weeksCount =
+                        int.tryParse(officialWeeksController.text.trim()) ??
+                        officialWeeks;
                     final term = AcademicTerm(
                       termId: termId,
                       termNameAr: nameAr,
@@ -2592,7 +2949,8 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
                       academicYear: year,
                       semesterType: semesterType,
                       officialWeeksCount: weeksCount.clamp(1, 53),
-                      effectiveTeachingWeeks: existing?.effectiveTeachingWeeks ?? 0,
+                      effectiveTeachingWeeks:
+                          existing?.effectiveTeachingWeeks ?? 0,
                       startDate: startDate,
                       endDate: endDate,
                       isActive: existing?.isActive ?? true,
@@ -2606,13 +2964,17 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
                         await AcademicTermRepository.instance.createTerm(term);
                         _showMessage('تم إضافة الفصل الدراسي');
                       } else {
-                        debugPrint('[Admin Save] path: academic_terms/${term.termId} (update)');
+                        debugPrint(
+                          '[Admin Save] path: academic_terms/${term.termId} (update)',
+                        );
                         await AcademicTermRepository.instance.updateTerm(term);
                         _showMessage('تم تحديث الفصل الدراسي');
                       }
                       if (ctx.mounted) Navigator.of(ctx).pop();
                     } catch (e) {
-                      debugPrint('[Admin Save] FAILED path: academic_terms/$termId error: $e');
+                      debugPrint(
+                        '[Admin Save] FAILED path: academic_terms/$termId error: $e',
+                      );
                       _showMessage('خطأ: $e');
                     }
                   },
@@ -2627,7 +2989,9 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
   }
 
   Future<void> _manageWeeks(AcademicTerm term) async {
-    List<TermWeek> weeks = await AcademicTermRepository.instance.getWeeks(term.termId);
+    List<TermWeek> weeks = await AcademicTermRepository.instance.getWeeks(
+      term.termId,
+    );
     if (weeks.isEmpty) {
       weeks = List.generate(
         term.officialWeeksCount,
@@ -2661,18 +3025,26 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
                     const SizedBox(height: 12),
                     ...weeks.map((w) {
                       return ListTile(
-                        title: Text('أسبوع رسمي ${w.officialWeekNumber} ${w.isBreak ? "(إجازة)" : "تعليمي → فعلي ${w.effectiveWeekNumber}"}'),
+                        title: Text(
+                          'أسبوع رسمي ${w.officialWeekNumber} ${w.isBreak ? "(إجازة)" : "تعليمي → فعلي ${w.effectiveWeekNumber}"}',
+                        ),
                         trailing: Switch(
                           value: !w.isBreak,
                           onChanged: (v) {
                             setDialogState(() {
-                              final idx = weeks.indexWhere((x) => x.officialWeekNumber == w.officialWeekNumber);
+                              final idx = weeks.indexWhere(
+                                (x) =>
+                                    x.officialWeekNumber ==
+                                    w.officialWeekNumber,
+                              );
                               if (idx >= 0) {
                                 weeks[idx] = TermWeek(
                                   weekId: w.weekId,
                                   officialWeekNumber: w.officialWeekNumber,
                                   effectiveWeekNumber: w.effectiveWeekNumber,
-                                  status: v ? WeekStatus.instructional : WeekStatus.break_,
+                                  status: v
+                                      ? WeekStatus.instructional
+                                      : WeekStatus.break_,
                                   countInAttendance: v,
                                   startDate: w.startDate,
                                   endDate: w.endDate,
@@ -2690,18 +3062,28 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('إلغاء')),
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('إلغاء'),
+                ),
                 FilledButton(
                   onPressed: () async {
                     try {
                       await AdminAuthService.instance.debugLogAdminState();
-                      debugPrint('[Admin Save] path: academic_terms/${term.termId}/weeks/* (batch) + academic_terms/${term.termId} (update effectiveTeachingWeeks)');
-                      await AcademicTermRepository.instance.saveWeeks(term.termId, weeks);
+                      debugPrint(
+                        '[Admin Save] path: academic_terms/${term.termId}/weeks/* (batch) + academic_terms/${term.termId} (update effectiveTeachingWeeks)',
+                      );
+                      await AcademicTermRepository.instance.saveWeeks(
+                        term.termId,
+                        weeks,
+                      );
                       _showMessage('تم حفظ الأسابيع');
                       if (ctx.mounted) Navigator.of(ctx).pop();
                       setState(() {});
                     } catch (e) {
-                      debugPrint('[Admin Save] FAILED path: academic_terms/${term.termId}/weeks error: $e');
+                      debugPrint(
+                        '[Admin Save] FAILED path: academic_terms/${term.termId}/weeks error: $e',
+                      );
                       _showMessage('خطأ: $e');
                     }
                   },
@@ -2746,7 +3128,10 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
                       Expanded(
                         child: Text(
                           'استثناءات التقويم: ${term.termNameAr}',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                       IconButton(
@@ -2759,7 +3144,8 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
                 const Divider(height: 1),
                 Flexible(
                   child: StreamBuilder<List<CalendarException>>(
-                    stream: AcademicTermRepository.instance.watchCalendarExceptions(term.termId),
+                    stream: AcademicTermRepository.instance
+                        .watchCalendarExceptions(term.termId),
                     builder: (context, snap) {
                       final exceptions = snap.data ?? [];
                       return ListView.builder(
@@ -2769,17 +3155,54 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
                           if (index == 0) {
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 8),
-                              child: FilledButton.icon(
-                                onPressed: () => _addOrEditCalendarException(ctx, term.termId),
-                                icon: const Icon(Icons.add),
-                                label: const Text('إضافة استثناء (تاريخ أو نطاق)'),
+                              child: Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  FilledButton.icon(
+                                    onPressed: () =>
+                                        _addOrEditCalendarException(
+                                          ctx,
+                                          term.termId,
+                                        ),
+                                    icon: const Icon(Icons.add),
+                                    label: const Text(
+                                      'إضافة استثناء (تاريخ أو نطاق)',
+                                    ),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: _isReplacingCalendar
+                                        ? null
+                                        : () =>
+                                              _replaceCalendarWithOfficialTemplate(
+                                                term,
+                                              ),
+                                    icon: _isReplacingCalendar
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Icon(Icons.auto_fix_high),
+                                    label: const Text(
+                                      'تعبئة من التقويم الرسمي 2025/2026 (ف2)',
+                                    ),
+                                  ),
+                                ],
                               ),
                             );
                           }
                           final ex = exceptions[index - 1];
-                          final startStr = ex.startDate.toString().substring(0, 10);
+                          final startStr = ex.startDate.toString().substring(
+                            0,
+                            10,
+                          );
                           final endStr = ex.endDate.toString().substring(0, 10);
-                          final rangeStr = startStr == endStr ? startStr : '$startStr → $endStr';
+                          final rangeStr = startStr == endStr
+                              ? startStr
+                              : '$startStr → $endStr';
                           return Card(
                             margin: const EdgeInsets.only(bottom: 6),
                             child: ListTile(
@@ -2792,28 +3215,58 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
                                 children: [
                                   if (ex.excludeFromAttendance)
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
                                       decoration: BoxDecoration(
                                         color: Colors.orange.shade100,
                                         borderRadius: BorderRadius.circular(8),
                                       ),
-                                      child: const Text('يستبعد من الحضور', style: TextStyle(fontSize: 11)),
+                                      child: const Text(
+                                        'يستبعد من الحضور',
+                                        style: TextStyle(fontSize: 11),
+                                      ),
                                     ),
                                   IconButton(
                                     icon: const Icon(Icons.edit, size: 20),
-                                    onPressed: () => _addOrEditCalendarException(ctx, term.termId, ex),
+                                    onPressed: () =>
+                                        _addOrEditCalendarException(
+                                          ctx,
+                                          term.termId,
+                                          ex,
+                                        ),
                                   ),
                                   IconButton(
-                                    icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                                    icon: const Icon(
+                                      Icons.delete_outline,
+                                      size: 20,
+                                      color: Colors.red,
+                                    ),
                                     onPressed: () async {
                                       try {
-                                        await AdminAuthService.instance.debugLogAdminState();
-                                        debugPrint('[Admin Save] path: academic_terms/${term.termId}/calendar_exceptions/${ex.exceptionId} (delete)');
-                                        await AcademicTermRepository.instance.deleteCalendarException(term.termId, ex.exceptionId);
-                                        if (ctx.mounted) _showMessage('تم حذف الاستثناء');
+                                        await AdminAuthService.instance
+                                            .debugLogAdminState();
+                                        debugPrint(
+                                          '[Admin Save] path: academic_terms/${term.termId}/calendar_exceptions/${ex.exceptionId} (delete)',
+                                        );
+                                        await AcademicTermRepository.instance
+                                            .deleteCalendarException(
+                                              term.termId,
+                                              ex.exceptionId,
+                                            );
+                                        await AcademicTermRepository.instance
+                                            .syncCurrentCalendarToTerm(
+                                              term.termId,
+                                            );
+                                        if (ctx.mounted)
+                                          _showMessage('تم حذف الاستثناء');
                                       } catch (e) {
-                                        debugPrint('[Admin Save] FAILED path: academic_terms/${term.termId}/calendar_exceptions/${ex.exceptionId} delete error: $e');
-                                        if (ctx.mounted) _showMessage('خطأ: $e');
+                                        debugPrint(
+                                          '[Admin Save] FAILED path: academic_terms/${term.termId}/calendar_exceptions/${ex.exceptionId} delete error: $e',
+                                        );
+                                        if (ctx.mounted)
+                                          _showMessage('خطأ: $e');
                                       }
                                     },
                                   ),
@@ -2834,13 +3287,24 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
     );
   }
 
-  Future<void> _addOrEditCalendarException(BuildContext context, String termId, [CalendarException? existing]) async {
-    final titleArController = TextEditingController(text: existing?.titleAr ?? '');
-    final titleEnController = TextEditingController(text: existing?.titleEn ?? '');
+  Future<void> _addOrEditCalendarException(
+    BuildContext context,
+    String termId, [
+    CalendarException? existing,
+  ]) async {
+    final normalizedTermId = termId.trim();
+    final titleArController = TextEditingController(
+      text: existing?.titleAr ?? '',
+    );
+    final titleEnController = TextEditingController(
+      text: existing?.titleEn ?? '',
+    );
     var startDate = existing?.startDate ?? DateTime.now();
     var endDate = existing?.endDate ?? DateTime.now();
     var type = existing?.type ?? CalendarExceptionType.holiday;
-    var excludeFromAttendance = existing?.excludeFromAttendance ?? true;
+    var excludeFromAttendance =
+        existing?.excludeFromAttendance ??
+        (type != CalendarExceptionType.other);
     final notesController = TextEditingController(text: existing?.notes ?? '');
 
     await showDialog<void>(
@@ -2850,7 +3314,11 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: Text(existing == null ? 'إضافة استثناء تقويم' : 'تعديل استثناء التقويم'),
+              title: Text(
+                existing == null
+                    ? 'إضافة استثناء تقويم'
+                    : 'تعديل استثناء التقويم',
+              ),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -2858,28 +3326,48 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
                   children: [
                     TextField(
                       controller: titleArController,
-                      decoration: const InputDecoration(labelText: 'العنوان (عربي)'),
+                      decoration: const InputDecoration(
+                        labelText: 'العنوان (عربي)',
+                      ),
                     ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: titleEnController,
-                      decoration: const InputDecoration(labelText: 'العنوان (إنجليزي)'),
+                      decoration: const InputDecoration(
+                        labelText: 'العنوان (إنجليزي)',
+                      ),
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<CalendarExceptionType>(
                       value: type,
                       decoration: const InputDecoration(labelText: 'النوع'),
                       items: const [
-                        DropdownMenuItem(value: CalendarExceptionType.holiday, child: Text('عطلة')),
-                        DropdownMenuItem(value: CalendarExceptionType.break_, child: Text('إجازة')),
-                        DropdownMenuItem(value: CalendarExceptionType.suspension, child: Text('تعليق')),
-                        DropdownMenuItem(value: CalendarExceptionType.other, child: Text('أخرى')),
+                        DropdownMenuItem(
+                          value: CalendarExceptionType.holiday,
+                          child: Text('عطلة'),
+                        ),
+                        DropdownMenuItem(
+                          value: CalendarExceptionType.break_,
+                          child: Text('إجازة'),
+                        ),
+                        DropdownMenuItem(
+                          value: CalendarExceptionType.suspension,
+                          child: Text('تعليق'),
+                        ),
+                        DropdownMenuItem(
+                          value: CalendarExceptionType.other,
+                          child: Text('أخرى'),
+                        ),
                       ],
-                      onChanged: (v) => setDialogState(() => type = v ?? CalendarExceptionType.holiday),
+                      onChanged: (v) => setDialogState(
+                        () => type = v ?? CalendarExceptionType.holiday,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     ListTile(
-                      title: Text('من: ${startDate.toString().substring(0, 10)}'),
+                      title: Text(
+                        'من: ${startDate.toString().substring(0, 10)}',
+                      ),
                       trailing: const Icon(Icons.calendar_today),
                       onTap: () async {
                         final d = await showDatePicker(
@@ -2888,11 +3376,17 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
                           firstDate: DateTime(2020),
                           lastDate: DateTime(2030),
                         );
-                        if (d != null) setDialogState(() { startDate = d; if (endDate.isBefore(d)) endDate = d; });
+                        if (d != null)
+                          setDialogState(() {
+                            startDate = d;
+                            if (endDate.isBefore(d)) endDate = d;
+                          });
                       },
                     ),
                     ListTile(
-                      title: Text('إلى: ${endDate.toString().substring(0, 10)}'),
+                      title: Text(
+                        'إلى: ${endDate.toString().substring(0, 10)}',
+                      ),
                       trailing: const Icon(Icons.calendar_today),
                       onTap: () async {
                         final d = await showDatePicker(
@@ -2906,29 +3400,46 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
                     ),
                     const SizedBox(height: 8),
                     CheckboxListTile(
-                      title: const Text('استبعاد من الحضور (لا يُحسب في نسبة الغياب)'),
+                      title: const Text(
+                        'استبعاد من الحضور (لا يُحسب في نسبة الغياب)',
+                      ),
                       value: excludeFromAttendance,
-                      onChanged: (v) => setDialogState(() => excludeFromAttendance = v ?? true),
+                      onChanged: (v) => setDialogState(
+                        () => excludeFromAttendance = v ?? true,
+                      ),
                     ),
                     TextField(
                       controller: notesController,
-                      decoration: const InputDecoration(labelText: 'ملاحظات (اختياري)'),
+                      decoration: const InputDecoration(
+                        labelText: 'ملاحظات (اختياري)',
+                      ),
                       maxLines: 2,
                     ),
                   ],
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('إلغاء')),
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('إلغاء'),
+                ),
                 FilledButton(
                   onPressed: () async {
+                    if (normalizedTermId.isEmpty) {
+                      _showMessage(
+                        'معرف الفصل غير صالح. تأكدي أن وثيقة الفصل تحتوي termId صحيح.',
+                      );
+                      return;
+                    }
                     final titleAr = titleArController.text.trim();
                     if (titleAr.isEmpty) {
                       _showMessage('أدخلي العنوان بالعربي');
                       return;
                     }
                     if (endDate.isBefore(startDate)) {
-                      _showMessage('تاريخ النهاية يجب أن يكون بعد أو يساوي تاريخ البداية');
+                      _showMessage(
+                        'تاريخ النهاية يجب أن يكون بعد أو يساوي تاريخ البداية',
+                      );
                       return;
                     }
                     final exception = CalendarException(
@@ -2939,22 +3450,40 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
                       endDate: endDate,
                       type: type,
                       excludeFromAttendance: excludeFromAttendance,
-                      notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
+                      notes: notesController.text.trim().isEmpty
+                          ? null
+                          : notesController.text.trim(),
                     );
                     try {
                       await AdminAuthService.instance.debugLogAdminState();
                       final exId = existing?.exceptionId ?? '(new)';
-                      debugPrint('[Admin Save] path: academic_terms/$termId/calendar_exceptions/$exId');
+                      debugPrint(
+                        '[Admin Save] path: academic_terms/$normalizedTermId/calendar_exceptions/$exId',
+                      );
                       if (existing == null) {
-                        await AcademicTermRepository.instance.addCalendarException(termId, exception);
+                        await AcademicTermRepository.instance
+                            .addCalendarException(normalizedTermId, exception);
                         _showMessage('تم إضافة الاستثناء');
                       } else {
-                        await AcademicTermRepository.instance.updateCalendarException(termId, exception);
+                        await AcademicTermRepository.instance
+                            .updateCalendarException(
+                              normalizedTermId,
+                              exception,
+                            );
                         _showMessage('تم تحديث الاستثناء');
                       }
+                      await AcademicTermRepository.instance
+                          .syncCurrentCalendarToTerm(normalizedTermId);
                       if (ctx.mounted) Navigator.of(ctx).pop();
+                    } on FirebaseException catch (e) {
+                      debugPrint(
+                        '[Admin Save] FAILED path: academic_terms/$normalizedTermId/calendar_exceptions code: ${e.code} message: ${e.message}',
+                      );
+                      _showMessage(_firebaseErrorMessage(e));
                     } catch (e) {
-                      debugPrint('[Admin Save] FAILED path: academic_terms/$termId/calendar_exceptions error: $e');
+                      debugPrint(
+                        '[Admin Save] FAILED path: academic_terms/$normalizedTermId/calendar_exceptions error: $e',
+                      );
                       _showMessage('خطأ: $e');
                     }
                   },
@@ -3006,15 +3535,29 @@ class _AdminTermsTabState extends State<_AdminTermsTab> {
                         onPressed: () => _manageCalendarExceptions(term),
                       ),
                       IconButton(
-                        icon: Icon(term.isActive ? Icons.toggle_on : Icons.toggle_off),
+                        icon: Icon(
+                          term.isActive ? Icons.toggle_on : Icons.toggle_off,
+                        ),
                         onPressed: () async {
                           try {
-                            await AdminAuthService.instance.debugLogAdminState();
-                            debugPrint('[Admin Save] path: academic_terms/${term.termId} (update isActive)');
-                            await AcademicTermRepository.instance.setTermActive(term.termId, !term.isActive);
-                            _showMessage(term.isActive ? 'تم إلغاء تفعيل الفصل' : 'تم تفعيل الفصل');
+                            await AdminAuthService.instance
+                                .debugLogAdminState();
+                            debugPrint(
+                              '[Admin Save] path: academic_terms/${term.termId} (update isActive)',
+                            );
+                            await AcademicTermRepository.instance.setTermActive(
+                              term.termId,
+                              !term.isActive,
+                            );
+                            _showMessage(
+                              term.isActive
+                                  ? 'تم إلغاء تفعيل الفصل'
+                                  : 'تم تفعيل الفصل',
+                            );
                           } catch (e) {
-                            debugPrint('[Admin Save] FAILED path: academic_terms/${term.termId} setTermActive error: $e');
+                            debugPrint(
+                              '[Admin Save] FAILED path: academic_terms/${term.termId} setTermActive error: $e',
+                            );
                             _showMessage('خطأ: $e');
                           }
                         },

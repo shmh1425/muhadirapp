@@ -6,10 +6,12 @@ import '../../screens/lecturer/lecturer_language.dart';
 class LecturerHomeHeader extends StatelessWidget {
   final String selectedFilter;
   final String? lecturerName;
+  final DateTime referenceDateTime;
 
   const LecturerHomeHeader({
     super.key,
     required this.selectedFilter,
+    required this.referenceDateTime,
     this.lecturerName,
   });
 
@@ -118,7 +120,7 @@ class LecturerHomeHeader extends StatelessWidget {
   }
 
   DateTime _getSelectedDate() {
-    final now = DateTime.now();
+    final now = referenceDateTime;
     switch (selectedFilter) {
       case 'غدًا':
         return now.add(const Duration(days: 1));
@@ -128,10 +130,10 @@ class LecturerHomeHeader extends StatelessWidget {
   }
 
   String _getGreeting(LecturerLanguage language) {
+    final hour = referenceDateTime.hour;
     if (language == LecturerLanguage.arabic) {
-      return date_utils.AppDateUtils.getGreeting();
+      return hour < 12 ? 'صباح الخير' : 'مساء الخير';
     }
-    final hour = DateTime.now().hour;
     return hour < 12 ? 'Good Morning' : 'Good Evening';
   }
 

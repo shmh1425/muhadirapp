@@ -99,6 +99,37 @@ class LectureCard extends StatelessWidget {
               ),
             ],
           ),
+          if (onTap != null) ...[
+            const SizedBox(height: 12),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF27A2A9), Color(0xFF006571)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  child: Text(
+                    tr('حضر', 'Attend'),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      fontFamily: 'Cairo',
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

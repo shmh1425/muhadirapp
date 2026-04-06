@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../models/lecturer/lecture_item.dart';
+import '../../services/lecturer/lecture_repository.dart';
+import '../../services/lecturer/calendar_sync_service.dart';
 import '../../services/lecturer/lecturer_sections_service.dart';
 import '../../utils/shared/time_utils.dart';
 import 'lecturer_language.dart';
@@ -19,8 +22,11 @@ class LecturerQrScreen extends StatefulWidget {
 
 class _LecturerQrScreenState extends State<LecturerQrScreen> {
   List<LectureItem> _allLectures = [];
+  final LectureRepository _calendarRepository = LectureRepository();
+  StreamSubscription<void>? _calendarSyncSub;
   late String _qrData;
   LectureItem? _activeLecture;
+  bool _isSyncRefreshing = false;
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
@@ -28,12 +34,23 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
   void initState() {
     super.initState();
     _qrData = '';
+    _calendarSyncSub = CalendarSyncService.instance.watchChanges().listen(
+      (_) => _handleRealtimeCalendarChange(),
+    );
     _loadLectures();
+  }
+
+  @override
+  void dispose() {
+    _calendarSyncSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadLectures() async {
     try {
-      final list = await LecturerSectionsService.instance.getLecturesForCurrentLecturer();
+      await _calendarRepository.refreshAcademicCalendar();
+      final list = await LecturerSectionsService.instance
+          .getLecturesForCurrentLecturer();
       if (!mounted) return;
       setState(() {
         _allLectures = list;
@@ -42,6 +59,22 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _syncLectureAndCode(generateCode: true));
+    }
+  }
+
+  Future<void> _handleRealtimeCalendarChange() async {
+    if (!mounted || _isSyncRefreshing) return;
+    _isSyncRefreshing = true;
+    try {
+      await _calendarRepository.refreshAcademicCalendar();
+      if (!mounted) return;
+      setState(() {
+        _syncLectureAndCode(generateCode: true);
+      });
+    } catch (_) {
+      // Ignore transient realtime listener errors.
+    } finally {
+      _isSyncRefreshing = false;
     }
   }
 
@@ -59,7 +92,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
   LectureItem? _resolveCurrentLecture() {
     if (widget.lecture != null) return widget.lecture;
 
-    final now = DateTime.now();
+    final now = _calendarRepository.currentDateTime;
     final dayLectures = TimeUtils.sortLecturesByTime(
       _allLectures.where((l) => l.dayOfWeek == now.weekday).toList(),
       (l) => l.startTime,

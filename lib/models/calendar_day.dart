@@ -8,6 +8,7 @@ class CalendarDay {
   final int hijriYear; // السنة الهجرية
   final int lecturesCount; // عدد المحاضرات
   final DayStatus status; // حالة اليوم
+  final String? holidayType; // نوع العطلة من Firebase (holiday/break/...)
 
   CalendarDay({
     required this.date,
@@ -16,6 +17,7 @@ class CalendarDay {
     required this.hijriYear,
     this.lecturesCount = 0,
     required this.status,
+    this.holidayType,
   });
 
   /// التحقق إذا كان اليوم هو اليوم الحالي
@@ -44,7 +46,7 @@ extension DayStatusExtension on DayStatus {
       case DayStatus.none:
         return Colors.transparent;
       case DayStatus.holiday:
-        return const Color(0xFFD0D0D0); // رمادي مميز للعطلة (أغمق من يوم بدون محاضرات)
+        return const Color(0xFFFFF4E0); // لون مخصص للعطلة المسجلة من Firebase
       case DayStatus.futureLocked:
         return const Color(0xFFFFE5E5); // أحمر فاتح
       case DayStatus.viewOnly:
@@ -61,7 +63,7 @@ extension DayStatusExtension on DayStatus {
       case DayStatus.none:
         return 'لا توجد محاضرات';
       case DayStatus.holiday:
-        return 'عطلة رسمية';
+        return 'عطلة مسجلة';
       case DayStatus.futureLocked:
         return 'لا يمكن فتح هذا التاريخ الآن';
       case DayStatus.viewOnly:
@@ -73,4 +75,3 @@ extension DayStatusExtension on DayStatus {
     }
   }
 }
-

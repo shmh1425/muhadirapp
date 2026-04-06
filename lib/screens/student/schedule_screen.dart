@@ -8,11 +8,151 @@ import 'notifications_screen.dart';
 import '../../services/student_auth_service.dart';
 import '../../shared/widgets/chat_fab.dart';
 
+DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
+
+DateTime? _parseFirestoreDate(dynamic value) {
+  if (value is Timestamp) return value.toDate().toLocal();
+  if (value is DateTime) return value.isUtc ? value.toLocal() : value;
+  if (value is String) {
+    final parsed = DateTime.tryParse(value.trim());
+    return parsed?.toLocal();
+  }
+  if (value is int) {
+    if (value <= 0) return null;
+    return DateTime.fromMillisecondsSinceEpoch(value).toLocal();
+  }
+  if (value is num) {
+    final ms = value.toInt();
+    if (ms <= 0) return null;
+    return DateTime.fromMillisecondsSinceEpoch(ms).toLocal();
+  }
+  return null;
+}
+
+bool _isDateInRange({
+  required DateTime date,
+  required DateTime start,
+  required DateTime end,
+}) {
+  final d = _dateOnly(date);
+  final s = _dateOnly(start);
+  final e = _dateOnly(end);
+  return (d.isAfter(s) || d.isAtSameMomentAs(s)) &&
+      (d.isBefore(e) || d.isAtSameMomentAs(e));
+}
+
+bool _isDateWithinTermData(Map<String, dynamic> data, DateTime date) {
+  final start = _parseFirestoreDate(
+    data['startDate'] ?? data['semesterStartDate'],
+  );
+  final end = _parseFirestoreDate(data['endDate'] ?? data['semesterEndDate']);
+  if (start == null || end == null) return false;
+  return _isDateInRange(date: date, start: start, end: end);
+}
+
+Future<String?> _resolveStudentTermIdForDate(DateTime date) async {
+  final firestore = FirebaseFirestore.instance;
+  String? preferredTermId;
+
+  try {
+    final currentDoc = await firestore
+        .collection('academic_calendar')
+        .doc('current')
+        .get();
+    if (currentDoc.exists) {
+      final current = currentDoc.data() ?? <String, dynamic>{};
+      preferredTermId =
+          (current['activeTermId'] ??
+                  current['termId'] ??
+                  current['currentTermId'] ??
+                  '')
+              .toString()
+              .trim();
+    }
+  } catch (_) {
+    // Ignore and fallback to active terms.
+  }
+
+  if (preferredTermId != null && preferredTermId.isNotEmpty) {
+    try {
+      final preferredDoc = await firestore
+          .collection('academic_terms')
+          .doc(preferredTermId)
+          .get();
+      if (preferredDoc.exists) {
+        final data = preferredDoc.data() ?? <String, dynamic>{};
+        final isActive = data['isActive'] == true;
+        if (isActive || _isDateWithinTermData(data, date)) {
+          return preferredDoc.id;
+        }
+      }
+    } catch (_) {
+      // Ignore and fallback.
+    }
+  }
+
+  try {
+    final activeTerms = await firestore
+        .collection('academic_terms')
+        .where('isActive', isEqualTo: true)
+        .get();
+    if (activeTerms.docs.isEmpty) return preferredTermId;
+
+    for (final doc in activeTerms.docs) {
+      if (_isDateWithinTermData(doc.data(), date)) {
+        return doc.id;
+      }
+    }
+    return activeTerms.docs.first.id;
+  } catch (_) {
+    return preferredTermId;
+  }
+}
+
+Future<bool> _isHolidayForStudent(DateTime date) async {
+  final termId = await _resolveStudentTermIdForDate(date);
+  if (termId == null || termId.trim().isEmpty) return false;
+
+  try {
+    final snap = await FirebaseFirestore.instance
+        .collection('academic_terms')
+        .doc(termId)
+        .collection('calendar_exceptions')
+        .get();
+    final d = _dateOnly(date);
+    for (final doc in snap.docs) {
+      final data = doc.data();
+      final start = _parseFirestoreDate(data['startDate']);
+      final end = _parseFirestoreDate(data['endDate']) ?? start;
+      if (start == null || end == null) continue;
+      final exclude = data['excludeFromAttendance'] == true;
+      final type = (data['type'] ?? '').toString().trim().toLowerCase();
+      final holidayLike =
+          exclude ||
+          type == 'holiday' ||
+          type == 'break' ||
+          type == 'suspension' ||
+          type == 'other';
+      if (!holidayLike) continue;
+      if (_isDateInRange(date: d, start: start, end: end)) {
+        return true;
+      }
+    }
+  } catch (_) {
+    // If fetch fails, fallback to showing schedule.
+  }
+  return false;
+}
+
 /// جلب محاضرات اليوم للطالب (للاستخدام من الصفحة الرئيسية)
 Future<List<CourseSchedule>> fetchTodayCoursesForStudent(int studentId) async {
   if (studentId <= 0) return <CourseSchedule>[];
-  final enrollmentsRef = FirebaseFirestore.instance
-      .collection('student_section_enrollments');
+  if (await _isHolidayForStudent(DateTime.now())) {
+    return <CourseSchedule>[];
+  }
+  final enrollmentsRef = FirebaseFirestore.instance.collection(
+    'student_section_enrollments',
+  );
   final enrollSnap = await enrollmentsRef
       .where('studentId', isEqualTo: studentId)
       .get();
@@ -81,7 +221,9 @@ Future<List<CourseSchedule>> _fetchTodayCoursesFromSectionIds(
     String courseNameAr = (data['courseName_Ar'] ?? '').toString().trim();
     String creditHours = '';
     String? courseType = (data['courseType'] ?? '').toString().trim();
-    if (courseType?.isEmpty ?? true) courseType = null;
+    if (courseType.isEmpty) {
+      courseType = null;
+    }
     if (courseCode.isNotEmpty) {
       final courseSnap = await coursesRef.doc(courseCode).get();
       if (courseSnap.exists) {
@@ -91,7 +233,9 @@ Future<List<CourseSchedule>> _fetchTodayCoursesFromSectionIds(
         }
         if (courseType == null || courseType.isEmpty) {
           courseType = (courseData['courseType'] ?? '').toString().trim();
-          if (courseType?.isEmpty ?? true) courseType = null;
+          if (courseType.isEmpty) {
+            courseType = null;
+          }
         }
         final ch = courseData['creditHours'];
         if (ch is int) {
@@ -101,40 +245,48 @@ Future<List<CourseSchedule>> _fetchTodayCoursesFromSectionIds(
         }
       }
     }
-    final displayName = courseNameAr.isNotEmpty ? courseNameAr : (courseName.isNotEmpty ? courseName : courseCode);
+    final displayName = courseNameAr.isNotEmpty
+        ? courseNameAr
+        : (courseName.isNotEmpty ? courseName : courseCode);
     final schedule = data['schedule'] as List<dynamic>?;
     final color = _todayCourseColors[colorIndex % _todayCourseColors.length];
     colorIndex++;
     if (schedule == null || schedule.isEmpty) continue;
     for (final e in schedule) {
-      final m = Map<String, dynamic>.from(e is Map ? e as Map : <String, dynamic>{});
+      final m = Map<String, dynamic>.from(e is Map ? e : <String, dynamic>{});
       final dayOfWeek = m['dayOfWeek'] is int
           ? m['dayOfWeek'] as int
           : int.tryParse((m['dayOfWeek'] ?? '').toString()) ?? 0;
       if (filterDayOfWeek != null && dayOfWeek != filterDayOfWeek) continue;
       String startTime = (m['startTime'] ?? '08:00').toString();
-      if (startTime.length == 4 && startTime[0] != '0') startTime = '0$startTime';
+      if (startTime.length == 4 && startTime[0] != '0') {
+        startTime = '0$startTime';
+      }
       String endTime = (m['endTime'] ?? '10:00').toString();
       if (endTime.length == 4 && endTime[0] != '0') endTime = '0$endTime';
       final hall = (m['hall'] ?? '').toString();
       final location = (m['location'] ?? m['مقر'] ?? '').toString().trim();
       final dayName = dayOfWeekToName[dayOfWeek] ?? '$dayOfWeek';
       if (!days.contains(dayName)) continue;
-      final sectionNum = sectionId.contains('-') ? sectionId.split('-').last : '1';
-      courses.add(CourseSchedule(
-        courseName: displayName,
-        day: dayName,
-        startTime: startTime,
-        endTime: endTime,
-        color: color,
-        courseCode: courseCode,
-        activity: _activityLabelFromCourseType(courseType),
-        section: sectionNum,
-        hours: creditHours.isNotEmpty ? creditHours : '—',
-        lecturer: lecturerName,
-        location: location.isNotEmpty ? location : '—',
-        room: hall.isNotEmpty ? hall : '—',
-      ));
+      final sectionNum = sectionId.contains('-')
+          ? sectionId.split('-').last
+          : '1';
+      courses.add(
+        CourseSchedule(
+          courseName: displayName,
+          day: dayName,
+          startTime: startTime,
+          endTime: endTime,
+          color: color,
+          courseCode: courseCode,
+          activity: _activityLabelFromCourseType(courseType),
+          section: sectionNum,
+          hours: creditHours.isNotEmpty ? creditHours : '—',
+          lecturer: lecturerName,
+          location: location.isNotEmpty ? location : '—',
+          room: hall.isNotEmpty ? hall : '—',
+        ),
+      );
     }
   }
   return courses;
@@ -210,6 +362,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         return 'نظري';
     }
   }
+
   static const List<Color> _courseColors = <Color>[
     Color(0xFF4CAF50),
     Color(0xFF2196F3),
@@ -224,7 +377,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return _dayOfWeekToName[dayOfWeek] ?? '$dayOfWeek';
   }
 
-  Future<List<CourseSchedule>> _fetchCoursesFromSectionIds(List<String> sectionIds) async {
+  Future<List<CourseSchedule>> _fetchCoursesFromSectionIds(
+    List<String> sectionIds,
+  ) async {
     if (sectionIds.isEmpty) return <CourseSchedule>[];
     final sectionsRef = FirebaseFirestore.instance.collection('sections');
     final coursesRef = FirebaseFirestore.instance.collection('courses');
@@ -240,17 +395,23 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       String courseNameAr = (data['courseName_Ar'] ?? '').toString().trim();
       String creditHours = '';
       String? courseType = (data['courseType'] ?? '').toString().trim();
-      if (courseType?.isEmpty ?? true) courseType = null;
+      if (courseType.isEmpty) {
+        courseType = null;
+      }
       if (courseCode.isNotEmpty) {
         final courseSnap = await coursesRef.doc(courseCode).get();
         if (courseSnap.exists) {
           final courseData = courseSnap.data() ?? <String, dynamic>{};
           if (courseNameAr.isEmpty) {
-            courseNameAr = (courseData['courseName_Ar'] ?? '').toString().trim();
+            courseNameAr = (courseData['courseName_Ar'] ?? '')
+                .toString()
+                .trim();
           }
           if (courseType == null || courseType.isEmpty) {
             courseType = (courseData['courseType'] ?? '').toString().trim();
-            if (courseType?.isEmpty ?? true) courseType = null;
+            if (courseType.isEmpty) {
+              courseType = null;
+            }
           }
           final ch = courseData['creditHours'];
           if (ch is int) {
@@ -260,39 +421,47 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           }
         }
       }
-      final displayName = courseNameAr.isNotEmpty ? courseNameAr : (courseName.isNotEmpty ? courseName : courseCode);
+      final displayName = courseNameAr.isNotEmpty
+          ? courseNameAr
+          : (courseName.isNotEmpty ? courseName : courseCode);
       final schedule = data['schedule'] as List<dynamic>?;
       final color = _courseColors[colorIndex % _courseColors.length];
       colorIndex++;
       if (schedule == null || schedule.isEmpty) continue;
       for (final e in schedule) {
-        final m = Map<String, dynamic>.from(e is Map ? e as Map : <String, dynamic>{});
+        final m = Map<String, dynamic>.from(e is Map ? e : <String, dynamic>{});
         final dayOfWeek = m['dayOfWeek'] is int
             ? m['dayOfWeek'] as int
             : int.tryParse((m['dayOfWeek'] ?? '').toString()) ?? 0;
         String startTime = (m['startTime'] ?? '08:00').toString();
-        if (startTime.length == 4 && startTime[0] != '0') startTime = '0$startTime';
+        if (startTime.length == 4 && startTime[0] != '0') {
+          startTime = '0$startTime';
+        }
         String endTime = (m['endTime'] ?? '10:00').toString();
         if (endTime.length == 4 && endTime[0] != '0') endTime = '0$endTime';
         final hall = (m['hall'] ?? '').toString();
-        final location = (m['location'] ?? m['مقر'] ?? '').toString().trim(); 
+        final location = (m['location'] ?? m['مقر'] ?? '').toString().trim();
         final dayName = _dayNameFromDayOfWeek(dayOfWeek);
         if (!_days.contains(dayName)) continue;
-        final sectionNum = sectionId.contains('-') ? sectionId.split('-').last : '1';
-        courses.add(CourseSchedule(
-          courseName: displayName,
-          day: dayName,
-          startTime: startTime,
-          endTime: endTime,
-          color: color,
-          courseCode: courseCode,
-          activity: _activityFromCourseType(courseType),
-          section: sectionNum,
-          hours: creditHours.isNotEmpty ? creditHours : '—',
-          lecturer: lecturerName,
-          location: location.isNotEmpty ? location : '—',
-          room: hall.isNotEmpty ? hall : '—',
-        ));
+        final sectionNum = sectionId.contains('-')
+            ? sectionId.split('-').last
+            : '1';
+        courses.add(
+          CourseSchedule(
+            courseName: displayName,
+            day: dayName,
+            startTime: startTime,
+            endTime: endTime,
+            color: color,
+            courseCode: courseCode,
+            activity: _activityFromCourseType(courseType),
+            section: sectionNum,
+            hours: creditHours.isNotEmpty ? creditHours : '—',
+            lecturer: lecturerName,
+            location: location.isNotEmpty ? location : '—',
+            room: hall.isNotEmpty ? hall : '—',
+          ),
+        );
       }
     }
     return courses;
@@ -309,9 +478,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           selectedIndex: 1,
           onItemTapped: (index) {
             if (index == 0) {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              );
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
             } else if (index == 2) {
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => const HomeScreen()),
@@ -326,9 +495,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           child: Column(
             children: <Widget>[
               _buildHeader(context),
-              Expanded(
-                child: _buildScheduleBody(),
-              ),
+              Expanded(child: _buildScheduleBody()),
             ],
           ),
         ),
@@ -370,9 +537,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const NotificationsScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => const NotificationsScreen()),
               );
             },
           ),
@@ -388,15 +553,18 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         child: Text('سجّل دخولك لعرض جدولك', style: TextStyle(fontSize: 16)),
       );
     }
-    final enrollmentsRef = FirebaseFirestore.instance
-        .collection('student_section_enrollments');
+    final enrollmentsRef = FirebaseFirestore.instance.collection(
+      'student_section_enrollments',
+    );
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: enrollmentsRef
           .where('studentId', isEqualTo: student.studentId)
           .snapshots(),
       builder: (context, enrollSnap) {
         if (enrollSnap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: _primaryColor));
+          return const Center(
+            child: CircularProgressIndicator(color: _primaryColor),
+          );
         }
         final sectionIds = (enrollSnap.data?.docs ?? [])
             .map((d) => (d.data()['sectionId'] ?? '').toString())
@@ -407,7 +575,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           future: _fetchCoursesFromSectionIds(sectionIds),
           builder: (context, courseSnap) {
             if (courseSnap.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator(color: _primaryColor));
+              return const Center(
+                child: CircularProgressIndicator(color: _primaryColor),
+              );
             }
             final courses = courseSnap.data ?? [];
             if (courses.isEmpty) {
@@ -433,7 +603,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       builder: (BuildContext context, BoxConstraints constraints) {
         final screenWidth = MediaQuery.of(context).size.width;
         final dayWidth = (screenWidth - _timeColWidth - 32) / _days.length;
-        final viewportHeight = constraints.maxHeight;
         return SingleChildScrollView(
           scrollDirection: Axis.vertical,
           physics: const AlwaysScrollableScrollPhysics(),
@@ -564,12 +733,20 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
-  Widget _buildDayStack(String day, double dayWidth, double tableHeight, List<CourseSchedule> courses) {
+  Widget _buildDayStack(
+    String day,
+    double dayWidth,
+    double tableHeight,
+    List<CourseSchedule> courses,
+  ) {
     final firstSlotMinutes = _parseTimeToMinutes(_timeSlots.first.start);
     const int slotMinutes = 60;
 
     final dayCourses = courses.where((c) => c.day == day).toList();
-    dayCourses.sort((a, b) => _parseTimeToMinutes(a.startTime) - _parseTimeToMinutes(b.startTime));
+    dayCourses.sort(
+      (a, b) =>
+          _parseTimeToMinutes(a.startTime) - _parseTimeToMinutes(b.startTime),
+    );
 
     return Stack(
       clipBehavior: Clip.hardEdge,
@@ -597,8 +774,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           final startMin = _parseTimeToMinutes(course.startTime);
           final endMin = _parseTimeToMinutes(course.endTime);
           final durationMin = (endMin - startMin).clamp(0, 24 * 60);
-          final slotCount = (durationMin / slotMinutes).ceil().clamp(1, _timeSlots.length);
-          final slotIndex = ((startMin - firstSlotMinutes) / slotMinutes).floor().clamp(0, _timeSlots.length - 1);
+          final slotCount = (durationMin / slotMinutes).ceil().clamp(
+            1,
+            _timeSlots.length,
+          );
+          final slotIndex = ((startMin - firstSlotMinutes) / slotMinutes)
+              .floor()
+              .clamp(0, _timeSlots.length - 1);
           final top = slotIndex * _rowHeight;
           final blockHeight = slotCount * _rowHeight;
 
@@ -614,7 +796,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 child: Container(
                   width: double.infinity,
                   height: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: course.color,
                     borderRadius: BorderRadius.circular(6),
@@ -642,7 +827,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                 maxLines: 4,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              if (course.location.isNotEmpty && course.location != '—') ...[
+                              if (course.location.isNotEmpty &&
+                                  course.location != '—') ...[
                                 const SizedBox(height: 2),
                                 Text(
                                   course.location,
@@ -696,7 +882,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           textDirection: TextDirection.rtl,
           child: Dialog(
             backgroundColor: Colors.transparent,
-            insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 48),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 32,
+              vertical: 48,
+            ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 320, maxHeight: 460),
               child: Container(
@@ -709,7 +898,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
                       Padding(
-                        padding: const EdgeInsets.only(top: 12, left: 12, right: 12),
+                        padding: const EdgeInsets.only(
+                          top: 12,
+                          left: 12,
+                          right: 12,
+                        ),
                         child: Row(
                           children: <Widget>[
                             IconButton(
@@ -719,10 +912,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                               constraints: const BoxConstraints(),
                             ),
                             const Expanded(
-                              child: Text(
-                                '',
-                                textAlign: TextAlign.center,
-                              ),
+                              child: Text('', textAlign: TextAlign.center),
                             ),
                           ],
                         ),
@@ -769,10 +959,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(
-            color: Colors.grey.shade300,
-            width: 1,
-          ),
+          bottom: BorderSide(color: Colors.grey.shade300, width: 1),
         ),
       ),
       child: Row(
@@ -789,10 +976,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           ),
           Text(
             value,
-            style: const TextStyle(
-              fontSize: 13,
-              color: Color(0xFF1A1A1A),
-            ),
+            style: const TextStyle(fontSize: 13, color: Color(0xFF1A1A1A)),
             textAlign: TextAlign.left,
           ),
         ],
@@ -802,10 +986,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 }
 
 class TimeSlot {
-  const TimeSlot({
-    required this.start,
-    required this.end,
-  });
+  const TimeSlot({required this.start, required this.end});
 
   final String start;
   final String end;

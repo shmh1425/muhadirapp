@@ -21,15 +21,18 @@ class AcademicTermRepository {
 
   /// Returns all terms ordered by startDate descending.
   Future<List<AcademicTerm>> getTerms() async {
-    final snapshot = await _termsRef.orderBy('startDate', descending: true).get();
+    final snapshot = await _termsRef
+        .orderBy('startDate', descending: true)
+        .get();
     return snapshot.docs.map(AcademicTerm.fromDoc).toList();
   }
 
   /// Stream of all terms.
   Stream<List<AcademicTerm>> watchTerms() {
-    return _termsRef.orderBy('startDate', descending: true).snapshots().map(
-          (s) => s.docs.map(AcademicTerm.fromDoc).toList(),
-        );
+    return _termsRef
+        .orderBy('startDate', descending: true)
+        .snapshots()
+        .map((s) => s.docs.map(AcademicTerm.fromDoc).toList());
   }
 
   /// Get a single term by id.
@@ -42,13 +45,15 @@ class AcademicTermRepository {
 
   /// Validate term: startDate < endDate, officialWeeksCount > 0.
   String? validateTerm(AcademicTerm term) {
-    if (term.startDate.isAfter(term.endDate) || term.startDate.isAtSameMomentAs(term.endDate)) {
+    if (term.startDate.isAfter(term.endDate) ||
+        term.startDate.isAtSameMomentAs(term.endDate)) {
       return 'تاريخ البداية يجب أن يكون قبل تاريخ النهاية';
     }
     if (term.officialWeeksCount < 1) {
       return 'عدد الأسابيع الرسمية يجب أن يكون 1 على الأقل';
     }
-    if (term.effectiveTeachingWeeks < 0 || term.effectiveTeachingWeeks > term.officialWeeksCount) {
+    if (term.effectiveTeachingWeeks < 0 ||
+        term.effectiveTeachingWeeks > term.officialWeeksCount) {
       return 'عدد أسابيع التدريس الفعلية غير صالح';
     }
     return null;
@@ -61,8 +66,7 @@ class AcademicTermRepository {
 
     final id = term.termId.trim().isNotEmpty ? term.termId : _termsRef.doc().id;
     debugPrint('[AcademicTermRepo] WRITE path: $_termsCollection/$id (set)');
-    final data = term.toMap()
-      ..['createdAt'] = FieldValue.serverTimestamp();
+    final data = term.toMap()..['createdAt'] = FieldValue.serverTimestamp();
     await _termsRef.doc(id).set(data);
     return id;
   }
@@ -72,17 +76,90 @@ class AcademicTermRepository {
     final err = validateTerm(term);
     if (err != null) throw ArgumentError(err);
 
-    debugPrint('[AcademicTermRepo] WRITE path: $_termsCollection/${term.termId} (set merge)');
+    debugPrint(
+      '[AcademicTermRepo] WRITE path: $_termsCollection/${term.termId} (set merge)',
+    );
     await _termsRef.doc(term.termId).set(term.toMap(), SetOptions(merge: true));
   }
 
   /// Set isActive for a term.
   Future<void> setTermActive(String termId, bool isActive) async {
-    debugPrint('[AcademicTermRepo] WRITE path: $_termsCollection/$termId (update isActive)');
-    await _termsRef.doc(termId).update({
+    debugPrint(
+      '[AcademicTermRepo] WRITE path: $_termsCollection/$termId (set isActive=$isActive)',
+    );
+    final batch = _firestore.batch();
+    final targetRef = _termsRef.doc(termId);
+
+    if (isActive) {
+      final activeSnapshot = await _termsRef
+          .where('isActive', isEqualTo: true)
+          .get();
+      for (final doc in activeSnapshot.docs) {
+        if (doc.id == termId) continue;
+        batch.set(doc.reference, {
+          'isActive': false,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+    }
+
+    batch.set(targetRef, {
       'isActive': isActive,
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    }, SetOptions(merge: true));
+
+    if (isActive) {
+      final targetSnapshot = await targetRef.get();
+      final targetData = targetSnapshot.data() ?? <String, dynamic>{};
+      final startDate = targetData['startDate'];
+      final endDate = targetData['endDate'];
+      final semesterWeeks =
+          (targetData['effectiveTeachingWeeks'] ??
+          targetData['officialWeeksCount']);
+
+      batch.set(
+        _firestore.collection('academic_calendar').doc('current'),
+        {
+          'activeTermId': termId,
+          'termId': termId,
+          if (startDate != null) 'startDate': startDate,
+          if (startDate != null) 'semesterStartDate': startDate,
+          if (endDate != null) 'endDate': endDate,
+          if (endDate != null) 'semesterEndDate': endDate,
+          if (semesterWeeks != null) 'semesterWeeks': semesterWeeks,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    }
+
+    await batch.commit();
+  }
+
+  /// Point academic_calendar/current to a specific term so lecturer screens
+  /// read exceptions from the same term being managed in Admin.
+  Future<void> syncCurrentCalendarToTerm(String termId) async {
+    if (termId.trim().isEmpty) return;
+    final termSnapshot = await _termsRef.doc(termId).get();
+    final termData = termSnapshot.data() ?? <String, dynamic>{};
+    final startDate = termData['startDate'];
+    final endDate = termData['endDate'];
+    final semesterWeeks =
+        termData['effectiveTeachingWeeks'] ?? termData['officialWeeksCount'];
+
+    debugPrint(
+      '[AcademicTermRepo] WRITE path: academic_calendar/current (sync termId=$termId)',
+    );
+    await _firestore.collection('academic_calendar').doc('current').set({
+      'activeTermId': termId,
+      'termId': termId,
+      if (startDate != null) 'startDate': startDate,
+      if (startDate != null) 'semesterStartDate': startDate,
+      if (endDate != null) 'endDate': endDate,
+      if (endDate != null) 'semesterEndDate': endDate,
+      if (semesterWeeks != null) 'semesterWeeks': semesterWeeks,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   /// Get all weeks for a term, ordered by officialWeekNumber.
@@ -101,7 +178,8 @@ class AcademicTermRepository {
     final officialSet = <int>{};
     int nextEffective = 1;
     for (final w in weeks) {
-      if (w.officialWeekNumber < 1 || w.officialWeekNumber > officialWeeksCount) {
+      if (w.officialWeekNumber < 1 ||
+          w.officialWeekNumber > officialWeeksCount) {
         return 'رقم الأسبوع الرسمي ${w.officialWeekNumber} خارج النطاق 1-$officialWeeksCount';
       }
       if (officialSet.contains(w.officialWeekNumber)) {
@@ -119,7 +197,9 @@ class AcademicTermRepository {
           return 'الرقم الفعلي للأسبوع التعليمي يجب أن يكون $nextEffective';
         }
         nextEffective++;
-        if (!w.countInAttendance) return 'الأسبوع التعليمي يجب أن يُحسب في الحضور';
+        if (!w.countInAttendance) {
+          return 'الأسبوع التعليمي يجب أن يُحسب في الحضور';
+        }
       }
     }
     return null;
@@ -137,31 +217,35 @@ class AcademicTermRepository {
     final updated = <TermWeek>[];
     for (final w in weeks) {
       if (w.isBreak) {
-        updated.add(TermWeek(
-          weekId: w.weekId,
-          officialWeekNumber: w.officialWeekNumber,
-          effectiveWeekNumber: null,
-          status: w.status,
-          countInAttendance: false,
-          startDate: w.startDate,
-          endDate: w.endDate,
-          label: w.label,
-          createdAt: w.createdAt,
-          updatedAt: w.updatedAt,
-        ));
+        updated.add(
+          TermWeek(
+            weekId: w.weekId,
+            officialWeekNumber: w.officialWeekNumber,
+            effectiveWeekNumber: null,
+            status: w.status,
+            countInAttendance: false,
+            startDate: w.startDate,
+            endDate: w.endDate,
+            label: w.label,
+            createdAt: w.createdAt,
+            updatedAt: w.updatedAt,
+          ),
+        );
       } else {
-        updated.add(TermWeek(
-          weekId: w.weekId,
-          officialWeekNumber: w.officialWeekNumber,
-          effectiveWeekNumber: nextEffective,
-          status: w.status,
-          countInAttendance: true,
-          startDate: w.startDate,
-          endDate: w.endDate,
-          label: w.label,
-          createdAt: w.createdAt,
-          updatedAt: w.updatedAt,
-        ));
+        updated.add(
+          TermWeek(
+            weekId: w.weekId,
+            officialWeekNumber: w.officialWeekNumber,
+            effectiveWeekNumber: nextEffective,
+            status: w.status,
+            countInAttendance: true,
+            startDate: w.startDate,
+            endDate: w.endDate,
+            label: w.label,
+            createdAt: w.createdAt,
+            updatedAt: w.updatedAt,
+          ),
+        );
         nextEffective++;
       }
     }
@@ -170,9 +254,13 @@ class AcademicTermRepository {
     final err = validateWeeks(updated, term.officialWeeksCount);
     if (err != null) throw ArgumentError(err);
 
-    debugPrint('[AcademicTermRepo] WRITE path: $_termsCollection/$termId (update effectiveTeachingWeeks)');
+    debugPrint(
+      '[AcademicTermRepo] WRITE path: $_termsCollection/$termId (update effectiveTeachingWeeks)',
+    );
     for (final w in updated) {
-      debugPrint('[AcademicTermRepo] WRITE path: $_termsCollection/$termId/$_weeksSubcollection/${w.weekId} (set)');
+      debugPrint(
+        '[AcademicTermRepo] WRITE path: $_termsCollection/$termId/$_weeksSubcollection/${w.weekId} (set)',
+      );
     }
     final batch = _firestore.batch();
     final weeksRef = _termsRef.doc(termId).collection(_weeksSubcollection);
@@ -202,14 +290,16 @@ class AcademicTermRepository {
     for (final r in ranges) {
       for (int o = r.start; o <= r.end; o++) {
         if (o < 1 || o > officialWeeksCount) continue;
-        list.add(TermWeek(
-          weekId: 'w$o',
-          officialWeekNumber: o,
-          effectiveWeekNumber: null,
-          status: r.status,
-          countInAttendance: r.status == WeekStatus.instructional,
-          label: 'أسبوع $o',
-        ));
+        list.add(
+          TermWeek(
+            weekId: 'w$o',
+            officialWeekNumber: o,
+            effectiveWeekNumber: null,
+            status: r.status,
+            countInAttendance: r.status == WeekStatus.instructional,
+            label: 'أسبوع $o',
+          ),
+        );
       }
     }
     list.sort((a, b) => a.officialWeekNumber.compareTo(b.officialWeekNumber));
@@ -222,7 +312,11 @@ class AcademicTermRepository {
     final normalized = DateTime(date.year, date.month, date.day);
     for (final w in weeks) {
       if (w.startDate != null && w.endDate != null) {
-        final start = DateTime(w.startDate!.year, w.startDate!.month, w.startDate!.day);
+        final start = DateTime(
+          w.startDate!.year,
+          w.startDate!.month,
+          w.startDate!.day,
+        );
         final end = DateTime(w.endDate!.year, w.endDate!.month, w.endDate!.day);
         if ((normalized.isAfter(start) || normalized.isAtSameMomentAs(start)) &&
             (normalized.isBefore(end) || normalized.isAtSameMomentAs(end))) {
@@ -234,7 +328,10 @@ class AcademicTermRepository {
   }
 
   /// Get week by official week number.
-  Future<TermWeek?> getWeekByOfficialNumber(String termId, int officialWeekNumber) async {
+  Future<TermWeek?> getWeekByOfficialNumber(
+    String termId,
+    int officialWeekNumber,
+  ) async {
     final snapshot = await _termsRef
         .doc(termId)
         .collection(_weeksSubcollection)
@@ -258,33 +355,99 @@ class AcademicTermRepository {
 
   Stream<List<CalendarException>> watchCalendarExceptions(String termId) {
     if (termId.trim().isEmpty) return Stream.value([]);
-    return _exceptionsRef(termId).orderBy('startDate').snapshots().map(
-          (s) => s.docs.map(CalendarException.fromDoc).toList(),
-        );
+    return _exceptionsRef(termId)
+        .orderBy('startDate')
+        .snapshots()
+        .map((s) => s.docs.map(CalendarException.fromDoc).toList());
   }
 
-  Future<String> addCalendarException(String termId, CalendarException exception) async {
-    final id = exception.exceptionId.trim().isNotEmpty ? exception.exceptionId : _exceptionsRef(termId).doc().id;
-    debugPrint('[AcademicTermRepo] WRITE path: $_termsCollection/$termId/$_exceptionsSubcollection/$id (set)');
-    final data = exception.exceptionId == id ? exception.toMap() : {...exception.toMap(), 'exceptionId': id};
+  Future<String> addCalendarException(
+    String termId,
+    CalendarException exception,
+  ) async {
+    if (termId.trim().isEmpty) {
+      throw ArgumentError('termId is empty');
+    }
+    final id = exception.exceptionId.trim().isNotEmpty
+        ? exception.exceptionId
+        : _exceptionsRef(termId).doc().id;
+    debugPrint(
+      '[AcademicTermRepo] WRITE path: $_termsCollection/$termId/$_exceptionsSubcollection/$id (set)',
+    );
+    final data = exception.exceptionId == id
+        ? exception.toMap()
+        : {...exception.toMap(), 'exceptionId': id};
     data['createdAt'] = FieldValue.serverTimestamp();
     await _exceptionsRef(termId).doc(id).set(data);
     return id;
   }
 
-  Future<void> updateCalendarException(String termId, CalendarException exception) async {
-    debugPrint('[AcademicTermRepo] WRITE path: $_termsCollection/$termId/$_exceptionsSubcollection/${exception.exceptionId} (set merge)');
-    await _exceptionsRef(termId).doc(exception.exceptionId).set(exception.toMap(), SetOptions(merge: true));
+  Future<void> updateCalendarException(
+    String termId,
+    CalendarException exception,
+  ) async {
+    if (termId.trim().isEmpty) {
+      throw ArgumentError('termId is empty');
+    }
+    if (exception.exceptionId.trim().isEmpty) {
+      throw ArgumentError('exceptionId is empty');
+    }
+    debugPrint(
+      '[AcademicTermRepo] WRITE path: $_termsCollection/$termId/$_exceptionsSubcollection/${exception.exceptionId} (set merge)',
+    );
+    await _exceptionsRef(termId)
+        .doc(exception.exceptionId)
+        .set(exception.toMap(), SetOptions(merge: true));
   }
 
-  Future<void> deleteCalendarException(String termId, String exceptionId) async {
-    debugPrint('[AcademicTermRepo] WRITE path: $_termsCollection/$termId/$_exceptionsSubcollection/$exceptionId (delete)');
+  Future<void> deleteCalendarException(
+    String termId,
+    String exceptionId,
+  ) async {
+    debugPrint(
+      '[AcademicTermRepo] WRITE path: $_termsCollection/$termId/$_exceptionsSubcollection/$exceptionId (delete)',
+    );
     await _exceptionsRef(termId).doc(exceptionId).delete();
+  }
+
+  /// Replace all calendar exceptions for a term in a single batch:
+  /// 1) delete existing exceptions
+  /// 2) insert provided exceptions
+  Future<void> replaceCalendarExceptions(
+    String termId,
+    List<CalendarException> exceptions,
+  ) async {
+    if (termId.trim().isEmpty) return;
+    final existingSnapshot = await _exceptionsRef(termId).get();
+    final batch = _firestore.batch();
+
+    for (final doc in existingSnapshot.docs) {
+      batch.delete(doc.reference);
+    }
+
+    for (final exception in exceptions) {
+      final id = exception.exceptionId.trim().isNotEmpty
+          ? exception.exceptionId
+          : _exceptionsRef(termId).doc().id;
+      final data = exception.exceptionId == id
+          ? exception.toMap()
+          : {...exception.toMap(), 'exceptionId': id};
+      data['createdAt'] = FieldValue.serverTimestamp();
+      batch.set(_exceptionsRef(termId).doc(id), data);
+    }
+
+    debugPrint(
+      '[AcademicTermRepo] WRITE path: $_termsCollection/$termId/$_exceptionsSubcollection/* (replace ${exceptions.length})',
+    );
+    await batch.commit();
   }
 
   /// Returns true if [date] falls inside any calendar exception with excludeFromAttendance = true.
   /// Used to set countInAttendance = false for sessions on excluded dates.
-  Future<bool> isDateExcludedFromAttendance(String termId, DateTime date) async {
+  Future<bool> isDateExcludedFromAttendance(
+    String termId,
+    DateTime date,
+  ) async {
     if (termId.trim().isEmpty) return false;
     final exceptions = await getCalendarExceptions(termId);
     final d = DateTime(date.year, date.month, date.day);

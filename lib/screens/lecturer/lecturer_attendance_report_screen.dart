@@ -1,14 +1,22 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../../models/calendar_day.dart';
 import '../../models/attendance/manual_attendance_record.dart';
 import '../../models/attendance/manual_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../services/attendance/manual_attendance_service.dart';
+import '../../services/lecturer/calendar_service.dart';
+import '../../services/lecturer/calendar_sync_service.dart';
+import '../../services/lecturer/lecture_repository.dart';
 import '../../services/lecturer/lecturer_sections_service.dart';
 import '../../utils/shared/time_utils.dart';
 import 'lecturer_language.dart';
+import 'lecturer_navigation.dart';
 import 'widgets/modern_popup_dialog.dart';
 import 'widgets/profile_back_button.dart';
+import '../../widgets/monthly_calendar.dart';
 
 class LecturerAttendanceReportScreen extends StatefulWidget {
   const LecturerAttendanceReportScreen({super.key});
@@ -23,10 +31,18 @@ class _LecturerAttendanceReportScreenState
   static const Color _primary = Color(0xFF006571);
   static const List<int> _defaultWeekdayOrder = [7, 1, 2, 3, 4];
   static const List<int> _allWeekdayOrder = [7, 1, 2, 3, 4, 5, 6];
-  static const int _maxWeeks = 53;
 
   final ManualAttendanceService _manualAttendanceService =
       ManualAttendanceService.instance;
+  final LectureRepository _calendarRepository = LectureRepository();
+  late final CalendarService _calendarService;
+  StreamSubscription<void>? _calendarSyncSub;
+  DateTime _calendarNow = DateTime.now();
+  bool _isSyncRefreshing = false;
+  List<LectureItem> _lecturerLectures = <LectureItem>[];
+  LectureItem? _selectedLectureForCalendar;
+  DateTime _calendarSelectedDate = DateTime.now();
+  DateTime _calendarSelectedMonth = DateTime.now();
 
   List<_LectureAttendanceGroup> _groups = <_LectureAttendanceGroup>[];
   bool _isLoading = true;
@@ -36,6 +52,7 @@ class _LecturerAttendanceReportScreenState
   bool _isEditMode = false;
   bool _hasPendingChanges = false;
   bool _weekIsAuto = true;
+  final bool _showLegacyReportPanel = false;
   int? _selectedWeekNumber;
   late int _selectedDayOfWeek;
   String? _selectedCourse;
@@ -49,11 +66,22 @@ class _LecturerAttendanceReportScreenState
   @override
   void initState() {
     super.initState();
+    _calendarService = CalendarService(_calendarRepository);
     _selectedDayOfWeek = DateTime.now().weekday;
+    _calendarSyncSub = CalendarSyncService.instance.watchChanges().listen(
+      (_) => _handleRealtimeCalendarChange(),
+    );
     _loadReportData();
   }
 
-  int get _currentWeekNumber => _weekOfYear(DateTime.now());
+  @override
+  void dispose() {
+    _calendarSyncSub?.cancel();
+    super.dispose();
+  }
+
+  int get _currentWeekNumber => _calendarRepository.getWeekNumber(_calendarNow);
+  int get _maxSelectableWeeks => _calendarRepository.semesterWeeks.clamp(1, 60);
   int get _displayWeekNumber => _weekIsAuto
       ? _currentWeekNumber
       : (_selectedWeekNumber ?? _currentWeekNumber);
@@ -155,8 +183,21 @@ class _LecturerAttendanceReportScreenState
     });
 
     try {
+      await _calendarRepository.refreshAcademicCalendar();
+      _calendarNow = _calendarRepository.currentDateTime;
+      if (_weekIsAuto) {
+        _selectedDayOfWeek = _calendarNow.weekday;
+      }
       final lectures = await LecturerSectionsService.instance
           .getLecturesForCurrentLecturer();
+      final sortedLectures = [...lectures]
+        ..sort((a, b) {
+          final byCourse = a.courseName.compareTo(b.courseName);
+          if (byCourse != 0) return byCourse;
+          final aTime = TimeUtils.parseTimeString(a.startTime);
+          final bTime = TimeUtils.parseTimeString(b.startTime);
+          return (aTime.$1 * 60 + aTime.$2).compareTo(bTime.$1 * 60 + bTime.$2);
+        });
       final lectureBySection = <String, LectureItem>{};
       final sectionIds = <String>{};
       for (final lecture in lectures) {
@@ -179,6 +220,25 @@ class _LecturerAttendanceReportScreenState
 
       if (!mounted) return;
       setState(() {
+        _lecturerLectures = sortedLectures;
+        _selectedLectureForCalendar =
+            (sortedLectures.any(
+              (lecture) =>
+                  lecture.sectionId == _selectedLectureForCalendar?.sectionId &&
+                  lecture.startTime == _selectedLectureForCalendar?.startTime,
+            ))
+            ? _selectedLectureForCalendar
+            : (sortedLectures.isNotEmpty ? sortedLectures.first : null);
+        _calendarSelectedDate = DateTime(
+          _calendarNow.year,
+          _calendarNow.month,
+          _calendarNow.day,
+        );
+        _calendarSelectedMonth = DateTime(
+          _calendarSelectedDate.year,
+          _calendarSelectedDate.month,
+          1,
+        );
         if (groups.isNotEmpty) {
           final latest = groups.first;
           _selectedDayOfWeek = latest.dayOfWeek;
@@ -199,6 +259,26 @@ class _LecturerAttendanceReportScreenState
     }
   }
 
+  Future<void> _handleRealtimeCalendarChange() async {
+    if (!mounted || _isSyncRefreshing) return;
+    _isSyncRefreshing = true;
+    try {
+      await _calendarRepository.refreshAcademicCalendar();
+      final updatedNow = _calendarRepository.currentDateTime;
+      if (!mounted) return;
+      setState(() {
+        _calendarNow = updatedNow;
+        if (_weekIsAuto) {
+          _selectedDayOfWeek = updatedNow.weekday;
+        }
+      });
+    } catch (_) {
+      // Ignore transient realtime listener errors.
+    } finally {
+      _isSyncRefreshing = false;
+    }
+  }
+
   List<_LectureAttendanceGroup> _buildGroupsFromFirestore({
     required List<ManualAttendanceSession> sessions,
     required Map<String, List<ManualAttendanceRecord>> recordsBySession,
@@ -206,6 +286,17 @@ class _LecturerAttendanceReportScreenState
   }) {
     final groups = <_LectureAttendanceGroup>[];
     for (final session in sessions) {
+      final effectiveDate = DateTime(
+        session.lectureDate.year,
+        session.lectureDate.month,
+        session.lectureDate.day,
+      );
+      // Keep report aligned with academic calendar:
+      // skip sessions outside attendance counting (breaks/exceptions/holidays).
+      if (!session.countInAttendance ||
+          _calendarRepository.isHoliday(effectiveDate)) {
+        continue;
+      }
       final records =
           recordsBySession[session.sessionId] ??
           const <ManualAttendanceRecord>[];
@@ -216,11 +307,6 @@ class _LecturerAttendanceReportScreenState
       final sectionLabel = session.sectionLabel.trim().isNotEmpty
           ? session.sectionLabel
           : (lecture?.section ?? '-');
-      final effectiveDate = DateTime(
-        session.lectureDate.year,
-        session.lectureDate.month,
-        session.lectureDate.day,
-      );
       final effectiveWeekday = effectiveDate.weekday;
       final students = records
           .map(
@@ -240,10 +326,13 @@ class _LecturerAttendanceReportScreenState
       groups.add(
         _LectureAttendanceGroup(
           sessionId: session.sessionId,
+          lecture: lecture,
           courseName: courseName,
           section: sectionLabel,
           dayOfWeek: effectiveWeekday,
-          weekNumber: _weekOfYear(effectiveDate),
+          weekNumber:
+              session.officialWeekNumber ??
+              _calendarRepository.getWeekNumber(effectiveDate),
           lectureDate: effectiveDate,
           startTime: session.lectureStartTime,
           timeRange: '${session.lectureStartTime} - ${session.lectureEndTime}',
@@ -344,6 +433,375 @@ class _LecturerAttendanceReportScreenState
       _normalizeSelectedSession();
       _resetEditState();
     });
+  }
+
+  void _openAttendanceDayActionPage() {
+    final sessions = _groupsForSelectedDayWeek;
+    if (sessions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _tr(
+              'لا توجد جلسات حضور لهذا اليوم.',
+              'No attendance sessions for this day.',
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _AttendanceDayActionScreen(
+          dayLabel: _dayName(_selectedDayOfWeek),
+          weekNumber: _displayWeekNumber,
+          sessions: sessions,
+          tr: _tr,
+        ),
+      ),
+    );
+  }
+
+  void _onCalendarDaySelected(CalendarDay day) {
+    setState(() {
+      _calendarSelectedDate = DateTime(
+        day.date.year,
+        day.date.month,
+        day.date.day,
+      );
+      _selectedDayOfWeek = _calendarSelectedDate.weekday;
+      _calendarSelectedMonth = DateTime(
+        _calendarSelectedDate.year,
+        _calendarSelectedDate.month,
+        1,
+      );
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _openCalendarActionPopup();
+    });
+  }
+
+  Future<void> _openCalendarActionPopup() async {
+    final lecture = _selectedLectureForCalendar;
+    if (lecture == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_tr('اختاري محاضرة أولاً.', 'Select a lecture first.')),
+        ),
+      );
+      return;
+    }
+
+    final selectedDate = DateTime(
+      _calendarSelectedDate.year,
+      _calendarSelectedDate.month,
+      _calendarSelectedDate.day,
+    );
+    if (_calendarRepository.isHoliday(selectedDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _tr(
+              'اليوم المختار إجازة حسب التقويم.',
+              'Selected day is a holiday in calendar.',
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+    if (selectedDate.weekday != lecture.dayOfWeek) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _tr(
+              'لا يوجد موعد لهذه المحاضرة في اليوم المختار.',
+              'No lecture slot for selected day.',
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+
+    final today = DateTime(
+      _calendarNow.year,
+      _calendarNow.month,
+      _calendarNow.day,
+    );
+    final isFuture = selectedDate.isAfter(today);
+    final existingGroup = _findGroupForLectureAndDate(
+      lecture: lecture,
+      date: selectedDate,
+    );
+    final hasExistingAttendance = existingGroup != null;
+
+    final action = await showDialog<_AttendanceCalendarAction>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return Directionality(
+          textDirection: LecturerLanguageController.direction(),
+          child: AlertDialog(
+            title: Text(_tr('إجراء الحضور', 'Attendance action')),
+            content: Text(
+              _tr(
+                'اختاري الإجراء للمحاضرة في ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                'Choose action for lecture on ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: Text(_tr('إلغاء', 'Cancel')),
+              ),
+              if (isFuture) ...[
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(
+                    dialogContext,
+                  ).pop(_AttendanceCalendarAction.attend),
+                  icon: const Icon(Icons.fact_check_rounded, size: 16),
+                  label: Text(_tr('تحضير', 'Take attendance')),
+                ),
+              ] else if (hasExistingAttendance) ...[
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.of(
+                    dialogContext,
+                  ).pop(_AttendanceCalendarAction.preview),
+                  icon: const Icon(Icons.visibility_rounded, size: 16),
+                  label: Text(_tr('معاينة الحضور', 'Preview attendance')),
+                ),
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(
+                    dialogContext,
+                  ).pop(_AttendanceCalendarAction.editPrevious),
+                  icon: const Icon(Icons.edit_rounded, size: 16),
+                  label: Text(_tr('تعديل الحضور', 'Edit attendance')),
+                ),
+              ] else ...[
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(
+                    dialogContext,
+                  ).pop(_AttendanceCalendarAction.attend),
+                  icon: const Icon(Icons.fact_check_rounded, size: 16),
+                  label: Text(_tr('تحضير', 'Take attendance')),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+
+    if (!mounted || action == null) return;
+    switch (action) {
+      case _AttendanceCalendarAction.preview:
+        LecturerNavigation.goToAttendanceViewOnly(
+          context,
+          lecture,
+          selectedDate,
+        );
+        break;
+      case _AttendanceCalendarAction.editPrevious:
+      case _AttendanceCalendarAction.attend:
+        LecturerNavigation.goToAttendance(
+          context,
+          lecture,
+          selectedDate: selectedDate,
+        );
+        break;
+    }
+  }
+
+  _LectureAttendanceGroup? _findGroupForLectureAndDate({
+    required LectureItem lecture,
+    required DateTime date,
+  }) {
+    final targetDate = DateTime(date.year, date.month, date.day);
+    final sectionId = (lecture.sectionId ?? '').trim();
+    for (final group in _groups) {
+      final groupDate = DateTime(
+        group.lectureDate.year,
+        group.lectureDate.month,
+        group.lectureDate.day,
+      );
+      if (groupDate != targetDate) continue;
+      if (sectionId.isNotEmpty &&
+          (group.lecture?.sectionId ?? '').trim() == sectionId &&
+          group.startTime.trim() == lecture.startTime.trim()) {
+        return group;
+      }
+      if (group.courseName.trim() == lecture.courseName.trim() &&
+          group.section.trim() == lecture.section.trim() &&
+          group.startTime.trim() == lecture.startTime.trim()) {
+        return group;
+      }
+    }
+    return null;
+  }
+
+  Widget _buildLectureCalendarSelectionPanel() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE3ECEE)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            _tr('1) اختار المحاضرة', '1) Choose lecture'),
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF2F4449),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildLectureCards(),
+          const SizedBox(height: 12),
+          Text(
+            _tr('2) اختار اليوم من التقويم', '2) Choose day from calendar'),
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF2F4449),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildLectureCalendar(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLectureCards() {
+    if (_lecturerLectures.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FBFB),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFE3ECEE)),
+        ),
+        child: Text(
+          _tr(
+            'لا توجد محاضرات مرتبطة بحسابك.',
+            'No lectures linked to account.',
+          ),
+          style: const TextStyle(
+            fontFamily: 'Cairo',
+            fontSize: 12,
+            color: Color(0xFF667A7F),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 108,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: _lecturerLectures.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final lecture = _lecturerLectures[index];
+          final selected =
+              lecture.sectionId == _selectedLectureForCalendar?.sectionId &&
+              lecture.startTime == _selectedLectureForCalendar?.startTime &&
+              lecture.dayOfWeek == _selectedLectureForCalendar?.dayOfWeek;
+          final timeRange = TimeUtils.formatTimeRange(
+            lecture.startTime,
+            lecture.endTime,
+          );
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                _selectedLectureForCalendar = lecture;
+                _selectedCourse = lecture.courseName;
+                _selectedSection = lecture.section;
+              });
+            },
+            child: Container(
+              width: 220,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: selected ? const Color(0xFFE6F3F5) : Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: selected ? _primary : const Color(0xFFDDE7E9),
+                  width: selected ? 1.3 : 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    lecture.courseName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: selected
+                          ? const Color(0xFF0A5A63)
+                          : const Color(0xFF243238),
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${_dayName(lecture.dayOfWeek)} • $timeRange',
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 11.5,
+                      color: Color(0xFF60757A),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    '${_tr('الشعبة', 'Section')} ${lecture.section}',
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 11.5,
+                      color: Color(0xFF60757A),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildLectureCalendar() {
+    final lecture = _selectedLectureForCalendar;
+    if (lecture == null) {
+      return const SizedBox.shrink();
+    }
+
+    return MonthlyCalendar(
+      currentMonth: _calendarSelectedMonth,
+      calendarDays: _calendarService.buildCalendarDays(_calendarSelectedMonth, [
+        lecture,
+      ]),
+      onDayTap: _onCalendarDaySelected,
+      onMonthChanged: (month) {
+        setState(() {
+          _calendarSelectedMonth = DateTime(month.year, month.month, 1);
+        });
+      },
+    );
   }
 
   void _onWeekChanged({required bool auto, int? week}) {
@@ -957,16 +1415,6 @@ class _LecturerAttendanceReportScreenState
     return '${date.day}/${date.month}/${date.year}';
   }
 
-  int _weekOfYear(DateTime date) {
-    final normalized = DateTime(date.year, date.month, date.day);
-    final startOfYear = DateTime(normalized.year, 1, 1);
-    final dayOfYear = normalized.difference(startOfYear).inDays + 1;
-    // الأسبوع في التطبيق يبدأ بالأحد (وليس الاثنين مثل ISO).
-    final yearStartOffset = startOfYear.weekday % 7; // الأحد=0 ... السبت=6
-    final week = ((dayOfYear + yearStartOffset - 1) / 7).floor() + 1;
-    return week.clamp(1, 53);
-  }
-
   void _goBack() {
     Navigator.of(context).pop();
   }
@@ -1043,26 +1491,32 @@ class _LecturerAttendanceReportScreenState
                                 child: ProfileBackButton(onTap: _goBack),
                               ),
                               const SizedBox(height: 10),
-                              _buildFilters(currentFiltersLabel),
+                              _buildLectureCalendarSelectionPanel(),
                               const SizedBox(height: 10),
-                              if (group != null) ...[
-                                _buildSessionSelector(),
+                              if (_showLegacyReportPanel) ...[
+                                _buildFilters(currentFiltersLabel),
                                 const SizedBox(height: 10),
-                                _buildControlBar(group),
-                                const SizedBox(height: 10),
-                                _buildStatusTabs(),
+                                if (group != null) ...[
+                                  _buildSessionSelector(),
+                                  const SizedBox(height: 10),
+                                  _buildControlBar(group),
+                                  const SizedBox(height: 10),
+                                  _buildStatusTabs(),
+                                  const SizedBox(height: 8),
+                                  _buildStudentsTable(tableHeight),
+                                  if (_isEditMode) ...[
+                                    const SizedBox(height: 12),
+                                    _buildSaveChangesButton(group),
+                                  ],
+                                ] else
+                                  SizedBox(
+                                    height: constraints.maxHeight * 0.56,
+                                    child: _buildEmptyState(),
+                                  ),
+                              ] else ...[
+                                _buildMergedWorkflowHint(constraints.maxHeight),
                                 const SizedBox(height: 8),
-                                _buildStudentsTable(tableHeight),
-                                if (_isEditMode) ...[
-                                  const SizedBox(height: 12),
-                                  _buildSaveChangesButton(group),
-                                ],
-                              ] else
-                                SizedBox(
-                                  height: constraints.maxHeight * 0.56,
-                                  child: _buildEmptyState(),
-                                ),
-                              const SizedBox(height: 8),
+                              ],
                             ],
                           ),
                         );
@@ -1650,6 +2104,57 @@ class _LecturerAttendanceReportScreenState
     );
   }
 
+  Widget _buildMergedWorkflowHint(double availableHeight) {
+    return SizedBox(
+      height: (availableHeight * 0.42).clamp(170.0, 300.0),
+      child: Center(
+        child: Container(
+          width: double.infinity,
+          margin: const EdgeInsets.symmetric(horizontal: 8),
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFDCE7E9)),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.merge_type_rounded, color: _primary, size: 34),
+              const SizedBox(height: 8),
+              Text(
+                _tr(
+                  'تم دمج التقرير مع لوحة الاختيار بالأعلى',
+                  'Report is merged with the top selection panel',
+                ),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  color: Color(0xFF4F6369),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _tr(
+                  'اختاري المحاضرة ثم اليوم من التقويم لفتح إجراء الحضور مباشرة.',
+                  'Choose lecture then day from calendar to open attendance actions directly.',
+                ),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 12,
+                  color: Color(0xFF758A90),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showWeekPickerSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -1724,7 +2229,7 @@ class _LecturerAttendanceReportScreenState
                 child: ListView.builder(
                   controller: scrollController,
                   shrinkWrap: true,
-                  itemCount: _maxWeeks,
+                  itemCount: _maxSelectableWeeks,
                   itemBuilder: (_, index) {
                     final week = index + 1;
                     final selected =
@@ -1822,6 +2327,10 @@ class _LecturerAttendanceReportScreenState
                 onTap: () {
                   Navigator.pop(ctx);
                   _onDayChanged(w);
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    _openAttendanceDayActionPage();
+                  });
                 },
               );
             }),
@@ -2055,12 +2564,318 @@ class _FilterCard extends StatelessWidget {
   }
 }
 
+class _AttendanceDayActionScreen extends StatelessWidget {
+  const _AttendanceDayActionScreen({
+    required this.dayLabel,
+    required this.weekNumber,
+    required this.sessions,
+    required this.tr,
+  });
+
+  final String dayLabel;
+  final int weekNumber;
+  final List<_LectureAttendanceGroup> sessions;
+  final String Function(String ar, String en) tr;
+
+  String _formatDate(DateTime date) => '${date.day}/${date.month}/${date.year}';
+
+  void _openAttendanceForSession(
+    BuildContext context,
+    _LectureAttendanceGroup group, {
+    required bool viewOnly,
+  }) {
+    final lecture = group.lecture;
+    if (lecture == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            tr(
+              'لا يمكن فتح شاشة التحضير لأن بيانات المحاضرة غير مكتملة.',
+              'Cannot open attendance because lecture data is incomplete.',
+            ),
+          ),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
+      return;
+    }
+    if (viewOnly) {
+      LecturerNavigation.goToAttendanceViewOnly(
+        context,
+        lecture,
+        group.lectureDate,
+      );
+      return;
+    }
+    LecturerNavigation.goToAttendance(
+      context,
+      lecture,
+      selectedDate: group.lectureDate,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return ValueListenableBuilder<LecturerLanguage>(
+      valueListenable: LecturerLanguageController.notifier,
+      builder: (context, _, __) {
+        return Directionality(
+          textDirection: LecturerLanguageController.direction(),
+          child: Scaffold(
+            backgroundColor: const Color(0xFFF8FBFB),
+            appBar: AppBar(
+              backgroundColor: const Color(0xFFF8FBFB),
+              elevation: 0,
+              leading: IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                color: const Color(0xFF24383D),
+              ),
+              title: Text(
+                tr('جلسات يوم $dayLabel', 'Sessions on $dayLabel'),
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                  color: Color(0xFF24383D),
+                ),
+              ),
+              centerTitle: true,
+            ),
+            body: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFDDE7E9)),
+                  ),
+                  child: Text(
+                    tr(
+                      'الأسبوع: $weekNumber • اختاري المحاضرة ثم حددي الإجراء المناسب',
+                      'Week: $weekNumber • Choose lecture then the proper action',
+                    ),
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF4E656C),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                ...sessions.map((group) {
+                  final groupDate = DateTime(
+                    group.lectureDate.year,
+                    group.lectureDate.month,
+                    group.lectureDate.day,
+                  );
+                  final isFuture = groupDate.isAfter(today);
+                  final previewStudents = group.students.take(4).toList();
+                  final moreCount =
+                      group.students.length - previewStudents.length;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFDDE7E9)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            group.courseName,
+                            style: const TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF203237),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${tr('الشعبة', 'Section')} ${group.section} • ${group.timeRange} • ${_formatDate(group.lectureDate)}',
+                            style: const TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 12,
+                              color: Color(0xFF5F747A),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            tr('أسماء الطلاب', 'Student names'),
+                            style: const TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 12,
+                              color: Color(0xFF5F747A),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          if (previewStudents.isEmpty)
+                            Text(
+                              tr('لا يوجد طلاب مسجلين', 'No enrolled students'),
+                              style: const TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 12,
+                                color: Color(0xFF8B9BA0),
+                              ),
+                            )
+                          else
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                for (final student in previewStudents)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFEFF5F7),
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Text(
+                                      student.name,
+                                      style: const TextStyle(
+                                        fontFamily: 'Cairo',
+                                        fontSize: 11.5,
+                                        color: Color(0xFF486068),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                if (moreCount > 0)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFE3EEF3),
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Text(
+                                      tr(
+                                        '+ $moreCount طالب/ـة',
+                                        '+ $moreCount students',
+                                      ),
+                                      style: const TextStyle(
+                                        fontFamily: 'Cairo',
+                                        fontSize: 11.5,
+                                        color: Color(0xFF3E5760),
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: FilledButton.icon(
+                                  onPressed: () => _openAttendanceForSession(
+                                    context,
+                                    group,
+                                    viewOnly: !isFuture,
+                                  ),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: const Color(0xFF006571),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  icon: Icon(
+                                    isFuture
+                                        ? Icons.fact_check_rounded
+                                        : Icons.visibility_rounded,
+                                    size: 18,
+                                  ),
+                                  label: Text(
+                                    isFuture
+                                        ? tr('تحضير', 'Take attendance')
+                                        : tr(
+                                            'معاينة الحضور',
+                                            'Preview attendance',
+                                          ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: isFuture
+                                      ? null
+                                      : () => _openAttendanceForSession(
+                                          context,
+                                          group,
+                                          viewOnly: false,
+                                        ),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFF006571),
+                                    side: const BorderSide(
+                                      color: Color(0xFF006571),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  icon: const Icon(
+                                    Icons.edit_rounded,
+                                    size: 18,
+                                  ),
+                                  label: Text(
+                                    tr('تعديل الحضور', 'Edit attendance'),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 const TextStyle _headerStyle = TextStyle(
   fontFamily: 'Cairo',
   fontSize: 11,
   fontWeight: FontWeight.w800,
   color: Color(0xFF41575D),
 );
+
+enum _AttendanceCalendarAction { attend, editPrevious, preview }
 
 enum _StatusFilter { all, present, absent, excused, late }
 
@@ -2069,6 +2884,7 @@ enum _AttendanceStatus { present, absent, excused, late }
 class _LectureAttendanceGroup {
   _LectureAttendanceGroup({
     required this.sessionId,
+    required this.lecture,
     required this.courseName,
     required this.section,
     required this.dayOfWeek,
@@ -2080,6 +2896,7 @@ class _LectureAttendanceGroup {
   });
 
   final String sessionId;
+  final LectureItem? lecture;
   final String courseName;
   final String section;
   final int dayOfWeek;

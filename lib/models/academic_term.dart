@@ -78,6 +78,7 @@ class AcademicTerm {
 
   factory AcademicTerm.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? {};
+    final rawTermId = (data['termId'] ?? '').toString().trim();
     final startRaw = data['startDate'];
     final endRaw = data['endDate'];
     final startDate = startRaw is Timestamp
@@ -87,11 +88,13 @@ class AcademicTerm {
         ? endRaw.toDate()
         : DateTime.tryParse((endRaw ?? '').toString()) ?? DateTime.now();
     return AcademicTerm(
-      termId: (data['termId'] ?? doc.id).toString(),
+      termId: rawTermId.isNotEmpty ? rawTermId : doc.id,
       termNameAr: (data['termNameAr'] ?? '').toString(),
       termNameEn: (data['termNameEn'] ?? '').toString(),
       academicYear: (data['academicYear'] ?? '').toString(),
-      semesterType: semesterTypeFromString((data['semesterType'] ?? '').toString()),
+      semesterType: semesterTypeFromString(
+        (data['semesterType'] ?? '').toString(),
+      ),
       officialWeeksCount: _safeInt(data['officialWeeksCount']),
       effectiveTeachingWeeks: _safeInt(data['effectiveTeachingWeeks']),
       startDate: startDate,

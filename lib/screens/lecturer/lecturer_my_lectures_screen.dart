@@ -17,6 +17,8 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
   static const Color _primaryColor = Color(0xFF006571);
   static const Color _headerBg = Color(0xFF0A6E79);
   static const Color _rowBorder = Color(0xFFE8E8E8);
+  static const double _tableRadius = 18;
+  static const double _timeColWidth = 56;
 
   List<LectureItem> _allLectures = [];
   bool _isLoadingLectures = true;
@@ -25,6 +27,7 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
   String _selectedTab = 'الكل';
 
   final List<int> _dayOrder = const [7, 1, 2, 3, 4];
+
   /// ساعات العمل من 8 صباحاً إلى 6 مساءً
   final List<int> _timeSlots = const [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
 
@@ -40,7 +43,8 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
       _loadError = null;
     });
     try {
-      final list = await LecturerSectionsService.instance.getLecturesForCurrentLecturer();
+      final list = await LecturerSectionsService.instance
+          .getLecturesForCurrentLecturer();
       if (!mounted) return;
       setState(() {
         _allLectures = list;
@@ -89,69 +93,79 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
                   ? const Center(
                       child: Padding(
                         padding: EdgeInsets.all(24),
-                        child: CircularProgressIndicator(color: Color(0xFF006571)),
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF006571),
+                        ),
                       ),
                     )
                   : _loadError != null
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(_tr('حدث خطأ في تحميل المحاضرات', 'Failed to load lectures')),
-                                const SizedBox(height: 12),
-                                Text(
-                                  _loadError!,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                ),
-                                const SizedBox(height: 16),
-                                TextButton.icon(
-                                  onPressed: _loadLectures,
-                                  icon: const Icon(Icons.refresh),
-                                  label: Text(_tr('إعادة المحاولة', 'Retry')),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      : Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 6),
-                    Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: ProfileBackButton(onTap: _goBack),
-                    ),
-                    const SizedBox(height: 10),
-                    _buildTabsSection(),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        physics: const BouncingScrollPhysics(),
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            _selectedTab == 'الكل'
-                                ? _buildAllScheduleTable()
-                                : _buildSingleDayTable(
-                                    _tabs.firstWhere(
-                                      (tab) => tab.label == _selectedTab,
-                                    ),
-                                  ),
-                            _scheduleTableBottomHint(),
+                            Text(
+                              _tr(
+                                'حدث خطأ في تحميل المحاضرات',
+                                'Failed to load lectures',
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              _loadError!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            TextButton.icon(
+                              onPressed: _loadLectures,
+                              icon: const Icon(Icons.refresh),
+                              label: Text(_tr('إعادة المحاولة', 'Retry')),
+                            ),
                           ],
                         ),
                       ),
+                    )
+                  : Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 6),
+                          Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: ProfileBackButton(onTap: _goBack),
+                          ),
+                          const SizedBox(height: 10),
+                          _buildTabsSection(),
+                          const SizedBox(height: 12),
+                          Expanded(
+                            child: SingleChildScrollView(
+                              physics: const BouncingScrollPhysics(),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _selectedTab == 'الكل'
+                                      ? _buildAllScheduleTable()
+                                      : _buildSingleDayTable(
+                                          _tabs.firstWhere(
+                                            (tab) => tab.label == _selectedTab,
+                                          ),
+                                        ),
+                                  _scheduleTableBottomHint(),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ],
-                ),
-              ),
             ),
           ),
         );
@@ -165,13 +179,13 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(_tableRadius),
         border: Border.all(color: const Color(0xFFD6E6E8)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
@@ -230,34 +244,40 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(_tableRadius),
         border: Border.all(color: const Color(0xFFD6E5E8)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(_tableRadius),
         child: Column(
           children: [
             Container(
-              color: _headerBg,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF27A2A9), _headerBg],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               child: Row(
                 children: [
                   SizedBox(
-                    width: 50,
+                    width: _timeColWidth,
                     child: Text(
                       _tr('الوقت', 'Time'),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white,
                         fontFamily: 'Cairo',
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -280,18 +300,20 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
               ),
             ),
             ..._timeSlots.asMap().entries.map((entry) {
+              final rowIndex = entry.key;
               final hour = entry.value;
               return Container(
                 decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: _rowBorder),
-                  ),
+                  color: rowIndex.isEven
+                      ? const Color(0xFFFCFEFE)
+                      : Colors.white,
+                  border: Border(bottom: BorderSide(color: _rowBorder)),
                 ),
                 child: Row(
                   children: [
                     Container(
-                      width: 50,
-                      height: 38,
+                      width: _timeColWidth,
+                      height: 40,
                       alignment: Alignment.center,
                       decoration: const BoxDecoration(
                         border: Border(left: BorderSide(color: _rowBorder)),
@@ -312,7 +334,7 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
                         child: _buildCell(
                           lecture: _lectureAt(day, hour),
                           showInfo: true,
-                          height: 38,
+                          height: 40,
                         ),
                       ),
                     ),
@@ -347,23 +369,29 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(_tableRadius),
         border: Border.all(color: const Color(0xFFD6E5E8)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(_tableRadius),
         child: Column(
           children: [
             Container(
               width: double.infinity,
-              color: _headerBg,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF27A2A9), _headerBg],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
                 _displayDayNameFromArabic(tab.label),
@@ -377,18 +405,20 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
               ),
             ),
             ..._timeSlots.asMap().entries.map((entry) {
+              final rowIndex = entry.key;
               final hour = entry.value;
               return Container(
                 decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: _rowBorder),
-                  ),
+                  color: rowIndex.isEven
+                      ? const Color(0xFFFCFEFE)
+                      : Colors.white,
+                  border: Border(bottom: BorderSide(color: _rowBorder)),
                 ),
                 child: Row(
                   children: [
                     Container(
-                      width: 50,
-                      height: 40,
+                      width: _timeColWidth,
+                      height: 42,
                       alignment: Alignment.center,
                       decoration: const BoxDecoration(
                         border: Border(left: BorderSide(color: _rowBorder)),
@@ -408,7 +438,7 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
                       child: _buildCell(
                         lecture: _lectureAt(day, hour),
                         showInfo: false,
-                        height: 40,
+                        height: 42,
                       ),
                     ),
                   ],
@@ -429,16 +459,17 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
     if (lecture == null) return SizedBox(height: height);
 
     final Color fill = lecture.activity == 'عملي'
-        ? const Color(0xFF8ABCC5)
-        : const Color(0xFFE6E0D3);
+        ? const Color(0xFFDDF1F5)
+        : const Color(0xFFF3EFE4);
 
     return Container(
       height: height,
-      margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-      padding: const EdgeInsets.symmetric(horizontal: 4),
+      margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
         color: fill,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFD6E5E8), width: 0.8),
       ),
       child: Row(
         children: [
@@ -530,7 +561,8 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
               _detailRow('CRN', lecture.crn),
               _detailRow(_tr('الشعبة', 'Section'), lecture.section),
               _detailRow(_tr('القاعة', 'Hall'), lecture.hall),
-              if (lecture.location != null && lecture.location!.trim().isNotEmpty)
+              if (lecture.location != null &&
+                  lecture.location!.trim().isNotEmpty)
                 _detailRow(_tr('الموقع', 'Location'), lecture.location!.trim()),
               _detailRow(_tr('النوع', 'Type'), lecture.activity),
               _detailRow(

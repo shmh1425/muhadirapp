@@ -226,18 +226,10 @@ class MonthlyCalendar extends StatelessWidget {
     final today = DateTime(now.year, now.month, now.day);
 
     final bool isToday = date.isAtSameMomentAs(today);
-    final bool isWeekend =
-        date.weekday == 5 || date.weekday == 6; // الجمعة أو السبت
-    final bool isFuture = date.isAfter(today);
 
     DayStatus status;
     if (isToday) {
       status = DayStatus.today;
-    } else if (isWeekend) {
-      status = DayStatus.holiday;
-    } else if (isFuture) {
-      // §3: كل تاريخ مستقبلي = أحمر مقفل
-      status = DayStatus.futureLocked;
     } else {
       status = DayStatus.none;
     }
@@ -258,9 +250,17 @@ class MonthlyCalendar extends StatelessWidget {
         ? HijriConverter.toArabicNumber(day.date.day)
         : '${day.date.day}';
     final status = day.status;
-    final backgroundColor = status.color;
+    final visualHolidayType = day.holidayType;
     final hasLectures = day.lecturesCount > 0;
     final isHoliday = status == DayStatus.holiday;
+    final isLectureDay = hasLectures && !isHoliday && !isToday;
+    final backgroundColor = isToday
+        ? DayStatus.today.color
+        : isHoliday
+        ? _holidayFillColor(visualHolidayType)
+        : isLectureDay
+        ? _lectureDayFillColor()
+        : Colors.transparent;
 
     return GestureDetector(
       onTap: () => onDayTap(day),
@@ -273,7 +273,12 @@ class MonthlyCalendar extends StatelessWidget {
           border: isToday
               ? Border.all(color: const Color(0xFF006571), width: 2.5)
               : isHoliday
-              ? Border.all(color: const Color(0xFFB0B0B0), width: 1.5)
+              ? Border.all(
+                  color: _holidayBorderColor(visualHolidayType),
+                  width: 1.5,
+                )
+              : isLectureDay
+              ? Border.all(color: _lectureDayBorderColor(), width: 1.2)
               : null,
           // إضافة ظل خفيف للأيام التي تحتوي على محاضرات
           boxShadow: hasLectures && !isHoliday
@@ -296,7 +301,13 @@ class MonthlyCalendar extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: isToday ? FontWeight.bold : FontWeight.w600,
-                color: isToday ? Colors.white : _getTextColor(status),
+                color: isToday
+                    ? Colors.white
+                    : _getTextColor(
+                        status,
+                        holidayType: visualHolidayType,
+                        isLectureDay: isLectureDay,
+                      ),
                 fontFamily: 'Cairo',
               ),
               textAlign: TextAlign.center,
@@ -312,15 +323,18 @@ class MonthlyCalendar extends StatelessWidget {
   }
 
   /// لون النص حسب حالة اليوم
-  Color _getTextColor(DayStatus status) {
+  Color _getTextColor(
+    DayStatus status, {
+    String? holidayType,
+    bool isLectureDay = false,
+  }) {
     switch (status) {
       case DayStatus.today:
         return Colors.white;
       case DayStatus.holiday:
-        return const Color(0xFF999999);
-      case DayStatus.futureLocked:
-        return const Color(0xFFCC4444);
+        return _holidayTextColor(holidayType);
       default:
+        if (isLectureDay) return const Color(0xFF1B5E20);
         return const Color(0xFF222222);
     }
   }
@@ -329,20 +343,11 @@ class MonthlyCalendar extends StatelessWidget {
     // تحديد لون النقاط حسب الحالة
     Color dotColor;
     switch (status) {
-      case DayStatus.viewOnly:
-        dotColor = const Color(0xFF4A90E2); // أزرق
-        break;
-      case DayStatus.editable:
-        dotColor = const Color(0xFF4CAF50); // أخضر
-        break;
       case DayStatus.today:
         dotColor = Colors.white; // أبيض على خلفية خضراء غامقة
         break;
-      case DayStatus.futureLocked:
-        dotColor = const Color(0xFFCC4444); // أحمر
-        break;
       default:
-        dotColor = const Color(0xFF999999); // رمادي
+        dotColor = const Color(0xFF1B5E20);
     }
 
     // عرض جميع النقاط (كل نقطة = محاضرة واحدة)
@@ -402,6 +407,7 @@ class MonthlyCalendar extends StatelessWidget {
 
   /// دليل الألوان (Legend) — يوضح معنى كل لون
   Widget _buildColorLegend() {
+    final monthHolidayTypes = _collectHolidayTypes();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -420,25 +426,116 @@ class MonthlyCalendar extends StatelessWidget {
             true,
           ),
           _legendItem(
-            const Color(0xFFE5F5E5),
-            _tr('قابل للتعديل', 'Editable'),
+            _lectureDayFillColor(),
+            _tr('يوم محاضرة', 'Lecture day'),
             false,
           ),
           _legendItem(
-            const Color(0xFFE5F0FF),
-            _tr('عرض فقط', 'View only'),
+            _holidayFillColor('weekend'),
+            _tr('عطلة أسبوعية', 'Weekend'),
             false,
           ),
-          _legendItem(
-            const Color(0xFFFFE5E5),
-            _tr('تاريخ مستقبلي', 'Future date'),
-            false,
+          ...monthHolidayTypes.map(
+            (type) => _legendItem(
+              _holidayFillColor(type),
+              _holidayLabel(type),
+              false,
+            ),
           ),
-          _legendItem(const Color(0xFFD0D0D0), _tr('عطلة', 'Holiday'), false),
         ],
       ),
     );
   }
+
+  List<String> _collectHolidayTypes() {
+    final types = calendarDays
+        .where((d) => d.status == DayStatus.holiday)
+        .map((d) => (d.holidayType ?? '').trim().toLowerCase())
+        .where((t) => t.isNotEmpty && t != 'weekend')
+        .toSet()
+        .toList();
+    types.sort((a, b) => _holidayTypeOrder(a).compareTo(_holidayTypeOrder(b)));
+    return types;
+  }
+
+  int _holidayTypeOrder(String type) {
+    switch (type) {
+      case 'holiday':
+        return 1;
+      case 'break':
+        return 2;
+      case 'suspension':
+        return 3;
+      case 'other':
+        return 4;
+      case 'weekend':
+        return 5;
+      default:
+        return 6;
+    }
+  }
+
+  String _holidayLabel(String? type) {
+    switch ((type ?? '').trim().toLowerCase()) {
+      case 'holiday':
+        return _tr('عطلة رسمية', 'Official holiday');
+      case 'break':
+        return _tr('إجازة أكاديمية', 'Academic break');
+      case 'suspension':
+        return _tr('تعليق دراسة', 'Suspension');
+      case 'other':
+        return _tr('عطلة أخرى', 'Other holiday');
+      case 'weekend':
+        return _tr('عطلة أسبوعية', 'Weekend');
+      default:
+        return _tr('عطلة مسجلة', 'Registered holiday');
+    }
+  }
+
+  Color _holidayFillColor(String? type) {
+    switch ((type ?? '').trim().toLowerCase()) {
+      case 'holiday':
+      case 'break':
+      case 'suspension':
+      case 'other':
+        return const Color(0xFFFFF5CC);
+      case 'weekend':
+        return const Color(0xFFFFE2E2);
+      default:
+        return const Color(0xFFFFF5CC);
+    }
+  }
+
+  Color _holidayBorderColor(String? type) {
+    switch ((type ?? '').trim().toLowerCase()) {
+      case 'holiday':
+      case 'break':
+      case 'suspension':
+      case 'other':
+        return const Color(0xFFE0B422);
+      case 'weekend':
+        return const Color(0xFFD34A4A);
+      default:
+        return const Color(0xFFE0B422);
+    }
+  }
+
+  Color _holidayTextColor(String? type) {
+    switch ((type ?? '').trim().toLowerCase()) {
+      case 'holiday':
+      case 'break':
+      case 'suspension':
+      case 'other':
+        return const Color(0xFF8A6A00);
+      case 'weekend':
+        return const Color(0xFFB3261E);
+      default:
+        return const Color(0xFF8A6A00);
+    }
+  }
+
+  Color _lectureDayFillColor() => const Color(0xFFE7F6E9);
+  Color _lectureDayBorderColor() => const Color(0xFF81C784);
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 

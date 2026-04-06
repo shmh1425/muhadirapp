@@ -34,17 +34,72 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
   final Set<String> _selectedWeeks = <String>{};
   bool _isLoading = true;
   String? _loadError;
+  int _semesterWeeksCount = 15;
+  DateTime? _semesterStartDate;
 
   @override
   void initState() {
     super.initState();
-    _subscribeAttendance();
+    _bootstrapAttendance();
   }
 
   @override
   void dispose() {
     _recordsSubscription?.cancel();
     super.dispose();
+  }
+
+  Future<void> _bootstrapAttendance() async {
+    await _loadAcademicTermContext();
+    await _subscribeAttendance();
+  }
+
+  Future<void> _loadAcademicTermContext() async {
+    try {
+      final now = DateTime.now();
+      final snapshot = await FirebaseFirestore.instance
+          .collection('academic_terms')
+          .where('isActive', isEqualTo: true)
+          .get();
+      if (snapshot.docs.isEmpty) return;
+
+      QueryDocumentSnapshot<Map<String, dynamic>> preferred =
+          snapshot.docs.first;
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final start = _readDate(data['startDate']);
+        final end = _readDate(data['endDate']);
+        if (start == null || end == null) continue;
+        final inRange =
+            (now.isAfter(start) || now.isAtSameMomentAs(start)) &&
+            (now.isBefore(end) || now.isAtSameMomentAs(end));
+        if (inRange) {
+          preferred = doc;
+          break;
+        }
+      }
+
+      if (preferred == snapshot.docs.first) {
+        final sorted = [...snapshot.docs];
+        sorted.sort((a, b) {
+          final aStart = _readDate(a.data()['startDate']) ?? DateTime(1970);
+          final bStart = _readDate(b.data()['startDate']) ?? DateTime(1970);
+          return bStart.compareTo(aStart);
+        });
+        preferred = sorted.first;
+      }
+
+      final data = preferred.data();
+      final weeks =
+          _readPositiveInt(data['effectiveTeachingWeeks']) ??
+          _readPositiveInt(data['officialWeeksCount']) ??
+          _readPositiveInt(data['semesterWeeks']) ??
+          _semesterWeeksCount;
+      _semesterWeeksCount = weeks.clamp(1, 20);
+      _semesterStartDate = _readDate(data['startDate']);
+    } catch (_) {
+      // Keep defaults if term context is unavailable.
+    }
   }
 
   Future<void> _subscribeAttendance() async {
@@ -57,22 +112,29 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
       return;
     }
 
+    await _recordsSubscription?.cancel();
     _recordsSubscription = _manualAttendanceService
         .watchStudentRecords(student.studentId)
         .listen(
           (records) async {
             final typeMaps = await _fetchCourseTypesForRecords(records);
             if (!mounted) return;
-            final semesterStart = records.isEmpty
-                ? null
-                : records.map((r) => r.lectureDate).reduce((a, b) => a.isBefore(b) ? a : b);
+            final semesterStart =
+                _semesterStartDate ??
+                (records.isEmpty
+                    ? null
+                    : records
+                          .map((r) => r.lectureDate)
+                          .reduce((a, b) => a.isBefore(b) ? a : b));
             final mapped = records
-                .map((r) => _toAttendanceRecord(
-                      r,
-                      typeMaps.codeToType,
-                      typeMaps.sectionIdToType,
-                      semesterStart,
-                    ))
+                .map(
+                  (r) => _toAttendanceRecord(
+                    r,
+                    typeMaps.codeToType,
+                    typeMaps.sectionIdToType,
+                    semesterStart,
+                  ),
+                )
                 .toList();
             mapped.sort((a, b) => b.lectureDate.compareTo(a.lectureDate));
             if (!mounted) return;
@@ -80,11 +142,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
               _records = mapped;
               _isLoading = false;
               _loadError = null;
-              if (_selectedWeeks.isEmpty) {
-                for (var i = 0; i < _semesterWeeksCount; i++) {
-                  _selectedWeeks.add('الأسبوع ${_weekOrdinal(i)}');
-                }
-              }
+              _syncSelectedWeeksWithAvailable();
             });
           },
           onError: (error) {
@@ -112,11 +170,19 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
   }
 
   /// جلب courseType من courses ثم sections للسجلات اللي ما عندها نوع
-  Future<({Map<String, String> codeToType, Map<String, String> sectionIdToType})> _fetchCourseTypesForRecords(
-    List<ManualAttendanceRecord> records,
-  ) async {
-    final needType = records.where((r) => (r.courseType ?? '').trim().isEmpty).toList();
-    if (needType.isEmpty) return (codeToType: <String, String>{}, sectionIdToType: <String, String>{});
+  Future<
+    ({Map<String, String> codeToType, Map<String, String> sectionIdToType})
+  >
+  _fetchCourseTypesForRecords(List<ManualAttendanceRecord> records) async {
+    final needType = records
+        .where((r) => (r.courseType ?? '').trim().isEmpty)
+        .toList();
+    if (needType.isEmpty) {
+      return (
+        codeToType: <String, String>{},
+        sectionIdToType: <String, String>{},
+      );
+    }
 
     final firestore = FirebaseFirestore.instance;
     final codeToType = <String, String>{};
@@ -173,9 +239,15 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
     final sectionText = record.sectionLabel.trim().isEmpty
         ? '-'
         : record.sectionLabel;
-    final courseName = (record.courseName).trim().isEmpty ? '—' : record.courseName;
-    String? rawType = (record.courseType ?? '').trim().isNotEmpty ? record.courseType?.trim() : null;
-    rawType ??= record.courseCode != null ? codeToType[record.courseCode!] : null;
+    final courseName = (record.courseName).trim().isEmpty
+        ? '—'
+        : record.courseName;
+    String? rawType = (record.courseType ?? '').trim().isNotEmpty
+        ? record.courseType?.trim()
+        : null;
+    rawType ??= record.courseCode != null
+        ? codeToType[record.courseCode!]
+        : null;
     rawType ??= sectionIdToType[record.sectionId];
     if (rawType == null || rawType.trim().isEmpty) rawType = 'theoretical';
     final courseType = _courseTypeLabel(rawType);
@@ -203,9 +275,13 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
   }
 
   /// أسبوع الفصل (0..14) من تاريخ بداية الفصل؛ إن لم يُحدد البداية يُستخدم أسبوع السنة.
-  static String _semesterWeekKey(DateTime date, DateTime? semesterStart) {
+  String _semesterWeekKey(DateTime date, DateTime? semesterStart) {
     if (semesterStart != null) {
-      final start = DateTime(semesterStart.year, semesterStart.month, semesterStart.day);
+      final start = DateTime(
+        semesterStart.year,
+        semesterStart.month,
+        semesterStart.day,
+      );
       final d = DateTime(date.year, date.month, date.day);
       final days = d.difference(start).inDays;
       if (days >= 0) {
@@ -219,21 +295,36 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
     return weekNum.clamp(0, _semesterWeeksCount - 1).toString();
   }
 
-  /// عدد أسابيع الفصل المعروضة في الفلتر (قيمة افتراضية؛ يمكن تغييرها حسب نظام الجامعة أو جلبها من الإعدادات لاحقاً)
-  static const int _semesterWeeksCount = 15;
-
   static const List<String> _weekOrdinals = <String>[
-    'الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس',
-    'السابع', 'الثامن', 'التاسع', 'العاشر', 'الحادي عشر', 'الثاني عشر',
-    'الثالث عشر', 'الرابع عشر', 'الخامس عشر', 'السادس عشر', 'السابع عشر',
-    'الثامن عشر', 'التاسع عشر', 'العشرون',
+    'الأول',
+    'الثاني',
+    'الثالث',
+    'الرابع',
+    'الخامس',
+    'السادس',
+    'السابع',
+    'الثامن',
+    'التاسع',
+    'العاشر',
+    'الحادي عشر',
+    'الثاني عشر',
+    'الثالث عشر',
+    'الرابع عشر',
+    'الخامس عشر',
+    'السادس عشر',
+    'السابع عشر',
+    'الثامن عشر',
+    'التاسع عشر',
+    'العشرون',
   ];
 
   List<String> get _courses {
     final seen = <String>{};
     final list = <String>[];
     for (final r in _records) {
-      final type = (r.courseType.trim().isEmpty || r.courseType == '—') ? 'نظري' : r.courseType;
+      final type = (r.courseType.trim().isEmpty || r.courseType == '—')
+          ? 'نظري'
+          : r.courseType;
       final label = '${r.course} $type'.trim();
       if (label.isNotEmpty && seen.add(label)) list.add(label);
     }
@@ -243,6 +334,18 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
 
   String _weekOrdinal(int index) =>
       index < _weekOrdinals.length ? _weekOrdinals[index] : '${index + 1}';
+
+  void _syncSelectedWeeksWithAvailable() {
+    final weeks = _weeks;
+    if (_selectedWeeks.isEmpty) {
+      _selectedWeeks.addAll(weeks);
+      return;
+    }
+    _selectedWeeks.removeWhere((week) => !weeks.contains(week));
+    if (_selectedWeeks.isEmpty) {
+      _selectedWeeks.addAll(weeks);
+    }
+  }
 
   /// قائمة أسابيع الفصل (15 أسبوع) للفلتر
   List<String> get _weeks {
@@ -280,6 +383,30 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
     }
   }
 
+  DateTime? _readDate(dynamic value) {
+    if (value is Timestamp) {
+      final d = value.toDate();
+      return DateTime(d.year, d.month, d.day);
+    }
+    if (value is DateTime) {
+      return DateTime(value.year, value.month, value.day);
+    }
+    if (value is String) {
+      final d = DateTime.tryParse(value.trim());
+      if (d == null) return null;
+      return DateTime(d.year, d.month, d.day);
+    }
+    return null;
+  }
+
+  int? _readPositiveInt(dynamic value) {
+    if (value is int && value > 0) return value;
+    if (value is num && value > 0) return value.toInt();
+    final parsed = int.tryParse((value ?? '').toString());
+    if (parsed == null || parsed <= 0) return null;
+    return parsed;
+  }
+
   int get _total => _records.length;
   int get _totalAttendance =>
       _records.where((r) => r.status == 'present').length;
@@ -297,9 +424,6 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
       _total == 0 ? 0 : (_unexcusedAbsence / _total) * 100;
   double get _tardinessPercentage =>
       _total == 0 ? 0 : (_tardiness / _total) * 100;
-
-  String _formatDate(DateTime date) =>
-      '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
 
   @override
   Widget build(BuildContext context) {
@@ -362,7 +486,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
                                 ),
                                 const SizedBox(height: 12),
                                 TextButton.icon(
-                                  onPressed: _subscribeAttendance,
+                                  onPressed: _bootstrapAttendance,
                                   icon: const Icon(Icons.refresh_rounded),
                                   label: const Text('إعادة المحاولة'),
                                 ),
@@ -605,7 +729,10 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
                 child: Container(
                   height: 36,
                   constraints: const BoxConstraints(minWidth: 100),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(22),
                     gradient: isActive
@@ -650,7 +777,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
         borderRadius: BorderRadius.circular(14),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -677,9 +804,14 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
                 child: Container(
                   width: 52,
                   height: 52,
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                    color: allSelected ? const Color(0xFF27A2A9) : Colors.grey.shade200,
+                    color: allSelected
+                        ? const Color(0xFF27A2A9)
+                        : Colors.grey.shade200,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   alignment: Alignment.center,
@@ -688,7 +820,9 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: allSelected ? Colors.white : const Color(0xFF1A1A1A),
+                      color: allSelected
+                          ? Colors.white
+                          : const Color(0xFF1A1A1A),
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -696,45 +830,52 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
               ),
             ),
             ...weeks.map((String week) {
-            final bool isSelected = _selectedWeeks.contains(week);
-            final String displayText = week.replaceFirst(' ', '\n');
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 3),
-              child: InkWell(
-                onTap: () {
-                  setState(() {
-                    if (isSelected) {
-                      _selectedWeeks.remove(week);
-                    } else {
-                      _selectedWeeks.add(week);
-                    }
-                  });
-                },
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  width: 52,
-                  height: 52,
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFF27A2A9) : Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    displayText,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: isSelected ? Colors.white : const Color(0xFF1A1A1A),
+              final bool isSelected = _selectedWeeks.contains(week);
+              final String displayText = week.replaceFirst(' ', '\n');
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: InkWell(
+                  onTap: () {
+                    setState(() {
+                      if (isSelected) {
+                        _selectedWeeks.remove(week);
+                      } else {
+                        _selectedWeeks.add(week);
+                      }
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    width: 52,
+                    height: 52,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 4,
                     ),
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? const Color(0xFF27A2A9)
+                          : Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      displayText,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: isSelected
+                            ? Colors.white
+                            : const Color(0xFF1A1A1A),
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
-              ),
-            );
-          }).toList(),
+              );
+            }),
           ],
         ),
       ),
@@ -747,8 +888,12 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
     final allWeeksSelected = _selectedWeeks.length == weeks.length;
     final noWeekFilter = allWeeksSelected;
     final filteredRecords = _records.where((record) {
-      final type = (record.courseType.trim().isEmpty || record.courseType == '—') ? 'نظري' : record.courseType;
-      final courseMatch = _selectedCourse == 'الكل' ||
+      final type =
+          (record.courseType.trim().isEmpty || record.courseType == '—')
+          ? 'نظري'
+          : record.courseType;
+      final courseMatch =
+          _selectedCourse == 'الكل' ||
           ('${record.course} $type'.trim() == _selectedCourse);
       final weekLabel = weekKeyToDisplay[record.weekKey] ?? record.weekKey;
       final weekMatch = noWeekFilter || _selectedWeeks.contains(weekLabel);
@@ -760,10 +905,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
       return const Center(
         child: Text(
           'لا توجد سجلات',
-          style: TextStyle(
-            fontSize: 16,
-            color: Color(0xFF9E9E9E),
-          ),
+          style: TextStyle(fontSize: 16, color: Color(0xFF9E9E9E)),
         ),
       );
     }
@@ -788,11 +930,9 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
             itemCount: filteredRecords.length,
             itemBuilder: (BuildContext context, int index) {
               final record = filteredRecords[index];
-              final weekLabel = weekKeyToDisplay[record.weekKey] ?? record.weekKey;
-              return _AttendanceCard(
-                record: record,
-                weekLabel: weekLabel,
-              );
+              final weekLabel =
+                  weekKeyToDisplay[record.weekKey] ?? record.weekKey;
+              return _AttendanceCard(record: record, weekLabel: weekLabel);
             },
           ),
         ),
@@ -922,10 +1062,7 @@ class _AttendanceRecord {
 }
 
 class _AttendanceCard extends StatelessWidget {
-  const _AttendanceCard({
-    required this.record,
-    required this.weekLabel,
-  });
+  const _AttendanceCard({required this.record, required this.weekLabel});
 
   final _AttendanceRecord record;
   final String weekLabel;
@@ -955,7 +1092,7 @@ class _AttendanceCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -1016,7 +1153,9 @@ class _AttendanceCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    (record.courseType.isEmpty || record.courseType == '—') ? 'نظري' : record.courseType,
+                    (record.courseType.isEmpty || record.courseType == '—')
+                        ? 'نظري'
+                        : record.courseType,
                     style: const TextStyle(
                       fontSize: 12,
                       color: Color(0xFF1A1A1A),
@@ -1053,10 +1192,7 @@ class _AttendanceCard extends StatelessWidget {
               const SizedBox(height: 2),
               const Text(
                 'مدة المحاضرة',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Color(0xFF1A1A1A),
-                ),
+                style: TextStyle(fontSize: 11, color: Color(0xFF1A1A1A)),
                 textAlign: TextAlign.right,
               ),
             ],

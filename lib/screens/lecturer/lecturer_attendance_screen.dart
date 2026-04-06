@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../models/attendance/manual_attendance_record.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../services/attendance/manual_attendance_service.dart';
+import '../../services/lecturer/lecture_repository.dart';
+import '../../services/lecturer/calendar_sync_service.dart';
 import 'lecturer_language.dart';
 import 'lecturer_navigation.dart';
 import 'widgets/profile_back_button.dart';
@@ -58,7 +60,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
   final ManualAttendanceService _manualAttendanceService =
       ManualAttendanceService.instance;
+  final LectureRepository _calendarRepository = LectureRepository();
   StreamSubscription<List<ManualAttendanceRecord>>? _recordsSubscription;
+  StreamSubscription<void>? _calendarSyncSub;
 
   String? _sessionId;
   List<_StudentRow> _students = <_StudentRow>[];
@@ -68,6 +72,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   bool _isSaving = false;
   bool _isLoadingAttendance = true;
   String? _attendanceLoadError;
+  DateTime? _calendarReferenceDate;
+  bool _isSyncRefreshing = false;
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
@@ -215,20 +221,72 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   @override
   void initState() {
     super.initState();
-    _loadManualAttendance();
+    _calendarSyncSub = CalendarSyncService.instance.watchChanges().listen(
+      (_) => _handleRealtimeCalendarChange(),
+    );
+    _bootstrapAttendance();
   }
 
   @override
   void dispose() {
     _recordsSubscription?.cancel();
+    _calendarSyncSub?.cancel();
     super.dispose();
   }
 
   DateTime get _sessionDate => DateTime(
-    (_selectedDate ?? DateTime.now()).year,
-    (_selectedDate ?? DateTime.now()).month,
-    (_selectedDate ?? DateTime.now()).day,
+    (_selectedDate ?? _calendarReferenceDate ?? DateTime.now()).year,
+    (_selectedDate ?? _calendarReferenceDate ?? DateTime.now()).month,
+    (_selectedDate ?? _calendarReferenceDate ?? DateTime.now()).day,
   );
+
+  Future<void> _bootstrapAttendance() async {
+    try {
+      await _calendarRepository.refreshAcademicCalendar();
+      _calendarReferenceDate = DateTime(
+        _calendarRepository.currentDateTime.year,
+        _calendarRepository.currentDateTime.month,
+        _calendarRepository.currentDateTime.day,
+      );
+    } catch (_) {
+      _calendarReferenceDate = DateTime.now();
+    }
+    await _loadManualAttendance();
+  }
+
+  Future<void> _handleRealtimeCalendarChange() async {
+    if (!mounted || _isSyncRefreshing) return;
+    _isSyncRefreshing = true;
+    try {
+      await _calendarRepository.refreshAcademicCalendar();
+      final newReference = DateTime(
+        _calendarRepository.currentDateTime.year,
+        _calendarRepository.currentDateTime.month,
+        _calendarRepository.currentDateTime.day,
+      );
+      final previous = _calendarReferenceDate;
+      _calendarReferenceDate = newReference;
+
+      final dayChanged =
+          previous == null ||
+          previous.year != newReference.year ||
+          previous.month != newReference.month ||
+          previous.day != newReference.day;
+
+      if (!_viewOnly && _selectedDate == null && dayChanged) {
+        await _loadManualAttendance();
+        return;
+      }
+
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (_) {
+      // Ignore transient realtime listener errors.
+    } finally {
+      _isSyncRefreshing = false;
+    }
+  }
 
   Future<void> _loadManualAttendance() async {
     setState(() {

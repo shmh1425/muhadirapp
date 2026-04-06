@@ -69,6 +69,22 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Academic terms + weeks + exceptions.
+    match /academic_terms/{termId} {
+      allow read: if true;
+      allow write: if isAdmin();
+
+      match /weeks/{weekId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+
+      match /calendar_exceptions/{exceptionId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+    }
+
     // Manual attendance sessions (one per section/day/lecture start time).
     match /manual_attendance_sessions/{sessionId} {
       allow read, write: if isSignedIn();
@@ -89,6 +105,20 @@ service cloud.firestore {
     // NFC attendance records (coming soon).
     match /nfc_attendance_records/{recordId} {
       allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // Student app notifications generated from lecturer actions.
+    match /student_notifications/{notificationId} {
+      // Students log in by email (without Firebase Auth), so read must remain public
+      // like manual_attendance_records; filtering by studentId happens in client query.
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // Lecturer confirmation notifications (e.g., students have been notified).
+    match /lecturer_notifications/{notificationId} {
+      allow read: if isSignedIn();
       allow write: if isSignedIn();
     }
 

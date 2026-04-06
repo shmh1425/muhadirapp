@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../student/components/notification_bell.dart';
 import '../student/notifications_screen.dart';
@@ -7,6 +9,7 @@ import '../../models/lecturer/lecture_item.dart';
 import '../../models/calendar_day.dart';
 import '../../services/lecturer/lecture_repository.dart';
 import '../../services/lecturer/calendar_service.dart';
+import '../../services/lecturer/calendar_sync_service.dart';
 import '../../services/lecturer/filter_service.dart';
 import '../../services/lecturer/lecturer_sections_service.dart';
 import '../../widgets/lecturer/lecturer_home_header.dart';
@@ -38,26 +41,43 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
   List<LectureItem> _allLectures = [];
   bool _isLoadingLectures = true;
   String? _loadError;
+  StreamSubscription<void>? _calendarSyncSub;
+  bool _isSyncRefreshing = false;
 
   @override
   void initState() {
     super.initState();
     _calendarService = CalendarService(_repository);
     _dayTapHandler = DayTapHandler(repository: _repository);
-    _loadLectures();
+    _calendarSyncSub = CalendarSyncService.instance.watchChanges().listen(
+      (_) => _handleRealtimeCalendarChange(),
+    );
+    _loadHomeData();
   }
 
-  Future<void> _loadLectures() async {
+  @override
+  void dispose() {
+    _calendarSyncSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadHomeData() async {
     setState(() {
       _isLoadingLectures = true;
       _loadError = null;
     });
     try {
+      await _repository.refreshAcademicCalendar();
       final list = await LecturerSectionsService.instance
           .getLecturesForCurrentLecturer();
       if (!mounted) return;
       setState(() {
         _allLectures = list;
+        _currentCalendarMonth = DateTime(
+          _repository.currentDateTime.year,
+          _repository.currentDateTime.month,
+          1,
+        );
         _isLoadingLectures = false;
         _loadError = null;
       });
@@ -74,20 +94,93 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
     setState(() {
       _selectedFilter = filter;
     });
+    _refreshCalendarContext();
+  }
+
+  Future<void> _refreshCalendarContext() async {
+    try {
+      await _repository.refreshAcademicCalendar();
+      if (!mounted) return;
+      setState(() {
+        _currentCalendarMonth = DateTime(
+          _repository.currentDateTime.year,
+          _repository.currentDateTime.month,
+          1,
+        );
+      });
+    } catch (_) {
+      // Keep current state on refresh failure.
+    }
+  }
+
+  Future<void> _handleRealtimeCalendarChange() async {
+    if (!mounted || _isSyncRefreshing) return;
+    _isSyncRefreshing = true;
+    try {
+      await _repository.refreshAcademicCalendar();
+      if (!mounted) return;
+      setState(() {
+        _currentCalendarMonth = DateTime(
+          _repository.currentDateTime.year,
+          _repository.currentDateTime.month,
+          1,
+        );
+      });
+    } catch (_) {
+      // Ignore noisy realtime errors and keep current UI.
+    } finally {
+      _isSyncRefreshing = false;
+    }
   }
 
   /// محاضرات المعروضة حسب الفلتر: اليوم / غداً (لو الغد إجازة = قائمة فارغة)
   List<LectureItem> _getLecturesForDisplay() {
+    final baseDate = _repository.currentDateTime;
     if (_selectedFilter == 'غدًا') {
-      final tomorrow = DateTime.now().add(const Duration(days: 1));
+      final tomorrow = baseDate.add(const Duration(days: 1));
       if (_repository.isHoliday(tomorrow)) return [];
     }
-    return FilterService.filterLectures(_allLectures, _selectedFilter);
+    return FilterService.filterLectures(
+      _allLectures,
+      _selectedFilter,
+      baseDate: baseDate,
+    );
   }
 
   DateTime _selectedLectureDateForFilter() {
-    final d = FilterService.getSelectedDate(_selectedFilter);
+    final d = FilterService.getSelectedDate(
+      _selectedFilter,
+      baseDate: _repository.currentDateTime,
+    );
     return DateTime(d.year, d.month, d.day);
+  }
+
+  void _openAttendanceForSelectedFilter(LectureItem lecture) {
+    final selectedDate = _selectedLectureDateForFilter();
+    final today = DateTime(
+      _repository.currentDateTime.year,
+      _repository.currentDateTime.month,
+      _repository.currentDateTime.day,
+    );
+    if (selectedDate.isAfter(today)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            LecturerLanguageController.tr(
+              'لا يمكن فتح حضور تاريخ مستقبلي قبل يومه',
+              'Cannot open future attendance before its day',
+            ),
+          ),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
+      return;
+    }
+    LecturerNavigation.goToAttendance(
+      context,
+      lecture,
+      selectedDate: selectedDate,
+    );
   }
 
   void _handleDayTap(CalendarDay day) {
@@ -160,7 +253,7 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
                             ),
                             const SizedBox(height: 16),
                             TextButton.icon(
-                              onPressed: _loadLectures,
+                              onPressed: _loadHomeData,
                               icon: const Icon(Icons.refresh),
                               label: Text(
                                 LecturerLanguageController.tr(
@@ -186,6 +279,7 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
                             Expanded(
                               child: LecturerHomeHeader(
                                 selectedFilter: _selectedFilter,
+                                referenceDateTime: _repository.currentDateTime,
                                 lecturerName: widget.lecturerName,
                               ),
                             ),
@@ -237,12 +331,7 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
                           ),
                           LectureTimeline(
                             lectures: _getLecturesForDisplay(),
-                            onLectureTap: (lecture) =>
-                                LecturerNavigation.goToAttendance(
-                                  context,
-                                  lecture,
-                                  selectedDate: _selectedLectureDateForFilter(),
-                                ),
+                            onLectureTap: _openAttendanceForSelectedFilter,
                           ),
                         ],
                       ],

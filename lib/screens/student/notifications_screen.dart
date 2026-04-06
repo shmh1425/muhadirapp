@@ -15,6 +15,7 @@ class NotificationsScreen extends StatefulWidget {
 class _NotificationsScreenState extends State<NotificationsScreen> {
   final StudentNotificationsService _notificationsService =
       StudentNotificationsService.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   int get _studentId =>
       StudentAuthService.instance.currentStudent?.studentId ?? 0;
@@ -34,8 +35,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 children: [
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_forward_ios,
-                        color: Color(0xFF006571)),
+                    icon: const Icon(
+                      Icons.arrow_forward_ios,
+                      color: Color(0xFF006571),
+                    ),
                   ),
                   const SizedBox(width: 6),
                   const Expanded(
@@ -56,9 +59,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton(
-                  onPressed: _studentId <= 0
-                      ? null
-                      : _hideAllNotifications,
+                  onPressed: _studentId <= 0 ? null : _hideAllNotifications,
                   child: const Text(
                     'حذف الكل',
                     style: TextStyle(color: Color(0xFFE53935)),
@@ -77,76 +78,112 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   List<Widget> _buildNotificationContent() {
     if (_studentId <= 0) {
       return const <Widget>[
-        _EmptyNotificationsMessage(
-          message: 'سجّل دخولك كطالب لعرض التنبيهات.',
-        ),
+        _EmptyNotificationsMessage(message: 'سجّل دخولك كطالب لعرض التنبيهات.'),
       ];
     }
 
     return <Widget>[
       StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
+        stream: _firestore
             .collection('manual_attendance_records')
             .where('studentId', isEqualTo: _studentId)
             .where('status', whereIn: const <String>['absent', 'excused'])
             .snapshots(),
-        builder: (context, recordsSnapshot) {
-          if (recordsSnapshot.connectionState == ConnectionState.waiting) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(child: CircularProgressIndicator()),
-            );
-          }
-          if (recordsSnapshot.hasError) {
-            return const _EmptyNotificationsMessage(
-              message: 'تعذر تحميل التنبيهات حالياً.',
-            );
-          }
-
-          return FutureBuilder<Set<String>>(
-            future: _notificationsService.getHiddenNotificationIds(_studentId),
-            builder: (context, hiddenSnapshot) {
-              if (hiddenSnapshot.connectionState == ConnectionState.waiting) {
+        builder: (context, attendanceSnapshot) {
+          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: _firestore
+                .collection('student_notifications')
+                .where('studentId', isEqualTo: _studentId)
+                .snapshots(),
+            builder: (context, lectureActionSnapshot) {
+              if (attendanceSnapshot.connectionState ==
+                      ConnectionState.waiting ||
+                  lectureActionSnapshot.connectionState ==
+                      ConnectionState.waiting) {
                 return const Padding(
                   padding: EdgeInsets.symmetric(vertical: 24),
                   child: Center(child: CircularProgressIndicator()),
                 );
               }
-              final hiddenIds = hiddenSnapshot.data ?? <String>{};
-              final docs = recordsSnapshot.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-              final items = docs
-                  .where((doc) => !hiddenIds.contains(doc.id))
-                  .map((doc) => _NotificationItem.fromAttendanceDoc(doc))
-                  .toList()
-                ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
-              if (items.isEmpty) {
+              if (attendanceSnapshot.hasError ||
+                  lectureActionSnapshot.hasError) {
                 return const _EmptyNotificationsMessage(
-                  message: 'لا يوجد إشعارات',
+                  message: 'تعذر تحميل التنبيهات حالياً.',
                 );
               }
 
-              return Column(
-                children: items
-                    .map(
-                      (item) => Dismissible(
-                        key: ValueKey(item.id),
-                        direction: DismissDirection.endToStart,
-                        background: Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          alignment: Alignment.centerLeft,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE53935),
-                            borderRadius: BorderRadius.circular(10),
+              return FutureBuilder<Set<String>>(
+                future: _notificationsService.getHiddenNotificationIds(
+                  _studentId,
+                ),
+                builder: (context, hiddenSnapshot) {
+                  if (hiddenSnapshot.connectionState ==
+                      ConnectionState.waiting) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  final hiddenIds = hiddenSnapshot.data ?? <String>{};
+                  final attendanceDocs =
+                      attendanceSnapshot.data?.docs ??
+                      <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+                  final lectureActionDocs =
+                      lectureActionSnapshot.data?.docs ??
+                      <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+                  final items =
+                      <_NotificationItem>[
+                            ...attendanceDocs.map(
+                              (doc) => _NotificationItem.fromAttendanceDoc(doc),
+                            ),
+                            ...lectureActionDocs.map(
+                              (doc) =>
+                                  _NotificationItem.fromLectureActionDoc(doc),
+                            ),
+                          ]
+                          .where(
+                            (item) =>
+                                !hiddenIds.contains(item.id) &&
+                                !hiddenIds.contains(item.rawId),
+                          )
+                          .toList()
+                        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+                  if (items.isEmpty) {
+                    return const _EmptyNotificationsMessage(
+                      message: 'لا يوجد إشعارات',
+                    );
+                  }
+
+                  return Column(
+                    children: items
+                        .map(
+                          (item) => Dismissible(
+                            key: ValueKey(item.id),
+                            direction: DismissDirection.endToStart,
+                            background: Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              alignment: Alignment.centerLeft,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE53935),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.delete,
+                                color: Colors.white,
+                              ),
+                            ),
+                            onDismissed: (_) =>
+                                _hideSingleNotification(item.id),
+                            child: _NotificationCard(item: item),
                           ),
-                          child: const Icon(Icons.delete, color: Colors.white),
-                        ),
-                        onDismissed: (_) => _hideSingleNotification(item.id),
-                        child: _NotificationCard(item: item),
-                      ),
-                    )
-                    .toList(),
+                        )
+                        .toList(),
+                  );
+                },
               );
             },
           );
@@ -161,12 +198,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Future<void> _hideAllNotifications() async {
     if (_studentId <= 0) return;
-    final query = await FirebaseFirestore.instance
+    final attendanceQuery = await _firestore
         .collection('manual_attendance_records')
         .where('studentId', isEqualTo: _studentId)
         .where('status', whereIn: const <String>['absent', 'excused'])
         .get();
-    final ids = query.docs.map((doc) => doc.id).toList();
+    final lectureActionQuery = await _firestore
+        .collection('student_notifications')
+        .where('studentId', isEqualTo: _studentId)
+        .get();
+    final ids = <String>[
+      ...attendanceQuery.docs.map(
+        (doc) => _NotificationItem.attendanceNotificationId(doc.id),
+      ),
+      ...lectureActionQuery.docs.map(
+        (doc) => _NotificationItem.lectureActionNotificationId(doc.id),
+      ),
+    ];
     await _notificationsService.hideNotifications(_studentId, ids);
   }
 }
@@ -273,6 +321,7 @@ const Map<_NotificationType, _NotificationStyle> _styles = {
 class _NotificationItem {
   const _NotificationItem({
     required this.id,
+    required this.rawId,
     required this.title,
     required this.message,
     required this.date,
@@ -281,11 +330,21 @@ class _NotificationItem {
   });
 
   final String id;
+  final String rawId;
   final String title;
   final String message;
   final String date;
   final _NotificationType type;
   final DateTime timestamp;
+
+  static const String _attendancePrefix = 'attendance::';
+  static const String _lectureActionPrefix = 'lecture_action::';
+
+  static String attendanceNotificationId(String rawId) =>
+      '$_attendancePrefix$rawId';
+
+  static String lectureActionNotificationId(String rawId) =>
+      '$_lectureActionPrefix$rawId';
 
   factory _NotificationItem.fromAttendanceDoc(
     QueryDocumentSnapshot<Map<String, dynamic>> doc,
@@ -302,7 +361,8 @@ class _NotificationItem {
     final sectionLabel = section.isEmpty ? '' : ' - الشعبة $section';
 
     return _NotificationItem(
-      id: doc.id,
+      id: attendanceNotificationId(doc.id),
+      rawId: doc.id,
       title: title,
       message: 'تم تسجيل غيابك ($statusLabel) في "$courseName"$sectionLabel.',
       date: _formatArabicDate(date),
@@ -310,6 +370,38 @@ class _NotificationItem {
           ? _NotificationType.info
           : _NotificationType.warning,
       timestamp: date,
+    );
+  }
+
+  factory _NotificationItem.fromLectureActionDoc(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = doc.data();
+    final actionType = (data['actionType'] ?? '').toString().trim();
+    final courseName = (data['courseName'] ?? 'المقرر').toString().trim();
+    final section = (data['section'] ?? '').toString().trim();
+    final lectureDate = _extractDate(data);
+    final title = (data['titleAr'] ?? '').toString().trim().isNotEmpty
+        ? (data['titleAr'] ?? '').toString().trim()
+        : actionType == 'delay'
+        ? 'تنبيه تأخير محاضرة'
+        : 'تنبيه إلغاء محاضرة';
+    final message = (data['messageAr'] ?? '').toString().trim().isNotEmpty
+        ? (data['messageAr'] ?? '').toString().trim()
+        : actionType == 'delay'
+        ? 'تم تأخير محاضرة "$courseName"${section.isEmpty ? '' : ' - الشعبة $section'}.'
+        : 'تم إلغاء محاضرة "$courseName"${section.isEmpty ? '' : ' - الشعبة $section'}.';
+
+    return _NotificationItem(
+      id: lectureActionNotificationId(doc.id),
+      rawId: doc.id,
+      title: title,
+      message: message,
+      date: _formatArabicDate(lectureDate),
+      type: actionType == 'delay'
+          ? _NotificationType.info
+          : _NotificationType.error,
+      timestamp: _extractCreatedAt(data, fallback: lectureDate),
     );
   }
 
@@ -337,6 +429,17 @@ class _NotificationItem {
     }
 
     return DateTime.now();
+  }
+
+  static DateTime _extractCreatedAt(
+    Map<String, dynamic> data, {
+    required DateTime fallback,
+  }) {
+    final createdAt = data['createdAt'];
+    if (createdAt is Timestamp) {
+      return createdAt.toDate();
+    }
+    return fallback;
   }
 
   static int _safeInt(dynamic value) {

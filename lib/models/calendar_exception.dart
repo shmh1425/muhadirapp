@@ -65,8 +65,11 @@ class CalendarException {
     }
   }
 
-  factory CalendarException.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  factory CalendarException.fromDoc(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
     final data = doc.data() ?? {};
+    final rawExceptionId = (data['exceptionId'] ?? '').toString().trim();
     final startRaw = data['startDate'];
     final endRaw = data['endDate'];
     final startDate = startRaw is Timestamp
@@ -76,14 +79,16 @@ class CalendarException {
         ? endRaw.toDate()
         : DateTime.tryParse((endRaw ?? '').toString()) ?? DateTime.now();
     return CalendarException(
-      exceptionId: (data['exceptionId'] ?? doc.id).toString(),
+      exceptionId: rawExceptionId.isNotEmpty ? rawExceptionId : doc.id,
       titleAr: (data['titleAr'] ?? '').toString(),
       titleEn: (data['titleEn'] ?? '').toString(),
       startDate: startDate,
       endDate: endDate,
       type: typeFromString((data['type'] ?? '').toString()),
       excludeFromAttendance: data['excludeFromAttendance'] == true,
-      notes: (data['notes'] ?? '').toString().trim().isEmpty ? null : (data['notes'] ?? '').toString(),
+      notes: (data['notes'] ?? '').toString().trim().isEmpty
+          ? null
+          : (data['notes'] ?? '').toString(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );
