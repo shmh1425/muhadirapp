@@ -10,6 +10,11 @@ class ManualAttendanceSession {
     required this.lectureEndTime,
     required this.lectureDate,
     required this.dayOfWeek,
+    this.termId,
+    this.officialWeekNumber,
+    this.effectiveWeekNumber,
+    this.countInAttendance = true,
+    this.attendanceFinalized = true,
   });
 
   final String sessionId;
@@ -20,6 +25,14 @@ class ManualAttendanceSession {
   final String lectureEndTime;
   final DateTime lectureDate;
   final int dayOfWeek;
+  /// When set, session is linked to an academic term for week-based attendance.
+  final String? termId;
+  final int? officialWeekNumber;
+  final int? effectiveWeekNumber;
+  /// True only for instructional weeks; break weeks must not count in attendance.
+  final bool countInAttendance;
+  /// When true, session is included in totalCountableSessions for absence calculation.
+  final bool attendanceFinalized;
 
   factory ManualAttendanceSession.fromDoc(
     QueryDocumentSnapshot<Map<String, dynamic>> doc,
@@ -51,6 +64,8 @@ class ManualAttendanceSession {
       }
     }
     final dayOfWeek = _safeInt(data['lectureDayOfWeek']);
+    final officialWeek = _optionalInt(data['officialWeekNumber']);
+    final effectiveWeek = _optionalInt(data['effectiveWeekNumber']);
     return ManualAttendanceSession(
       sessionId: (data['sessionId'] ?? doc.id).toString(),
       sectionId: (data['sectionId'] ?? '').toString(),
@@ -62,7 +77,19 @@ class ManualAttendanceSession {
       dayOfWeek: (dayOfWeek >= DateTime.monday && dayOfWeek <= DateTime.sunday)
           ? dayOfWeek
           : lectureDate.weekday,
+      termId: (data['termId'] ?? '').toString().trim().isEmpty ? null : (data['termId'] ?? '').toString(),
+      officialWeekNumber: officialWeek,
+      effectiveWeekNumber: effectiveWeek,
+      countInAttendance: data['countInAttendance'] != false,
+      attendanceFinalized: data['attendanceFinalized'] != false,
     );
+  }
+
+  static int? _optionalInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse((value ?? '').toString());
   }
 
   static int _safeInt(dynamic value) {
