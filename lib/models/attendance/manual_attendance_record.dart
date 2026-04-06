@@ -11,6 +11,8 @@ class ManualAttendanceRecord {
     required this.studentName,
     required this.status,
     required this.lectureDate,
+    this.courseCode,
+    this.courseType,
     required this.courseName,
     required this.sectionLabel,
     required this.lectureStartTime,
@@ -25,6 +27,8 @@ class ManualAttendanceRecord {
   final String studentName;
   final ManualAttendanceStatus status;
   final DateTime lectureDate;
+  final String? courseCode;
+  final String? courseType;
   final String courseName;
   final String sectionLabel;
   final String lectureStartTime;
@@ -67,6 +71,12 @@ class ManualAttendanceRecord {
   ) {
     final data = doc.data();
     final lectureDate = _parseLectureDate(data);
+    final courseCode = (data['courseCode'] ?? data['course_code'] ?? data['courseId'] ?? '')
+        .toString()
+        .trim();
+    final courseType = (data['courseType'] ?? data['course_type'] ?? '')
+        .toString()
+        .trim();
     return ManualAttendanceRecord(
       recordId: doc.id,
       sessionId: (data['sessionId'] ?? '').toString(),
@@ -75,6 +85,8 @@ class ManualAttendanceRecord {
       studentName: (data['studentName'] ?? '').toString(),
       status: statusFromString((data['status'] ?? '').toString()),
       lectureDate: lectureDate,
+      courseCode: courseCode.isEmpty ? null : courseCode,
+      courseType: courseType.isEmpty ? null : courseType,
       courseName: (data['courseName'] ?? '').toString(),
       sectionLabel: (data['section'] ?? '').toString(),
       lectureStartTime: (data['lectureStartTime'] ?? '').toString(),

@@ -1,5 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../services/student_auth_service.dart';
+import '../../services/student_notifications_service.dart';
 import '../../shared/widgets/chat_fab.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -10,7 +13,11 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  final List<_NotificationItem> _items = List.of(_notifications);
+  final StudentNotificationsService _notificationsService =
+      StudentNotificationsService.instance;
+
+  int get _studentId =>
+      StudentAuthService.instance.currentStudent?.studentId ?? 0;
 
   @override
   Widget build(BuildContext context) {
@@ -49,13 +56,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton(
-                  onPressed: _items.isEmpty
+                  onPressed: _studentId <= 0
                       ? null
-                      : () {
-                          setState(() {
-                            _items.clear();
-                          });
-                        },
+                      : _hideAllNotifications,
                   child: const Text(
                     'حذف الكل',
                     style: TextStyle(color: Color(0xFFE53935)),
@@ -63,33 +66,108 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 ),
               ),
               const SizedBox(height: 6),
-              ..._items.map(
-                (item) => Dismissible(
-                  key: ValueKey(item.title + item.date),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    alignment: Alignment.centerLeft,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE53935),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.delete, color: Colors.white),
-                  ),
-                  onDismissed: (_) {
-                    setState(() {
-                      _items.remove(item);
-                    });
-                  },
-                  child: _NotificationCard(item: item),
-                ),
-              ),
+              ..._buildNotificationContent(),
             ],
           ),
         ),
       ),
     );
+  }
+
+  List<Widget> _buildNotificationContent() {
+    if (_studentId <= 0) {
+      return const <Widget>[
+        _EmptyNotificationsMessage(
+          message: 'سجّل دخولك كطالب لعرض التنبيهات.',
+        ),
+      ];
+    }
+
+    return <Widget>[
+      StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('manual_attendance_records')
+            .where('studentId', isEqualTo: _studentId)
+            .where('status', whereIn: const <String>['absent', 'excused'])
+            .snapshots(),
+        builder: (context, recordsSnapshot) {
+          if (recordsSnapshot.connectionState == ConnectionState.waiting) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          if (recordsSnapshot.hasError) {
+            return const _EmptyNotificationsMessage(
+              message: 'تعذر تحميل التنبيهات حالياً.',
+            );
+          }
+
+          return FutureBuilder<Set<String>>(
+            future: _notificationsService.getHiddenNotificationIds(_studentId),
+            builder: (context, hiddenSnapshot) {
+              if (hiddenSnapshot.connectionState == ConnectionState.waiting) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final hiddenIds = hiddenSnapshot.data ?? <String>{};
+              final docs = recordsSnapshot.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+              final items = docs
+                  .where((doc) => !hiddenIds.contains(doc.id))
+                  .map((doc) => _NotificationItem.fromAttendanceDoc(doc))
+                  .toList()
+                ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+              if (items.isEmpty) {
+                return const _EmptyNotificationsMessage(
+                  message: 'لا يوجد إشعارات',
+                );
+              }
+
+              return Column(
+                children: items
+                    .map(
+                      (item) => Dismissible(
+                        key: ValueKey(item.id),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          alignment: Alignment.centerLeft,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE53935),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.delete, color: Colors.white),
+                        ),
+                        onDismissed: (_) => _hideSingleNotification(item.id),
+                        child: _NotificationCard(item: item),
+                      ),
+                    )
+                    .toList(),
+              );
+            },
+          );
+        },
+      ),
+    ];
+  }
+
+  Future<void> _hideSingleNotification(String id) async {
+    await _notificationsService.hideNotification(_studentId, id);
+  }
+
+  Future<void> _hideAllNotifications() async {
+    if (_studentId <= 0) return;
+    final query = await FirebaseFirestore.instance
+        .collection('manual_attendance_records')
+        .where('studentId', isEqualTo: _studentId)
+        .where('status', whereIn: const <String>['absent', 'excused'])
+        .get();
+    final ids = query.docs.map((doc) => doc.id).toList();
+    await _notificationsService.hideNotifications(_studentId, ids);
   }
 }
 
@@ -194,55 +272,128 @@ const Map<_NotificationType, _NotificationStyle> _styles = {
 
 class _NotificationItem {
   const _NotificationItem({
+    required this.id,
     required this.title,
     required this.message,
     required this.date,
     required this.type,
+    required this.timestamp,
   });
 
+  final String id;
   final String title;
   final String message;
   final String date;
   final _NotificationType type;
+  final DateTime timestamp;
+
+  factory _NotificationItem.fromAttendanceDoc(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = doc.data();
+    final rawStatus = (data['status'] ?? '').toString().trim().toLowerCase();
+    final courseName = (data['courseName'] ?? data['courseTitle'] ?? 'المقرر')
+        .toString()
+        .trim();
+    final section = (data['section'] ?? '').toString().trim();
+    final date = _extractDate(data);
+    final statusLabel = rawStatus == 'excused' ? 'بعذر' : 'بدون عذر';
+    final title = rawStatus == 'excused' ? 'إشعار غياب بعذر' : 'إشعار غياب';
+    final sectionLabel = section.isEmpty ? '' : ' - الشعبة $section';
+
+    return _NotificationItem(
+      id: doc.id,
+      title: title,
+      message: 'تم تسجيل غيابك ($statusLabel) في "$courseName"$sectionLabel.',
+      date: _formatArabicDate(date),
+      type: rawStatus == 'excused'
+          ? _NotificationType.info
+          : _NotificationType.warning,
+      timestamp: date,
+    );
+  }
+
+  static DateTime _extractDate(Map<String, dynamic> data) {
+    final lectureDate = data['lectureDate'];
+    if (lectureDate is Timestamp) {
+      return lectureDate.toDate();
+    }
+
+    final year = _safeInt(data['lectureYear']);
+    final month = _safeInt(data['lectureMonth']);
+    final day = _safeInt(data['lectureDay']);
+    if (year > 0 && month > 0 && day > 0) {
+      return DateTime(year, month, day);
+    }
+
+    final dateKey = (data['dateKey'] ?? '').toString().trim();
+    if (dateKey.length == 8) {
+      final y = int.tryParse(dateKey.substring(0, 4));
+      final m = int.tryParse(dateKey.substring(4, 6));
+      final d = int.tryParse(dateKey.substring(6, 8));
+      if (y != null && m != null && d != null) {
+        return DateTime(y, m, d);
+      }
+    }
+
+    return DateTime.now();
+  }
+
+  static int _safeInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse((value ?? '').toString()) ?? 0;
+  }
+
+  static String _formatArabicDate(DateTime date) {
+    const days = <String>[
+      'الاثنين',
+      'الثلاثاء',
+      'الأربعاء',
+      'الخميس',
+      'الجمعة',
+      'السبت',
+      'الأحد',
+    ];
+    const months = <String>[
+      'يناير',
+      'فبراير',
+      'مارس',
+      'أبريل',
+      'مايو',
+      'يونيو',
+      'يوليو',
+      'أغسطس',
+      'سبتمبر',
+      'أكتوبر',
+      'نوفمبر',
+      'ديسمبر',
+    ];
+    final dayName = days[(date.weekday - 1).clamp(0, 6)];
+    final monthName = months[(date.month - 1).clamp(0, 11)];
+    return '$dayName ${date.day} $monthName ${date.year}';
+  }
 }
 
-const List<_NotificationItem> _notifications = [
-  _NotificationItem(
-    title: 'إشعار قبول العذر',
-    message: 'تم قبول العذر المرفق لمقرر "بحوث العمليات".',
-    date: 'الأربعاء 21 مايو 2025',
-    type: _NotificationType.success,
-  ),
-  _NotificationItem(
-    title: 'إشعار رفض العذر',
-    message: 'تم رفض العذر المرفق لمقرر "جودة البرمجيات".',
-    date: 'الأحد 18 مايو 2025',
-    type: _NotificationType.error,
-  ),
-  _NotificationItem(
-    title: 'تحذير من الحرمان',
-    message:
-        'تجاوزت نسبة الغياب في مقرر "بحوث العمليات" إلى 14% نرجو الحضور لتفادي الحرمان الأكاديمي.',
-    date: 'السبت 17 مايو 2025',
-    type: _NotificationType.warning,
-  ),
-  _NotificationItem(
-    title: 'إلغاء محاضرة',
-    message: 'تم إلغاء محاضرة "الثقافة الإسلامية" للشعبة 2.',
-    date: 'الاثنين 19 مايو 2025',
-    type: _NotificationType.info,
-  ),
-  _NotificationItem(
-    title: 'محاولة دخول غير مصرح بها',
-    message:
-        'تم رصد محاولة دخول باستخدام بطاقتك الجامعية لكن لم يتم تطابق البصمة مع المسجل.',
-    date: 'الثلاثاء 20 مايو 2025',
-    type: _NotificationType.error,
-  ),
-  _NotificationItem(
-    title: 'تأخير المحاضرة',
-    message: 'تم تأخير محاضرة "الثقافة الإسلامية" للشعبة 2.',
-    date: 'الاثنين 26 مايو 2025 مدة 15 دقيقة.',
-    type: _NotificationType.info,
-  ),
-];
+class _EmptyNotificationsMessage extends StatelessWidget {
+  const _EmptyNotificationsMessage({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 48),
+      child: Center(
+        child: Text(
+          message,
+          style: const TextStyle(
+            fontSize: 16,
+            color: Colors.black54,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
