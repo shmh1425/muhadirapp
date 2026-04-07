@@ -271,6 +271,24 @@ class FemaleSecurityGateScanService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  Stream<List<SecurityGateScanRecord>> getAcceptedScans({
+    required String gateId,
+    required DateTime date,
+  }) {
+    return _firestore
+        .collection('student_gate_scans')
+        .where('gateId', isEqualTo: gateId)
+        .where('scanDateKey', isEqualTo: formatScanDateKey(date))
+        .where('status', isEqualTo: 'accepted')
+        .orderBy('scanTime', descending: true)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map(SecurityGateScanRecord.fromDoc)
+              .toList(growable: false),
+        );
+  }
+
   Stream<List<SecurityGateScanRecord>> watchScans({
     required String gateId,
     required DateTime date,

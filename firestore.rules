@@ -10,6 +10,16 @@ service cloud.firestore {
           exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
+    function isActiveSecurityStaff() {
+      return isSignedIn() &&
+          exists(
+            /databases/$(database)/documents/security_staff/$(request.auth.uid)
+          ) &&
+          get(
+            /databases/$(database)/documents/security_staff/$(request.auth.uid)
+          ).data.isActive == true;
+    }
+
     match /admins/{uid} {
       allow read: if isSignedIn() && request.auth.uid == uid;
       allow write: if false;
@@ -120,6 +130,12 @@ service cloud.firestore {
     match /lecturer_notifications/{notificationId} {
       allow read: if isSignedIn();
       allow write: if isSignedIn();
+    }
+
+    // Female security accepted/rejected gate scan history.
+    match /student_gate_scans/{scanId} {
+      allow read: if isActiveSecurityStaff();
+      allow write: if false;
     }
 
     // Deny everything else by default.

@@ -34,6 +34,7 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
   bool _dateUpdated = true;
   bool _isSubmittingScan = false;
   DateTime _selectedDate = DateTime.now();
+  String? _lastAcceptedErrorLog;
 
   @override
   void initState() {
@@ -195,6 +196,29 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
     );
   }
 
+  void _logAcceptedQueryError({
+    required Object error,
+    required StackTrace? stackTrace,
+    required String gateId,
+  }) {
+    final message =
+        '[AcceptedScreen] student_gate_scans query failed. '
+        'gateId=$gateId, '
+        'scanDateKey=${formatScanDateKey(_selectedDate)}, '
+        'status=accepted, '
+        'error=$error';
+
+    if (_lastAcceptedErrorLog == message) return;
+    _lastAcceptedErrorLog = message;
+    debugPrint(message);
+    if (stackTrace != null) {
+      debugPrintStack(
+        label: '[AcceptedScreen] student_gate_scans stackTrace',
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final formattedDate = _getFormattedDate(_selectedDate);
@@ -211,12 +235,18 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
                   valueListenable: selectedGateId,
                   builder: (context, gateId, _) {
                     return StreamBuilder<List<SecurityGateScanRecord>>(
-                      stream: _service.watchScans(
+                      stream: _service.getAcceptedScans(
                         gateId: gateId,
                         date: _selectedDate,
-                        status: 'accepted',
                       ),
                       builder: (context, snapshot) {
+                        if (snapshot.hasError && snapshot.error != null) {
+                          _logAcceptedQueryError(
+                            error: snapshot.error!,
+                            stackTrace: snapshot.stackTrace,
+                            gateId: gateId,
+                          );
+                        }
                         final scans = _filterScans(snapshot.data ?? const []);
                         return ListView(
                           padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),

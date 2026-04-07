@@ -1,4 +1,27 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "student_gate_scans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "gateId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "scanDateKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "scanTime",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }
