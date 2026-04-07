@@ -35,6 +35,7 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
   bool _isSubmittingScan = false;
   DateTime _selectedDate = DateTime.now();
   String? _lastAcceptedErrorLog;
+  String? _lastAcceptedQueryLog;
 
   @override
   void initState() {
@@ -87,19 +88,6 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
         _dateUpdated = true;
       });
     }
-  }
-
-  List<SecurityGateScanRecord> _filterScans(
-    List<SecurityGateScanRecord> scans,
-  ) {
-    final query = _searchController.text.trim().toLowerCase();
-    if (query.isEmpty) return scans;
-    return scans
-        .where((scan) {
-          return scan.studentName.toLowerCase().contains(query) ||
-              scan.universityId.contains(query);
-        })
-        .toList(growable: false);
   }
 
   Future<void> _startScanFlow() async {
@@ -219,6 +207,17 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
     }
   }
 
+  void _logAcceptedQueryValues(String gateId) {
+    final message =
+        '[AcceptedScreen] using simplified accepted query. '
+        'collection=student_gate_scans, status=accepted, '
+        'ignoredGateId=$gateId, '
+        'ignoredScanDateKey=${formatScanDateKey(_selectedDate)}';
+    if (_lastAcceptedQueryLog == message) return;
+    _lastAcceptedQueryLog = message;
+    debugPrint(message);
+  }
+
   @override
   Widget build(BuildContext context) {
     final formattedDate = _getFormattedDate(_selectedDate);
@@ -234,6 +233,7 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
                 child: ValueListenableBuilder<String>(
                   valueListenable: selectedGateId,
                   builder: (context, gateId, _) {
+                    _logAcceptedQueryValues(gateId);
                     return StreamBuilder<List<SecurityGateScanRecord>>(
                       stream: _service.getAcceptedScans(
                         gateId: gateId,
@@ -247,7 +247,7 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
                             gateId: gateId,
                           );
                         }
-                        final scans = _filterScans(snapshot.data ?? const []);
+                        final scans = snapshot.data ?? const [];
                         return ListView(
                           padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
                           children: [

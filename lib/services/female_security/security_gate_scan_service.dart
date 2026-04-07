@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../screens/female_security/models/student_card_info.dart';
 
@@ -275,18 +276,29 @@ class FemaleSecurityGateScanService {
     required String gateId,
     required DateTime date,
   }) {
+    debugPrint(
+      '[FemaleSecurityGateScanService] getAcceptedScans using simplified query: '
+      'collection=student_gate_scans, status=accepted',
+    );
     return _firestore
         .collection('student_gate_scans')
-        .where('gateId', isEqualTo: gateId)
-        .where('scanDateKey', isEqualTo: formatScanDateKey(date))
         .where('status', isEqualTo: 'accepted')
-        .orderBy('scanTime', descending: true)
         .snapshots()
         .map(
           (snapshot) => snapshot.docs
               .map(SecurityGateScanRecord.fromDoc)
               .toList(growable: false),
-        );
+        )
+        .handleError((error, stackTrace) {
+          debugPrint(
+            '[FemaleSecurityGateScanService] getAcceptedScans failed: $error',
+          );
+          debugPrintStack(
+            label:
+                '[FemaleSecurityGateScanService] getAcceptedScans stackTrace',
+            stackTrace: stackTrace,
+          );
+        });
   }
 
   Stream<List<SecurityGateScanRecord>> watchScans({
