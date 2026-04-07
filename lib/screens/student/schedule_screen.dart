@@ -520,7 +520,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             ),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.of(context).maybePop(),
           ),
           const Expanded(
             child: Text(
@@ -926,7 +926,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF1A1A1A),
                           ),
-                          textAlign: TextAlign.center,
+                          textAlign: TextAlign.right,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -965,19 +965,29 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: <Widget>[
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF1A1A1A),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1A1A1A),
+              ),
+              textAlign: TextAlign.right,
+              overflow: TextOverflow.ellipsis,
             ),
-            textAlign: TextAlign.right,
           ),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 13, color: Color(0xFF1A1A1A)),
-            textAlign: TextAlign.left,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Color(0xFF1A1A1A),
+              ),
+              textAlign: TextAlign.right,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),

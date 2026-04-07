@@ -34,7 +34,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               Row(
                 children: [
                   IconButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () => Navigator.of(context).maybePop(),
                     icon: const Icon(
                       Icons.arrow_forward_ios,
                       color: Color(0xFF006571),

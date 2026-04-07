@@ -36,7 +36,7 @@ class ChatbotScreen extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _ChatbotAvatar(size: 70),
+                  _ChatbotAvatar(size: 90),
                   const SizedBox(width: 4),
                   const Text(
                     'مساعدك الذكي',
@@ -310,7 +310,7 @@ class _ChatbotAvatar extends StatelessWidget {
 class _BotAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return _ChatbotAvatar(size: 57);
+    return _ChatbotAvatar(size: 65);
   }
 }
 

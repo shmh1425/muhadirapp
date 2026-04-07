@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'components/notification_bell.dart';
 import 'rejection_detail_screen.dart';
 import 'submit_excuse_screen.dart';
 import 'notifications_screen.dart';
+import '../../models/attendance/manual_attendance_record.dart';
+import '../../models/excuse/excuse_request.dart';
+import '../../services/attendance/manual_attendance_service.dart';
+import '../../services/excuse/excuse_service.dart';
+import '../../services/student_auth_service.dart';
 
 class ExcuseScreen extends StatefulWidget {
   const ExcuseScreen({super.key});
@@ -16,11 +22,8 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
   static const Color _primaryColor = Color(0xFF006571);
   static const Color _tabBackground = Color(0xFFF5F5F5);
 
-  final List<String> _courses = <String>[
-    'جودة البرمجيات',
-    'بحوث عمليات',
-    'هندسة البيانات',
-  ];
+  final ManualAttendanceService _attendance = ManualAttendanceService.instance;
+  final ExcuseService _excuses = ExcuseService.instance;
 
   final List<String> _filters = <String>[
     'الكل',
@@ -31,89 +34,312 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
     'مغلق',
   ];
 
-  String _selectedCourse = 'جودة البرمجيات';
+  String? _selectedCourse;
   String _selectedFilter = 'الكل';
 
-  late final List<_ExcuseItem> _items;
+  Future<List<String>> _fetchStudentCourses(int studentId) async {
+    if (studentId <= 0) return <String>[];
+    final enrollSnap = await FirebaseFirestore.instance
+        .collection('student_section_enrollments')
+        .where('studentId', isEqualTo: studentId)
+        .get();
 
-  @override
-  void initState() {
-    super.initState();
-    _items = <_ExcuseItem>[
-      const _ExcuseItem(
-        course: 'جودة البرمجيات',
-        timeRange: '08:50-08:00',
-        dateText: 'الأربعاء, 14 مايو',
-        status: 'معلقة',
-      ),
-      const _ExcuseItem(
-        course: 'جودة البرمجيات',
-        timeRange: '08:50-08:00',
-        dateText: 'الأحد, 11 مايو',
-        status: 'قيد الانتظار',
-      ),
-      const _ExcuseItem(
-        course: 'جودة البرمجيات',
-        timeRange: '08:50-08:00',
-        dateText: 'الأربعاء, 7 مايو',
-        status: 'تم القبول',
-      ),
-      const _ExcuseItem(
-        course: 'جودة البرمجيات',
-        timeRange: '08:50-08:00',
-        dateText: 'الأحد, 4 مايو',
-        status: 'تم الرفض',
-      ),
-      const _ExcuseItem(
-        course: 'جودة البرمجيات',
-        timeRange: '08:50-08:00',
-        dateText: 'الأحد, 4 مايو',
-        status: 'مغلق',
-      ),
-    ];
+    final sectionIds = enrollSnap.docs
+        .map((d) => (d.data()['sectionId'] ?? '').toString())
+        .where((id) => id.trim().isNotEmpty)
+        .toSet()
+        .toList();
+    if (sectionIds.isEmpty) return <String>[];
+
+    final sectionsRef = FirebaseFirestore.instance.collection('sections');
+    final coursesRef = FirebaseFirestore.instance.collection('courses');
+    final names = <String>{};
+    for (final sectionId in sectionIds) {
+      final sectionSnap = await sectionsRef.doc(sectionId).get();
+      if (!sectionSnap.exists) continue;
+      final data = sectionSnap.data() ?? <String, dynamic>{};
+      final code = (data['courseCode'] ?? '').toString().trim();
+      String ar = (data['courseName_Ar'] ?? '').toString().trim();
+      if (ar.isEmpty && code.isNotEmpty) {
+        final courseSnap = await coursesRef.doc(code).get();
+        if (courseSnap.exists) {
+          final courseData = courseSnap.data() ?? <String, dynamic>{};
+          ar = (courseData['courseName_Ar'] ?? '').toString().trim();
+        }
+      }
+      final name = ar.isNotEmpty ? ar : code;
+      if (name.trim().isNotEmpty) names.add(name.trim());
+    }
+    final list = names.toList()..sort();
+    return list;
+  }
+
+  List<_ExcuseItem> _mapRecordsToExcuseItems(
+    List<ManualAttendanceRecord> records,
+    Map<String, String> sectionIdToCourseNameAr,
+  ) {
+    final items = <_ExcuseItem>[];
+    for (final r in records) {
+      if (r.status != ManualAttendanceStatus.absent &&
+          r.status != ManualAttendanceStatus.excused) {
+        continue;
+      }
+      final isClosed =
+          r.status == ManualAttendanceStatus.absent && _isClosedForDate(r.lectureDate);
+      final status = isClosed
+          ? 'مغلق'
+          : (r.status == ManualAttendanceStatus.excused ? 'تم القبول' : 'معلقة');
+      final sectionId = r.sectionId.trim();
+      final courseNameAr = sectionId.isEmpty ? '' : (sectionIdToCourseNameAr[sectionId] ?? '');
+      final courseName = courseNameAr.trim().isNotEmpty
+          ? courseNameAr.trim()
+          : (r.courseName.trim().isEmpty ? '—' : r.courseName.trim());
+      items.add(_ExcuseItem(
+        course: courseName,
+        timeRange:
+            '${_formatHHmm(r.lectureStartTime)}-${_formatHHmm(r.lectureEndTime)}',
+        dateText: _formatArabicDate(r.lectureDate),
+        status: status,
+        rawDate: r.lectureDate,
+        sectionId: sectionId,
+        rawStartTime: r.lectureStartTime,
+      ));
+    }
+    items.sort((a, b) => b.rawDate.compareTo(a.rawDate));
+    return items;
+  }
+
+  List<_ExcuseItem> _mergeRequestsIntoItems({
+    required List<_ExcuseItem> baseItems,
+    required List<ExcuseRequest> requests,
+  }) {
+    if (requests.isEmpty) return baseItems;
+
+    String key(DateTime d, String start, String sectionId) {
+      final dd = DateTime(d.year, d.month, d.day);
+      return '${dd.toIso8601String()}|${start.trim()}|${sectionId.trim()}';
+    }
+
+    final reqMap = <String, ExcuseRequest>{};
+    for (final r in requests) {
+      final k = key(r.lectureDate, r.lectureStartTime, r.sectionId);
+      reqMap[k] = r;
+    }
+
+    final updated = <_ExcuseItem>[];
+    for (final item in baseItems) {
+      final k = key(item.rawDate, item.rawStartTime, item.sectionId);
+      final req = reqMap[k];
+      if (req == null) {
+        updated.add(item);
+        continue;
+      }
+      final status = switch (req.status) {
+        ExcuseRequestStatus.pending => 'قيد الانتظار',
+        ExcuseRequestStatus.accepted => 'تم القبول',
+        ExcuseRequestStatus.rejected => 'تم الرفض',
+      };
+      updated.add(item.copyWith(
+        course: req.courseNameAr.trim().isNotEmpty ? req.courseNameAr.trim() : item.course,
+        status: status,
+        rejectionReason: req.rejectionReason,
+      ));
+    }
+    return updated;
+  }
+
+  bool _isClosedForDate(DateTime date) {
+    final d = DateTime(date.year, date.month, date.day);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return today.difference(d).inDays >= 3;
+  }
+
+  String _arabicWeekday(int weekday) {
+    switch (weekday) {
+      case DateTime.monday:
+        return 'الاثنين';
+      case DateTime.tuesday:
+        return 'الثلاثاء';
+      case DateTime.wednesday:
+        return 'الأربعاء';
+      case DateTime.thursday:
+        return 'الخميس';
+      case DateTime.friday:
+        return 'الجمعة';
+      case DateTime.saturday:
+        return 'السبت';
+      case DateTime.sunday:
+      default:
+        return 'الأحد';
+    }
+  }
+
+  String _arabicMonth(int month) {
+    const months = <int, String>{
+      1: 'يناير',
+      2: 'فبراير',
+      3: 'مارس',
+      4: 'أبريل',
+      5: 'مايو',
+      6: 'يونيو',
+      7: 'يوليو',
+      8: 'أغسطس',
+      9: 'سبتمبر',
+      10: 'أكتوبر',
+      11: 'نوفمبر',
+      12: 'ديسمبر',
+    };
+    return months[month] ?? month.toString();
+  }
+
+  String _formatArabicDate(DateTime date) {
+    return '${_arabicWeekday(date.weekday)}, ${date.day} ${_arabicMonth(date.month)}';
+  }
+
+  String _formatHHmm(String time) {
+    final t = time.trim();
+    if (t.isEmpty) return '—';
+    final parts = t.split(':');
+    if (parts.length != 2) return t;
+    final hh = parts[0].trim().padLeft(2, '0');
+    final mm = parts[1].trim().padLeft(2, '0');
+    return '$hh:$mm';
+  }
+
+  Future<Map<String, String>> _fetchCourseNameArForSectionIds(
+    Set<String> sectionIds,
+  ) async {
+    final cleaned = sectionIds.map((s) => s.trim()).where((s) => s.isNotEmpty).toSet();
+    if (cleaned.isEmpty) return <String, String>{};
+    final sectionsRef = FirebaseFirestore.instance.collection('sections');
+    final coursesRef = FirebaseFirestore.instance.collection('courses');
+    final map = <String, String>{};
+    for (final id in cleaned) {
+      final snap = await sectionsRef.doc(id).get();
+      if (!snap.exists) continue;
+      final data = snap.data() ?? <String, dynamic>{};
+      final code = (data['courseCode'] ?? '').toString().trim();
+      String ar = (data['courseName_Ar'] ?? '').toString().trim();
+      if (ar.isEmpty && code.isNotEmpty) {
+        final courseSnap = await coursesRef.doc(code).get();
+        if (courseSnap.exists) {
+          final courseData = courseSnap.data() ?? <String, dynamic>{};
+          ar = (courseData['courseName_Ar'] ?? '').toString().trim();
+        }
+      }
+      if (ar.isNotEmpty) map[id] = ar;
+    }
+    return map;
   }
 
   @override
   Widget build(BuildContext context) {
-    final List<_ExcuseItem> visibleItems = _items.where((item) {
-      final bool matchCourse = item.course == _selectedCourse;
-      final String filterStatus = _selectedFilter == 'رفع عذر' ? 'معلقة' : _selectedFilter;
-      final bool matchFilter =
-          _selectedFilter == 'الكل' || item.status == filterStatus;
-      return matchCourse && matchFilter;
-    }).toList();
+    final student = StudentAuthService.instance.currentStudent;
+    if (student == null) {
+      return Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          backgroundColor: Colors.white,
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  _buildHeader(context),
+                  const SizedBox(height: 24),
+                  const Center(
+                    child: Text(
+                      'سجّل دخولك لعرض الأعذار المرتبطة بجدولك.',
+                      style: TextStyle(fontSize: 16, color: Color(0xFF666666)),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: Colors.white,
         body: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            children: <Widget>[
-              _buildHeader(context),
-              const SizedBox(height: 16),
-              _buildCourseTabs(),
-              const SizedBox(height: 12),
-              _buildStatusFilters(),
-              const SizedBox(height: 24),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  _selectedCourse,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1A1A1A),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              ...visibleItems
-                  .map((item) => _ExcuseCard(
-                        item: item,
-                      )),
-            ],
+          child: FutureBuilder<List<String>>(
+            future: _fetchStudentCourses(student.studentId),
+            builder: (context, courseSnap) {
+              final courses = courseSnap.data ?? <String>[];
+              if (_selectedCourse == null && courses.isNotEmpty) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  setState(() => _selectedCourse = courses.first);
+                });
+              }
+              final selectedCourse =
+                  _selectedCourse ?? (courses.isNotEmpty ? courses.first : null);
+
+              return StreamBuilder<List<ManualAttendanceRecord>>(
+                stream: _attendance.watchStudentRecords(student.studentId),
+                builder: (context, recordsSnap) {
+                  final records = recordsSnap.data ?? <ManualAttendanceRecord>[];
+                  final sectionIds = records.map((r) => r.sectionId).toSet();
+                  return FutureBuilder<Map<String, String>>(
+                    future: _fetchCourseNameArForSectionIds(sectionIds),
+                    builder: (context, namesSnap) {
+                      final sectionIdToNameAr = namesSnap.data ?? <String, String>{};
+                      final baseItems = _mapRecordsToExcuseItems(records, sectionIdToNameAr);
+                      return StreamBuilder<List<ExcuseRequest>>(
+                        stream: _excuses.watchStudentRequests(student.studentId),
+                        builder: (context, reqSnap) {
+                          final merged = _mergeRequestsIntoItems(
+                            baseItems: baseItems,
+                            requests: reqSnap.data ?? <ExcuseRequest>[],
+                          );
+                          final List<_ExcuseItem> visibleItems = merged.where((item) {
+                            final bool matchCourse =
+                                selectedCourse == null || item.course == selectedCourse;
+                            final String filterStatus =
+                                _selectedFilter == 'رفع عذر' ? 'معلقة' : _selectedFilter;
+                            final bool matchFilter =
+                                _selectedFilter == 'الكل' || item.status == filterStatus;
+                            return matchCourse && matchFilter;
+                          }).toList();
+
+                          return ListView(
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                            children: <Widget>[
+                              _buildHeader(context),
+                              const SizedBox(height: 16),
+                              _buildCourseTabs(courses),
+                              const SizedBox(height: 12),
+                              _buildStatusFilters(),
+                              const SizedBox(height: 24),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  selectedCourse ?? '',
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1A1A1A),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              ...visibleItems.map((item) => _ExcuseCard(item: item)),
+                            ],
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+              );
+            },
           ),
         ),
       ),
@@ -135,7 +361,7 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
           ),
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.of(context).maybePop(),
         ),
         const SizedBox(width: 6),
         const Text(
@@ -161,7 +387,7 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
     );
   }
 
-  Widget _buildCourseTabs() {
+  Widget _buildCourseTabs(List<String> courses) {
     return Container(
       height: 44,
       decoration: BoxDecoration(
@@ -170,8 +396,8 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       child: Row(
-        children: _courses.map((String course) {
-          final bool isActive = course == _selectedCourse;
+        children: courses.map((String course) {
+          final bool isActive = course == (_selectedCourse ?? courses.first);
           return Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -337,12 +563,37 @@ class _ExcuseItem {
     required this.timeRange,
     required this.dateText,
     required this.status,
+    required this.rawDate,
+    required this.sectionId,
+    required this.rawStartTime,
+    this.rejectionReason,
   });
 
   final String course;
   final String timeRange;
   final String dateText;
   final String status;
+  final DateTime rawDate;
+  final String sectionId;
+  final String rawStartTime;
+  final String? rejectionReason;
+
+  _ExcuseItem copyWith({
+    String? course,
+    String? status,
+    String? rejectionReason,
+  }) {
+    return _ExcuseItem(
+      course: course ?? this.course,
+      timeRange: timeRange,
+      dateText: dateText,
+      status: status ?? this.status,
+      rawDate: rawDate,
+      sectionId: sectionId,
+      rawStartTime: rawStartTime,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
+    );
+  }
 }
 
 class _ExcuseCard extends StatelessWidget {
@@ -507,7 +758,9 @@ class _ExcuseCard extends StatelessWidget {
                                       course: item.course,
                                       dateText: item.dateText,
                                       timeRange: item.timeRange,
-                                      reason: 'السبب: العذر غير مقبول - يُشترط تقديم عذر صحي رسمي.',
+                                      reason: item.rejectionReason?.trim().isNotEmpty == true
+                                          ? item.rejectionReason!.trim()
+                                          : 'السبب: العذر غير مقبول - يُشترط تقديم عذر صحي رسمي.',
                                     ),
                                   ),
                                 );

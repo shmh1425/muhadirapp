@@ -73,7 +73,7 @@ class SettingsScreen extends StatelessWidget {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () async {
-                    Navigator.pop(context);
+                    Navigator.of(context).maybePop();
                     await FirebaseAuth.instance.signOut();
                     StudentAuthService.instance.logout();
                     if (!context.mounted) return;
@@ -98,7 +98,7 @@ class SettingsScreen extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () => Navigator.of(context).maybePop(),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(color: Color(0xFFB71C1C)),
                     shape: RoundedRectangleBorder(
@@ -134,7 +134,7 @@ class SettingsScreen extends StatelessWidget {
                   IconButton(
                     icon: const Icon(Icons.arrow_forward_ios,
                         color: Color(0xFF006571)),
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () => Navigator.of(context).maybePop(),
                   ),
                   const SizedBox(width: 6),
                   const Text(

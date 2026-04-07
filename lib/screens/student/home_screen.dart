@@ -13,6 +13,8 @@ import 'excuse_screen.dart';
 import 'submit_excuse_screen.dart';
 import 'app_settings.dart';
 import '../../services/student_auth_service.dart';
+import '../../services/attendance/manual_attendance_service.dart';
+import '../../models/attendance/manual_attendance_record.dart';
 import '../../shared/widgets/chat_fab.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -24,6 +26,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int selectedIndex = 2; // Start with Home selected (index 2 for Home)
+  final ManualAttendanceService _attendance = ManualAttendanceService.instance;
 
   Future<void> _onItemTapped(int index) async {
     setState(() {
@@ -248,46 +251,72 @@ class _HomeScreenState extends State<HomeScreen> {
 
               SizedBox(
                 height: 180,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: [
-                    InkWell(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const SubmitExcuseScreen(),
-                          ),
-                        );
-                      },
-                      borderRadius: BorderRadius.circular(16),
-                      child: buildLectureCard(
-                        'جودة البرمجيات',
-                        '1',
-                        '103',
-                        statusText: 'إرفاق عذر',
-                        statusColor: Colors.grey,
-                      ),
-                    ),
-                    buildLectureCard(
-                      'بحوث عمليات',
-                      '1',
-                      '102 ط',
-                      statusText: 'قيد المعالجة',
-                      statusColor: Colors.amber,
-                    ),
-                  ].map((Widget card) {
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: card,
-                    );
-                  }).toList(),
-                ),
+                child: _buildActiveAbsencesSection(context),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildActiveAbsencesSection(BuildContext context) {
+    final studentId = StudentAuthService.instance.currentStudent?.studentId ?? 0;
+    if (studentId <= 0) {
+      return const SizedBox.shrink();
+    }
+    return StreamBuilder<List<ManualAttendanceRecord>>(
+      stream: _attendance.watchStudentRecords(studentId),
+      builder: (context, snapshot) {
+        final records = snapshot.data ?? <ManualAttendanceRecord>[];
+        final items = records
+            .where((r) =>
+                r.status == ManualAttendanceStatus.absent ||
+                r.status == ManualAttendanceStatus.excused)
+            .toList()
+          ..sort((a, b) {
+            final byDate = b.lectureDate.compareTo(a.lectureDate);
+            if (byDate != 0) return byDate;
+            return b.lectureStartTime.compareTo(a.lectureStartTime);
+          });
+
+        final shown = items.take(6).toList();
+        return ListView(
+          scrollDirection: Axis.horizontal,
+          children: shown.map((r) {
+            final isAttach = r.status == ManualAttendanceStatus.absent;
+            final card = buildLectureCard(
+              r.courseName,
+              r.sectionLabel,
+              r.lectureEndTime.isNotEmpty ? r.lectureEndTime : '—',
+              statusText: isAttach ? 'إرفاق عذر' : 'قيد المعالجة',
+              statusColor: isAttach ? Colors.grey : Colors.amber,
+            );
+            return Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: isAttach
+                  ? InkWell(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => SubmitExcuseScreen(
+                              course: r.courseName,
+                              dateText: '',
+                              timeRange:
+                                  '${r.lectureStartTime}-${r.lectureEndTime}',
+                            ),
+                          ),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: card,
+                    )
+                  : card,
+            );
+          }).toList(),
+        );
+      },
     );
   }
 

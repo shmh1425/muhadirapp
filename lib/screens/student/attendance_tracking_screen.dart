@@ -548,7 +548,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
           ),
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.of(context).maybePop(),
         ),
         const Expanded(
           child: Text(

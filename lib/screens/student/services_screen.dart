@@ -48,7 +48,7 @@ class ServicesScreen extends StatelessWidget {
                   IconButton(
                     icon: const Icon(Icons.arrow_forward_ios,
                         color: primaryColor),
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () => Navigator.of(context).maybePop(),
                   ),
                   const SizedBox(width: 6),
                   const Text(

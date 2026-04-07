@@ -76,7 +76,7 @@ class RejectionDetailScreen extends StatelessWidget {
             ),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.of(context).maybePop(),
           ),
           const SizedBox(width: 6),
           const Expanded(

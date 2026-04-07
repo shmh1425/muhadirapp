@@ -31,7 +31,7 @@ class StudentCardPage extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.arrow_forward_ios, color: Colors.black87),
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.of(context).maybePop(),
           ),
         ],
       ),
