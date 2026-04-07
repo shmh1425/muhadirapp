@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../../services/female_security/security_gate_scan_service.dart';
 import 'security_prefs.dart';
 import '../../theme/app_theme_controller.dart';
 
@@ -26,6 +28,12 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
   bool _autoUpdatesEnabled = true;
 
   @override
+  void initState() {
+    super.initState();
+    loadSecurityGatePreferences();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -45,7 +53,7 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
                   trailing: Switch(
                     value: _autoUpdatesEnabled,
                     onChanged: (v) => setState(() => _autoUpdatesEnabled = v),
-                    activeColor: _kTealLight,
+                    activeThumbColor: _kTealLight,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -67,7 +75,11 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
       children: [
         IconButton(
           onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.arrow_forward_ios, size: 20, color: _kTextDark),
+          icon: const Icon(
+            Icons.arrow_forward_ios,
+            size: 20,
+            color: _kTextDark,
+          ),
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
         ),
@@ -119,15 +131,24 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
           trailing: DropdownButtonHideUnderline(
             child: DropdownButton<ThemeMode>(
               value: mode,
-              icon: Icon(Icons.keyboard_arrow_down_rounded, color: _kTextMuted, size: 24),
+              icon: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: _kTextMuted,
+                size: 24,
+              ),
               items: [ThemeMode.system, ThemeMode.dark, ThemeMode.light]
-                  .map((m) => DropdownMenuItem<ThemeMode>(
-                        value: m,
-                        child: Text(
-                          _themeModeLabels[m]!,
-                          style: const TextStyle(fontFamily: 'Cairo', color: _kTextDark),
+                  .map(
+                    (m) => DropdownMenuItem<ThemeMode>(
+                      value: m,
+                      child: Text(
+                        _themeModeLabels[m]!,
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          color: _kTextDark,
                         ),
-                      ))
+                      ),
+                    ),
+                  )
                   .toList(),
               onChanged: (v) {
                 if (v != null) appThemeMode.value = v;
@@ -140,22 +161,49 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
   }
 
   Widget _buildGateCard() {
-    return ValueListenableBuilder<int>(
-      valueListenable: selectedGate,
-      builder: (context, gate, _) {
+    return ValueListenableBuilder<List<SecurityGateOption>>(
+      valueListenable: availableSecurityGates,
+      builder: (context, gates, _) {
+        final options = gates.isNotEmpty
+            ? gates
+            : <SecurityGateOption>[currentSecurityGateOption];
+        final current = options.firstWhere(
+          (gate) => gate.gateId == selectedGateId.value,
+          orElse: () => options.first,
+        );
+
         return _GenOptionCard(
           icon: Icons.door_front_door_rounded,
           iconColor: _kTealLight,
-          label: 'البوابة: $gate',
+          label: 'البوابة: ${current.gateNumber}',
           trailing: DropdownButtonHideUnderline(
-            child: DropdownButton<int>(
-              value: gate,
-              icon: Icon(Icons.keyboard_arrow_down_rounded, color: _kTextMuted, size: 24),
-              items: [1, 2, 3, 4]
-                  .map((g) => DropdownMenuItem<int>(value: g, child: Text('$g', style: const TextStyle(fontFamily: 'Cairo', color: _kTextDark))))
-                  .toList(),
-              onChanged: (v) {
-                if (v != null) selectedGate.value = v;
+            child: DropdownButton<String>(
+              value: current.gateId,
+              icon: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: _kTextMuted,
+                size: 24,
+              ),
+              items: options
+                  .map(
+                    (gate) => DropdownMenuItem<String>(
+                      value: gate.gateId,
+                      child: Text(
+                        '${gate.gateNumber} - ${gate.campusName}',
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          color: _kTextDark,
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(growable: false),
+              onChanged: (value) async {
+                if (value == null) return;
+                final selected = options.firstWhere(
+                  (gate) => gate.gateId == value,
+                );
+                await updateSelectedGateOption(selected);
               },
             ),
           ),

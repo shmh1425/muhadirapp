@@ -1,17 +1,11 @@
 import 'package:flutter/material.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Colors (aligned with accepted_screen.dart)
-// ─────────────────────────────────────────────────────────────────────────────
+import '../../../services/female_security/security_gate_scan_service.dart';
 
 const _kTealLight = Color(0xFF27A2A9);
 const _kTextDark = Color(0xFF2D2D2D);
 const _kTextMuted = Color(0xFF757575);
 const _kRejectRed = Color(0xFFC00000);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// StudentGateScanResult
-// ─────────────────────────────────────────────────────────────────────────────
 
 class StudentGateScanResult {
   const StudentGateScanResult({
@@ -29,57 +23,59 @@ class StudentGateScanResult {
   final String? photoUrl;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SecurityVerifyStudentDialog
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Reusable NFC scan verification dialog for female security.
-/// Displays student details with approve/reject actions.
 class SecurityVerifyStudentDialog extends StatelessWidget {
   const SecurityVerifyStudentDialog({
     super.key,
     required this.result,
-    required this.onApprove,
-    required this.onReject,
-    required this.onClose,
+    required this.rejectionReasons,
   });
 
   final StudentGateScanResult result;
-  final VoidCallback onApprove;
-  final VoidCallback onReject;
-  final VoidCallback onClose;
+  final List<SecurityRejectionReason> rejectionReasons;
 
-  /// Shows the dialog. Returns nothing; use callbacks for actions.
-  static Future<void> show(
+  static Future<SecurityVerificationDecision?> show(
     BuildContext context, {
     required StudentGateScanResult result,
-    required VoidCallback onApprove,
-    required VoidCallback onReject,
-    VoidCallback? onClose,
+    required List<SecurityRejectionReason> rejectionReasons,
   }) {
-    return showDialog<void>(
+    return showDialog<SecurityVerificationDecision>(
       context: context,
       barrierDismissible: false,
       builder: (context) => Directionality(
         textDirection: TextDirection.rtl,
-        child: SecurityVerifyStudentDialog(
+        child: _SecurityVerifyDialogBody(
           result: result,
-          onApprove: () {
-            Navigator.of(context).pop();
-            onApprove();
-          },
-          onReject: () {
-            Navigator.of(context).pop();
-            onReject();
-          },
-          onClose: () {
-            Navigator.of(context).pop();
-            onClose?.call();
-          },
+          rejectionReasons: rejectionReasons,
         ),
       ),
     );
   }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SecurityVerifyDialogBody(
+      result: result,
+      rejectionReasons: rejectionReasons,
+    );
+  }
+}
+
+class _SecurityVerifyDialogBody extends StatefulWidget {
+  const _SecurityVerifyDialogBody({
+    required this.result,
+    required this.rejectionReasons,
+  });
+
+  final StudentGateScanResult result;
+  final List<SecurityRejectionReason> rejectionReasons;
+
+  @override
+  State<_SecurityVerifyDialogBody> createState() =>
+      _SecurityVerifyDialogBodyState();
+}
+
+class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
+  SecurityRejectionReason? _selectedReason;
 
   @override
   Widget build(BuildContext context) {
@@ -99,6 +95,8 @@ class SecurityVerifyStudentDialog extends StatelessWidget {
               _buildAvatar(),
               const SizedBox(height: 20),
               _buildStudentInfo(),
+              const SizedBox(height: 16),
+              _buildRejectionReasonField(),
               const SizedBox(height: 24),
               _buildButtons(),
             ],
@@ -110,9 +108,9 @@ class SecurityVerifyStudentDialog extends StatelessWidget {
 
   Widget _buildHeader(BuildContext context) {
     return Align(
-      alignment: Alignment.topLeft, // X on "right" in RTL
+      alignment: Alignment.topLeft,
       child: IconButton(
-        onPressed: onClose,
+        onPressed: () => Navigator.of(context).pop(),
         icon: const Icon(Icons.close, color: _kTextDark, size: 24),
         style: IconButton.styleFrom(
           backgroundColor: Colors.white,
@@ -129,11 +127,26 @@ class SecurityVerifyStudentDialog extends StatelessWidget {
       alignment: Alignment.center,
       clipBehavior: Clip.none,
       children: [
-        // Decorative circles around avatar
-        Positioned(right: 8, top: 0, child: _decorationDot(_kTealLight.withOpacity(0.4))),
-        Positioned(left: 4, top: 12, child: _decorationDot(_kTextMuted.withOpacity(0.3))),
-        Positioned(left: 20, bottom: 8, child: _decorationDot(_kTealLight.withOpacity(0.35))),
-        Positioned(right: 16, bottom: 4, child: _decorationDot(_kTextMuted.withOpacity(0.25))),
+        Positioned(
+          right: 8,
+          top: 0,
+          child: _decorationDot(_kTealLight.withValues(alpha: 0.4)),
+        ),
+        Positioned(
+          left: 4,
+          top: 12,
+          child: _decorationDot(_kTextMuted.withValues(alpha: 0.3)),
+        ),
+        Positioned(
+          left: 20,
+          bottom: 8,
+          child: _decorationDot(_kTealLight.withValues(alpha: 0.35)),
+        ),
+        Positioned(
+          right: 16,
+          bottom: 4,
+          child: _decorationDot(_kTextMuted.withValues(alpha: 0.25)),
+        ),
         Container(
           width: 100,
           height: 100,
@@ -142,16 +155,18 @@ class SecurityVerifyStudentDialog extends StatelessWidget {
             border: Border.all(color: _kTealLight, width: 3),
             boxShadow: [
               BoxShadow(
-                color: _kTealLight.withOpacity(0.2),
+                color: _kTealLight.withValues(alpha: 0.2),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
             ],
           ),
           clipBehavior: Clip.antiAlias,
-          child: result.photoUrl != null && result.photoUrl!.isNotEmpty
+          child:
+              widget.result.photoUrl != null &&
+                  widget.result.photoUrl!.isNotEmpty
               ? Image.network(
-                  result.photoUrl!,
+                  widget.result.photoUrl!,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => _avatarPlaceholder(),
                 )
@@ -171,10 +186,10 @@ class SecurityVerifyStudentDialog extends StatelessWidget {
 
   Widget _avatarPlaceholder() {
     return Container(
-      color: _kTextMuted.withOpacity(0.15),
+      color: _kTextMuted.withValues(alpha: 0.15),
       child: Center(
         child: Text(
-          result.fullName.isNotEmpty ? result.fullName[0] : '?',
+          widget.result.fullName.isNotEmpty ? widget.result.fullName[0] : '?',
           style: const TextStyle(
             fontSize: 36,
             fontWeight: FontWeight.bold,
@@ -207,14 +222,64 @@ class SecurityVerifyStudentDialog extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _infoRow('اسم الطالبة:', result.fullName, valueStyle: nameValueStyle, labelStyle: labelStyle),
+        _infoRow(
+          'اسم الطالبة:',
+          widget.result.fullName,
+          valueStyle: nameValueStyle,
+          labelStyle: labelStyle,
+        ),
         const SizedBox(height: 10),
-        _infoRow('رقمها الجامعي:', result.universityId, valueStyle: valueStyle, labelStyle: labelStyle),
+        _infoRow(
+          'رقمها الجامعي:',
+          widget.result.universityId,
+          valueStyle: valueStyle,
+          labelStyle: labelStyle,
+        ),
         const SizedBox(height: 10),
-        _infoRow('التخصص:', result.major, valueStyle: valueStyle, labelStyle: labelStyle),
+        _infoRow(
+          'التخصص:',
+          widget.result.major,
+          valueStyle: valueStyle,
+          labelStyle: labelStyle,
+        ),
         const SizedBox(height: 10),
-        _infoRow('الوقت:', result.scanTime, valueStyle: valueStyle, labelStyle: labelStyle),
+        _infoRow(
+          'الوقت:',
+          widget.result.scanTime,
+          valueStyle: valueStyle,
+          labelStyle: labelStyle,
+        ),
       ],
+    );
+  }
+
+  Widget _buildRejectionReasonField() {
+    return DropdownButtonFormField<SecurityRejectionReason>(
+      initialValue: _selectedReason,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'سبب الرفض عند الحاجة',
+        labelStyle: const TextStyle(color: _kTextMuted, fontFamily: 'Cairo'),
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: _kTextMuted, width: 1),
+        ),
+      ),
+      items: widget.rejectionReasons
+          .map(
+            (reason) => DropdownMenuItem<SecurityRejectionReason>(
+              value: reason,
+              child: Text(
+                reason.titleAr,
+                style: const TextStyle(color: _kTextDark, fontFamily: 'Cairo'),
+              ),
+            ),
+          )
+          .toList(growable: false),
+      onChanged: (value) => setState(() => _selectedReason = value),
     );
   }
 
@@ -229,7 +294,9 @@ class SecurityVerifyStudentDialog extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       textDirection: TextDirection.rtl,
       children: [
-        Text(value, style: valueStyle),
+        Expanded(
+          child: Text(value, textAlign: TextAlign.left, style: valueStyle),
+        ),
         const SizedBox(width: 8),
         Text(label, style: labelStyle),
       ],
@@ -243,7 +310,11 @@ class SecurityVerifyStudentDialog extends StatelessWidget {
         SizedBox(
           height: 50,
           child: ElevatedButton(
-            onPressed: onApprove,
+            onPressed: () {
+              Navigator.of(
+                context,
+              ).pop(const SecurityVerificationDecision.approved());
+            },
             style: ElevatedButton.styleFrom(
               backgroundColor: _kTealLight,
               foregroundColor: Colors.white,
@@ -266,7 +337,17 @@ class SecurityVerifyStudentDialog extends StatelessWidget {
         SizedBox(
           height: 50,
           child: ElevatedButton(
-            onPressed: onReject,
+            onPressed: () {
+              if (_selectedReason == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('اختاري سبب الرفض أولاً')),
+                );
+                return;
+              }
+              Navigator.of(
+                context,
+              ).pop(SecurityVerificationDecision.rejected(_selectedReason!));
+            },
             style: ElevatedButton.styleFrom(
               backgroundColor: _kRejectRed,
               foregroundColor: Colors.white,

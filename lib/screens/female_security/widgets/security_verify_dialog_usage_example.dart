@@ -4,9 +4,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
+import '../../../services/female_security/security_gate_scan_service.dart';
 import 'security_verify_student_dialog.dart';
 
-void openVerifyDialogExample(BuildContext context) {
+Future<void> openVerifyDialogExample(BuildContext context) async {
   final result = StudentGateScanResult(
     fullName: 'خديجة فيصل الهاشمي',
     universityId: '444000018',
@@ -15,19 +16,20 @@ void openVerifyDialogExample(BuildContext context) {
     photoUrl: null, // or 'https://example.com/photo.jpg'
   );
 
-  SecurityVerifyStudentDialog.show(
+  final decision = await SecurityVerifyStudentDialog.show(
     context,
     result: result,
-    onApprove: () {
-      // Handle confirm – e.g. mark as verified, refresh list
-    },
-    onReject: () {
-      // Handle reject – e.g. move to rejected list
-    },
-    onClose: () {
-      // Optional: handle dialog closed without action
-    },
+    rejectionReasons: const [
+      SecurityRejectionReason(reasonId: 'graduated', titleAr: 'الطالبة متخرجة'),
+    ],
   );
+
+  if (decision == null) return;
+  if (decision.isApproved) {
+    // Handle confirm – e.g. write accepted scan record.
+  } else {
+    // Handle reject – e.g. write rejected scan record with decision.rejectionReason.
+  }
 }
 
 // In accepted_screen.dart, call from the eye icon's onTap, e.g.:
@@ -42,7 +44,6 @@ void openVerifyDialogExample(BuildContext context) {
 //       scanTime: student.time,
 //       photoUrl: null,
 //     ),
-//     onApprove: () => setState(() { /* update UI */ }),
-//     onReject: () => setState(() { /* update UI */ }),
+//     rejectionReasons: reasonsFromDatabase,
 //   );
 // }

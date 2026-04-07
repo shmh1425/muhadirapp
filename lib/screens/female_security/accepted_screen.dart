@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
+
+import '../../services/female_security/security_gate_scan_service.dart';
 import 'female_security_nav_bar.dart';
 import 'rejected_students_screen.dart';
-import 'widgets/security_date_picker_dialog.dart';
-import 'models/student_card_info.dart';
 import 'security_card_preview_screen.dart';
-import 'security_settings_screen.dart';
 import 'security_prefs.dart';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Constants
-// ─────────────────────────────────────────────────────────────────────────────
+import 'security_settings_screen.dart';
+import 'widgets/security_date_picker_dialog.dart';
+import 'widgets/security_verify_student_dialog.dart';
 
 const _kTealLight = Color(0xFF27A2A9);
 const _kTealDark = Color(0xFF006571);
@@ -20,10 +18,6 @@ const _kGreyIconBg = Color(0xFFE8E8E8);
 const _kGreyBorder = Color(0xFFE0E0E0);
 const _kDateIconBg = Color(0xFFF5F5F5);
 
-// ─────────────────────────────────────────────────────────────────────────────
-// AcceptedScreen
-// ─────────────────────────────────────────────────────────────────────────────
-
 class AcceptedScreen extends StatefulWidget {
   const AcceptedScreen({super.key});
 
@@ -33,34 +27,18 @@ class AcceptedScreen extends StatefulWidget {
 
 class _AcceptedScreenState extends State<AcceptedScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final FemaleSecurityGateScanService _service =
+      FemaleSecurityGateScanService.instance;
+
   int _selectedNavIndex = 0;
   bool _dateUpdated = true;
-
-  // date shown in header (temporary preview)
+  bool _isSubmittingScan = false;
   DateTime _selectedDate = DateTime.now();
 
-  final List<_StudentEntry> _students = [
-    _StudentEntry('نورة الحارثي', '444000000', '09:15:22'),
-    _StudentEntry('غلا القرني', '444000001', '09:15:00'),
-    _StudentEntry('وضوح الترجمي', '444000002', '09:14:56'),
-    _StudentEntry('لمياء الشريف', '444000003', '09:14:48'),
-    _StudentEntry('سارة العمري', '444000004', '09:14:32'),
-    _StudentEntry('فاطمة الزهراني', '444000005', '09:14:18'),
-    _StudentEntry('هند المطيري', '444000006', '09:14:02'),
-    _StudentEntry('مريم القحطاني', '444000007', '09:13:45'),
-    _StudentEntry('رنا الشهري', '444000008', '09:13:30'),
-    _StudentEntry('أسماء الحربي', '444000009', '09:13:15'),
-    _StudentEntry('سلمى العتيبي', '444000010', '09:13:00'),
-    _StudentEntry('ريم الدوسري', '444000011', '09:12:48'),
-  ];
-
-  List<_StudentEntry> get _filteredStudents {
-    final query = _searchController.text.trim().toLowerCase();
-    if (query.isEmpty) return _students;
-    return _students.where((s) {
-      return s.name.toLowerCase().contains(query) ||
-          s.universityId.contains(query);
-    }).toList();
+  @override
+  void initState() {
+    super.initState();
+    loadSecurityGatePreferences();
   }
 
   @override
@@ -91,6 +69,7 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
       _dateUpdated = true;
       _selectedDate = DateTime.now();
     });
+    loadSecurityGatePreferences();
   }
 
   Future<void> _openDatePicker() async {
@@ -106,8 +85,114 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
         _selectedDate = selected;
         _dateUpdated = true;
       });
-      debugPrint('Selected date: $selected');
     }
+  }
+
+  List<SecurityGateScanRecord> _filterScans(
+    List<SecurityGateScanRecord> scans,
+  ) {
+    final query = _searchController.text.trim().toLowerCase();
+    if (query.isEmpty) return scans;
+    return scans
+        .where((scan) {
+          return scan.studentName.toLowerCase().contains(query) ||
+              scan.universityId.contains(query);
+        })
+        .toList(growable: false);
+  }
+
+  Future<void> _startScanFlow() async {
+    final universityId = await _openStudentLookupDialog();
+    if (!mounted || universityId == null || universityId.trim().isEmpty) {
+      return;
+    }
+
+    setState(() => _isSubmittingScan = true);
+    try {
+      await loadSecurityGatePreferences();
+      final student = await _service.findStudentByUniversityId(universityId);
+      if (!mounted) return;
+      if (student == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('لم يتم العثور على الطالبة في external_students'),
+          ),
+        );
+        return;
+      }
+
+      final reasons = await _service.getActiveRejectionReasons();
+      if (!mounted) return;
+
+      final now = DateTime.now();
+      final decision = await SecurityVerifyStudentDialog.show(
+        context,
+        result: StudentGateScanResult(
+          fullName: student.fullName,
+          universityId: student.universityId,
+          major: student.major,
+          scanTime: now.toString().split(' ').last.split('.').first,
+          photoUrl: student.photoUrl,
+        ),
+        rejectionReasons: reasons,
+      );
+
+      if (!mounted || decision == null) return;
+
+      await _service.recordGateScanDecision(
+        student: student,
+        gate: currentSecurityGateOption,
+        decision: decision,
+      );
+      if (!mounted) return;
+
+      final message = decision.isApproved
+          ? 'تم تسجيل الدخول في قائمة المقبولين'
+          : 'تم تسجيل الرفض في قائمة المرفوضين';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('تعذر إكمال عملية التحقق: $e')));
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmittingScan = false);
+      }
+    }
+  }
+
+  Future<String?> _openStudentLookupDialog() {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text(
+          'إدخال الرقم الجامعي',
+          style: TextStyle(fontFamily: 'Cairo'),
+        ),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            hintText: 'مثال: 444000018',
+            hintStyle: TextStyle(fontFamily: 'Cairo'),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: const Text('متابعة', style: TextStyle(fontFamily: 'Cairo')),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -122,25 +207,63 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
           child: Column(
             children: [
               Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                  children: [
-                    HeaderSection(
-                      onRefresh: _onRefresh,
-                      onPickDate: _openDatePicker,
-                      formattedDate: formattedDate,
-                      isDateActive: _dateUpdated,
-                    ),
-                    const SizedBox(height: 20),
-                    const ActionButton(),
-                    const SizedBox(height: 18),
-                    SearchBar(
-                      controller: _searchController,
-                      onChanged: (_) => setState(() {}),
-                    ),
-                    const SizedBox(height: 16),
-                    _AcceptedDataTable(students: _filteredStudents),
-                  ],
+                child: ValueListenableBuilder<String>(
+                  valueListenable: selectedGateId,
+                  builder: (context, gateId, _) {
+                    return StreamBuilder<List<SecurityGateScanRecord>>(
+                      stream: _service.watchScans(
+                        gateId: gateId,
+                        date: _selectedDate,
+                        status: 'accepted',
+                      ),
+                      builder: (context, snapshot) {
+                        final scans = _filterScans(snapshot.data ?? const []);
+                        return ListView(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                          children: [
+                            HeaderSection(
+                              onRefresh: _onRefresh,
+                              onPickDate: _openDatePicker,
+                              formattedDate: formattedDate,
+                              isDateActive: _dateUpdated,
+                            ),
+                            const SizedBox(height: 20),
+                            ActionButton(
+                              isLoading: _isSubmittingScan,
+                              onTap: _startScanFlow,
+                            ),
+                            const SizedBox(height: 18),
+                            SearchBar(
+                              controller: _searchController,
+                              onChanged: (_) => setState(() {}),
+                            ),
+                            const SizedBox(height: 16),
+                            if (snapshot.hasError)
+                              const _SecurityStateMessage(
+                                message:
+                                    'تعذر تحميل سجلات المقبولين من student_gate_scans',
+                              )
+                            else if (snapshot.connectionState ==
+                                    ConnectionState.waiting &&
+                                !snapshot.hasData)
+                              const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 24),
+                                  child: CircularProgressIndicator(),
+                                ),
+                              )
+                            else if (scans.isEmpty)
+                              const _SecurityStateMessage(
+                                message:
+                                    'لا توجد سجلات مقبولة لهذا اليوم والبوابة',
+                              )
+                            else
+                              _AcceptedDataTable(scans: scans),
+                          ],
+                        );
+                      },
+                    );
+                  },
                 ),
               ),
               FemaleSecurityNavBar(
@@ -161,8 +284,6 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
                       ),
                     );
                   }
-                  // index == 0: already on accepted
-                  // index == 2: later (notifications/announcements)
                 },
               ),
             ],
@@ -172,10 +293,6 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// HeaderSection
-// ─────────────────────────────────────────────────────────────────────────────
 
 class HeaderSection extends StatelessWidget {
   const HeaderSection({
@@ -222,13 +339,16 @@ class HeaderSection extends StatelessWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            const Text(
-              'الموقع: الزاهر',
-              style: TextStyle(
-                fontSize: 14,
-                color: _kTealLight,
-                fontFamily: 'Cairo',
-                fontWeight: FontWeight.w500,
+            ValueListenableBuilder<String>(
+              valueListenable: selectedCampusName,
+              builder: (context, campus, _) => Text(
+                'الموقع: $campus',
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: _kTealLight,
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
             const SizedBox(height: 6),
@@ -266,10 +386,6 @@ class HeaderSection extends StatelessWidget {
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DateRow
-// ─────────────────────────────────────────────────────────────────────────────
 
 class DateRow extends StatelessWidget {
   const DateRow({
@@ -327,18 +443,16 @@ class DateRow extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ActionButton (جاهز للمسح)
-// ─────────────────────────────────────────────────────────────────────────────
-
 class ActionButton extends StatelessWidget {
-  const ActionButton({super.key});
+  const ActionButton({super.key, required this.onTap, this.isLoading = false});
+
+  final VoidCallback onTap;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       height: 50,
-      margin: const EdgeInsets.symmetric(horizontal: 0),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [_kTealLight, _kTealDark],
@@ -346,10 +460,13 @@ class ActionButton extends StatelessWidget {
           end: Alignment.bottomCenter,
         ),
         borderRadius: BorderRadius.circular(25),
-        border: Border.all(color: _kTealLight.withOpacity(0.3), width: 0.5),
+        border: Border.all(
+          color: _kTealLight.withValues(alpha: 0.3),
+          width: 0.5,
+        ),
         boxShadow: [
           BoxShadow(
-            color: _kTealLight.withOpacity(0.3),
+            color: _kTealLight.withValues(alpha: 0.3),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
@@ -358,28 +475,33 @@ class ActionButton extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () {},
+          onTap: isLoading ? null : onTap,
           borderRadius: BorderRadius.circular(25),
-          child: const Center(
-            child: Text(
-              'جاهز للمسح',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                fontFamily: 'Cairo',
-              ),
-            ),
+          child: Center(
+            child: isLoading
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text(
+                    'جاهز للمسح',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontFamily: 'Cairo',
+                    ),
+                  ),
           ),
         ),
       ),
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SearchBar
-// ─────────────────────────────────────────────────────────────────────────────
 
 class SearchBar extends StatelessWidget {
   const SearchBar({
@@ -398,7 +520,10 @@ class SearchBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: _kGreyFill,
         borderRadius: BorderRadius.circular(25.0),
-        border: Border.all(color: _kGreyBorder.withOpacity(0.5), width: 0.5),
+        border: Border.all(
+          color: _kGreyBorder.withValues(alpha: 0.5),
+          width: 0.5,
+        ),
       ),
       child: TextField(
         controller: controller,
@@ -432,124 +557,122 @@ class SearchBar extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// _AcceptedDataTable
-// ─────────────────────────────────────────────────────────────────────────────
-
 class _AcceptedDataTable extends StatelessWidget {
-  const _AcceptedDataTable({required this.students});
+  const _AcceptedDataTable({required this.scans});
 
-  final List<_StudentEntry> students;
+  final List<SecurityGateScanRecord> scans;
 
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
-      child: DataTable(
-        headingRowColor: WidgetStateProperty.all(_kTealLight),
-        headingTextStyle: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-          fontFamily: 'Cairo',
-        ),
-        dataTextStyle: const TextStyle(
-          fontSize: 13,
-          color: _kTextDark,
-          fontFamily: 'Cairo',
-        ),
-        columnSpacing: 12,
-        horizontalMargin: 16,
-        columns: const [
-          DataColumn(label: Text('اسم الطالب/ة'), numeric: false),
-          DataColumn(label: Text('الرقم الجامعي'), numeric: false),
-          DataColumn(label: Text('الوقت'), numeric: false),
-          DataColumn(label: Text('معاينة البطاقة'), numeric: false),
-        ],
-        rows: students.asMap().entries.map((entry) {
-          final index = entry.key;
-          final student = entry.value;
-          return DataRow(
-            color: WidgetStateProperty.all(
-              index % 2 == 1 ? const Color(0xFFFAFAFA) : Colors.white,
-            ),
-            cells: [
-              DataCell(
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    student.name,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: _kTextDark,
-                      fontFamily: 'Cairo',
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          headingRowColor: WidgetStateProperty.all(_kTealLight),
+          headingTextStyle: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+            fontFamily: 'Cairo',
+          ),
+          dataTextStyle: const TextStyle(
+            fontSize: 13,
+            color: _kTextDark,
+            fontFamily: 'Cairo',
+          ),
+          columnSpacing: 12,
+          horizontalMargin: 16,
+          columns: const [
+            DataColumn(label: Text('اسم الطالب/ة')),
+            DataColumn(label: Text('الرقم الجامعي')),
+            DataColumn(label: Text('الوقت')),
+            DataColumn(label: Text('معاينة البطاقة')),
+          ],
+          rows: scans.asMap().entries.map((entry) {
+            final index = entry.key;
+            final scan = entry.value;
+            return DataRow(
+              color: WidgetStateProperty.all(
+                index % 2 == 1 ? const Color(0xFFFAFAFA) : Colors.white,
+              ),
+              cells: [
+                DataCell(
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      scan.studentName,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: _kTextDark,
+                        fontFamily: 'Cairo',
+                      ),
                     ),
                   ),
                 ),
-              ),
-              DataCell(Text(student.universityId)),
-              DataCell(Text(student.time)),
-              DataCell(
-                Center(
-                  child: Material(
-                    color: _kGreyIconBg,
-                    shape: const CircleBorder(),
-                    child: InkWell(
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => SecurityCardPreviewScreen(
-                              isAccepted: true,
-                              student: StudentCardInfo(
-                                fullName: student.name,
-                                universityId: student.universityId,
-                                entryTime: student.time,
-                                dayLabel: 'اليوم: الإثنين',
-                                dateLabel: 'التاريخ: 2025-06-26',
-                                attendanceStatus: 'منتظم',
-                                college: 'كلية الحاسبات',
-                                major: 'هندسة البرمجيات',
-                                degree: 'بكالوريوس',
-                                nationality: 'سعودية',
-                                extraId: '1125241000',
-                                gateLabel: gateLabelWithLocation(selectedGate.value),
+                DataCell(Text(scan.universityId)),
+                DataCell(Text(scan.formattedTime)),
+                DataCell(
+                  Center(
+                    child: Material(
+                      color: _kGreyIconBg,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => SecurityCardPreviewScreen(
+                                isAccepted: true,
+                                student: scan.toStudentCardInfo(),
                               ),
                             ),
-                          ),
-                        );
-                      },
-                      customBorder: const CircleBorder(),
-                      child: const SizedBox(
-                        width: 34,
-                        height: 34,
-                        child: Center(
-                          child: Icon(
-                            Icons.visibility_outlined,
-                            size: 17,
-                            color: _kTextMuted,
+                          );
+                        },
+                        customBorder: const CircleBorder(),
+                        child: const SizedBox(
+                          width: 34,
+                          height: 34,
+                          child: Center(
+                            child: Icon(
+                              Icons.visibility_outlined,
+                              size: 17,
+                              color: _kTextMuted,
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          );
-        }).toList(),
+              ],
+            );
+          }).toList(),
+        ),
       ),
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// _StudentEntry
-// ─────────────────────────────────────────────────────────────────────────────
+class _SecurityStateMessage extends StatelessWidget {
+  const _SecurityStateMessage({required this.message});
 
-class _StudentEntry {
-  final String name;
-  final String universityId;
-  final String time;
+  final String message;
 
-  _StudentEntry(this.name, this.universityId, this.time);
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      decoration: BoxDecoration(
+        color: _kGreyFill,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Center(
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: _kTextMuted, fontFamily: 'Cairo'),
+        ),
+      ),
+    );
+  }
 }

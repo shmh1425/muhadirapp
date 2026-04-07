@@ -4,8 +4,9 @@ import 'student/home_screen.dart';
 import 'lecturer/lecturer_main_shell.dart';
 import 'lecturer/lecturer_profile_screen.dart';
 import 'admin/admin_dashboard_screen.dart';
-import 'female_security/accepted_screen.dart';
+import 'female_security/female_security_home_screen.dart';
 import '../services/admin/admin_auth_service.dart';
+import '../services/female_security_auth_service.dart';
 import '../services/student_auth_service.dart';
 import '../services/lecturer_auth_service.dart';
 
@@ -41,7 +42,8 @@ class _LoginScreenState extends State<LoginScreen> {
     final needsPassword =
         _selectedRole == _UserRole.student ||
         _selectedRole == _UserRole.admin ||
-        _selectedRole == _UserRole.lecturer;
+        _selectedRole == _UserRole.lecturer ||
+        _selectedRole == _UserRole.security;
 
     setState(() {
       _emailError = hasEmail ? null : 'اكتب ايميل';
@@ -175,9 +177,54 @@ class _LoginScreenState extends State<LoginScreen> {
         });
       }
     } else if (_selectedRole == _UserRole.security) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const AcceptedScreen()),
-      );
+      setState(() => _isLoading = true);
+      try {
+        final isSecurityStaff = await FemaleSecurityAuthService.instance
+            .signInAndVerifySecurityStaff(email: email, password: password);
+        if (!mounted) return;
+
+        if (!isSecurityStaff) {
+          setState(() {
+            _isLoading = false;
+            _emailError =
+                'هذا الحساب غير مخول للأمن النسائي أو أن الحساب غير مفعل';
+          });
+          return;
+        }
+
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const FemaleSecurityHomeScreen()),
+        );
+      } on FirebaseAuthException catch (e) {
+        if (!mounted) return;
+        final message = switch (e.code) {
+          'user-not-found' => 'لا يوجد حساب بهذا الإيميل',
+          'wrong-password' => 'كلمة المرور غير صحيحة',
+          'invalid-email' => 'صيغة الإيميل غير صحيحة',
+          'invalid-credential' => 'الإيميل أو كلمة المرور غير صحيحة',
+          'network-request-failed' =>
+            'تعذر الاتصال بالإنترنت. تأكد من الشبكة وحاول مرة أخرى.',
+          'keychain-error' =>
+            'تعذر الوصول إلى Keychain على macOS. أعد تشغيل التطبيق واسمح بالصلاحية.',
+          _ => e.message ?? 'فشل تسجيل دخول الأمن النسائي',
+        };
+        setState(() {
+          _isLoading = false;
+          _emailError = message;
+        });
+      } on FirebaseException catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          _emailError = 'فشل التحقق من صلاحيات الأمن النسائي (${e.code})';
+        });
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          _emailError = 'حدث خطأ غير متوقع، حاول مرة أخرى';
+        });
+      }
     } else if (_selectedRole == _UserRole.lecturer) {
       setState(() => _isLoading = true);
       try {
@@ -266,7 +313,8 @@ class _LoginScreenState extends State<LoginScreen> {
     final needsPassword =
         _selectedRole == _UserRole.student ||
         _selectedRole == _UserRole.admin ||
-        _selectedRole == _UserRole.lecturer;
+        _selectedRole == _UserRole.lecturer ||
+        _selectedRole == _UserRole.security;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -629,7 +677,7 @@ class _InputField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    return TextFormField(
       controller: controller,
       obscureText: obscureText,
       keyboardType: keyboardType,
