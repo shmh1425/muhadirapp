@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'female_security_nav_bar.dart';
 import 'accepted_screen.dart';
 import 'rejected_students_screen.dart';
 import 'general_settings_screen.dart';
 import '../login_screen.dart';
+import '../../services/female_security_auth_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -27,8 +29,13 @@ class SecuritySettingsScreen extends StatefulWidget {
 }
 
 class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
+  final FemaleSecurityAuthService _authService =
+      FemaleSecurityAuthService.instance;
+  final ImagePicker _imagePicker = ImagePicker();
+
   bool _notificationsEnabled = false;
   int _rating = 0;
+  bool _isUploadingPhoto = false;
 
   @override
   Widget build(BuildContext context) {
@@ -156,41 +163,131 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
   }
 
   Widget _buildProfileSection() {
-    return Column(
-      children: [
-        Container(
-          width: 88,
-          height: 88,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: _kTealLight, width: 2),
-            color: _kTextMuted.withOpacity(0.12),
-          ),
-          child: const Center(
-            child: Icon(Icons.person_rounded, size: 44, color: _kTextMuted),
-          ),
-        ),
-        const SizedBox(height: 14),
-        const Text(
-          'حساب الأمن',
-          style: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.bold,
-            color: _kTextDark,
-            fontFamily: 'Cairo',
-          ),
-        ),
-        const SizedBox(height: 6),
-        const Text(
-          'username@example.com',
-          style: TextStyle(
-            fontSize: 14,
-            color: _kTextMuted,
-            fontFamily: 'Cairo',
-          ),
-        ),
-      ],
+    return StreamBuilder<Map<String, dynamic>?>(
+      stream: _authService.watchCurrentSecurityStaff().map((doc) => doc.data()),
+      builder: (context, snapshot) {
+        final data = snapshot.data ?? const <String, dynamic>{};
+        final photoUrl = (data['photoUrl'] ?? '').toString().trim();
+        final fullName = (data['fullName'] ?? data['name'] ?? 'حساب الأمن')
+            .toString();
+        final email = _authService.currentUserEmail ?? 'username@example.com';
+
+        return Column(
+          children: [
+            GestureDetector(
+              onTap: _isUploadingPhoto ? null : _pickAndUploadProfileImage,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: 88,
+                    height: 88,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: _kTealLight, width: 2),
+                      color: _kTextMuted.withValues(alpha: 0.12),
+                    ),
+                    child: ClipOval(
+                      child: photoUrl.isNotEmpty
+                          ? Image.network(
+                              photoUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  const _SecurityProfilePlaceholder(),
+                            )
+                          : const _SecurityProfilePlaceholder(),
+                    ),
+                  ),
+                  if (_isUploadingPhoto)
+                    Container(
+                      width: 88,
+                      height: 88,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.black.withValues(alpha: 0.35),
+                      ),
+                      child: const Center(
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.6,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: const BoxDecoration(
+                        color: _kTealLight,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.camera_alt_rounded,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              fullName.isEmpty ? 'حساب الأمن' : fullName,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: _kTextDark,
+                fontFamily: 'Cairo',
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              email,
+              style: const TextStyle(
+                fontSize: 14,
+                color: _kTextMuted,
+                fontFamily: 'Cairo',
+              ),
+            ),
+          ],
+        );
+      },
     );
+  }
+
+  Future<void> _pickAndUploadProfileImage() async {
+    try {
+      final pickedFile = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+      if (pickedFile == null || !mounted) return;
+
+      setState(() => _isUploadingPhoto = true);
+      await _authService.uploadCurrentUserProfileImage(pickedFile);
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم تحديث الصورة الشخصية بنجاح')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر رفع الصورة، يرجى المحاولة مرة أخرى')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isUploadingPhoto = false);
+      }
+    }
   }
 
   void _showLogoutDialog() {
@@ -210,7 +307,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.12),
+                  color: Colors.black.withValues(alpha: 0.12),
                   blurRadius: 16,
                   offset: const Offset(0, 6),
                 ),
@@ -303,7 +400,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
       trailing: Switch(
         value: _notificationsEnabled,
         onChanged: (v) => setState(() => _notificationsEnabled = v),
-        activeColor: _kTealLight,
+        activeThumbColor: _kTealLight,
       ),
     );
   }
@@ -386,6 +483,17 @@ class _OptionCard extends StatelessWidget {
           child: content,
         ),
       ),
+    );
+  }
+}
+
+class _SecurityProfilePlaceholder extends StatelessWidget {
+  const _SecurityProfilePlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Icon(Icons.person_rounded, size: 44, color: _kTextMuted),
     );
   }
 }
