@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/attendance/manual_attendance_record.dart';
@@ -30,7 +31,8 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
   StreamSubscription<List<ManualAttendanceRecord>>? _recordsSubscription;
 
   List<_AttendanceRecord> _records = <_AttendanceRecord>[];
-  String _selectedCourse = 'الكل';
+  Map<String, int> _codeToWeeklyMinutes = <String, int>{};
+  String? _selectedCourse;
   final Set<String> _selectedWeeks = <String>{};
   bool _isLoading = true;
   String? _loadError;
@@ -57,9 +59,91 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
   Future<void> _loadAcademicTermContext() async {
     try {
       final now = DateTime.now();
+      var calendarWeeksIsSourceOfTruth = false;
+      int? calendarWeeksCandidate;
+
+      bool hasAnyKey(Map<String, dynamic> m, List<String> keys) {
+        for (final k in keys) {
+          if (m.containsKey(k)) return true;
+        }
+        return false;
+      }
+
+      int? readWeeksFromKeys(Map<String, dynamic> m, List<String> keys) {
+        for (final k in keys) {
+          final v = _readPositiveInt(m[k]);
+          if (v != null && v > 0) return v;
+        }
+        return null;
+      }
+
+      // Prefer the centralized academic calendar if present.
+      try {
+        final calendarDoc = await FirebaseFirestore.instance
+            .collection('academic_calendar')
+            .doc('current')
+            .get();
+        if (!calendarDoc.exists) {
+          if (kDebugMode) {
+            debugPrint('[AttendanceTracking] academic_calendar/current: MISSING');
+          }
+        } else {
+          final cal = calendarDoc.data() ?? <String, dynamic>{};
+        const effectiveKeys = <String>[
+          'effectiveTeachingWeeks',
+          'effective_teaching_weeks',
+          'effectiveWeeks',
+        ];
+        const officialKeys = <String>[
+          'officialWeeksCount',
+          'official_weeks_count',
+          'semesterWeeks',
+          'semester_weeks',
+        ];
+
+        final effectiveWeeks = readWeeksFromKeys(cal, effectiveKeys);
+          if (effectiveWeeks != null && effectiveWeeks > 0) {
+            calendarWeeksCandidate = effectiveWeeks;
+            if (kDebugMode) {
+              debugPrint(
+                '[AttendanceTracking] academic_calendar/current: using effectiveWeeks=$effectiveWeeks cal=$cal',
+              );
+            }
+        } else {
+          // Fall back to official/semester weeks if effectiveTeachingWeeks is absent
+          // or present but invalid (0/null). In our admin sync, `semesterWeeks`
+          // can already represent the effective teaching weeks.
+          final officialWeeks = readWeeksFromKeys(cal, officialKeys);
+          if (officialWeeks != null && officialWeeks > 0) {
+            calendarWeeksCandidate = officialWeeks;
+              if (kDebugMode) {
+                debugPrint(
+                  '[AttendanceTracking] academic_calendar/current: using officialWeeks=$officialWeeks cal=$cal',
+                );
+              }
+          } else if (kDebugMode) {
+            debugPrint(
+              '[AttendanceTracking] academic_calendar/current: no valid weeks found. cal=$cal',
+            );
+          }
+        }
+          _semesterStartDate =
+              _readDate(cal['semesterStartDate']) ?? _readDate(cal['startDate']);
+          // If we got a valid weeks count from calendar, we can still continue to term lookup
+          // for better start/end selection, but don't force override weeks later unless term has better data.
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('[AttendanceTracking] academic_calendar/current READ FAILED: $e');
+        }
+      }
+
       final snapshot = await FirebaseFirestore.instance
           .collection('academic_terms')
-          .where('isActive', isEqualTo: true)
+          // Some environments may not keep isActive in sync; we select the best
+          // term by date range and fallback to the latest by startDate.
+          .orderBy('startDate', descending: true)
+          .limit(25)
           .get();
       if (snapshot.docs.isEmpty) return;
 
@@ -90,15 +174,91 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
       }
 
       final data = preferred.data();
-      final weeks =
-          _readPositiveInt(data['effectiveTeachingWeeks']) ??
+      final termId = (data['termId'] ?? '').toString().trim().isNotEmpty
+          ? (data['termId'] ?? '').toString().trim()
+          : preferred.id;
+      if (kDebugMode) {
+        debugPrint(
+          '[AttendanceTracking] picked termId=$termId startDate=${data['startDate']} '
+          'effectiveTeachingWeeks=${data['effectiveTeachingWeeks']} officialWeeksCount=${data['officialWeeksCount']}',
+        );
+      }
+
+      // Prefer weeks subcollection if available: count only weeks that count in attendance.
+      try {
+        final weeksSnap = await FirebaseFirestore.instance
+            .collection('academic_terms')
+            .doc(termId)
+            .collection('weeks')
+            .get();
+        if (weeksSnap.docs.isNotEmpty) {
+          final countInAttendance = weeksSnap.docs
+              .where((d) => (d.data()['countInAttendance'] == true))
+              .length;
+          if (countInAttendance > 0) {
+            // If the admin maintains the centralized calendar, don't override it here.
+            if (!calendarWeeksIsSourceOfTruth) {
+              _semesterWeeksCount = countInAttendance;
+            }
+          }
+        }
+      } catch (e) {
+        // ignore and fallback to fields below
+        if (kDebugMode) {
+          debugPrint(
+            '[AttendanceTracking] academic_terms/$termId/weeks READ FAILED: $e',
+          );
+        }
+      }
+
+      final effectiveWeeks =
+          _readPositiveInt(data['effectiveTeachingWeeks']) ?? 0;
+      final officialWeeks =
           _readPositiveInt(data['officialWeeksCount']) ??
           _readPositiveInt(data['semesterWeeks']) ??
           _semesterWeeksCount;
-      _semesterWeeksCount = weeks.clamp(1, 20);
+
+      // Source of truth for teaching weeks should be the term's effectiveTeachingWeeks
+      // (maintained by admin). The academic_calendar doc can be stale.
+      if (effectiveWeeks > 0) {
+        _semesterWeeksCount = effectiveWeeks;
+        calendarWeeksIsSourceOfTruth = true;
+        if (kDebugMode) {
+          debugPrint('[AttendanceTracking] using term effectiveWeeks=$effectiveWeeks');
+        }
+      } else if (_semesterWeeksCount <= 0 && !calendarWeeksIsSourceOfTruth) {
+        // If nothing else worked, use calendar candidate if present.
+        if (calendarWeeksCandidate != null && calendarWeeksCandidate! > 0) {
+          _semesterWeeksCount = calendarWeeksCandidate!;
+          calendarWeeksIsSourceOfTruth = true;
+          if (kDebugMode) {
+            debugPrint(
+              '[AttendanceTracking] using calendar weeks candidate=$_semesterWeeksCount',
+            );
+          }
+        }
+      } else if (!calendarWeeksIsSourceOfTruth && calendarWeeksCandidate != null) {
+        // If term doesn't provide effective weeks, calendar can be used.
+        _semesterWeeksCount = calendarWeeksCandidate!;
+        calendarWeeksIsSourceOfTruth = true;
+      } else {
+        // Final fallback: use effectiveTeachingWeeks if maintained by admin; else official.
+        final weeks = (effectiveWeeks > 0 ? effectiveWeeks : officialWeeks);
+        if (weeks > 0 && !calendarWeeksIsSourceOfTruth) {
+          _semesterWeeksCount = weeks;
+          if (kDebugMode) {
+            debugPrint(
+              '[AttendanceTracking] using term weeks=$_semesterWeeksCount (calendar not source of truth)',
+            );
+          }
+        }
+      }
       _semesterStartDate = _readDate(data['startDate']);
-    } catch (_) {
+    } catch (e) {
       // Keep defaults if term context is unavailable.
+      if (kDebugMode) {
+        debugPrint('[AttendanceTracking] _loadAcademicTermContext FAILED: $e');
+      }
     }
   }
 
@@ -117,7 +277,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
         .watchStudentRecords(student.studentId)
         .listen(
           (records) async {
-            final typeMaps = await _fetchCourseTypesForRecords(records);
+            final metaMaps = await _fetchCourseMetaForRecords(records);
             if (!mounted) return;
             final semesterStart =
                 _semesterStartDate ??
@@ -130,8 +290,9 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
                 .map(
                   (r) => _toAttendanceRecord(
                     r,
-                    typeMaps.codeToType,
-                    typeMaps.sectionIdToType,
+                    metaMaps.codeToType,
+                    metaMaps.sectionIdToType,
+                    metaMaps.codeToNameAr,
                     semesterStart,
                   ),
                 )
@@ -140,9 +301,16 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
             if (!mounted) return;
             setState(() {
               _records = mapped;
+              _codeToWeeklyMinutes = metaMaps.codeToWeeklyMinutes;
               _isLoading = false;
               _loadError = null;
               _syncSelectedWeeksWithAvailable();
+              final courses = _courses;
+              if (courses.isNotEmpty &&
+                  (_selectedCourse == null ||
+                      !courses.contains(_selectedCourse))) {
+                _selectedCourse = courses.first;
+              }
             });
           },
           onError: (error) {
@@ -169,34 +337,71 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
     }
   }
 
-  /// جلب courseType من courses ثم sections للسجلات اللي ما عندها نوع
+  /// جلب بيانات المقرر من courses ثم sections (نوع المقرر + الاسم العربي).
   Future<
-    ({Map<String, String> codeToType, Map<String, String> sectionIdToType})
+    ({
+      Map<String, String> codeToType,
+      Map<String, String> sectionIdToType,
+      Map<String, String> codeToNameAr,
+      Map<String, int> codeToWeeklyMinutes,
+    })
   >
-  _fetchCourseTypesForRecords(List<ManualAttendanceRecord> records) async {
-    final needType = records
-        .where((r) => (r.courseType ?? '').trim().isEmpty)
+  _fetchCourseMetaForRecords(List<ManualAttendanceRecord> records) async {
+    // Always read course weekly *scheduled* hours from DB first.
+    final codes = records
+        .where((r) => (r.courseCode ?? '').trim().isNotEmpty)
+        .map((r) => r.courseCode!.trim())
+        .toSet()
         .toList();
-    if (needType.isEmpty) {
+
+    final needSectionType = records
+        .where((r) => (r.courseType ?? '').trim().isEmpty)
+        .where((r) => r.sectionId.trim().isNotEmpty)
+        .map((r) => r.sectionId.trim())
+        .toSet()
+        .toList();
+
+    if (codes.isEmpty && needSectionType.isEmpty) {
       return (
         codeToType: <String, String>{},
         sectionIdToType: <String, String>{},
+        codeToNameAr: <String, String>{},
+        codeToWeeklyMinutes: <String, int>{},
       );
     }
 
     final firestore = FirebaseFirestore.instance;
     final codeToType = <String, String>{};
     final sectionIdToType = <String, String>{};
+    final codeToNameAr = <String, String>{};
+    final codeToWeeklyMinutes = <String, int>{};
 
-    final codes = needType
-        .where((r) => (r.courseCode ?? '').trim().isNotEmpty)
-        .map((r) => r.courseCode!.trim())
-        .toSet()
-        .toList();
     String typeFromMap(Map<String, dynamic>? d) {
       if (d == null) return '';
       final v = d['courseType'] ?? d['course_type'] ?? d['CourseType'] ?? '';
       return (v ?? '').toString().trim();
+    }
+    String nameArFromMap(Map<String, dynamic>? d) {
+      if (d == null) return '';
+      final v = d['courseName_Ar'] ?? d['courseNameAr'] ?? '';
+      return (v ?? '').toString().trim();
+    }
+    int weeklyMinutesFromMap(Map<String, dynamic>? d) {
+      if (d == null) return 0;
+      int readHours(dynamic raw) {
+        if (raw is int) return raw;
+        if (raw is num) return raw.toInt();
+        return int.tryParse((raw ?? '').toString()) ?? 0;
+      }
+
+      // Absence must be based on actual scheduled weekly contact hours.
+      // Prefer explicit weekly fields; do NOT use creditHours (academic credits)
+      // because it can differ from real weekly contact hours.
+      final weeklyHours =
+          readHours(d['weeklyHours'] ?? d['hoursPerWeek'] ?? d['contactHours']);
+      if (weeklyHours > 0) return weeklyHours * 60;
+
+      return 0;
     }
 
     for (final code in codes) {
@@ -204,15 +409,14 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
       if (doc.exists) {
         final type = typeFromMap(doc.data());
         if (type.isNotEmpty) codeToType[code] = type;
+        final nameAr = nameArFromMap(doc.data());
+        if (nameAr.isNotEmpty) codeToNameAr[code] = nameAr;
+        final weekly = weeklyMinutesFromMap(doc.data());
+        if (weekly > 0) codeToWeeklyMinutes[code] = weekly;
       }
     }
 
-    final sectionIds = needType
-        .where((r) => (r.sectionId).trim().isNotEmpty)
-        .map((r) => r.sectionId.trim())
-        .toSet()
-        .toList();
-    for (final sectionId in sectionIds) {
+    for (final sectionId in needSectionType) {
       if (sectionIdToType.containsKey(sectionId)) continue;
       final doc = await firestore.collection('sections').doc(sectionId).get();
       if (doc.exists) {
@@ -221,13 +425,19 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
       }
     }
 
-    return (codeToType: codeToType, sectionIdToType: sectionIdToType);
+    return (
+      codeToType: codeToType,
+      sectionIdToType: sectionIdToType,
+      codeToNameAr: codeToNameAr,
+      codeToWeeklyMinutes: codeToWeeklyMinutes,
+    );
   }
 
   _AttendanceRecord _toAttendanceRecord(
     ManualAttendanceRecord record,
     Map<String, String> codeToType,
     Map<String, String> sectionIdToType,
+    Map<String, String> codeToNameAr,
     DateTime? semesterStart,
   ) {
     final status = switch (record.status) {
@@ -239,9 +449,11 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
     final sectionText = record.sectionLabel.trim().isEmpty
         ? '-'
         : record.sectionLabel;
-    final courseName = (record.courseName).trim().isEmpty
-        ? '—'
-        : record.courseName;
+    final fallbackName = record.courseName.trim().isEmpty ? '—' : record.courseName.trim();
+    final courseName = (record.courseCode != null &&
+            codeToNameAr[record.courseCode!]?.trim().isNotEmpty == true)
+        ? codeToNameAr[record.courseCode!]!.trim()
+        : fallbackName;
     String? rawType = (record.courseType ?? '').trim().isNotEmpty
         ? record.courseType?.trim()
         : null;
@@ -259,6 +471,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
     final weekKey = _semesterWeekKey(lectureDate, semesterStart);
     final day = lectureDate.day.toString().padLeft(2, '0');
     return _AttendanceRecord(
+      courseCode: record.courseCode,
       courseKey: '$courseName • شعبة $sectionText',
       courseName: courseName,
       sectionLabel: sectionText,
@@ -295,29 +508,6 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
     return weekNum.clamp(0, _semesterWeeksCount - 1).toString();
   }
 
-  static const List<String> _weekOrdinals = <String>[
-    'الأول',
-    'الثاني',
-    'الثالث',
-    'الرابع',
-    'الخامس',
-    'السادس',
-    'السابع',
-    'الثامن',
-    'التاسع',
-    'العاشر',
-    'الحادي عشر',
-    'الثاني عشر',
-    'الثالث عشر',
-    'الرابع عشر',
-    'الخامس عشر',
-    'السادس عشر',
-    'السابع عشر',
-    'الثامن عشر',
-    'التاسع عشر',
-    'العشرون',
-  ];
-
   List<String> get _courses {
     final seen = <String>{};
     final list = <String>[];
@@ -329,11 +519,8 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
       if (label.isNotEmpty && seen.add(label)) list.add(label);
     }
     list.sort();
-    return <String>['الكل', ...list];
+    return list;
   }
-
-  String _weekOrdinal(int index) =>
-      index < _weekOrdinals.length ? _weekOrdinals[index] : '${index + 1}';
 
   void _syncSelectedWeeksWithAvailable() {
     final weeks = _weeks;
@@ -351,14 +538,14 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
   List<String> get _weeks {
     return List<String>.generate(
       _semesterWeeksCount,
-      (i) => 'الأسبوع ${_weekOrdinal(i)}',
+      (i) => 'الأسبوع ${i + 1}',
     );
   }
 
   Map<String, String> get _weekKeyToDisplay {
     final map = <String, String>{};
     for (var i = 0; i < _semesterWeeksCount; i++) {
-      map[i.toString()] = 'الأسبوع ${_weekOrdinal(i)}';
+      map[i.toString()] = 'الأسبوع ${i + 1}';
     }
     return map;
   }
@@ -407,23 +594,140 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
     return parsed;
   }
 
-  int get _total => _records.length;
+  List<_AttendanceRecord> get _filteredRecordsForSummary {
+    final weekKeyToDisplay = _weekKeyToDisplay;
+    final weeks = _weeks;
+    final allWeeksSelected = _selectedWeeks.length == weeks.length;
+    final noWeekFilter = allWeeksSelected;
+    final filtered = _records.where((record) {
+      final type =
+          (record.courseType.trim().isEmpty || record.courseType == '—')
+              ? 'نظري'
+              : record.courseType;
+      final courseMatch = _selectedCourse == null
+          ? true
+          : ('${record.course} $type'.trim() == _selectedCourse);
+      final weekLabel = weekKeyToDisplay[record.weekKey] ?? record.weekKey;
+      final weekMatch = noWeekFilter || _selectedWeeks.contains(weekLabel);
+      return courseMatch && weekMatch;
+    }).toList();
+    filtered.sort((a, b) => b.lectureDate.compareTo(a.lectureDate));
+    return filtered;
+  }
+
+  int get _filteredWeeksCount {
+    final weeks = _weeks;
+    if (weeks.isEmpty) return _semesterWeeksCount;
+    final allWeeksSelected = _selectedWeeks.length == weeks.length;
+    if (allWeeksSelected) return _semesterWeeksCount;
+    return _selectedWeeks.length.clamp(0, _semesterWeeksCount);
+  }
+
+  int _minutesFromTimeRange(String timeRange) {
+    // Expects "HH:mm-HH:mm" (or similar). Returns 0 if parsing fails.
+    final parts = timeRange.split('-');
+    if (parts.length != 2) return 0;
+    int? toMinutes(String s) {
+      final p = s.trim().split(':');
+      if (p.length < 2) return null;
+      final h = int.tryParse(p[0].trim());
+      final m = int.tryParse(p[1].trim());
+      if (h == null || m == null) return null;
+      return h * 60 + m;
+    }
+
+    final start = toMinutes(parts[0]);
+    final end = toMinutes(parts[1]);
+    if (start == null || end == null) return 0;
+    final diff = end - start;
+    // Handle cross-midnight just in case.
+    final minutes = diff >= 0 ? diff : (diff + 24 * 60);
+    return minutes.clamp(0, 24 * 60);
+  }
+
+  int _estimateWeeklyLectureMinutesForSelectedCourse() {
+    // Backward-compatible estimate (used only as fallback when DB weekly hours missing).
+    // We take the maximum total minutes found in any single week (unique sessions).
+    final weekToSessions = <String, Map<String, int>>{};
+    for (final r in _records) {
+      final sessionKey =
+          '${r.courseKey}|${r.lectureDate.toIso8601String()}|${r.timeRange}';
+      final minutes = _minutesFromTimeRange(r.timeRange);
+      if (minutes <= 0) continue;
+      weekToSessions.putIfAbsent(r.weekKey, () => <String, int>{})[sessionKey] =
+          minutes;
+    }
+    int maxMinutes = 0;
+    for (final sessions in weekToSessions.values) {
+      final total = sessions.values.fold<int>(0, (a, b) => a + b);
+      if (total > maxMinutes) maxMinutes = total;
+    }
+    return maxMinutes;
+  }
+
+  int get _expectedTotalMinutes {
+    // Prefer planned weekly minutes from `courses` (e.g. creditHours) when available.
+    int weekly = 0;
+    // Not used for per-course display anymore (kept for old single-summary fallback).
+    weekly = weekly > 0 ? weekly : _estimateWeeklyLectureMinutesForSelectedCourse();
+    final weeks = _filteredWeeksCount;
+    final expected = weekly * weeks;
+    return expected < 0 ? 0 : expected;
+  }
+
+  int get _totalPlannedMinutes {
+    if (_expectedTotalMinutes > 0) return _expectedTotalMinutes;
+    // Fallback: sum minutes from filtered records (when schedule is incomplete).
+    return _filteredRecordsForSummary.fold<int>(
+      0,
+      (sum, r) => sum + _minutesFromTimeRange(r.timeRange),
+    );
+  }
+
+  int get _presentMinutes => _filteredRecordsForSummary
+      .where((r) => r.status == 'present')
+      .fold<int>(0, (sum, r) => sum + _minutesFromTimeRange(r.timeRange));
+
+  int get _excusedMinutes => _filteredRecordsForSummary
+      .where((r) => r.status == 'excused')
+      .fold<int>(0, (sum, r) => sum + _minutesFromTimeRange(r.timeRange));
+
+  int get _unexcusedMinutes => _filteredRecordsForSummary
+      .where((r) => r.status == 'unexcused')
+      .fold<int>(0, (sum, r) => sum + _minutesFromTimeRange(r.timeRange));
+
+  int get _lateMinutes => _filteredRecordsForSummary
+      .where((r) => r.status == 'late')
+      .fold<int>(0, (sum, r) => sum + _minutesFromTimeRange(r.timeRange));
+
   int get _totalAttendance =>
-      _records.where((r) => r.status == 'present').length;
+      _filteredRecordsForSummary.where((r) => r.status == 'present').length;
   int get _excusedAbsence =>
-      _records.where((r) => r.status == 'excused').length;
+      _filteredRecordsForSummary.where((r) => r.status == 'excused').length;
   int get _unexcusedAbsence =>
-      _records.where((r) => r.status == 'unexcused').length;
-  int get _tardiness => _records.where((r) => r.status == 'late').length;
+      _filteredRecordsForSummary.where((r) => r.status == 'unexcused').length;
+  int get _tardiness =>
+      _filteredRecordsForSummary.where((r) => r.status == 'late').length;
+
+  int get _totalAbsence => _excusedAbsence + _unexcusedAbsence;
 
   double get _attendancePercentage =>
-      _total == 0 ? 0 : (_totalAttendance / _total) * 100;
+      _totalPlannedMinutes == 0 ? 0 : (_presentMinutes / _totalPlannedMinutes) * 100;
   double get _excusedPercentage =>
-      _total == 0 ? 0 : (_excusedAbsence / _total) * 100;
+      _totalPlannedMinutes == 0 ? 0 : (_excusedMinutes / _totalPlannedMinutes) * 100;
   double get _unexcusedPercentage =>
-      _total == 0 ? 0 : (_unexcusedAbsence / _total) * 100;
+      _totalPlannedMinutes == 0 ? 0 : (_unexcusedMinutes / _totalPlannedMinutes) * 100;
   double get _tardinessPercentage =>
-      _total == 0 ? 0 : (_tardiness / _total) * 100;
+      _totalPlannedMinutes == 0 ? 0 : (_lateMinutes / _totalPlannedMinutes) * 100;
+
+  double get _totalAbsencePercentage =>
+      _totalPlannedMinutes == 0
+          ? 0
+          : ((_excusedMinutes + _unexcusedMinutes) / _totalPlannedMinutes) * 100;
+
+  bool get _isTotalAbsenceOverLimit => _totalAbsencePercentage > 25;
+  bool get _isExcusedAbsenceOverLimit => _excusedPercentage > 25;
+  bool get _isUnexcusedAbsenceOverLimit => _unexcusedPercentage > 15;
 
   @override
   Widget build(BuildContext context) {
@@ -519,8 +823,8 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
                       _buildHeader(context),
                       const SizedBox(height: 16),
                       _buildCourseTabs(),
-                      const SizedBox(height: 24),
-                      _buildAttendanceSummary(),
+                      const SizedBox(height: 16),
+                      _buildAttendanceSummaryPerCourse(),
                       const SizedBox(height: 24),
                       _buildWeekFilterBar(),
                       const SizedBox(height: 24),
@@ -573,87 +877,21 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
     );
   }
 
-  Widget _buildAttendanceSummary() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                _buildLegendItem(
-                  color: const Color(0xFF006571),
-                  percentage: _attendancePercentage,
-                  count: _totalAttendance,
-                  label: 'الحضور',
-                ),
-                const SizedBox(height: 12),
-                _buildLegendItem(
-                  color: const Color(0xFF2196F3),
-                  percentage: _excusedPercentage,
-                  count: _excusedAbsence,
-                  label: 'الغياب بعذر',
-                ),
-                const SizedBox(height: 12),
-                _buildLegendItem(
-                  color: const Color(0xFFFF9800),
-                  percentage: _unexcusedPercentage,
-                  count: _unexcusedAbsence,
-                  label: 'الغياب بدون عذر',
-                ),
-                const SizedBox(height: 12),
-                _buildLegendItem(
-                  color: const Color(0xFFFFC107),
-                  percentage: _tardinessPercentage,
-                  count: _tardiness,
-                  label: 'التأخير',
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 20),
-          SizedBox(
-            width: 120,
-            height: 120,
-            child: Stack(
-              alignment: Alignment.center,
-              children: <Widget>[
-                CustomPaint(
-                  size: const Size(120, 120),
-                  painter: _DonutChartPainter(
-                    attendancePercentage: _attendancePercentage,
-                    excusedPercentage: _excusedPercentage,
-                    unexcusedPercentage: _unexcusedPercentage,
-                    tardinessPercentage: _tardinessPercentage,
-                  ),
-                ),
-                Text(
-                  '${_attendancePercentage.toStringAsFixed(0)}%',
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: _primaryColor,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+  Widget _buildAttendanceSummaryPerCourse() {
+    final courses = _courses;
+    if (courses.isEmpty) return const SizedBox.shrink();
+    final selected =
+        (_selectedCourse != null && courses.contains(_selectedCourse))
+            ? _selectedCourse!
+            : courses.first;
+    return _CourseSummaryCard(
+      courseLabel: selected,
+      allRecords: _records,
+      weekKeyToDisplay: _weekKeyToDisplay,
+      selectedWeeks: _selectedWeeks,
+      allWeeks: _weeks,
+      weeksCountForTerm: _semesterWeeksCount,
+      codeToWeeklyMinutes: _codeToWeeklyMinutes,
     );
   }
 
@@ -662,6 +900,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
     required double percentage,
     required int count,
     required String label,
+    bool isOverLimit = false,
   }) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -675,10 +914,10 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
         const SizedBox(width: 6),
         Text(
           '${percentage.toStringAsFixed(0)}%',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF1A1A1A),
+            color: isOverLimit ? const Color(0xFFD32F2F) : const Color(0xFF1A1A1A),
           ),
         ),
         const SizedBox(width: 6),
@@ -705,6 +944,15 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
   Widget _buildCourseTabs() {
     final courses = _courses;
     if (courses.isEmpty) return const SizedBox.shrink();
+
+    final selected =
+        (_selectedCourse != null && courses.contains(_selectedCourse))
+            ? _selectedCourse!
+            : courses.first;
+    if (selected != _selectedCourse) {
+      _selectedCourse = selected;
+    }
+
     return Container(
       height: 44,
       decoration: BoxDecoration(
@@ -722,13 +970,11 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2),
               child: InkWell(
-                onTap: () {
-                  setState(() => _selectedCourse = course);
-                },
+                onTap: () => setState(() => _selectedCourse = course),
                 borderRadius: BorderRadius.circular(22),
                 child: Container(
                   height: 36,
-                  constraints: const BoxConstraints(minWidth: 100),
+                  constraints: const BoxConstraints(minWidth: 110),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 8,
@@ -785,7 +1031,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        reverse: true,
+        reverse: false,
         child: Row(
           children: <Widget>[
             Padding(
@@ -793,11 +1039,9 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
               child: InkWell(
                 onTap: () {
                   setState(() {
-                    if (allSelected) {
-                      _selectedWeeks.clear();
-                    } else {
-                      _selectedWeeks.addAll(weeks);
-                    }
+                    _selectedWeeks
+                      ..clear()
+                      ..addAll(weeks);
                   });
                 },
                 borderRadius: BorderRadius.circular(10),
@@ -892,9 +1136,9 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
           (record.courseType.trim().isEmpty || record.courseType == '—')
           ? 'نظري'
           : record.courseType;
-      final courseMatch =
-          _selectedCourse == 'الكل' ||
-          ('${record.course} $type'.trim() == _selectedCourse);
+      final courseMatch = _selectedCourse == null
+          ? true
+          : ('${record.course} $type'.trim() == _selectedCourse);
       final weekLabel = weekKeyToDisplay[record.weekKey] ?? record.weekKey;
       final weekMatch = noWeekFilter || _selectedWeeks.contains(weekLabel);
       return courseMatch && weekMatch;
@@ -943,16 +1187,14 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
 
 class _DonutChartPainter extends CustomPainter {
   _DonutChartPainter({
-    required this.attendancePercentage,
     required this.excusedPercentage,
     required this.unexcusedPercentage,
-    required this.tardinessPercentage,
+    this.unexcusedOverLimit,
   });
 
-  final double attendancePercentage;
   final double excusedPercentage;
   final double unexcusedPercentage;
-  final double tardinessPercentage;
+  final bool? unexcusedOverLimit;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -962,22 +1204,11 @@ class _DonutChartPainter extends CustomPainter {
 
     double startAngle = -math.pi / 2;
 
-    final attendanceSweep = (attendancePercentage / 100) * 2 * math.pi;
-    final attendancePaint = Paint()
-      ..color = const Color(0xFF006571)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      startAngle,
-      attendanceSweep,
-      false,
-      attendancePaint,
-    );
-    startAngle += attendanceSweep;
+    final totalAbsence =
+        (excusedPercentage + unexcusedPercentage).clamp(0, 100).toDouble();
+    final denom = totalAbsence <= 0 ? 1.0 : totalAbsence;
 
-    final excusedSweep = (excusedPercentage / 100) * 2 * math.pi;
+    final excusedSweep = (excusedPercentage / denom) * 2 * math.pi;
     final excusedPaint = Paint()
       ..color = const Color(0xFF2196F3)
       ..style = PaintingStyle.stroke
@@ -992,9 +1223,11 @@ class _DonutChartPainter extends CustomPainter {
     );
     startAngle += excusedSweep;
 
-    final unexcusedSweep = (unexcusedPercentage / 100) * 2 * math.pi;
+    final unexcusedSweep = (unexcusedPercentage / denom) * 2 * math.pi;
     final unexcusedPaint = Paint()
-      ..color = const Color(0xFFFF9800)
+      ..color = (unexcusedOverLimit ?? false)
+          ? const Color(0xFFD32F2F)
+          : const Color(0xFFFF9800)
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round;
@@ -1005,34 +1238,19 @@ class _DonutChartPainter extends CustomPainter {
       false,
       unexcusedPaint,
     );
-    startAngle += unexcusedSweep;
-
-    final tardinessSweep = (tardinessPercentage / 100) * 2 * math.pi;
-    final tardinessPaint = Paint()
-      ..color = const Color(0xFFFFC107)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      startAngle,
-      tardinessSweep,
-      false,
-      tardinessPaint,
-    );
   }
 
   @override
   bool shouldRepaint(covariant _DonutChartPainter oldDelegate) {
-    return attendancePercentage != oldDelegate.attendancePercentage ||
-        excusedPercentage != oldDelegate.excusedPercentage ||
+    return excusedPercentage != oldDelegate.excusedPercentage ||
         unexcusedPercentage != oldDelegate.unexcusedPercentage ||
-        tardinessPercentage != oldDelegate.tardinessPercentage;
+        unexcusedOverLimit != oldDelegate.unexcusedOverLimit;
   }
 }
 
 class _AttendanceRecord {
   _AttendanceRecord({
+    this.courseCode,
     required this.courseKey,
     required this.courseName,
     required this.sectionLabel,
@@ -1047,6 +1265,7 @@ class _AttendanceRecord {
     required this.status,
   });
 
+  final String? courseCode;
   final String courseKey;
   final String courseName;
   final String sectionLabel;
@@ -1199,6 +1418,313 @@ class _AttendanceCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CourseSummaryCard extends StatelessWidget {
+  const _CourseSummaryCard({
+    required this.courseLabel,
+    required this.allRecords,
+    required this.weekKeyToDisplay,
+    required this.selectedWeeks,
+    required this.allWeeks,
+    required this.weeksCountForTerm,
+    required this.codeToWeeklyMinutes,
+  });
+
+  final String courseLabel;
+  final List<_AttendanceRecord> allRecords;
+  final Map<String, String> weekKeyToDisplay;
+  final Set<String> selectedWeeks;
+  final List<String> allWeeks;
+  final int weeksCountForTerm;
+  final Map<String, int> codeToWeeklyMinutes;
+
+  int _truncatePct(double v) {
+    if (!v.isFinite || v <= 0) return 0;
+    return v.floor().clamp(0, 100);
+  }
+
+  int _minutesFromTimeRange(String timeRange) {
+    final parts = timeRange.split('-');
+    if (parts.length != 2) return 0;
+    int? toMinutes(String s) {
+      final p = s.trim().split(':');
+      if (p.length < 2) return null;
+      final h = int.tryParse(p[0].trim());
+      final m = int.tryParse(p[1].trim());
+      if (h == null || m == null) return null;
+      return h * 60 + m;
+    }
+
+    final start = toMinutes(parts[0]);
+    final end = toMinutes(parts[1]);
+    if (start == null || end == null) return 0;
+    final diff = end - start;
+    final minutes = diff >= 0 ? diff : (diff + 24 * 60);
+    return minutes.clamp(0, 24 * 60);
+  }
+
+  bool _matchesCourse(_AttendanceRecord r) {
+    final type =
+        (r.courseType.trim().isEmpty || r.courseType == '—') ? 'نظري' : r.courseType;
+    return ('${r.course} $type'.trim() == courseLabel);
+  }
+
+  List<_AttendanceRecord> _filteredCourseRecords() {
+    final allWeeksSelected = selectedWeeks.length == allWeeks.length;
+    final noWeekFilter = allWeeksSelected;
+    final filtered = allRecords.where((r) {
+      if (!_matchesCourse(r)) return false;
+      final weekLabel = weekKeyToDisplay[r.weekKey] ?? r.weekKey;
+      final weekMatch = noWeekFilter || selectedWeeks.contains(weekLabel);
+      return weekMatch;
+    }).toList();
+    filtered.sort((a, b) => b.lectureDate.compareTo(a.lectureDate));
+    return filtered;
+  }
+
+  int _filteredWeeksCount() {
+    if (allWeeks.isEmpty) return weeksCountForTerm;
+    final allWeeksSelected = selectedWeeks.length == allWeeks.length;
+    if (allWeeksSelected) return weeksCountForTerm;
+    return selectedWeeks.length.clamp(0, weeksCountForTerm);
+  }
+
+  int _weeklyMinutesFromDb(List<_AttendanceRecord> records) {
+    int weekly = 0;
+    final codes = records
+        .map((r) => r.courseCode)
+        .whereType<String>()
+        .map((c) => c.trim())
+        .where((c) => c.isNotEmpty)
+        .toSet()
+        .toList();
+    for (final code in codes) {
+      final v = codeToWeeklyMinutes[code];
+      if (v != null && v > weekly) weekly = v;
+    }
+    return weekly;
+  }
+
+  int _weeklyMinutesFallback(List<_AttendanceRecord> records) {
+    final byWeek = <String, Map<String, int>>{};
+    for (final r in records) {
+      final minutes = _minutesFromTimeRange(r.timeRange);
+      if (minutes <= 0) continue;
+      final sessionKey =
+          '${r.courseKey}|${r.lectureDate.toIso8601String()}|${r.timeRange}';
+      byWeek.putIfAbsent(r.weekKey, () => <String, int>{})[sessionKey] = minutes;
+    }
+    int maxMinutes = 0;
+    for (final sessions in byWeek.values) {
+      final total = sessions.values.fold<int>(0, (a, b) => a + b);
+      maxMinutes = math.max(maxMinutes, total);
+    }
+    return maxMinutes;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final records = _filteredCourseRecords();
+    if (records.isEmpty) return const SizedBox.shrink();
+
+    final presentMinutes = records
+        .where((r) => r.status == 'present')
+        .fold<int>(0, (s, r) => s + _minutesFromTimeRange(r.timeRange));
+    final excusedMinutes = records
+        .where((r) => r.status == 'excused')
+        .fold<int>(0, (s, r) => s + _minutesFromTimeRange(r.timeRange));
+    final unexcusedMinutes = records
+        .where((r) => r.status == 'unexcused')
+        .fold<int>(0, (s, r) => s + _minutesFromTimeRange(r.timeRange));
+    final lateMinutes = records
+        .where((r) => r.status == 'late')
+        .fold<int>(0, (s, r) => s + _minutesFromTimeRange(r.timeRange));
+
+    final weeklyFromDb = _weeklyMinutesFromDb(records);
+    final weeklyFallback = _weeklyMinutesFallback(records);
+    final weekly = weeklyFromDb > 0 ? weeklyFromDb : weeklyFallback;
+    final filteredWeeksCount = _filteredWeeksCount();
+    final planned = weekly * filteredWeeksCount;
+    final totalPlannedMinutes = planned > 0
+        ? planned
+        : records.fold<int>(0, (s, r) => s + _minutesFromTimeRange(r.timeRange));
+
+    if (kDebugMode) {
+      final courseCodes = records
+          .map((r) => r.courseCode?.trim())
+          .whereType<String>()
+          .where((c) => c.isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
+      final dbWeeklyByCode = <String, int>{};
+      for (final c in courseCodes) {
+        final v = codeToWeeklyMinutes[c];
+        if (v != null) dbWeeklyByCode[c] = v;
+      }
+
+      debugPrint(
+        '[AttendanceTracking] course="$courseLabel" '
+        'courseCodes=$courseCodes '
+        'dbWeeklyByCode=$dbWeeklyByCode '
+        'weeklyFromDb=$weeklyFromDb '
+        'weeklyFallback=$weeklyFallback '
+        'weeklyUsed=$weekly '
+        'filteredWeeksCount=$filteredWeeksCount '
+        'planned=$planned '
+        'totalPlannedMinutes=$totalPlannedMinutes',
+      );
+    }
+
+    double pct(int minutes) =>
+        totalPlannedMinutes == 0 ? 0 : (minutes / totalPlannedMinutes) * 100;
+
+    final excusedPct = pct(excusedMinutes);
+    final unexcusedPct = pct(unexcusedMinutes);
+    final totalAbsencePct = pct(excusedMinutes + unexcusedMinutes);
+    final unexcusedOverLimit = unexcusedPct > 15;
+    final totalOverLimit = totalAbsencePct > 25;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  courseLabel,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1A1A1A),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _LegendRow(
+                  color: const Color(0xFF006571),
+                  label: 'الحضور',
+                  percentage: pct(presentMinutes),
+                ),
+                const SizedBox(height: 8),
+                _LegendRow(
+                  color: const Color(0xFF2196F3),
+                  label: 'بعذر',
+                  percentage: excusedPct,
+                  isOverLimit: excusedPct > 25,
+                ),
+                const SizedBox(height: 8),
+                _LegendRow(
+                  color: const Color(0xFFFF9800),
+                  label: 'بدون عذر',
+                  percentage: unexcusedPct,
+                  isOverLimit: unexcusedOverLimit,
+                ),
+                const SizedBox(height: 8),
+                _LegendRow(
+                  color: const Color(0xFFFFC107),
+                  label: 'تأخير',
+                  percentage: pct(lateMinutes),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          SizedBox(
+            width: 110,
+            height: 110,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                CustomPaint(
+                  size: const Size(110, 110),
+                  painter: _DonutChartPainter(
+                    excusedPercentage: excusedPct,
+                    unexcusedPercentage: unexcusedPct,
+                    unexcusedOverLimit: unexcusedOverLimit,
+                  ),
+                ),
+                Text(
+                  '${_truncatePct(totalAbsencePct)}%',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: totalOverLimit
+                        ? const Color(0xFFD32F2F)
+                        : const Color(0xFF006571),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LegendRow extends StatelessWidget {
+  const _LegendRow({
+    required this.color,
+    required this.label,
+    required this.percentage,
+    this.isOverLimit = false,
+  });
+
+  final Color color;
+  final String label;
+  final double percentage;
+  final bool isOverLimit;
+
+  int _truncatePct(double v) {
+    if (!v.isFinite || v <= 0) return 0;
+    return v.floor().clamp(0, 100);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pctInt = _truncatePct(percentage);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          '$pctInt%',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: isOverLimit
+                ? const Color(0xFFD32F2F)
+                : const Color(0xFF1A1A1A),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 11, color: Color(0xFF1A1A1A)),
+        ),
+      ],
     );
   }
 }
