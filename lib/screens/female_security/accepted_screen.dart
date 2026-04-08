@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/female_security/security_gate_scan_service.dart';
@@ -40,7 +41,7 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
   @override
   void initState() {
     super.initState();
-    loadSecurityGatePreferences();
+    _loadSecurityGatePreferencesSafely();
   }
 
   @override
@@ -71,7 +72,21 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
       _dateUpdated = true;
       _selectedDate = DateTime.now();
     });
-    loadSecurityGatePreferences();
+    _loadSecurityGatePreferencesSafely();
+  }
+
+  Future<void> _loadSecurityGatePreferencesSafely() async {
+    try {
+      await loadSecurityGatePreferences();
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[AcceptedScreen] loadSecurityGatePreferences failed: $error',
+      );
+      debugPrintStack(
+        label: '[AcceptedScreen] loadSecurityGatePreferences stackTrace',
+        stackTrace: stackTrace,
+      );
+    }
   }
 
   Future<void> _openDatePicker() async {
@@ -151,6 +166,35 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
         setState(() => _isSubmittingScan = false);
       }
     }
+  }
+
+  Future<void> _openDebugVerifyDialog() async {
+    final now = DateTime.now();
+    final decision = await SecurityVerifyStudentDialog.show(
+      context,
+      result: StudentGateScanResult(
+        fullName: 'طالبة تجريبية',
+        universityId: '444000018',
+        major: 'هندسة برمجيات',
+        scanTime: now.toString().split(' ').last.split('.').first,
+        photoUrl: null,
+      ),
+      rejectionReasons: const [
+        SecurityRejectionReason(
+          reasonId: 'temporary_debug_reason',
+          titleAr: 'سبب تجريبي للاختبار فقط',
+        ),
+      ],
+    );
+
+    if (!mounted || decision == null) return;
+
+    final message = decision.isApproved
+        ? 'تم تنفيذ اختبار الحفظ للمقبولين'
+        : 'تم إغلاق الاختبار بدون حفظ رفض';
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<String?> _openStudentLookupDialog() {
@@ -262,6 +306,22 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
                               isLoading: _isSubmittingScan,
                               onTap: _startScanFlow,
                             ),
+                            if (kDebugMode) ...[
+                              const SizedBox(height: 10),
+                              Align(
+                                alignment: Alignment.center,
+                                child: TextButton(
+                                  onPressed: _openDebugVerifyDialog,
+                                  child: const Text(
+                                    'اختبار مؤقت لفتح نافذة التحقق',
+                                    style: TextStyle(
+                                      fontFamily: 'Cairo',
+                                      color: _kTextMuted,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 18),
                             SearchBar(
                               controller: _searchController,
