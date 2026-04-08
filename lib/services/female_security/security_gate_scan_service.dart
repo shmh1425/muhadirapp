@@ -187,10 +187,19 @@ class SecurityGateScanRecord {
   final String attendanceStatus;
   final String dayLabelAr;
 
+  String get rejectionReason => rejectionReasonText;
+
   factory SecurityGateScanRecord.fromDoc(
     DocumentSnapshot<Map<String, dynamic>> doc,
   ) {
     final data = doc.data() ?? <String, dynamic>{};
+    final rejectionReasonText =
+        (data['rejectionReasonText'] ??
+                data['rejectionReason'] ??
+                data['reasonText'] ??
+                data['reason'] ??
+                '')
+            .toString();
     return SecurityGateScanRecord(
       scanId: (data['scanId'] ?? doc.id).toString(),
       studentId: _safeInt(data['studentId']) ?? 0,
@@ -212,7 +221,7 @@ class SecurityGateScanRecord {
       campusId: (data['campusId'] ?? 'zaher').toString(),
       campusName: (data['campusName'] ?? 'الزاهر').toString(),
       rejectionReasonId: (data['rejectionReasonId'] ?? '').toString(),
-      rejectionReasonText: (data['rejectionReasonText'] ?? '').toString(),
+      rejectionReasonText: rejectionReasonText,
       attendanceStatus: (data['attendanceStatus'] ?? 'منتظم').toString(),
       dayLabelAr: (data['dayLabelAr'] ?? '').toString(),
     );
@@ -299,6 +308,24 @@ class FemaleSecurityGateScanService {
             stackTrace: stackTrace,
           );
         });
+  }
+
+  Stream<List<SecurityGateScanRecord>> getRejectedScans({
+    required String gateId,
+    required DateTime date,
+  }) {
+    return _firestore
+        .collection('student_gate_scans')
+        .where('gateId', isEqualTo: gateId)
+        .where('scanDateKey', isEqualTo: formatScanDateKey(date))
+        .where('status', isEqualTo: 'rejected')
+        .orderBy('scanTime', descending: true)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map(SecurityGateScanRecord.fromDoc)
+              .toList(growable: false),
+        );
   }
 
   Stream<List<SecurityGateScanRecord>> watchScans({

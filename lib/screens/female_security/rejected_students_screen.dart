@@ -161,10 +161,9 @@ class _RejectedStudentsScreenState extends State<RejectedStudentsScreen> {
                   valueListenable: selectedGateId,
                   builder: (context, gateId, _) {
                     return StreamBuilder<List<SecurityGateScanRecord>>(
-                      stream: _service.watchScans(
+                      stream: _service.getRejectedScans(
                         gateId: gateId,
                         date: _selectedDate,
-                        status: 'rejected',
                       ),
                       builder: (context, snapshot) {
                         final scans = _filterScans(snapshot.data ?? const []);
