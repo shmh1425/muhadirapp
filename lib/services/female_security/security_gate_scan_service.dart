@@ -258,19 +258,18 @@ class SecurityGateScanRecord {
 }
 
 class SecurityVerificationDecision {
-  const SecurityVerificationDecision._({
-    required this.isApproved,
-    this.rejectionReason,
-  });
-
-  const SecurityVerificationDecision.approved() : this._(isApproved: true);
+  const SecurityVerificationDecision.approved({this.persistedScanId})
+    : isApproved = true,
+      rejectionReason = null;
 
   const SecurityVerificationDecision.rejected(
-    SecurityRejectionReason rejectionReason,
-  ) : this._(isApproved: false, rejectionReason: rejectionReason);
+    this.rejectionReason,
+  ) : isApproved = false,
+      persistedScanId = null;
 
   final bool isApproved;
   final SecurityRejectionReason? rejectionReason;
+  final String? persistedScanId;
 }
 
 class FemaleSecurityGateScanService {
@@ -326,6 +325,25 @@ class FemaleSecurityGateScanService {
               .map(SecurityGateScanRecord.fromDoc)
               .toList(growable: false),
         );
+  }
+
+  Future<String> createAcceptedGateScan({
+    required int studentId,
+    required String studentName,
+    required String gateId,
+  }) async {
+    final now = DateTime.now();
+    final scanRef = _firestore.collection('student_gate_scans').doc();
+    await scanRef.set({
+      'scanId': scanRef.id,
+      'studentId': studentId,
+      'studentName': studentName,
+      'gateId': gateId,
+      'status': 'accepted',
+      'scanTime': Timestamp.fromDate(now),
+      'scanDateKey': formatScanDateKey(now),
+    });
+    return scanRef.id;
   }
 
   Stream<List<SecurityGateScanRecord>> watchScans({
@@ -412,37 +430,76 @@ class FemaleSecurityGateScanService {
   Future<List<SecurityGateOption>> loadAssignedGatesForCurrentUser() async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) {
+      debugPrint(
+        '[FemaleSecurityGateScanService] loadAssignedGatesForCurrentUser: '
+        'no authenticated user, using fallback gate gate_3',
+      );
       return [SecurityGateOption.fallback('gate_3')];
     }
 
-    final staffDoc = await _firestore
-        .collection('security_staff')
-        .doc(uid)
-        .get();
-    final data = staffDoc.data() ?? <String, dynamic>{};
-    final defaultGateId = (data['defaultGateId'] ?? 'gate_3').toString();
-    final assignedGateIds =
-        ((data['assignedGateIds'] as List?) ?? [defaultGateId])
-            .map((value) => value.toString())
-            .where((value) => value.isNotEmpty)
-            .toSet()
-            .toList(growable: false);
-
-    final gates = await Future.wait(
-      assignedGateIds.map((gateId) async {
-        final doc = await _firestore
-            .collection('campus_gates')
-            .doc(gateId)
-            .get();
-        if (doc.exists) {
-          return SecurityGateOption.fromDoc(doc);
-        }
-        return SecurityGateOption.fallback(gateId);
-      }),
+    final staffDocPath = 'security_staff/$uid';
+    debugPrint(
+      '[FemaleSecurityGateScanService] loadAssignedGatesForCurrentUser '
+      'reading document: $staffDocPath',
     );
 
-    gates.sort((a, b) => a.gateNumber.compareTo(b.gateNumber));
-    return gates;
+    try {
+      final staffDoc = await _firestore
+          .collection('security_staff')
+          .doc(uid)
+          .get();
+      final data = staffDoc.data() ?? <String, dynamic>{};
+      final defaultGateId = (data['defaultGateId'] ?? 'gate_3').toString();
+      final assignedGateIds =
+          ((data['assignedGateIds'] as List?) ?? [defaultGateId])
+              .map((value) => value.toString())
+              .where((value) => value.isNotEmpty)
+              .toSet()
+              .toList(growable: false);
+
+      debugPrint(
+        '[FemaleSecurityGateScanService] loadAssignedGatesForCurrentUser '
+        'loaded $staffDocPath, defaultGateId=$defaultGateId, '
+        'assignedGateIds=$assignedGateIds',
+      );
+
+      final gates = await Future.wait(
+        assignedGateIds.map((gateId) async {
+          final gateDocPath = 'campus_gates/$gateId';
+          debugPrint(
+            '[FemaleSecurityGateScanService] loadAssignedGatesForCurrentUser '
+            'reading document: $gateDocPath',
+          );
+          final doc = await _firestore
+              .collection('campus_gates')
+              .doc(gateId)
+              .get();
+          if (doc.exists) {
+            return SecurityGateOption.fromDoc(doc);
+          }
+          debugPrint(
+            '[FemaleSecurityGateScanService] loadAssignedGatesForCurrentUser '
+            'document not found, using fallback for $gateDocPath',
+          );
+          return SecurityGateOption.fallback(gateId);
+        }),
+      );
+
+      gates.sort((a, b) => a.gateNumber.compareTo(b.gateNumber));
+      return gates;
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[FemaleSecurityGateScanService] loadAssignedGatesForCurrentUser '
+        'failed while reading $staffDocPath: $error',
+      );
+      debugPrintStack(
+        label:
+            '[FemaleSecurityGateScanService] '
+            'loadAssignedGatesForCurrentUser stackTrace',
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
   }
 
   Future<String> loadDefaultGateIdForCurrentUser() async {
@@ -470,6 +527,10 @@ class FemaleSecurityGateScanService {
     required SecurityGateOption gate,
     required SecurityVerificationDecision decision,
   }) async {
+    if (decision.isApproved && (decision.persistedScanId?.isNotEmpty ?? false)) {
+      return;
+    }
+
     final uid = _auth.currentUser?.uid;
     final email = _auth.currentUser?.email ?? '';
     final staffDoc = uid == null

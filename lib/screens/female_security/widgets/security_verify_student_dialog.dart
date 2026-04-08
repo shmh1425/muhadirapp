@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../services/female_security/security_gate_scan_service.dart';
+import '../security_prefs.dart';
 
 const _kTealLight = Color(0xFF27A2A9);
 const _kTextDark = Color(0xFF2D2D2D);
@@ -75,7 +76,10 @@ class _SecurityVerifyDialogBody extends StatefulWidget {
 }
 
 class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
+  final FemaleSecurityGateScanService _service =
+      FemaleSecurityGateScanService.instance;
   SecurityRejectionReason? _selectedReason;
+  bool _isSavingAcceptedScan = false;
 
   @override
   Widget build(BuildContext context) {
@@ -310,11 +314,7 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
         SizedBox(
           height: 50,
           child: ElevatedButton(
-            onPressed: () {
-              Navigator.of(
-                context,
-              ).pop(const SecurityVerificationDecision.approved());
-            },
+            onPressed: _isSavingAcceptedScan ? null : _handleAccept,
             style: ElevatedButton.styleFrom(
               backgroundColor: _kTealLight,
               foregroundColor: Colors.white,
@@ -368,5 +368,36 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
         ),
       ],
     );
+  }
+
+  Future<void> _handleAccept() async {
+    final studentId = int.tryParse(widget.result.universityId.trim());
+    if (studentId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذر حفظ السجل: الرقم الجامعي غير صالح')),
+      );
+      return;
+    }
+
+    setState(() => _isSavingAcceptedScan = true);
+    try {
+      final persistedScanId = await _service.createAcceptedGateScan(
+        studentId: studentId,
+        studentName: widget.result.fullName.trim(),
+        gateId: currentSecurityGateOption.gateId,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop(
+        SecurityVerificationDecision.approved(
+          persistedScanId: persistedScanId,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر حفظ سجل الدخول: $error')),
+      );
+      setState(() => _isSavingAcceptedScan = false);
+    }
   }
 }
