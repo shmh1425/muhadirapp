@@ -57,12 +57,18 @@ class LecturerNavigation {
   /// يُرجع [true] عند الحفظ الناجح لتمكين صفحة التحضير من تحديث الحالات (مثلاً غياب بعذر).
   static Future<bool?> goToExcuseManagement(
     BuildContext context,
-    LectureItem lecture,
-  ) {
+    LectureItem lecture, {
+    required String sessionId,
+    required DateTime sessionDate,
+  }) {
     return Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (_) => LecturerExcuseManagementScreen(lecture: lecture),
+        builder: (_) => LecturerExcuseManagementScreen(
+          lecture: lecture,
+          sessionId: sessionId,
+          sessionDate: sessionDate,
+        ),
       ),
     );
   }

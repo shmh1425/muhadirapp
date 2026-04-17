@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/attendance/manual_attendance_record.dart';
 import '../../models/lecturer/lecture_item.dart';
+import '../../services/attendance/attendance_session_export_service.dart';
 import '../../services/attendance/manual_attendance_service.dart';
 import '../../services/lecturer/lecture_repository.dart';
 import '../../services/lecturer/calendar_sync_service.dart';
@@ -70,6 +71,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   Map<String, AttendanceStatus> _draftStatuses = {};
   bool _hasPendingChanges = false;
   bool _isSaving = false;
+  bool _isExporting = false;
   bool _isLoadingAttendance = true;
   String? _attendanceLoadError;
   DateTime? _calendarReferenceDate;
@@ -208,10 +210,76 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     }
   }
 
+  /// Session-scoped CSV export (same service as attendance report). Hidden until session loads.
+  bool get _exportButtonVisible {
+    final sid = _sessionId;
+    if (sid == null || sid.isEmpty) return false;
+    if (_isLoadingAttendance) return false;
+    if (_attendanceLoadError != null) return false;
+    return true;
+  }
+
+  bool get _exportButtonEnabled {
+    if (!_exportButtonVisible || _isExporting || _isSaving) return false;
+    if (!_viewOnly && _hasPendingChanges) return false;
+    return true;
+  }
+
+  Future<void> _exportSessionCsv() async {
+    if (!_exportButtonEnabled) {
+      if (!_viewOnly && _hasPendingChanges) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _tr(
+                'احفظي تعديلات الحضور قبل التصدير.',
+                'Save attendance changes before exporting.',
+              ),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    final sid = _sessionId!;
+    setState(() => _isExporting = true);
+    try {
+      await AttendanceSessionExportService.instance.exportSessionCsvAndShare(sid);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${_tr('فشل التصدير.', 'Export failed.')} $e',
+          ),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
   Future<void> _openPreviewExcuses() async {
+    final sessionId = _sessionId;
+    if (sessionId == null || sessionId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _tr(
+              'تعذر فتح الأعذار قبل تحميل جلسة التحضير.',
+              'Cannot open excuses before the attendance session is loaded.',
+            ),
+          ),
+        ),
+      );
+      return;
+    }
     final saved = await LecturerNavigation.goToExcuseManagement(
       context,
       widget.lecture,
+      sessionId: sessionId,
+      sessionDate: _sessionDate,
     );
     if (saved == true && mounted) {
       setState(() {});
@@ -549,6 +617,53 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
               ],
             ),
           ),
+          if (_exportButtonVisible)
+            Tooltip(
+              message: !_exportButtonEnabled && _hasPendingChanges && !_viewOnly
+                  ? _tr(
+                      'احفظي التعديلات قبل التصدير.',
+                      'Save changes before export.',
+                    )
+                  : _tr(
+                      'تصدير حضور هذه الجلسة CSV',
+                      'Export this session as CSV',
+                    ),
+              child: IconButton(
+                onPressed: _isExporting
+                    ? null
+                    : _exportButtonEnabled
+                        ? _exportSessionCsv
+                        : (!_viewOnly && _hasPendingChanges)
+                            ? () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      _tr(
+                                        'احفظي تعديلات الحضور قبل التصدير.',
+                                        'Save attendance changes before exporting.',
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }
+                            : null,
+                icon: _isExporting
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF006571),
+                        ),
+                      )
+                    : Icon(
+                        Icons.share_rounded,
+                        color: _exportButtonEnabled
+                            ? const Color(0xFF006571)
+                            : const Color(0xFFB0BEC5),
+                      ),
+              ),
+            ),
         ],
       ),
     );
