@@ -91,6 +91,16 @@ class ManualAttendanceService {
         });
   }
 
+  /// Single session document (e.g. export, validation).
+  Future<ManualAttendanceSession?> getSessionById(String sessionId) async {
+    final id = sessionId.trim();
+    if (id.isEmpty) return null;
+    final snap =
+        await _firestore.collection(_sessionsCollection).doc(id).get();
+    if (!snap.exists) return null;
+    return ManualAttendanceSession.fromDocumentSnapshot(snap);
+  }
+
   Future<List<ManualAttendanceSession>> getSessionsForSectionIds(
     Set<String> sectionIds,
   ) async {

@@ -15,12 +15,18 @@ class ManualAttendanceSession {
     this.effectiveWeekNumber,
     this.countInAttendance = true,
     this.attendanceFinalized = true,
+    this.courseCode,
+    this.lecturerId,
   });
 
   final String sessionId;
   final String sectionId;
   final String courseName;
   final String sectionLabel;
+  /// From session doc `courseCode` (e.g. CRN) when present.
+  final String? courseCode;
+  /// From session doc when present.
+  final String? lecturerId;
   final String lectureStartTime;
   final String lectureEndTime;
   final DateTime lectureDate;
@@ -37,7 +43,19 @@ class ManualAttendanceSession {
   factory ManualAttendanceSession.fromDoc(
     QueryDocumentSnapshot<Map<String, dynamic>> doc,
   ) {
-    final data = doc.data();
+    return ManualAttendanceSession._fromMap(doc.id, doc.data());
+  }
+
+  factory ManualAttendanceSession.fromDocumentSnapshot(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    if (!doc.exists || doc.data() == null) {
+      throw StateError('Session document does not exist');
+    }
+    return ManualAttendanceSession._fromMap(doc.id, doc.data()!);
+  }
+
+  static ManualAttendanceSession _fromMap(String docId, Map<String, dynamic> data) {
     DateTime lectureDate;
     final y = _safeInt(data['lectureYear']);
     final m = _safeInt(data['lectureMonth']);
@@ -66,8 +84,10 @@ class ManualAttendanceSession {
     final dayOfWeek = _safeInt(data['lectureDayOfWeek']);
     final officialWeek = _optionalInt(data['officialWeekNumber']);
     final effectiveWeek = _optionalInt(data['effectiveWeekNumber']);
+    final cc = (data['courseCode'] ?? '').toString().trim();
+    final lid = (data['lecturerId'] ?? '').toString().trim();
     return ManualAttendanceSession(
-      sessionId: (data['sessionId'] ?? doc.id).toString(),
+      sessionId: (data['sessionId'] ?? docId).toString(),
       sectionId: (data['sectionId'] ?? '').toString(),
       courseName: (data['courseName'] ?? '').toString(),
       sectionLabel: (data['section'] ?? '').toString(),
@@ -82,6 +102,8 @@ class ManualAttendanceSession {
       effectiveWeekNumber: effectiveWeek,
       countInAttendance: data['countInAttendance'] != false,
       attendanceFinalized: data['attendanceFinalized'] != false,
+      courseCode: cc.isEmpty ? null : cc,
+      lecturerId: lid.isEmpty ? null : lid,
     );
   }
 
