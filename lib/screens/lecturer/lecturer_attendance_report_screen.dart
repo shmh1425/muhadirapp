@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show min;
 
 import 'package:flutter/material.dart';
 
@@ -6,6 +7,7 @@ import '../../models/calendar_day.dart';
 import '../../models/attendance/manual_attendance_record.dart';
 import '../../models/attendance/manual_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
+import '../../services/attendance/attendance_session_export_service.dart';
 import '../../services/attendance/manual_attendance_service.dart';
 import '../../services/lecturer/calendar_service.dart';
 import '../../services/lecturer/calendar_sync_service.dart';
@@ -47,12 +49,14 @@ class _LecturerAttendanceReportScreenState
   List<_LectureAttendanceGroup> _groups = <_LectureAttendanceGroup>[];
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _isExporting = false;
   String? _loadError;
 
   bool _isEditMode = false;
   bool _hasPendingChanges = false;
   bool _weekIsAuto = true;
-  final bool _showLegacyReportPanel = false;
+  /// When true, shows filters, session chips, student table, summary, edit, and export.
+  final bool _showLegacyReportPanel = true;
   int? _selectedWeekNumber;
   late int _selectedDayOfWeek;
   String? _selectedCourse;
@@ -453,14 +457,75 @@ class _LecturerAttendanceReportScreenState
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => _AttendanceDayActionScreen(
+        builder: (ctx) => _AttendanceDayActionScreen(
           dayLabel: _dayName(_selectedDayOfWeek),
           weekNumber: _displayWeekNumber,
           sessions: sessions,
           tr: _tr,
+          onExportCsv: (sessionId) => _exportSessionCsvFromContext(ctx, sessionId),
         ),
       ),
     );
+  }
+
+  Future<void> _exportSessionCsvFromContext(
+    BuildContext ctx,
+    String sessionId,
+  ) async {
+    if (_isExporting) return;
+    setState(() => _isExporting = true);
+    try {
+      await AttendanceSessionExportService.instance
+          .exportSessionCsvAndShare(sessionId);
+    } catch (e) {
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${_tr('فشل التصدير.', 'Export failed.')} $e',
+            ),
+            backgroundColor: const Color(0xFFD32F2F),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  Future<void> _exportActiveSessionCsv(_LectureAttendanceGroup group) async {
+    if (_isExporting) return;
+    if (_isEditMode && _hasPendingChanges) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _tr(
+              'احفظي تعديلات الحضور قبل التصدير.',
+              'Save attendance changes before exporting.',
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+    setState(() => _isExporting = true);
+    try {
+      await AttendanceSessionExportService.instance
+          .exportSessionCsvAndShare(group.sessionId);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${_tr('فشل التصدير.', 'Export failed.')} $e',
+            ),
+            backgroundColor: const Color(0xFFD32F2F),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
   }
 
   void _onCalendarDaySelected(CalendarDay day) {
@@ -541,55 +606,101 @@ class _LecturerAttendanceReportScreenState
     final action = await showDialog<_AttendanceCalendarAction>(
       context: context,
       barrierDismissible: true,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
       builder: (dialogContext) {
+        final screenW = MediaQuery.sizeOf(dialogContext).width;
+        final maxCardW = min(400.0, screenW - 40);
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
-          child: AlertDialog(
-            title: Text(_tr('إجراء الحضور', 'Attendance action')),
-            content: Text(
-              _tr(
-                'اختاري الإجراء للمحاضرة في ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
-                'Choose action for lecture on ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+          child: Dialog(
+            elevation: 0,
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: maxCardW,
+                minWidth: min(300.0, maxCardW),
+              ),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFFE3ECEE)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.12),
+                      blurRadius: 22,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 22, 22, 14),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        _tr('إجراء الحضور', 'Attendance action'),
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF2F4449),
+                          height: 1.25,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        _tr(
+                          'اختاري الإجراء للمحاضرة في ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                          'Choose action for lecture on ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                        ),
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          height: 1.45,
+                          color: Color(0xFF5F747A),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        height: 1,
+                        margin: const EdgeInsets.only(top: 14, bottom: 4),
+                        color: const Color(0xFFE8EEF0),
+                      ),
+                      _sessionDecisionDialogActions(
+                        dialogContext: dialogContext,
+                        isFuture: isFuture,
+                        hasExistingAttendance: hasExistingAttendance,
+                      ),
+                      const SizedBox(height: 4),
+                      Center(
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFF60757A),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                              horizontal: 20,
+                            ),
+                          ),
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          child: Text(
+                            _tr('إلغاء', 'Cancel'),
+                            style: const TextStyle(
+                              fontFamily: 'Cairo',
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: Text(_tr('إلغاء', 'Cancel')),
-              ),
-              if (isFuture) ...[
-                FilledButton.icon(
-                  onPressed: () => Navigator.of(
-                    dialogContext,
-                  ).pop(_AttendanceCalendarAction.attend),
-                  icon: const Icon(Icons.fact_check_rounded, size: 16),
-                  label: Text(_tr('تحضير', 'Take attendance')),
-                ),
-              ] else if (hasExistingAttendance) ...[
-                OutlinedButton.icon(
-                  onPressed: () => Navigator.of(
-                    dialogContext,
-                  ).pop(_AttendanceCalendarAction.preview),
-                  icon: const Icon(Icons.visibility_rounded, size: 16),
-                  label: Text(_tr('معاينة الحضور', 'Preview attendance')),
-                ),
-                FilledButton.icon(
-                  onPressed: () => Navigator.of(
-                    dialogContext,
-                  ).pop(_AttendanceCalendarAction.editPrevious),
-                  icon: const Icon(Icons.edit_rounded, size: 16),
-                  label: Text(_tr('تعديل الحضور', 'Edit attendance')),
-                ),
-              ] else ...[
-                FilledButton.icon(
-                  onPressed: () => Navigator.of(
-                    dialogContext,
-                  ).pop(_AttendanceCalendarAction.attend),
-                  icon: const Icon(Icons.fact_check_rounded, size: 16),
-                  label: Text(_tr('تحضير', 'Take attendance')),
-                ),
-              ],
-            ],
           ),
         );
       },
@@ -597,6 +708,12 @@ class _LecturerAttendanceReportScreenState
 
     if (!mounted || action == null) return;
     switch (action) {
+      case _AttendanceCalendarAction.exportCsv:
+        final g = existingGroup;
+        if (g != null) {
+          await _exportActiveSessionCsv(g);
+        }
+        break;
       case _AttendanceCalendarAction.preview:
         LecturerNavigation.goToAttendanceViewOnly(
           context,
@@ -613,6 +730,126 @@ class _LecturerAttendanceReportScreenState
         );
         break;
     }
+  }
+
+  /// Session decision modal — **actions only** (presentation). Branching matches
+  /// `_openCalendarActionPopup`: same buttons, same conditions; layout is vertical + full width.
+  Widget _sessionDecisionDialogActions({
+    required BuildContext dialogContext,
+    required bool isFuture,
+    required bool hasExistingAttendance,
+  }) {
+    const gap = SizedBox(height: 10);
+    final filledStyle = FilledButton.styleFrom(
+      backgroundColor: const Color(0xFF006571),
+      foregroundColor: Colors.white,
+      minimumSize: const Size.fromHeight(48),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    );
+    final outlinedStyle = OutlinedButton.styleFrom(
+      foregroundColor: const Color(0xFF006571),
+      side: const BorderSide(color: Color(0xFF006571)),
+      minimumSize: const Size.fromHeight(48),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    );
+    final labelStyle = const TextStyle(
+      fontFamily: 'Cairo',
+      fontWeight: FontWeight.w700,
+      fontSize: 14,
+    );
+
+    if (isFuture) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          FilledButton.icon(
+            style: filledStyle,
+            onPressed: () => Navigator.of(
+              dialogContext,
+            ).pop(_AttendanceCalendarAction.attend),
+            icon: const Icon(Icons.fact_check_rounded, size: 18),
+            label: Text(
+              _tr('تحضير', 'Take attendance'),
+              style: labelStyle,
+            ),
+          ),
+          if (hasExistingAttendance) ...[
+            gap,
+            OutlinedButton.icon(
+              style: outlinedStyle,
+              onPressed: () => Navigator.of(
+                dialogContext,
+              ).pop(_AttendanceCalendarAction.exportCsv),
+              icon: const Icon(Icons.share_rounded, size: 18),
+              label: Text(
+                _tr('تصدير CSV', 'Export CSV'),
+                style: labelStyle,
+              ),
+            ),
+          ],
+        ],
+      );
+    }
+    if (hasExistingAttendance) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          FilledButton.icon(
+            style: filledStyle,
+            onPressed: () => Navigator.of(
+              dialogContext,
+            ).pop(_AttendanceCalendarAction.editPrevious),
+            icon: const Icon(Icons.edit_rounded, size: 18),
+            label: Text(
+              _tr('تعديل الحضور', 'Edit attendance'),
+              style: labelStyle,
+            ),
+          ),
+          gap,
+          OutlinedButton.icon(
+            style: outlinedStyle,
+            onPressed: () => Navigator.of(
+              dialogContext,
+            ).pop(_AttendanceCalendarAction.preview),
+            icon: const Icon(Icons.visibility_rounded, size: 18),
+            label: Text(
+              _tr('معاينة الحضور', 'Preview attendance'),
+              style: labelStyle,
+            ),
+          ),
+          gap,
+          OutlinedButton.icon(
+            style: outlinedStyle,
+            onPressed: () => Navigator.of(
+              dialogContext,
+            ).pop(_AttendanceCalendarAction.exportCsv),
+            icon: const Icon(Icons.share_rounded, size: 18),
+            label: Text(
+              _tr('تصدير CSV', 'Export CSV'),
+              style: labelStyle,
+            ),
+          ),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FilledButton.icon(
+          style: filledStyle,
+          onPressed: () => Navigator.of(
+            dialogContext,
+          ).pop(_AttendanceCalendarAction.attend),
+          icon: const Icon(Icons.fact_check_rounded, size: 18),
+          label: Text(
+            _tr('تحضير', 'Take attendance'),
+            style: labelStyle,
+          ),
+        ),
+      ],
+    );
   }
 
   _LectureAttendanceGroup? _findGroupForLectureAndDate({
@@ -1419,6 +1656,13 @@ class _LecturerAttendanceReportScreenState
     Navigator.of(context).pop();
   }
 
+  /// تصدير CSV متاح فقط لجلسة محددة وبعد حفظ أي تعديلات معلّقة.
+  bool _canTapExportCsv(_LectureAttendanceGroup? g) {
+    if (g == null || _isExporting || _isSaving) return false;
+    if (_isEditMode && _hasPendingChanges) return false;
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final group = _activeGroup;
@@ -1690,54 +1934,97 @@ class _LecturerAttendanceReportScreenState
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFDCE7E9)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: OutlinedButton(
-              onPressed: () => _showSummaryPopup(group),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(40),
-                side: const BorderSide(color: Color(0xFFBFD5D9)),
-              ),
-              child: Text(
-                _tr('ملخص الحضور', 'Attendance Summary'),
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Row(
-              children: [
-                Expanded(
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => _showSummaryPopup(group),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(40),
+                    side: const BorderSide(color: Color(0xFFBFD5D9)),
+                  ),
                   child: Text(
-                    modeLabel,
-                    textAlign: TextAlign.start,
-                    style: TextStyle(
+                    _tr('ملخص الحضور', 'Attendance Summary'),
+                    style: const TextStyle(
                       fontFamily: 'Cairo',
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                      color: _isEditMode ? _primary : const Color(0xFF60757A),
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
-                Switch.adaptive(
-                  value: _isEditMode,
-                  activeTrackColor: _primary.withValues(alpha: 0.5),
-                  activeThumbColor: _primary,
-                  onChanged: (on) async {
-                    if (on) {
-                      _enterEditMode(group);
-                      return;
-                    }
-                    await _switchToViewMode(group);
-                  },
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Tooltip(
+                  message: _isEditMode && _hasPendingChanges
+                      ? _tr(
+                          'احفظي التعديلات قبل التصدير.',
+                          'Save changes before export.',
+                        )
+                      : _tr(
+                          'تصدير حضور هذه الجلسة CSV',
+                          'Export this session as CSV',
+                        ),
+                  child: OutlinedButton.icon(
+                    onPressed: !_canTapExportCsv(group)
+                        ? null
+                        : () => _exportActiveSessionCsv(group),
+                    icon: _isExporting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.share_rounded, size: 18),
+                    label: Text(
+                      _tr('تصدير CSV', 'Export CSV'),
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(40),
+                      side: const BorderSide(color: Color(0xFF006571)),
+                      foregroundColor: const Color(0xFF006571),
+                    ),
+                  ),
                 ),
-              ],
-            ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  modeLabel,
+                  textAlign: TextAlign.start,
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: _isEditMode ? _primary : const Color(0xFF60757A),
+                  ),
+                ),
+              ),
+              Switch.adaptive(
+                value: _isEditMode,
+                activeTrackColor: _primary.withValues(alpha: 0.5),
+                activeThumbColor: _primary,
+                onChanged: _isExporting
+                    ? null
+                    : (on) async {
+                        if (on) {
+                          _enterEditMode(group);
+                          return;
+                        }
+                        await _switchToViewMode(group);
+                      },
+              ),
+            ],
           ),
         ],
       ),
@@ -2092,10 +2379,26 @@ class _LecturerAttendanceReportScreenState
                 'لا توجد بيانات حضور لهذا الفلتر.',
                 'No attendance data for this filter.',
               ),
+              textAlign: TextAlign.center,
               style: const TextStyle(
                 fontFamily: 'Cairo',
                 color: Color(0xFF4F6369),
                 fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _tr(
+                'جرّبي أسبوعاً أو يوماً آخر، أو سجّلي الحضور أولاً. يظهر زر التصدير ضمن شريط التقرير عندما توجد جلسة مطابقة.',
+                'Try another week or day, or take attendance first. Export appears in the report actions row when a matching session exists.',
+              ),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 12,
+                color: Color(0xFF758A90),
+                fontWeight: FontWeight.w600,
+                height: 1.35,
               ),
             ),
           ],
@@ -2570,12 +2873,14 @@ class _AttendanceDayActionScreen extends StatelessWidget {
     required this.weekNumber,
     required this.sessions,
     required this.tr,
+    required this.onExportCsv,
   });
 
   final String dayLabel;
   final int weekNumber;
   final List<_LectureAttendanceGroup> sessions;
   final String Function(String ar, String en) tr;
+  final Future<void> Function(String sessionId) onExportCsv;
 
   String _formatDate(DateTime date) => '${date.day}/${date.month}/${date.year}';
 
@@ -2787,73 +3092,171 @@ class _AttendanceDayActionScreen extends StatelessWidget {
                               ],
                             ),
                           const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: FilledButton.icon(
-                                  onPressed: () => _openAttendanceForSession(
-                                    context,
-                                    group,
-                                    viewOnly: !isFuture,
-                                  ),
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: const Color(0xFF006571),
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 12,
+                          if (isFuture)
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: FilledButton.icon(
+                                    onPressed: () =>
+                                        _openAttendanceForSession(
+                                      context,
+                                      group,
+                                      viewOnly: false,
                                     ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: const Color(0xFF006571),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
                                     ),
-                                  ),
-                                  icon: Icon(
-                                    isFuture
-                                        ? Icons.fact_check_rounded
-                                        : Icons.visibility_rounded,
-                                    size: 18,
-                                  ),
-                                  label: Text(
-                                    isFuture
-                                        ? tr('تحضير', 'Take attendance')
-                                        : tr(
-                                            'معاينة الحضور',
-                                            'Preview attendance',
-                                          ),
+                                    icon: const Icon(
+                                      Icons.fact_check_rounded,
+                                      size: 18,
+                                    ),
+                                    label: Text(
+                                      tr('تحضير', 'Take attendance'),
+                                      maxLines: 2,
+                                      textAlign: TextAlign.center,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: isFuture
-                                      ? null
-                                      : () => _openAttendanceForSession(
-                                          context,
-                                          group,
-                                          viewOnly: false,
-                                        ),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: const Color(0xFF006571),
-                                    side: const BorderSide(
-                                      color: Color(0xFF006571),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () =>
+                                        onExportCsv(group.sessionId),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor:
+                                          const Color(0xFF006571),
+                                      side: const BorderSide(
+                                        color: Color(0xFF006571),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
                                     ),
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 12,
+                                    icon: const Icon(
+                                      Icons.share_rounded,
+                                      size: 18,
                                     ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
+                                    label: Text(
+                                      tr('تصدير', 'Export'),
+                                      maxLines: 2,
+                                      textAlign: TextAlign.center,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                  ),
-                                  icon: const Icon(
-                                    Icons.edit_rounded,
-                                    size: 18,
-                                  ),
-                                  label: Text(
-                                    tr('تعديل الحضور', 'Edit attendance'),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            )
+                          else
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () =>
+                                        _openAttendanceForSession(
+                                      context,
+                                      group,
+                                      viewOnly: false,
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor:
+                                          const Color(0xFF006571),
+                                      side: const BorderSide(
+                                        color: Color(0xFF006571),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                    icon: const Icon(
+                                      Icons.edit_rounded,
+                                      size: 18,
+                                    ),
+                                    label: Text(
+                                      tr('تعديل الحضور', 'Edit attendance'),
+                                      maxLines: 2,
+                                      textAlign: TextAlign.center,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: FilledButton.icon(
+                                    onPressed: () =>
+                                        _openAttendanceForSession(
+                                      context,
+                                      group,
+                                      viewOnly: true,
+                                    ),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor:
+                                          const Color(0xFF006571),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                    icon: const Icon(
+                                      Icons.visibility_rounded,
+                                      size: 18,
+                                    ),
+                                    label: Text(
+                                      tr('معاينة الحضور', 'Preview attendance'),
+                                      maxLines: 2,
+                                      textAlign: TextAlign.center,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () =>
+                                        onExportCsv(group.sessionId),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor:
+                                          const Color(0xFF006571),
+                                      side: const BorderSide(
+                                        color: Color(0xFF006571),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                    icon: const Icon(
+                                      Icons.share_rounded,
+                                      size: 18,
+                                    ),
+                                    label: Text(
+                                      tr('تصدير', 'Export'),
+                                      maxLines: 2,
+                                      textAlign: TextAlign.center,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                         ],
                       ),
                     ),
@@ -2875,7 +3278,7 @@ const TextStyle _headerStyle = TextStyle(
   color: Color(0xFF41575D),
 );
 
-enum _AttendanceCalendarAction { attend, editPrevious, preview }
+enum _AttendanceCalendarAction { attend, editPrevious, preview, exportCsv }
 
 enum _StatusFilter { all, present, absent, excused, late }
 
