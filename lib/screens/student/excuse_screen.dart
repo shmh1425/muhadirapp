@@ -138,6 +138,7 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
         ExcuseRequestStatus.pending => 'قيد الانتظار',
         ExcuseRequestStatus.accepted => 'تم القبول',
         ExcuseRequestStatus.rejected => 'تم الرفض',
+        ExcuseRequestStatus.expired => 'منتهي',
       };
       updated.add(item.copyWith(
         course: req.courseNameAr.trim().isNotEmpty ? req.courseNameAr.trim() : item.course,

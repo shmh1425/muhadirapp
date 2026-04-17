@@ -132,6 +132,13 @@ service cloud.firestore {
       allow write: if isSignedIn();
     }
 
+    // Formal excuse requests (student creates — may require separate create rules when shipped).
+    match /excuse_requests/{requestId} {
+      allow read: if isSignedIn();
+      allow update: if isSignedIn();
+      allow create, delete: if false;
+    }
+
     // Female security accepted/rejected gate scan history.
     match /student_gate_scans/{scanId} {
       allow read: if isActiveSecurityStaff();
