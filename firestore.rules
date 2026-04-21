@@ -25,6 +25,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Female security staff profiles (used by security settings + admin profile image manager).
+    match /security_staff/{uid} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
+      allow write: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
+    }
+
     // Public read for pre-seeded external lecturers.
     match /external_lecturers/{lecturerId} {
       allow read: if true;

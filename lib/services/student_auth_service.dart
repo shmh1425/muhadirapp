@@ -8,9 +8,27 @@ class StudentAuthService {
   static final StudentAuthService instance = StudentAuthService._();
 
   ExternalStudent? _currentStudent;
+  String? _currentStudentDocId;
 
   /// الطالب المسجل حالياً (إن وجد)
   ExternalStudent? get currentStudent => _currentStudent;
+
+  Stream<DocumentSnapshot<Map<String, dynamic>>> watchCurrentStudentDoc() {
+    final docId = (_currentStudentDocId ?? '').trim();
+    final fallbackStudentId = _currentStudent?.studentId;
+    final resolvedDocId = docId.isNotEmpty
+        ? docId
+        : (fallbackStudentId == null || fallbackStudentId <= 0
+              ? ''
+              : fallbackStudentId.toString());
+    if (resolvedDocId.isEmpty) {
+      return const Stream<DocumentSnapshot<Map<String, dynamic>>>.empty();
+    }
+    return FirebaseFirestore.instance
+        .collection('external_students')
+        .doc(resolvedDocId)
+        .snapshots();
+  }
 
   ExternalStudent _fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data();
@@ -34,6 +52,7 @@ class StudentAuthService {
   Future<ExternalStudent?> verifyEmailAndGetStudent(String email) async {
     final normalized = email.trim().toLowerCase();
     if (normalized.isEmpty) return null;
+    _currentStudentDocId = null;
 
     // 1) محاولة مباشرة بالإيميل (مطابقة حرفية)
     final snapshot = await FirebaseFirestore.instance
@@ -47,6 +66,7 @@ class StudentAuthService {
         return null;
       }
       _currentStudent = _fromDoc(snapshot.docs.first);
+      _currentStudentDocId = snapshot.docs.first.id;
       return _currentStudent;
     }
 
@@ -65,6 +85,7 @@ class StudentAuthService {
           return null;
         }
         _currentStudent = _fromDocSnapshot(docSnap);
+        _currentStudentDocId = docSnap.id;
         // إذا كان الإيميل محفوظ لكنه مختلف، نخليه ينعكس في الإعدادات كما هو
         return _currentStudent;
       }
@@ -80,6 +101,7 @@ class StudentAuthService {
           return null;
         }
         _currentStudent = _fromDoc(snapshotById.docs.first);
+        _currentStudentDocId = snapshotById.docs.first.id;
         return _currentStudent;
       }
     }
@@ -90,5 +112,6 @@ class StudentAuthService {
   /// تسجيل الخروج (مسح بيانات الطالب الحالي)
   void logout() {
     _currentStudent = null;
+    _currentStudentDocId = null;
   }
 }

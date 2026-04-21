@@ -5,6 +5,7 @@ class ExternalStudent {
     required this.email,
     required this.name,
     this.nameAr = '',
+    this.photoUrl = '',
     required this.gender,
     required this.level,
     required this.major,
@@ -13,8 +14,10 @@ class ExternalStudent {
   final int studentId;
   final String email;
   final String name;
+
   /// الاسم بالعربية للعرض في الهوم والبطاقة
   final String nameAr;
+  final String photoUrl;
   final String gender;
   final int level;
   final String major;
@@ -29,6 +32,7 @@ class ExternalStudent {
       if (v is String) return v;
       return v.toString();
     }
+
     int safeInt(dynamic v) {
       if (v == null) return 0;
       if (v is int) return v;
@@ -36,11 +40,15 @@ class ExternalStudent {
       final s = v.toString();
       return int.tryParse(s) ?? 0;
     }
+
     return ExternalStudent(
       studentId: safeInt(map['studentId']),
       email: safeStr(map['email']),
       name: safeStr(map['name']),
       nameAr: safeStr(map['name_ar']),
+      photoUrl: safeStr(
+        safeStr(map['photoUrl']).isNotEmpty ? map['photoUrl'] : map['photoURL'],
+      ),
       gender: safeStr(map['gender']),
       level: safeInt(map['level']),
       major: safeStr(map['major']),
@@ -48,12 +56,13 @@ class ExternalStudent {
   }
 
   Map<String, dynamic> toMap() => {
-        'studentId': studentId,
-        'email': email,
-        'name': name,
-        'name_ar': nameAr,
-        'gender': gender,
-        'level': level,
-        'major': major,
-      };
+    'studentId': studentId,
+    'email': email,
+    'name': name,
+    'name_ar': nameAr,
+    'photoUrl': photoUrl,
+    'gender': gender,
+    'level': level,
+    'major': major,
+  };
 }
