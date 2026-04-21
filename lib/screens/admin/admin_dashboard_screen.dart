@@ -6,6 +6,7 @@ import '../../models/calendar_exception.dart';
 import '../../models/term_week.dart';
 import '../../repositories/academic_term_repository.dart';
 import '../../services/admin/admin_auth_service.dart';
+import '../../services/admin/admin_user_image_service.dart';
 
 String _firebaseErrorMessage(FirebaseException e) {
   return switch (e.code) {
@@ -177,6 +178,7 @@ class _AdminStudentsTabState extends State<_AdminStudentsTab> {
   String _selectedGender = 'F';
   int _selectedLevel = 1;
   bool _isSaving = false;
+  final Set<String> _uploadingStudentIds = <String>{};
 
   @override
   void dispose() {
@@ -235,6 +237,42 @@ class _AdminStudentsTabState extends State<_AdminStudentsTab> {
     } finally {
       if (mounted) {
         setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  Future<void> _uploadStudentImage({
+    required String docId,
+    required Map<String, dynamic> data,
+  }) async {
+    final parsed = int.tryParse(docId) ??
+        (data['studentId'] is int ? data['studentId'] as int : null) ??
+        int.tryParse((data['studentId'] ?? '').toString());
+    if (parsed == null || parsed <= 0) {
+      _showMessage('رقم الطالب غير صالح لرفع الصورة.');
+      return;
+    }
+
+    if (_uploadingStudentIds.contains(docId)) return;
+    setState(() => _uploadingStudentIds.add(docId));
+    try {
+      final file = await AdminUserImageService.instance.pickImageFromGallery();
+      if (file == null) return;
+      await AdminUserImageService.instance.uploadStudentImage(
+        studentId: parsed,
+        file: file,
+      );
+      if (!mounted) return;
+      _showMessage('تم رفع صورة الطالب');
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+      _showMessage(_firebaseErrorMessage(e));
+    } catch (e) {
+      if (!mounted) return;
+      _showMessage('فشل رفع الصورة: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _uploadingStudentIds.remove(docId));
       }
     }
   }
@@ -355,20 +393,57 @@ class _AdminStudentsTabState extends State<_AdminStudentsTab> {
                     final email = (data['email'] ?? '').toString();
                     final level = (data['level'] ?? '').toString();
                     final major = (data['major'] ?? '').toString();
+                    final photoUrl =
+                        (data['photoUrl'] ?? data['photo_url'] ?? '').toString();
+                    final isUploading = _uploadingStudentIds.contains(doc.id);
 
                     return ListTile(
+                      leading: CircleAvatar(
+                        radius: 22,
+                        backgroundColor: const Color(0x11006571),
+                        foregroundImage: photoUrl.trim().isNotEmpty
+                            ? NetworkImage(photoUrl)
+                            : null,
+                        child: photoUrl.trim().isEmpty
+                            ? const Icon(Icons.person, color: Color(0xFF006571))
+                            : null,
+                      ),
                       title: Text(
                         displayName.isEmpty ? 'بدون اسم' : displayName,
                       ),
                       subtitle: Text(
                         'ID: ${doc.id} | $email | مستوى $level | $major',
                       ),
-                      trailing: IconButton(
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          color: Colors.red,
-                        ),
-                        onPressed: () => _deleteStudent(doc.id),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'رفع/تغيير الصورة',
+                            onPressed: isUploading
+                                ? null
+                                : () => _uploadStudentImage(
+                                      docId: doc.id,
+                                      data: data,
+                                    ),
+                            icon: isUploading
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.photo_camera_outlined),
+                          ),
+                          IconButton(
+                            tooltip: 'حذف',
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Colors.red,
+                            ),
+                            onPressed: () => _deleteStudent(doc.id),
+                          ),
+                        ],
                       ),
                     );
                   },
@@ -403,6 +478,7 @@ class _AdminLecturersTabState extends State<_AdminLecturersTab> {
   String? _selectedLecturerDepartment;
 
   bool _isSaving = false;
+  final Set<String> _uploadingLecturerIds = <String>{};
 
   @override
   void dispose() {
@@ -483,6 +559,34 @@ class _AdminLecturersTabState extends State<_AdminLecturersTab> {
 
   void _showMessage(String text) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  Future<void> _uploadLecturerImage({
+    required String lecturerId,
+  }) async {
+    if (lecturerId.trim().isEmpty) return;
+    if (_uploadingLecturerIds.contains(lecturerId)) return;
+    setState(() => _uploadingLecturerIds.add(lecturerId));
+    try {
+      final file = await AdminUserImageService.instance.pickImageFromGallery();
+      if (file == null) return;
+      await AdminUserImageService.instance.uploadLecturerImage(
+        lecturerId: lecturerId,
+        file: file,
+      );
+      if (!mounted) return;
+      _showMessage('تم رفع صورة المحاضر');
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+      _showMessage(_firebaseErrorMessage(e));
+    } catch (e) {
+      if (!mounted) return;
+      _showMessage('فشل رفع الصورة: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _uploadingLecturerIds.remove(lecturerId));
+      }
+    }
   }
 
   @override
@@ -604,16 +708,52 @@ class _AdminLecturersTabState extends State<_AdminLecturersTab> {
                         .toString();
                     final email = (data['email'] ?? '').toString();
                     final department = (data['department'] ?? '').toString();
+                    final photoUrl =
+                        (data['photoUrl'] ?? data['photo_url'] ?? '').toString();
+                    final isUploading = _uploadingLecturerIds.contains(doc.id);
 
                     return ListTile(
+                      leading: CircleAvatar(
+                        radius: 22,
+                        backgroundColor: const Color(0x11006571),
+                        foregroundImage: photoUrl.trim().isNotEmpty
+                            ? NetworkImage(photoUrl)
+                            : null,
+                        child: photoUrl.trim().isEmpty
+                            ? const Icon(Icons.person, color: Color(0xFF006571))
+                            : null,
+                      ),
                       title: Text(name.isEmpty ? 'بدون اسم' : name),
                       subtitle: Text('ID: ${doc.id} | $email | $department'),
-                      trailing: IconButton(
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          color: Colors.red,
-                        ),
-                        onPressed: () => _deleteLecturer(doc.id),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'رفع/تغيير الصورة',
+                            onPressed: isUploading
+                                ? null
+                                : () => _uploadLecturerImage(
+                                      lecturerId: doc.id,
+                                    ),
+                            icon: isUploading
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.photo_camera_outlined),
+                          ),
+                          IconButton(
+                            tooltip: 'حذف',
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Colors.red,
+                            ),
+                            onPressed: () => _deleteLecturer(doc.id),
+                          ),
+                        ],
                       ),
                     );
                   },

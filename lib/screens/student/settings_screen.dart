@@ -1,11 +1,10 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'app_settings.dart';
 import 'components/notification_bell.dart';
 import 'notifications_screen.dart';
 import '../../services/student_auth_service.dart';
+import '../../shared/widgets/student_profile_avatar.dart';
 import '../../shared/widgets/chat_fab.dart';
 import '../login_screen.dart';
 
@@ -160,40 +159,7 @@ class SettingsScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Center(
-                child: ValueListenableBuilder<bool>(
-                  valueListenable: AppSettings.instance.blurProfileImage,
-                  builder: (context, isBlurred, child) {
-                    return Stack(
-                      alignment: Alignment.bottomRight,
-                      children: [
-                        Container(
-                          width: 120,
-                          height: 120,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white,
-                            border: Border.all(
-                              color: const Color(0xFF006571),
-                              width: 3,
-                            ),
-                          ),
-                          child: ClipOval(
-                            child: ImageFiltered(
-                              imageFilter: ImageFilter.blur(
-                                sigmaX: isBlurred ? 8 : 0,
-                                sigmaY: isBlurred ? 8 : 0,
-                              ),
-                              child: Image.asset(
-                                'assets/images/avatar.png',
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
+                child: const StudentProfileAvatar(size: 120),
               ),
               const SizedBox(height: 12),
               Center(

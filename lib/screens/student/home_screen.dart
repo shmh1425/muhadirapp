@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'student_card_page.dart';
 import 'components/custom_nav_bar_icons.dart';
@@ -11,10 +9,10 @@ import 'nfc_attendance_screen.dart';
 import 'schedule_screen.dart';
 import 'excuse_screen.dart';
 import 'submit_excuse_screen.dart';
-import 'app_settings.dart';
 import '../../services/student_auth_service.dart';
 import '../../services/attendance/manual_attendance_service.dart';
 import '../../models/attendance/manual_attendance_record.dart';
+import '../../shared/widgets/student_profile_avatar.dart';
 import '../../shared/widgets/chat_fab.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -413,28 +411,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
-                  ValueListenableBuilder<bool>(
-                    valueListenable: AppSettings.instance.blurProfileImage,
-                    builder: (context, isBlurred, child) {
-                      return CircleAvatar(
-                        radius: 24,
-                        backgroundColor: Colors.transparent,
-                        child: ClipOval(
-                          child: ImageFiltered(
-                            imageFilter: ImageFilter.blur(
-                              sigmaX: isBlurred ? 6 : 0,
-                              sigmaY: isBlurred ? 6 : 0,
-                            ),
-                            child: Image.asset(
-                              'assets/images/avatar.png',
-                              fit: BoxFit.cover,
-                              width: 48,
-                              height: 48,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
+                  const StudentProfileAvatar(
+                    size: 48,
+                    borderWidth: 0,
                   ),
                     const SizedBox(width: 12),
                     Expanded(
