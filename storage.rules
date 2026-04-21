@@ -1,0 +1,31 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Student profile images (requires authenticated session).
+    match /external_students/{studentId}/{rest=**} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // Lecturer profile images (requires authenticated session).
+    match /external_lecturers/{lecturerId}/{rest=**} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // Security staff profile images (requires authenticated session).
+    match /security_staff/{uid}/{rest=**} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // Deny anything else by default.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

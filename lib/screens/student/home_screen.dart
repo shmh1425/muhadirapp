@@ -28,6 +28,20 @@ class _HomeScreenState extends State<HomeScreen> {
   int selectedIndex = 2; // Start with Home selected (index 2 for Home)
   final ManualAttendanceService _attendance = ManualAttendanceService.instance;
 
+  String _resolveStudentPhotoUrl(Map<String, dynamic>? data) {
+    final firestorePhoto = (data?['photoUrl'] ?? data?['photoURL'] ?? '')
+        .toString()
+        .trim();
+    final rawUrl = firestorePhoto.isNotEmpty
+        ? firestorePhoto
+        : (StudentAuthService.instance.currentStudent?.photoUrl ?? '');
+    if (rawUrl.isEmpty) return '';
+    final version = (data?['photoVersion'] ?? '').toString().trim();
+    if (version.isEmpty) return rawUrl;
+    final separator = rawUrl.contains('?') ? '&' : '?';
+    return '$rawUrl${separator}v=$version';
+  }
+
   Future<void> _onItemTapped(int index) async {
     setState(() {
       selectedIndex = index;
@@ -44,12 +58,12 @@ class _HomeScreenState extends State<HomeScreen> {
           context,
           MaterialPageRoute(builder: (_) => const SettingsScreen()),
         );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        selectedIndex = 2;
-      });
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          selectedIndex = 2;
+        });
         break;
       case 1: // Services/Grid (Center)
         await Future.delayed(const Duration(milliseconds: 180));
@@ -84,6 +98,44 @@ class _HomeScreenState extends State<HomeScreen> {
     return raw.split(' ').first;
   }
 
+  Widget _buildStudentAvatar(bool isBlurred) {
+    return StreamBuilder<Map<String, dynamic>?>(
+      stream: StudentAuthService.instance.watchCurrentStudentDoc().map(
+        (doc) => doc.data(),
+      ),
+      builder: (context, snapshot) {
+        final photoUrl = _resolveStudentPhotoUrl(snapshot.data);
+        final image = photoUrl.isNotEmpty
+            ? Image.network(
+                photoUrl,
+                fit: BoxFit.cover,
+                width: 48,
+                height: 48,
+                errorBuilder: (_, __, ___) => Image.asset(
+                  'assets/images/avatar.png',
+                  fit: BoxFit.cover,
+                  width: 48,
+                  height: 48,
+                ),
+              )
+            : Image.asset(
+                'assets/images/avatar.png',
+                fit: BoxFit.cover,
+                width: 48,
+                height: 48,
+              );
+
+        return ImageFiltered(
+          imageFilter: ImageFilter.blur(
+            sigmaX: isBlurred ? 6 : 0,
+            sigmaY: isBlurred ? 6 : 0,
+          ),
+          child: image,
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -98,8 +150,12 @@ class _HomeScreenState extends State<HomeScreen> {
         body: SafeArea(
           child: ListView(
             clipBehavior: Clip.none,
-            padding:
-                const EdgeInsets.only(top: 36, left: 30, right: 16, bottom: 16),
+            padding: const EdgeInsets.only(
+              top: 36,
+              left: 30,
+              right: 16,
+              bottom: 16,
+            ),
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -107,7 +163,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     'أهلاً ${_greetingName()}',
                     style: const TextStyle(
-                        fontSize: 24, fontWeight: FontWeight.bold),
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   NotificationBell(
                     onTap: () {
@@ -187,8 +245,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                     },
                     style: ButtonStyle(
-                      foregroundColor:
-                          WidgetStateProperty.resolveWith<Color>((states) {
+                      foregroundColor: WidgetStateProperty.resolveWith<Color>((
+                        states,
+                      ) {
                         if (states.contains(WidgetState.pressed)) {
                           return const Color(0xFF006571); // اللون عند الضغط
                         }
@@ -222,14 +281,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => const ExcuseScreen(),
-                        ),
+                        MaterialPageRoute(builder: (_) => const ExcuseScreen()),
                       );
                     },
                     style: ButtonStyle(
-                      foregroundColor:
-                          WidgetStateProperty.resolveWith<Color>((states) {
+                      foregroundColor: WidgetStateProperty.resolveWith<Color>((
+                        states,
+                      ) {
                         if (states.contains(WidgetState.pressed)) {
                           return const Color(0xFF006571); // اللون عند الضغط
                         }
@@ -261,7 +319,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildActiveAbsencesSection(BuildContext context) {
-    final studentId = StudentAuthService.instance.currentStudent?.studentId ?? 0;
+    final studentId =
+        StudentAuthService.instance.currentStudent?.studentId ?? 0;
     if (studentId <= 0) {
       return const SizedBox.shrink();
     }
@@ -269,16 +328,19 @@ class _HomeScreenState extends State<HomeScreen> {
       stream: _attendance.watchStudentRecords(studentId),
       builder: (context, snapshot) {
         final records = snapshot.data ?? <ManualAttendanceRecord>[];
-        final items = records
-            .where((r) =>
-                r.status == ManualAttendanceStatus.absent ||
-                r.status == ManualAttendanceStatus.excused)
-            .toList()
-          ..sort((a, b) {
-            final byDate = b.lectureDate.compareTo(a.lectureDate);
-            if (byDate != 0) return byDate;
-            return b.lectureStartTime.compareTo(a.lectureStartTime);
-          });
+        final items =
+            records
+                .where(
+                  (r) =>
+                      r.status == ManualAttendanceStatus.absent ||
+                      r.status == ManualAttendanceStatus.excused,
+                )
+                .toList()
+              ..sort((a, b) {
+                final byDate = b.lectureDate.compareTo(a.lectureDate);
+                if (byDate != 0) return byDate;
+                return b.lectureStartTime.compareTo(a.lectureStartTime);
+              });
 
         final shown = items.take(6).toList();
         return ListView(
@@ -321,7 +383,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildTodayLecturesSection(BuildContext context) {
-    final studentId = StudentAuthService.instance.currentStudent?.studentId ?? 0;
+    final studentId =
+        StudentAuthService.instance.currentStudent?.studentId ?? 0;
     return SizedBox(
       height: 150,
       child: FutureBuilder<List<CourseSchedule>>(
@@ -360,9 +423,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => const ScheduleScreen(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const ScheduleScreen()),
                     );
                   },
                   borderRadius: BorderRadius.circular(16),
@@ -413,44 +474,41 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
-                  ValueListenableBuilder<bool>(
-                    valueListenable: AppSettings.instance.blurProfileImage,
-                    builder: (context, isBlurred, child) {
-                      return CircleAvatar(
-                        radius: 24,
-                        backgroundColor: Colors.transparent,
-                        child: ClipOval(
-                          child: ImageFiltered(
-                            imageFilter: ImageFilter.blur(
-                              sigmaX: isBlurred ? 6 : 0,
-                              sigmaY: isBlurred ? 6 : 0,
-                            ),
-                            child: Image.asset(
-                              'assets/images/avatar.png',
-                              fit: BoxFit.cover,
-                              width: 48,
-                              height: 48,
-                            ),
+                    ValueListenableBuilder<bool>(
+                      valueListenable: AppSettings.instance.blurProfileImage,
+                      builder: (context, isBlurred, child) {
+                        return CircleAvatar(
+                          radius: 24,
+                          backgroundColor: Colors.transparent,
+                          child: ClipOval(
+                            child: _buildStudentAvatar(isBlurred),
                           ),
-                        ),
-                      );
-                    },
-                  ),
+                        );
+                      },
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            StudentAuthService.instance.currentStudent?.displayName ?? '-',
+                            StudentAuthService
+                                    .instance
+                                    .currentStudent
+                                    ?.displayName ??
+                                '-',
                             style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 14),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             'رقم الطالب : ${StudentAuthService.instance.currentStudent?.studentId ?? '-'}',
                             style: const TextStyle(
-                                fontSize: 13, color: Colors.black54),
+                              fontSize: 13,
+                              color: Colors.black54,
+                            ),
                           ),
                         ],
                       ),

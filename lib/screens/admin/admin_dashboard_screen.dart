@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import 'admin_profile_image_management_tab.dart';
 import '../../models/academic_term.dart';
 import '../../models/calendar_exception.dart';
 import '../../models/term_week.dart';
@@ -111,7 +112,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 5,
+      length: 6,
       child: Directionality(
         textDirection: TextDirection.rtl,
         child: Scaffold(
@@ -138,6 +139,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 Tab(text: 'المقررات'),
                 Tab(text: 'التسجيل'),
                 Tab(text: 'الفصول الدراسية'),
+                Tab(text: 'صور البروفايل'),
               ],
             ),
           ),
@@ -148,6 +150,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               _AdminCoursesTab(),
               _AdminEnrollmentTab(),
               _AdminTermsTab(),
+              AdminProfileImageManagementTab(),
             ],
           ),
         ),

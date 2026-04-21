@@ -167,7 +167,13 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
       stream: _authService.watchCurrentSecurityStaff().map((doc) => doc.data()),
       builder: (context, snapshot) {
         final data = snapshot.data ?? const <String, dynamic>{};
-        final photoUrl = (data['photoUrl'] ?? '').toString().trim();
+        final rawPhotoUrl = (data['photoUrl'] ?? '').toString().trim();
+        final photoVersion = (data['photoVersion'] ?? '').toString().trim();
+        final photoUrl = rawPhotoUrl.isEmpty
+            ? ''
+            : photoVersion.isEmpty
+            ? rawPhotoUrl
+            : '$rawPhotoUrl${rawPhotoUrl.contains('?') ? '&' : '?'}v=$photoVersion';
         final fullName = (data['fullName'] ?? data['name'] ?? 'حساب الأمن')
             .toString();
         final email = _authService.currentUserEmail ?? 'username@example.com';
@@ -281,7 +287,9 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر رفع الصورة، يرجى المحاولة مرة أخرى')),
+        const SnackBar(
+          content: Text('تعذر رفع الصورة، يرجى المحاولة مرة أخرى'),
+        ),
       );
     } finally {
       if (mounted) {
@@ -316,11 +324,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.logout_rounded,
-                  size: 52,
-                  color: _kLogoutRed,
-                ),
+                Icon(Icons.logout_rounded, size: 52, color: _kLogoutRed),
                 const SizedBox(height: 20),
                 Text(
                   'هل أنت متأكد أنك تريد تسجيل الخروج؟',

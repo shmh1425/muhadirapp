@@ -44,6 +44,18 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
+  String _resolveLecturerPhotoUrl(Map<String, dynamic>? data) {
+    final photoUrl = (data?['photoUrl'] ?? '').toString().trim();
+    final rawUrl = photoUrl.isNotEmpty
+        ? photoUrl
+        : (LecturerAuthService.instance.currentLecturer?.photoUrl ?? '');
+    if (rawUrl.isEmpty) return '';
+    final version = (data?['photoVersion'] ?? '').toString().trim();
+    if (version.isEmpty) return rawUrl;
+    final separator = rawUrl.contains('?') ? '&' : '?';
+    return '$rawUrl${separator}v=$version';
+  }
+
   void _toggleBlur() {
     setState(() {
       _isBlurred = !_isBlurred;
@@ -442,6 +454,27 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
   }
 
   Widget _buildAvatarContent() {
+    return StreamBuilder<Map<String, dynamic>?>(
+      stream: LecturerAuthService.instance.watchCurrentLecturerDoc().map(
+        (doc) => doc.data(),
+      ),
+      builder: (context, snapshot) {
+        final photoUrl = _resolveLecturerPhotoUrl(snapshot.data);
+        if (photoUrl.isNotEmpty) {
+          return Image.network(
+            photoUrl,
+            fit: BoxFit.cover,
+            width: 84,
+            height: 84,
+            errorBuilder: (_, __, ___) => _buildDefaultAvatar(),
+          );
+        }
+        return _buildDefaultAvatar();
+      },
+    );
+  }
+
+  Widget _buildDefaultAvatar() {
     return Container(
       color: Colors.white,
       child: const Center(

@@ -34,13 +34,9 @@ class FemaleSecurityAuthService {
 
     final extension = _extractFileExtension(imageFile.name);
     final storagePath = 'security_staff/$uid/profile.$extension';
-    final storageRef = _storage
-        .ref()
-        .child(storagePath);
+    final storageRef = _storage.ref().child(storagePath);
 
-    debugPrint(
-      '[FemaleSecurityAuth] profile upload path: $storagePath',
-    );
+    debugPrint('[FemaleSecurityAuth] profile upload path: $storagePath');
     debugPrint(
       '[FemaleSecurityAuth] expected path check '
       '(security_staff_profiles/$uid.jpg): '
@@ -54,9 +50,11 @@ class FemaleSecurityAuthService {
         SettableMetadata(contentType: 'image/$extension'),
       );
       final downloadUrl = await storageRef.getDownloadURL();
+      final photoVersion = DateTime.now().millisecondsSinceEpoch;
 
       await _firestore.collection('security_staff').doc(uid).set({
         'photoUrl': downloadUrl,
+        'photoVersion': photoVersion,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 

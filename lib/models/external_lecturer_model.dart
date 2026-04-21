@@ -9,6 +9,7 @@ class ExternalLecturerModel {
   final String department;
   final String source;
   final String sourceId;
+  final String? photoUrl;
   final String role;
   final String? linkedUserUid;
   final bool isImported;
@@ -25,6 +26,7 @@ class ExternalLecturerModel {
     required this.department,
     required this.source,
     required this.sourceId,
+    this.photoUrl,
     this.role = 'lecturer',
     this.linkedUserUid,
     required this.isImported,
@@ -43,6 +45,9 @@ class ExternalLecturerModel {
       department: map['department'] ?? '',
       source: map['source'] ?? '',
       sourceId: map['sourceId'] ?? '',
+      photoUrl: (map['photoUrl'] ?? '').toString().trim().isEmpty
+          ? null
+          : (map['photoUrl']).toString().trim(),
       role: map['role'] ?? 'lecturer',
       linkedUserUid: map['linkedUserUid'],
       isImported: map['isImported'] ?? false,
@@ -62,6 +67,7 @@ class ExternalLecturerModel {
       'department': department,
       'source': source,
       'sourceId': sourceId,
+      'photoUrl': photoUrl,
       'role': role,
       'linkedUserUid': linkedUserUid,
       'isImported': isImported,

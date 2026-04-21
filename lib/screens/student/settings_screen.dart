@@ -12,6 +12,47 @@ import '../login_screen.dart';
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
+  String _resolveStudentPhotoUrl(Map<String, dynamic>? data) {
+    final firestorePhoto = (data?['photoUrl'] ?? data?['photoURL'] ?? '')
+        .toString()
+        .trim();
+    final rawUrl = firestorePhoto.isNotEmpty
+        ? firestorePhoto
+        : (StudentAuthService.instance.currentStudent?.photoUrl ?? '');
+    if (rawUrl.isEmpty) return '';
+    final version = (data?['photoVersion'] ?? '').toString().trim();
+    if (version.isEmpty) return rawUrl;
+    final separator = rawUrl.contains('?') ? '&' : '?';
+    return '$rawUrl${separator}v=$version';
+  }
+
+  Widget _buildStudentProfileImage(bool isBlurred) {
+    return StreamBuilder<Map<String, dynamic>?>(
+      stream: StudentAuthService.instance.watchCurrentStudentDoc().map(
+        (doc) => doc.data(),
+      ),
+      builder: (context, snapshot) {
+        final photoUrl = _resolveStudentPhotoUrl(snapshot.data);
+        final image = photoUrl.isNotEmpty
+            ? Image.network(
+                photoUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) =>
+                    Image.asset('assets/images/avatar.png', fit: BoxFit.cover),
+              )
+            : Image.asset('assets/images/avatar.png', fit: BoxFit.cover);
+
+        return ImageFiltered(
+          imageFilter: ImageFilter.blur(
+            sigmaX: isBlurred ? 8 : 0,
+            sigmaY: isBlurred ? 8 : 0,
+          ),
+          child: image,
+        );
+      },
+    );
+  }
+
   Widget _buildStudentDataSection() {
     final student = StudentAuthService.instance.currentStudent;
     if (student == null) return const SizedBox.shrink();
@@ -31,10 +72,7 @@ class SettingsScreen extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           student.major,
-          style: const TextStyle(
-            color: Color(0xFF444444),
-            fontSize: 14,
-          ),
+          style: const TextStyle(color: Color(0xFF444444), fontSize: 14),
           textAlign: TextAlign.center,
         ),
       ],
@@ -132,8 +170,10 @@ class SettingsScreen extends StatelessWidget {
               Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_forward_ios,
-                        color: Color(0xFF006571)),
+                    icon: const Icon(
+                      Icons.arrow_forward_ios,
+                      color: Color(0xFF006571),
+                    ),
                     onPressed: () => Navigator.of(context).maybePop(),
                   ),
                   const SizedBox(width: 6),
@@ -178,16 +218,7 @@ class SettingsScreen extends StatelessWidget {
                             ),
                           ),
                           child: ClipOval(
-                            child: ImageFiltered(
-                              imageFilter: ImageFilter.blur(
-                                sigmaX: isBlurred ? 8 : 0,
-                                sigmaY: isBlurred ? 8 : 0,
-                              ),
-                              child: Image.asset(
-                                'assets/images/avatar.png',
-                                fit: BoxFit.cover,
-                              ),
-                            ),
+                            child: _buildStudentProfileImage(isBlurred),
                           ),
                         ),
                       ],
@@ -201,7 +232,9 @@ class SettingsScreen extends StatelessWidget {
                   builder: (context) {
                     final s = StudentAuthService.instance.currentStudent;
                     final nameAr = s?.nameAr ?? '';
-                    final nameDisplay = nameAr.isNotEmpty ? nameAr : (s?.name ?? 'لم يتم تحميل البيانات');
+                    final nameDisplay = nameAr.isNotEmpty
+                        ? nameAr
+                        : (s?.name ?? 'لم يتم تحميل البيانات');
                     return Text(
                       nameDisplay,
                       style: const TextStyle(
@@ -394,7 +427,9 @@ class _StarRatingRow extends StatelessWidget {
                 child: Icon(
                   Icons.star,
                   size: 16,
-                  color: isSelected ? const Color(0xFFFFC107) : const Color(0xFFB0B0B0),
+                  color: isSelected
+                      ? const Color(0xFFFFC107)
+                      : const Color(0xFFB0B0B0),
                 ),
               ),
             );

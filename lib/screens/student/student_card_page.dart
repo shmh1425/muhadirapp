@@ -9,6 +9,47 @@ import '../../models/external_student.dart';
 class StudentCardPage extends StatelessWidget {
   const StudentCardPage({super.key});
 
+  String _resolveStudentPhotoUrl(Map<String, dynamic>? data) {
+    final firestorePhoto = (data?['photoUrl'] ?? data?['photoURL'] ?? '')
+        .toString()
+        .trim();
+    final rawUrl = firestorePhoto.isNotEmpty
+        ? firestorePhoto
+        : (StudentAuthService.instance.currentStudent?.photoUrl ?? '');
+    if (rawUrl.isEmpty) return '';
+    final version = (data?['photoVersion'] ?? '').toString().trim();
+    if (version.isEmpty) return rawUrl;
+    final separator = rawUrl.contains('?') ? '&' : '?';
+    return '$rawUrl${separator}v=$version';
+  }
+
+  Widget _buildStudentAvatar(bool isBlurred) {
+    return StreamBuilder<Map<String, dynamic>?>(
+      stream: StudentAuthService.instance.watchCurrentStudentDoc().map(
+        (doc) => doc.data(),
+      ),
+      builder: (context, snapshot) {
+        final photoUrl = _resolveStudentPhotoUrl(snapshot.data);
+        final image = photoUrl.isNotEmpty
+            ? Image.network(
+                photoUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) =>
+                    Image.asset('assets/images/avatar.png', fit: BoxFit.cover),
+              )
+            : Image.asset('assets/images/avatar.png', fit: BoxFit.cover);
+
+        return ImageFiltered(
+          imageFilter: ImageFilter.blur(
+            sigmaX: isBlurred ? 6 : 0,
+            sigmaY: isBlurred ? 6 : 0,
+          ),
+          child: image,
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final student = StudentAuthService.instance.currentStudent;
@@ -98,26 +139,14 @@ class StudentCardPage extends StatelessWidget {
                           width: 3,
                         ),
                       ),
-                      child: ClipOval(
-                        child: ImageFiltered(
-                          imageFilter: ImageFilter.blur(
-                            sigmaX: isBlurred ? 6 : 0,
-                            sigmaY: isBlurred ? 6 : 0,
-                          ),
-                          child: Image.asset(
-                            "assets/images/avatar.png",
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
+                      child: ClipOval(child: _buildStudentAvatar(isBlurred)),
                     );
                   },
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         nameAr.isNotEmpty ? nameAr : nameEn,
@@ -207,7 +236,10 @@ class StudentCardPage extends StatelessWidget {
     );
   }
 
-  Widget _buildElectronicWalletSection(BuildContext context, ExternalStudent? student) {
+  Widget _buildElectronicWalletSection(
+    BuildContext context,
+    ExternalStudent? student,
+  ) {
     final nameAr = student?.nameAr ?? '-';
     final nameEn = student?.name ?? '-';
     final studentId = student?.studentId?.toString() ?? '-';
@@ -274,17 +306,19 @@ class StudentCardPage extends StatelessWidget {
     );
   }
 
-  Widget _buildWalletRow(BuildContext context, String label, String value, {bool valueLtr = false}) {
+  Widget _buildWalletRow(
+    BuildContext context,
+    String label,
+    String value, {
+    bool valueLtr = false,
+  }) {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
         decoration: BoxDecoration(
           border: Border(
-            bottom: BorderSide(
-              color: Colors.grey.withOpacity(0.1),
-              width: 1,
-            ),
+            bottom: BorderSide(color: Colors.grey.withOpacity(0.1), width: 1),
           ),
         ),
         child: Row(
@@ -366,7 +400,7 @@ class StudentCardPage extends StatelessWidget {
                   color: Color(0xFF006571),
                 ),
               ),
-            )
+            ),
           ],
         ),
       ),
