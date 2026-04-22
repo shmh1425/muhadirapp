@@ -10,17 +10,17 @@ class ChatFAB extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => const ChatbotScreen(),
-            ),
-          );
-        },
-        customBorder: const CircleBorder(),
-        child: Transform.translate(
-          offset: const Offset(-12, 18),
+      child: Transform.translate(
+        offset: const Offset(-22, 40),
+        child: InkWell(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const ChatbotScreen(),
+              ),
+            );
+          },
+          customBorder: const CircleBorder(),
           child: SizedBox(
             width: 120,
             height: 120,

@@ -59,8 +59,8 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
   Future<void> _loadAcademicTermContext() async {
     try {
       final now = DateTime.now();
-      var calendarWeeksIsSourceOfTruth = false;
       int? calendarWeeksCandidate;
+      DateTime? calendarStartCandidate;
 
       bool hasAnyKey(Map<String, dynamic> m, List<String> keys) {
         for (final k in keys) {
@@ -89,48 +89,44 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
           }
         } else {
           final cal = calendarDoc.data() ?? <String, dynamic>{};
-        const effectiveKeys = <String>[
-          'effectiveTeachingWeeks',
-          'effective_teaching_weeks',
-          'effectiveWeeks',
-        ];
-        const officialKeys = <String>[
-          'officialWeeksCount',
-          'official_weeks_count',
-          'semesterWeeks',
-          'semester_weeks',
-        ];
+          const effectiveKeys = <String>[
+            'effectiveTeachingWeeks',
+            'effective_teaching_weeks',
+            'effectiveWeeks',
+          ];
+          const officialKeys = <String>[
+            'officialWeeksCount',
+            'official_weeks_count',
+            'semesterWeeks',
+            'semester_weeks',
+          ];
 
-        final effectiveWeeks = readWeeksFromKeys(cal, effectiveKeys);
+          final effectiveWeeks = readWeeksFromKeys(cal, effectiveKeys);
           if (effectiveWeeks != null && effectiveWeeks > 0) {
             calendarWeeksCandidate = effectiveWeeks;
             if (kDebugMode) {
               debugPrint(
-                '[AttendanceTracking] academic_calendar/current: using effectiveWeeks=$effectiveWeeks cal=$cal',
+                '[AttendanceTracking] academic_calendar/current: effectiveWeeks=$effectiveWeeks cal=$cal',
               );
             }
-        } else {
-          // Fall back to official/semester weeks if effectiveTeachingWeeks is absent
-          // or present but invalid (0/null). In our admin sync, `semesterWeeks`
-          // can already represent the effective teaching weeks.
-          final officialWeeks = readWeeksFromKeys(cal, officialKeys);
-          if (officialWeeks != null && officialWeeks > 0) {
-            calendarWeeksCandidate = officialWeeks;
+          } else {
+            final officialWeeks = readWeeksFromKeys(cal, officialKeys);
+            if (officialWeeks != null && officialWeeks > 0) {
+              calendarWeeksCandidate = officialWeeks;
               if (kDebugMode) {
                 debugPrint(
-                  '[AttendanceTracking] academic_calendar/current: using officialWeeks=$officialWeeks cal=$cal',
+                  '[AttendanceTracking] academic_calendar/current: officialWeeks=$officialWeeks cal=$cal',
                 );
               }
-          } else if (kDebugMode) {
-            debugPrint(
-              '[AttendanceTracking] academic_calendar/current: no valid weeks found. cal=$cal',
-            );
+            } else if (kDebugMode) {
+              debugPrint(
+                '[AttendanceTracking] academic_calendar/current: no valid weeks keys. cal=$cal',
+              );
+            }
           }
-        }
-          _semesterStartDate =
+
+          calendarStartCandidate =
               _readDate(cal['semesterStartDate']) ?? _readDate(cal['startDate']);
-          // If we got a valid weeks count from calendar, we can still continue to term lookup
-          // for better start/end selection, but don't force override weeks later unless term has better data.
         }
       } catch (e) {
         if (kDebugMode) {
@@ -184,7 +180,15 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
         );
       }
 
-      // Prefer weeks subcollection if available: count only weeks that count in attendance.
+      // 1) Source of truth: term.effectiveTeachingWeeks (admin maintained).
+      // 2) Next: term weeks subcollection (countInAttendance == true).
+      // 3) Next: academic_calendar/current.
+      // 4) Fallback: term official fields.
+      final termEffectiveWeeks = _readPositiveInt(data['effectiveTeachingWeeks']);
+      final termOfficialWeeks =
+          _readPositiveInt(data['officialWeeksCount']) ?? _readPositiveInt(data['semesterWeeks']);
+
+      int? weeksFromWeeksSubcollection;
       try {
         final weeksSnap = await FirebaseFirestore.instance
             .collection('academic_terms')
@@ -195,65 +199,31 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
           final countInAttendance = weeksSnap.docs
               .where((d) => (d.data()['countInAttendance'] == true))
               .length;
-          if (countInAttendance > 0) {
-            // If the admin maintains the centralized calendar, don't override it here.
-            if (!calendarWeeksIsSourceOfTruth) {
-              _semesterWeeksCount = countInAttendance;
-            }
-          }
+          if (countInAttendance > 0) weeksFromWeeksSubcollection = countInAttendance;
         }
       } catch (e) {
-        // ignore and fallback to fields below
         if (kDebugMode) {
-          debugPrint(
-            '[AttendanceTracking] academic_terms/$termId/weeks READ FAILED: $e',
-          );
+          debugPrint('[AttendanceTracking] academic_terms/$termId/weeks READ FAILED: $e');
         }
       }
 
-      final effectiveWeeks =
-          _readPositiveInt(data['effectiveTeachingWeeks']) ?? 0;
-      final officialWeeks =
-          _readPositiveInt(data['officialWeeksCount']) ??
-          _readPositiveInt(data['semesterWeeks']) ??
-          _semesterWeeksCount;
+      final chosenWeeks = termEffectiveWeeks ??
+          weeksFromWeeksSubcollection ??
+          calendarWeeksCandidate ??
+          termOfficialWeeks ??
+          15;
+      _semesterWeeksCount = chosenWeeks.clamp(1, 40);
 
-      // Source of truth for teaching weeks should be the term's effectiveTeachingWeeks
-      // (maintained by admin). The academic_calendar doc can be stale.
-      if (effectiveWeeks > 0) {
-        _semesterWeeksCount = effectiveWeeks;
-        calendarWeeksIsSourceOfTruth = true;
-        if (kDebugMode) {
-          debugPrint('[AttendanceTracking] using term effectiveWeeks=$effectiveWeeks');
-        }
-      } else if (_semesterWeeksCount <= 0 && !calendarWeeksIsSourceOfTruth) {
-        // If nothing else worked, use calendar candidate if present.
-        if (calendarWeeksCandidate != null && calendarWeeksCandidate! > 0) {
-          _semesterWeeksCount = calendarWeeksCandidate!;
-          calendarWeeksIsSourceOfTruth = true;
-          if (kDebugMode) {
-            debugPrint(
-              '[AttendanceTracking] using calendar weeks candidate=$_semesterWeeksCount',
-            );
-          }
-        }
-      } else if (!calendarWeeksIsSourceOfTruth && calendarWeeksCandidate != null) {
-        // If term doesn't provide effective weeks, calendar can be used.
-        _semesterWeeksCount = calendarWeeksCandidate!;
-        calendarWeeksIsSourceOfTruth = true;
-      } else {
-        // Final fallback: use effectiveTeachingWeeks if maintained by admin; else official.
-        final weeks = (effectiveWeeks > 0 ? effectiveWeeks : officialWeeks);
-        if (weeks > 0 && !calendarWeeksIsSourceOfTruth) {
-          _semesterWeeksCount = weeks;
-          if (kDebugMode) {
-            debugPrint(
-              '[AttendanceTracking] using term weeks=$_semesterWeeksCount (calendar not source of truth)',
-            );
-          }
-        }
+      // Start date: term startDate first, otherwise calendar, otherwise keep existing/default.
+      _semesterStartDate = _readDate(data['startDate']) ?? calendarStartCandidate ?? _semesterStartDate;
+
+      if (kDebugMode) {
+        debugPrint(
+          '[AttendanceTracking] weeks chosen=$_semesterWeeksCount '
+          '(termEffective=$termEffectiveWeeks weeksSub=$weeksFromWeeksSubcollection calendar=$calendarWeeksCandidate termOfficial=$termOfficialWeeks) '
+          'startDate=$_semesterStartDate',
+        );
       }
-      _semesterStartDate = _readDate(data['startDate']);
     } catch (e) {
       // Keep defaults if term context is unavailable.
       if (kDebugMode) {

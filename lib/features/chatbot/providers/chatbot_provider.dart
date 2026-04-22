@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../data/chatbot_repository.dart';
 import '../data/openai_service.dart';
 import '../models/chat_message.dart';
+import '../models/attendance_context.dart';
+import '../../../services/student_auth_service.dart';
 
 class ChatbotProvider extends ChangeNotifier {
   ChatbotProvider._();
@@ -19,6 +21,122 @@ class ChatbotProvider extends ChangeNotifier {
 
   static const String _errorGeneric =
       'عذراً، حدث خطأ. تحقق من اتصالك وحاول مجدداً 🔄';
+
+  bool _isAbsenceQuickQuery(String text) {
+    final t = text.trim().toLowerCase();
+    if (t.isEmpty) return false;
+    // Arabic quick queries
+    if (t.contains('كم غيابي') || t == 'غيابي' || t == 'كم الغياب' || t == 'كم غياب') {
+      return true;
+    }
+    // English quick queries
+    if (t.contains('how many absences') || t == 'absences' || t == 'my absences') {
+      return true;
+    }
+    return false;
+  }
+
+  String _formatAbsenceQuickReply({
+    required String userMessage,
+    required String studentName,
+    required List<CourseAttendanceSummary> courses,
+  }) {
+    final t = userMessage.trim().toLowerCase();
+
+    CourseAttendanceSummary? pickCourseByMention() {
+      for (final c in courses) {
+        final name = c.displayName.toLowerCase();
+        if (name.isNotEmpty && t.contains(name)) return c;
+      }
+      return null;
+    }
+
+    String oneCourse(CourseAttendanceSummary c) {
+      // Keep the old template but remove "إجمالي المحاضرات".
+      // absentCount = unexcused, excusedCount = excused.
+      final totalAbs = c.absentCount + c.excusedCount;
+      final pct = c.absenceRate.isFinite ? c.absenceRate : 0.0;
+      final pctText = pct.toStringAsFixed(1);
+
+      final statusEmoji = c.isDeprivation
+          ? '🚫'
+          : (c.isWarning ? '⚠️' : '🟢');
+      final statusText = c.isDeprivation
+          ? 'أنت قريب/داخل الحرمان — انتبه جدًا.'
+          : (c.isWarning ? 'لديك نسبة غياب مرتفعة، كن حذرًا!' : 'وضعك سليم حاليًا');
+
+      final courseEmoji = () {
+        final idx = courses.indexOf(c);
+        switch (idx) {
+          case 0:
+            return '📘';
+          case 1:
+            return '📗';
+          case 2:
+            return '📙';
+          default:
+            return '📕';
+        }
+      }();
+
+      return '$courseEmoji ${c.displayName}\n'
+          '- الغياب: $totalAbs\n'
+          '- بدون عذر: ${c.absentCount}\n'
+          '- بعذر: ${c.excusedCount}\n'
+          '- نسبة الغياب: $pctText%\n'
+          '- المتبقي قبل الحرمان: ${c.remainingBeforeDeprivation} محاضرات\n'
+          '$statusEmoji الحالة: $statusText';
+    }
+
+    if (courses.isEmpty) {
+      return 'ما عندي بيانات غياب كافية حالياً.';
+    }
+
+    final mentioned = pickCourseByMention();
+    if (mentioned != null) {
+      return oneCourse(mentioned);
+    }
+
+    String shortName(String raw) {
+      final s = raw.trim();
+      if (s.isEmpty) return '';
+      final parts = s.split(RegExp(r'\s+')).where((p) => p.trim().isNotEmpty).toList();
+      return parts.isEmpty ? '' : parts.first.trim();
+    }
+
+    bool containsLatin(String s) => RegExp(r'[A-Za-z]').hasMatch(s);
+
+    final fallbackArName = shortName(StudentAuthService.instance.currentStudent?.nameAr ?? '');
+    final pickedName = shortName(studentName);
+    final displayName = (pickedName.isEmpty || containsLatin(pickedName)) ? fallbackArName : pickedName;
+
+    final greetName = displayName.isEmpty ? '' : ' $displayName';
+    final lines = <String>['هلًا$greetName!'];
+    for (final c in courses) {
+      lines.add(oneCourse(c));
+      lines.add(''); // blank line
+    }
+    // remove trailing blank
+    while (lines.isNotEmpty && lines.last.trim().isEmpty) {
+      lines.removeLast();
+    }
+    // Overall summary: one concise line like the old behavior.
+    final warnings = courses.where((c) => c.isWarning && !c.isDeprivation).toList();
+    final deprivations = courses.where((c) => c.isDeprivation).toList();
+
+    String overall;
+    if (deprivations.isNotEmpty) {
+      final name = deprivations.first.displayName;
+      overall = '📊 وضعك العام: لديك خطر حرمان في $name 🚫';
+    } else if (warnings.isNotEmpty) {
+      final name = warnings.first.displayName;
+      overall = '📊 وضعك العام: انتبه للغياب في $name ⚠️';
+    } else {
+      overall = '📊 وضعك العام: وضعك ممتاز حاليًا 🟢';
+    }
+
+    return [...lines, '', overall].join('\n');
+  }
 
   String _userFriendlyError(Object e) {
     final msg = e.toString();
@@ -58,8 +176,10 @@ class ChatbotProvider extends ChangeNotifier {
     try {
       // جلب بيانات الحضور — إذا فشل (صلاحيات/شبكة) نكمل بدونها حتى يرد البوت على التحية وأي سؤال
       String attendanceString = '';
+      AttendanceContext? attendanceContextObj;
       try {
         final context = await ChatbotRepository.instance.getAttendanceContext();
+        attendanceContextObj = context;
         attendanceString = context?.rawContextString ?? '';
       } catch (e, st) {
         if (kDebugMode) debugPrint('ChatbotRepository error (attendance): $e\n$st');
@@ -78,6 +198,23 @@ class ChatbotProvider extends ChangeNotifier {
                 'content': m.text,
               })
           .toList();
+
+      // For "كم غيابي؟" style questions, respond deterministically and concise
+      // without going through the LLM prompt formatting.
+      if (_isAbsenceQuickQuery(text) && attendanceContextObj != null) {
+        final reply = _formatAbsenceQuickReply(
+          userMessage: text,
+          studentName: attendanceContextObj!.studentName,
+          courses: attendanceContextObj!.courses,
+        );
+        _messages.add(ChatMessage(
+          id: 'bot_${DateTime.now().millisecondsSinceEpoch}',
+          text: reply,
+          isUser: false,
+          timestamp: DateTime.now(),
+        ));
+        return;
+      }
 
       final reply = await OpenAIService.instance.sendMessage(
         userMessage: text,

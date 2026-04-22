@@ -3,12 +3,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'components/notification_bell.dart';
 import 'rejection_detail_screen.dart';
+import 'pending_detail_screen.dart';
 import 'submit_excuse_screen.dart';
 import 'notifications_screen.dart';
 import '../../models/attendance/manual_attendance_record.dart';
 import '../../models/excuse/excuse_request.dart';
 import '../../services/attendance/manual_attendance_service.dart';
 import '../../services/excuse/excuse_service.dart';
+import '../../services/excuse/excuse_attendance_merge.dart';
 import '../../services/student_auth_service.dart';
 
 class ExcuseScreen extends StatefulWidget {
@@ -84,8 +86,8 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
           r.status != ManualAttendanceStatus.excused) {
         continue;
       }
-      final isClosed =
-          r.status == ManualAttendanceStatus.absent && _isClosedForDate(r.lectureDate);
+      final isClosed = r.status == ManualAttendanceStatus.absent &&
+          ExcuseAttendanceMerge.isExcuseSubmissionClosedForAbsent(r.lectureDate);
       final status = isClosed
           ? 'مغلق'
           : (r.status == ManualAttendanceStatus.excused ? 'تم القبول' : 'معلقة');
@@ -98,10 +100,12 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
         course: courseName,
         timeRange:
             '${_formatHHmm(r.lectureStartTime)}-${_formatHHmm(r.lectureEndTime)}',
-        dateText: _formatArabicDate(r.lectureDate),
+        dateText: ExcuseAttendanceMerge.formatArabicLectureDate(r.lectureDate),
         status: status,
         rawDate: r.lectureDate,
         sectionId: sectionId,
+        sessionId: r.sessionId,
+        attendanceRecordId: r.recordId,
         rawStartTime: r.lectureStartTime,
       ));
     }
@@ -109,93 +113,43 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
     return items;
   }
 
-  List<_ExcuseItem> _mergeRequestsIntoItems({
+  List<_ExcuseItem> _applyExcusePipeline({
+    required List<ManualAttendanceRecord> records,
     required List<_ExcuseItem> baseItems,
     required List<ExcuseRequest> requests,
+    required Set<String> pendingAttendanceRecordIds,
   }) {
-    if (requests.isEmpty) return baseItems;
-
-    String key(DateTime d, String start, String sectionId) {
-      final dd = DateTime(d.year, d.month, d.day);
-      return '${dd.toIso8601String()}|${start.trim()}|${sectionId.trim()}';
-    }
-
-    final reqMap = <String, ExcuseRequest>{};
-    for (final r in requests) {
-      final k = key(r.lectureDate, r.lectureStartTime, r.sectionId);
-      reqMap[k] = r;
-    }
+    final byRecordId = <String, ManualAttendanceRecord>{
+      for (final r in records) r.recordId.trim(): r,
+    };
+    final reqMap = ExcuseAttendanceMerge.indexRequestsByLectureKey(requests);
 
     final updated = <_ExcuseItem>[];
     for (final item in baseItems) {
-      final k = key(item.rawDate, item.rawStartTime, item.sectionId);
-      final req = reqMap[k];
-      if (req == null) {
+      final rec = byRecordId[item.attendanceRecordId.trim()];
+      if (rec == null) {
         updated.add(item);
         continue;
       }
-      final status = switch (req.status) {
-        ExcuseRequestStatus.pending => 'قيد الانتظار',
-        ExcuseRequestStatus.accepted => 'تم القبول',
-        ExcuseRequestStatus.rejected => 'تم الرفض',
-        ExcuseRequestStatus.expired => 'منتهي',
-      };
+      final k = ExcuseAttendanceMerge.lectureKey(
+        item.rawDate,
+        item.rawStartTime,
+        item.sectionId,
+      );
+      final req = reqMap[k];
+      final status = ExcuseAttendanceMerge.mergedStatus(
+        attendance: rec,
+        request: req,
+        pendingAttendanceRecordIds: pendingAttendanceRecordIds,
+      );
+      final courseOverride = ExcuseAttendanceMerge.mergedCourseNameArOverride(req);
       updated.add(item.copyWith(
-        course: req.courseNameAr.trim().isNotEmpty ? req.courseNameAr.trim() : item.course,
+        course: courseOverride ?? item.course,
         status: status,
-        rejectionReason: req.rejectionReason,
+        rejectionReason: req?.rejectionReason,
       ));
     }
     return updated;
-  }
-
-  bool _isClosedForDate(DateTime date) {
-    final d = DateTime(date.year, date.month, date.day);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    return today.difference(d).inDays >= 3;
-  }
-
-  String _arabicWeekday(int weekday) {
-    switch (weekday) {
-      case DateTime.monday:
-        return 'الاثنين';
-      case DateTime.tuesday:
-        return 'الثلاثاء';
-      case DateTime.wednesday:
-        return 'الأربعاء';
-      case DateTime.thursday:
-        return 'الخميس';
-      case DateTime.friday:
-        return 'الجمعة';
-      case DateTime.saturday:
-        return 'السبت';
-      case DateTime.sunday:
-      default:
-        return 'الأحد';
-    }
-  }
-
-  String _arabicMonth(int month) {
-    const months = <int, String>{
-      1: 'يناير',
-      2: 'فبراير',
-      3: 'مارس',
-      4: 'أبريل',
-      5: 'مايو',
-      6: 'يونيو',
-      7: 'يوليو',
-      8: 'أغسطس',
-      9: 'سبتمبر',
-      10: 'أكتوبر',
-      11: 'نوفمبر',
-      12: 'ديسمبر',
-    };
-    return months[month] ?? month.toString();
-  }
-
-  String _formatArabicDate(DateTime date) {
-    return '${_arabicWeekday(date.weekday)}, ${date.day} ${_arabicMonth(date.month)}';
   }
 
   String _formatHHmm(String time) {
@@ -274,14 +228,7 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
             future: _fetchStudentCourses(student.studentId),
             builder: (context, courseSnap) {
               final courses = courseSnap.data ?? <String>[];
-              if (_selectedCourse == null && courses.isNotEmpty) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted) return;
-                  setState(() => _selectedCourse = courses.first);
-                });
-              }
-              final selectedCourse =
-                  _selectedCourse ?? (courses.isNotEmpty ? courses.first : null);
+              final selectedCourse = _selectedCourse; // null = الكل
 
               return StreamBuilder<List<ManualAttendanceRecord>>(
                 stream: _attendance.watchStudentRecords(student.studentId),
@@ -296,43 +243,62 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
                       return StreamBuilder<List<ExcuseRequest>>(
                         stream: _excuses.watchStudentRequests(student.studentId),
                         builder: (context, reqSnap) {
-                          final merged = _mergeRequestsIntoItems(
-                            baseItems: baseItems,
-                            requests: reqSnap.data ?? <ExcuseRequest>[],
-                          );
-                          final List<_ExcuseItem> visibleItems = merged.where((item) {
-                            final bool matchCourse =
-                                selectedCourse == null || item.course == selectedCourse;
-                            final String filterStatus =
-                                _selectedFilter == 'رفع عذر' ? 'معلقة' : _selectedFilter;
-                            final bool matchFilter =
-                                _selectedFilter == 'الكل' || item.status == filterStatus;
-                            return matchCourse && matchFilter;
-                          }).toList();
+                          return StreamBuilder<Set<String>>(
+                            stream: _excuses.watchPendingExcuseAttendanceRecordIds(
+                              student.studentId,
+                            ),
+                            builder: (context, pendingSnap) {
+                              final piped = _applyExcusePipeline(
+                                records: records,
+                                baseItems: baseItems,
+                                requests: reqSnap.data ?? <ExcuseRequest>[],
+                                pendingAttendanceRecordIds:
+                                    pendingSnap.data ?? <String>{},
+                              );
 
-                          return ListView(
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                            children: <Widget>[
-                              _buildHeader(context),
-                              const SizedBox(height: 16),
-                              _buildCourseTabs(courses),
-                              const SizedBox(height: 12),
-                              _buildStatusFilters(),
-                              const SizedBox(height: 24),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: Text(
-                                  selectedCourse ?? '',
-                                  style: const TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF1A1A1A),
+                              final List<_ExcuseItem> visibleItems = piped.where((item) {
+                                final bool matchCourse =
+                                    selectedCourse == null || item.course == selectedCourse;
+                                final String filterStatus =
+                                    _selectedFilter == 'رفع عذر' ? 'معلقة' : _selectedFilter;
+                                final bool matchFilter =
+                                    _selectedFilter == 'الكل' || item.status == filterStatus;
+                                return matchCourse && matchFilter;
+                              }).toList();
+
+                              return ListView(
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                                children: <Widget>[
+                                  _buildHeader(context),
+                                  const SizedBox(height: 16),
+                                  _buildCourseTabs(courses),
+                                  const SizedBox(height: 12),
+                                  _buildStatusFilters(),
+                                  const SizedBox(height: 24),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Text(
+                                      selectedCourse ?? 'الكل',
+                                      style: const TextStyle(
+                                        fontSize: 21,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF1A1A1A),
+                                      ),
+                                      textAlign: TextAlign.right,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              ...visibleItems.map((item) => _ExcuseCard(item: item)),
-                            ],
+                                  const SizedBox(height: 16),
+                                  ...visibleItems.map(
+                                    (item) => _ExcuseCard(
+                                      item: item,
+                                      showCourseTitle: selectedCourse == null,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           );
                         },
                       );
@@ -389,6 +355,7 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
   }
 
   Widget _buildCourseTabs(List<String> courses) {
+    final tabs = <String>['الكل', ...courses];
     return Container(
       height: 44,
       decoration: BoxDecoration(
@@ -397,23 +364,61 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       child: Row(
-        children: courses.map((String course) {
-          final bool isActive = course == (_selectedCourse ?? courses.first);
-          return Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: _GradientTabChip(
-                label: course,
-                isActive: isActive,
-                onTap: () {
-                  setState(() {
-                    _selectedCourse = course;
-                  });
-                },
+        children: <Widget>[
+          ...tabs.map((String course) {
+            final bool isAll = course == 'الكل';
+            final bool isActive =
+                isAll ? _selectedCourse == null : _selectedCourse == course;
+            return Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: _GradientTabChip(
+                  label: course,
+                  isActive: isActive,
+                  onTap: () {
+                    setState(() {
+                      _selectedCourse = isAll ? null : course;
+                    });
+                  },
+                ),
+              ),
+            );
+          }),
+          if (tabs.length == 1) ...<Widget>[
+            // Keep the initial "الكل" tab width stable before courses load.
+            // Two invisible placeholders match the common 3-tab layout.
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: IgnorePointer(
+                  child: Opacity(
+                    opacity: 0,
+                    child: _GradientTabChip(
+                      label: '',
+                      isActive: false,
+                      onTap: () {},
+                    ),
+                  ),
+                ),
               ),
             ),
-          );
-        }).toList(),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: IgnorePointer(
+                  child: Opacity(
+                    opacity: 0,
+                    child: _GradientTabChip(
+                      label: '',
+                      isActive: false,
+                      onTap: () {},
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -566,6 +571,8 @@ class _ExcuseItem {
     required this.status,
     required this.rawDate,
     required this.sectionId,
+    required this.sessionId,
+    required this.attendanceRecordId,
     required this.rawStartTime,
     this.rejectionReason,
   });
@@ -576,6 +583,8 @@ class _ExcuseItem {
   final String status;
   final DateTime rawDate;
   final String sectionId;
+  final String sessionId;
+  final String attendanceRecordId;
   final String rawStartTime;
   final String? rejectionReason;
 
@@ -591,6 +600,8 @@ class _ExcuseItem {
       status: status ?? this.status,
       rawDate: rawDate,
       sectionId: sectionId,
+      sessionId: sessionId,
+      attendanceRecordId: attendanceRecordId,
       rawStartTime: rawStartTime,
       rejectionReason: rejectionReason ?? this.rejectionReason,
     );
@@ -600,9 +611,11 @@ class _ExcuseItem {
 class _ExcuseCard extends StatelessWidget {
   const _ExcuseCard({
     required this.item,
+    this.showCourseTitle = false,
   });
 
   final _ExcuseItem item;
+  final bool showCourseTitle;
 
   Color get _statusColor {
     switch (item.status) {
@@ -614,14 +627,12 @@ class _ExcuseCard extends StatelessWidget {
         return const Color(0xFFE57373); // أفتح من #C62828
       case 'مغلق':
         return const Color(0xFF757575);
+      case 'منتهي':
+        return const Color(0xFF8D6E63);
       case 'معلقة':
       default:
         return const Color(0xFFBDBDBD); // أفتح من #9E9E9E
     }
-  }
-
-  bool get _shouldShowArrow {
-    return item.status == 'معلقة' || item.status == 'تم الرفض';
   }
 
   void _showClosedInfoDialog(BuildContext context) {
@@ -666,6 +677,58 @@ class _ExcuseCard extends StatelessWidget {
     );
   }
 
+  void _onStatusChipTap(BuildContext context) {
+    if (item.status == 'تم الرفض') {
+      Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (BuildContext context) => RejectionDetailScreen(
+            course: item.course,
+            dateText: item.dateText,
+            timeRange: item.timeRange,
+            reason: item.rejectionReason?.trim().isNotEmpty == true
+                ? item.rejectionReason!.trim()
+                : 'السبب: العذر غير مقبول - يُشترط تقديم عذر صحي رسمي.',
+            sectionId: item.sectionId,
+            lectureDate: item.rawDate,
+            sessionId: item.sessionId,
+            attendanceRecordId: item.attendanceRecordId,
+          ),
+        ),
+      );
+    } else if (item.status == 'قيد الانتظار') {
+      final student = StudentAuthService.instance.currentStudent;
+      final sid = student?.studentId ?? 0;
+      Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (BuildContext context) => PendingDetailScreen(
+            studentId: sid,
+            attendanceRecordId: item.attendanceRecordId,
+            course: item.course,
+            dateText: item.dateText,
+            timeRange: item.timeRange,
+          ),
+        ),
+      );
+    } else if (item.status == 'معلقة') {
+      Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (BuildContext context) => SubmitExcuseScreen(
+            course: item.course,
+            dateText: item.dateText,
+            timeRange: item.timeRange,
+            sectionId: item.sectionId,
+            lectureDate: item.rawDate,
+            sessionId: item.sessionId,
+            attendanceRecordId: item.attendanceRecordId,
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isClosed = item.status == 'مغلق';
@@ -691,6 +754,23 @@ class _ExcuseCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
+          if (showCourseTitle) ...<Widget>[
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                item.course,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1A1A1A),
+                ),
+                textAlign: TextAlign.right,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           Row(
             textDirection: TextDirection.rtl,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -712,7 +792,7 @@ class _ExcuseCard extends StatelessWidget {
                   Text(
                     item.dateText,
                     style: const TextStyle(
-                      fontSize: 18,
+                      fontSize: 16,
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF1A1A1A),
                     ),
@@ -726,79 +806,47 @@ class _ExcuseCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    Container(
-                      constraints: const BoxConstraints(minWidth: 80),
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: _statusColor,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        item.status == 'معلقة' ? 'رفع عذر' : item.status,
-                        style: TextStyle(
-                          fontSize: item.status == 'معلقة' ? 13 : 12,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                    if (_shouldShowArrow) ...[
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: <Widget>[
-                          GestureDetector(
-                            onTap: () {
-                              if (item.status == 'تم الرفض') {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => RejectionDetailScreen(
-                                      course: item.course,
-                                      dateText: item.dateText,
-                                      timeRange: item.timeRange,
-                                      reason: item.rejectionReason?.trim().isNotEmpty == true
-                                          ? item.rejectionReason!.trim()
-                                          : 'السبب: العذر غير مقبول - يُشترط تقديم عذر صحي رسمي.',
-                                    ),
-                                  ),
-                                );
-                              } else if (item.status == 'معلقة') {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => SubmitExcuseScreen(
-                                      course: item.course,
-                                      dateText: item.dateText,
-                                      timeRange: item.timeRange,
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
-                            child: Container(
-                              width: 28,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                color: const Color(0xFFE0E0E0),
-                              ),
-                              child: Transform(
-                                alignment: Alignment.center,
-                                transform: Matrix4.rotationY(3.14159),
-                                child: const Icon(
-                                  Icons.arrow_back_ios,
-                                  size: 14,
-                                  color: Color(0xFF616161),
-                                ),
-                              ),
-                            ),
+                    Builder(
+                      builder: (BuildContext chipContext) {
+                        const radius = BorderRadius.all(Radius.circular(20));
+                        final String chipLabel =
+                            item.status == 'معلقة' ? 'رفع عذر' : item.status;
+                        final Widget chipBody = Container(
+                          constraints: const BoxConstraints(minWidth: 80),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
                           ),
-                        ],
-                      ),
-                    ],
+                          decoration: BoxDecoration(
+                            color: _statusColor,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            chipLabel,
+                            style: TextStyle(
+                              fontSize: item.status == 'معلقة' ? 13 : 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        );
+                        final bool tappable = item.status == 'معلقة' ||
+                            item.status == 'قيد الانتظار' ||
+                            item.status == 'تم الرفض';
+                        if (!tappable) {
+                          return chipBody;
+                        }
+                        return Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () => _onStatusChipTap(chipContext),
+                            borderRadius: radius,
+                            child: chipBody,
+                          ),
+                        );
+                      },
+                    ),
                     if (isClosed) ...[
                       const SizedBox(height: 6),
                       Row(

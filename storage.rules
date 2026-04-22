@@ -23,6 +23,12 @@ service firebase.storage {
       allow write: if isSignedIn();
     }
 
+    // Student excuse attachments.
+    match /excuses/{studentId}/{rest=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
     // Deny anything else by default.
     match /{allPaths=**} {
       allow read, write: if false;

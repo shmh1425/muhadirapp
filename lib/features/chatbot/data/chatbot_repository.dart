@@ -50,7 +50,9 @@ class ChatbotRepository {
           final data = studentDoc.docs.first.data();
           universityId =
               data['universityId']?.toString() ?? data['studentId']?.toString() ?? '';
-          studentName = data['name']?.toString() ?? data['nameAr']?.toString() ?? studentName;
+          // Prefer Arabic name for Arabic UI; fall back to English.
+          studentName =
+              data['nameAr']?.toString() ?? data['name']?.toString() ?? studentName;
           major = data['major']?.toString() ?? data['majorAr']?.toString() ?? '';
         }
       } catch (_) {

@@ -3,13 +3,37 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'app_settings.dart';
 import 'components/notification_bell.dart';
 import 'notifications_screen.dart';
+import 'components/custom_nav_bar_icons.dart';
 import '../../services/student_auth_service.dart';
 import '../../shared/widgets/student_profile_avatar.dart';
 import '../../shared/widgets/chat_fab.dart';
+import 'home_screen.dart';
+import 'services_screen.dart';
 import '../login_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
+
+  void _onItemTapped(BuildContext context, int index) {
+    if (index == 0) {
+      // Stay on settings
+      return;
+    }
+    if (index == 1) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const ServicesScreen()),
+        (route) => false,
+      );
+      return;
+    }
+    if (index == 2) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      );
+      return;
+    }
+  }
 
   Widget _buildStudentDataSection() {
     final student = StudentAuthService.instance.currentStudent;
@@ -124,6 +148,10 @@ class SettingsScreen extends StatelessWidget {
       child: Scaffold(
         backgroundColor: Colors.white,
         floatingActionButton: const ChatFAB(),
+        bottomNavigationBar: NavBarSettingsArabic(
+          selectedIndex: 0,
+          onItemTapped: (i) => _onItemTapped(context, i),
+        ),
         body: SafeArea(
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),

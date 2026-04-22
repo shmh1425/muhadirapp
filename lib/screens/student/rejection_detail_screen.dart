@@ -10,6 +10,10 @@ class RejectionDetailScreen extends StatelessWidget {
   final String dateText;
   final String timeRange;
   final String reason;
+  final String sectionId;
+  final DateTime lectureDate;
+  final String sessionId;
+  final String attendanceRecordId;
 
   const RejectionDetailScreen({
     super.key,
@@ -17,6 +21,10 @@ class RejectionDetailScreen extends StatelessWidget {
     required this.dateText,
     required this.timeRange,
     required this.reason,
+    required this.sectionId,
+    required this.lectureDate,
+    required this.sessionId,
+    required this.attendanceRecordId,
   });
 
   @override
@@ -273,6 +281,10 @@ class RejectionDetailScreen extends StatelessWidget {
                           course: course,
                           dateText: dateText,
                           timeRange: timeRange,
+                          sectionId: sectionId,
+                          lectureDate: lectureDate,
+                          sessionId: sessionId,
+                          attendanceRecordId: attendanceRecordId,
                         ),
                       ),
                     );

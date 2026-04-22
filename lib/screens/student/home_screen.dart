@@ -8,9 +8,14 @@ import 'services_screen.dart';
 import 'nfc_attendance_screen.dart';
 import 'schedule_screen.dart';
 import 'excuse_screen.dart';
+import 'pending_detail_screen.dart';
 import 'submit_excuse_screen.dart';
+import 'rejection_detail_screen.dart';
 import '../../services/student_auth_service.dart';
 import '../../services/attendance/manual_attendance_service.dart';
+import '../../services/excuse/excuse_service.dart';
+import '../../services/excuse/excuse_attendance_merge.dart';
+import '../../models/excuse/excuse_request.dart';
 import '../../models/attendance/manual_attendance_record.dart';
 import '../../shared/widgets/student_profile_avatar.dart';
 import '../../shared/widgets/chat_fab.dart';
@@ -25,6 +30,32 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int selectedIndex = 2; // Start with Home selected (index 2 for Home)
   final ManualAttendanceService _attendance = ManualAttendanceService.instance;
+  final ExcuseService _excuses = ExcuseService.instance;
+
+  static const Set<String> _activeAbsenceStatuses = <String>{
+    'معلقة',
+    'قيد الانتظار',
+    'تم الرفض',
+  };
+
+  ({String text, Color color}) _badgeForMergedExcuseStatus(String status) {
+    switch (status) {
+      case 'معلقة':
+        return (text: 'إرفاق عذر', color: Colors.grey);
+      case 'قيد الانتظار':
+        return (text: 'قيد الانتظار', color: Colors.amber);
+      case 'تم الرفض':
+        return (text: 'مرفوض', color: Colors.red);
+      case 'مغلق':
+        return (text: 'مغلق', color: Colors.blueGrey);
+      case 'منتهي':
+        return (text: 'منتهي', color: Colors.brown);
+      case 'تم القبول':
+        return (text: 'مقبول', color: Colors.green);
+      default:
+        return (text: '—', color: Colors.grey);
+    }
+  }
 
   Future<void> _onItemTapped(int index) async {
     setState(() {
@@ -265,54 +296,140 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     return StreamBuilder<List<ManualAttendanceRecord>>(
       stream: _attendance.watchStudentRecords(studentId),
-      builder: (context, snapshot) {
-        final records = snapshot.data ?? <ManualAttendanceRecord>[];
-        final items = records
-            .where((r) =>
-                r.status == ManualAttendanceStatus.absent ||
-                r.status == ManualAttendanceStatus.excused)
-            .toList()
-          ..sort((a, b) {
-            final byDate = b.lectureDate.compareTo(a.lectureDate);
-            if (byDate != 0) return byDate;
-            return b.lectureStartTime.compareTo(a.lectureStartTime);
-          });
+      builder: (context, recordsSnap) {
+        final records = recordsSnap.data ?? <ManualAttendanceRecord>[];
+        return StreamBuilder<List<ExcuseRequest>>(
+          stream: _excuses.watchStudentRequests(studentId),
+          builder: (context, reqSnap) {
+            final requests = reqSnap.data ?? <ExcuseRequest>[];
+            final reqMap = ExcuseAttendanceMerge.indexRequestsByLectureKey(requests);
+            return StreamBuilder<Set<String>>(
+              stream: _excuses.watchPendingExcuseAttendanceRecordIds(studentId),
+              builder: (context, pendingSnap) {
+                final pending = pendingSnap.data ?? <String>{};
+                final candidates = records
+                    .where((r) =>
+                        r.status == ManualAttendanceStatus.absent ||
+                        r.status == ManualAttendanceStatus.excused)
+                    .map((r) {
+                  final k = ExcuseAttendanceMerge.lectureKey(
+                    r.lectureDate,
+                    r.lectureStartTime,
+                    r.sectionId,
+                  );
+                  final req = reqMap[k];
+                  final merged = ExcuseAttendanceMerge.mergedStatus(
+                    attendance: r,
+                    request: req,
+                    pendingAttendanceRecordIds: pending,
+                  );
+                  return (record: r, merged: merged, request: req);
+                })
+                    .where((e) => _activeAbsenceStatuses.contains(e.merged))
+                    .toList()
+                  ..sort((a, b) {
+                    final byDate = b.record.lectureDate.compareTo(a.record.lectureDate);
+                    if (byDate != 0) return byDate;
+                    return b.record.lectureStartTime.compareTo(a.record.lectureStartTime);
+                  });
 
-        final shown = items.take(6).toList();
-        return ListView(
-          scrollDirection: Axis.horizontal,
-          children: shown.map((r) {
-            final isAttach = r.status == ManualAttendanceStatus.absent;
-            final card = buildLectureCard(
-              r.courseName,
-              r.sectionLabel,
-              r.lectureEndTime.isNotEmpty ? r.lectureEndTime : '—',
-              statusText: isAttach ? 'إرفاق عذر' : 'قيد المعالجة',
-              statusColor: isAttach ? Colors.grey : Colors.amber,
+                final shown = candidates.take(6).toList();
+                if (shown.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'لا توجد غيابات نشطة حاليًا',
+                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  );
+                }
+                return ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: shown.map((e) {
+                    final r = e.record;
+                    final merged = e.merged;
+                    final req = e.request;
+                    final courseLabel =
+                        ExcuseAttendanceMerge.mergedCourseNameArOverride(req) ??
+                            (r.courseName.trim().isEmpty ? '—' : r.courseName.trim());
+                    final dateText =
+                        ExcuseAttendanceMerge.formatArabicLectureDate(r.lectureDate);
+                    final timeRange =
+                        '${r.lectureStartTime}-${r.lectureEndTime}';
+                    final badge = _badgeForMergedExcuseStatus(merged);
+                    final card = buildLectureCard(
+                      courseLabel,
+                      r.sectionLabel,
+                      r.lectureEndTime.isNotEmpty ? r.lectureEndTime : '—',
+                      statusText: badge.text,
+                      statusColor: badge.color,
+                    );
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: InkWell(
+                        onTap: () {
+                          if (merged == 'معلقة') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => SubmitExcuseScreen(
+                                  course: courseLabel,
+                                  dateText: dateText,
+                                  timeRange: timeRange,
+                                  sectionId: r.sectionId,
+                                  lectureDate: r.lectureDate,
+                                  sessionId: r.sessionId,
+                                  attendanceRecordId: r.recordId,
+                                ),
+                              ),
+                            );
+                          } else if (merged == 'قيد الانتظار') {
+                            final sid = studentId;
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => PendingDetailScreen(
+                                  studentId: sid,
+                                  attendanceRecordId: r.recordId,
+                                  course: courseLabel,
+                                  dateText: dateText,
+                                  timeRange: timeRange,
+                                ),
+                              ),
+                            );
+                          } else if (merged == 'تم الرفض') {
+                            final reason = req?.rejectionReason?.trim().isNotEmpty == true
+                                ? req!.rejectionReason!.trim()
+                                : 'السبب: العذر غير مقبول - يُشترط تقديم عذر صحي رسمي.';
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => RejectionDetailScreen(
+                                  course: courseLabel,
+                                  dateText: dateText,
+                                  timeRange: timeRange,
+                                  reason: reason,
+                                  sectionId: r.sectionId,
+                                  lectureDate: r.lectureDate,
+                                  sessionId: r.sessionId,
+                                  attendanceRecordId: r.recordId,
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(16),
+                        child: card,
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
             );
-            return Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: isAttach
-                  ? InkWell(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => SubmitExcuseScreen(
-                              course: r.courseName,
-                              dateText: '',
-                              timeRange:
-                                  '${r.lectureStartTime}-${r.lectureEndTime}',
-                            ),
-                          ),
-                        );
-                      },
-                      borderRadius: BorderRadius.circular(16),
-                      child: card,
-                    )
-                  : card,
-            );
-          }).toList(),
+          },
         );
       },
     );

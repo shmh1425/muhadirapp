@@ -14,6 +14,7 @@ class ExcuseRequest {
     required this.status,
     this.reasonText,
     this.attachmentUrl,
+    this.attachmentName,
     this.rejectionReason,
     this.createdAt,
     this.updatedAt,
@@ -37,6 +38,7 @@ class ExcuseRequest {
   final ExcuseRequestStatus status;
   final String? reasonText;
   final String? attachmentUrl;
+  final String? attachmentName;
   final String? rejectionReason;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -123,6 +125,9 @@ class ExcuseRequest {
       attachmentUrl: (data['attachmentUrl'] ?? data['attachmentURL'] ?? '').toString().trim().isEmpty
           ? null
           : (data['attachmentUrl'] ?? data['attachmentURL'] ?? '').toString().trim(),
+      attachmentName: (data['attachmentName'] ?? '').toString().trim().isEmpty
+          ? null
+          : (data['attachmentName'] ?? '').toString().trim(),
       rejectionReason: (data['rejectionReason'] ?? '').toString().trim().isEmpty
           ? null
           : (data['rejectionReason'] ?? '').toString().trim(),
@@ -159,7 +164,16 @@ class ExcuseRequest {
       'status': statusToString(status),
       if (reasonText != null) 'reasonText': reasonText,
       if (attachmentUrl != null) 'attachmentUrl': attachmentUrl,
+      if (attachmentName != null) 'attachmentName': attachmentName,
       if (rejectionReason != null) 'rejectionReason': rejectionReason,
+      if (sessionId != null) 'sessionId': sessionId,
+      if (attendanceRecordId != null) 'attendanceRecordId': attendanceRecordId,
+      if (lecturerId != null) 'lecturerId': lecturerId,
+      if (studentName != null) 'studentName': studentName,
+      if (submittedAt != null) 'submittedAt': Timestamp.fromDate(submittedAt!),
+      if (reviewDeadlineAt != null) 'reviewDeadlineAt': Timestamp.fromDate(reviewDeadlineAt!),
+      if (reviewedBy != null) 'reviewedBy': reviewedBy,
+      if (reviewedAt != null) 'reviewedAt': Timestamp.fromDate(reviewedAt!),
       'updatedAt': FieldValue.serverTimestamp(),
       if (createdAt == null) 'createdAt': FieldValue.serverTimestamp(),
     };

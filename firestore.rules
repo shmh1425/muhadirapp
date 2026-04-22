@@ -140,9 +140,11 @@ service cloud.firestore {
 
     // Formal excuse requests (student creates — may require separate create rules when shipped).
     match /excuse_requests/{requestId} {
-      allow read: if isSignedIn();
-      allow update: if isSignedIn();
-      allow create, delete: if false;
+      // Student submits; lecturer/admin reviews.
+      // For now: allow create for any signed-in Firebase session (anonymous is OK).
+      allow create: if isSignedIn();
+      allow read, update: if isSignedIn();
+      allow delete: if isAdmin();
     }
 
     // Female security accepted/rejected gate scan history.
