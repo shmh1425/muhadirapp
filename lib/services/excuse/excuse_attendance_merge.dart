@@ -12,6 +12,49 @@ class ExcuseAttendanceMerge {
     return '${_arabicWeekday(date.weekday)}, ${date.day} ${_arabicMonth(date.month)}';
   }
 
+  /// e.g. "Wednesday, 29 April" — for English UI alongside [formatArabicLectureDate].
+  static String formatEnglishLectureDate(DateTime date) {
+    return '${_englishWeekday(date.weekday)}, ${date.day} ${_englishMonth(date.month)}';
+  }
+
+  static String _englishWeekday(int weekday) {
+    switch (weekday) {
+      case DateTime.monday:
+        return 'Monday';
+      case DateTime.tuesday:
+        return 'Tuesday';
+      case DateTime.wednesday:
+        return 'Wednesday';
+      case DateTime.thursday:
+        return 'Thursday';
+      case DateTime.friday:
+        return 'Friday';
+      case DateTime.saturday:
+        return 'Saturday';
+      case DateTime.sunday:
+      default:
+        return 'Sunday';
+    }
+  }
+
+  static String _englishMonth(int month) {
+    const months = <int, String>{
+      1: 'January',
+      2: 'February',
+      3: 'March',
+      4: 'April',
+      5: 'May',
+      6: 'June',
+      7: 'July',
+      8: 'August',
+      9: 'September',
+      10: 'October',
+      11: 'November',
+      12: 'December',
+    };
+    return months[month] ?? month.toString();
+  }
+
   static String _arabicWeekday(int weekday) {
     switch (weekday) {
       case DateTime.monday:

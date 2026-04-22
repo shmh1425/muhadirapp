@@ -6,6 +6,8 @@ import 'components/custom_nav_bar_icons.dart';
 import 'components/notification_bell.dart';
 import 'home_screen.dart';
 import 'settings_screen.dart';
+import '../../features/translation/translation_controller.dart';
+import '../../features/translation/widgets/t_text.dart';
 
 class PendingDetailScreen extends StatelessWidget {
   final int studentId;
@@ -52,7 +54,7 @@ class PendingDetailScreen extends StatelessWidget {
           continue;
         }
         if (t == null && bestTs == null) continue;
-        if (t != null && (bestTs == null || t.isAfter(bestTs!))) {
+        if (t != null && (bestTs == null || t.isAfter(bestTs))) {
           best = doc;
           bestTs = t;
         }
@@ -69,10 +71,15 @@ class PendingDetailScreen extends StatelessWidget {
     if (uri == null) return;
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && context.mounted) {
+      final t = TranslationController.instance;
+      final td = t.textDirection;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تعذر فتح الملف.', textDirection: TextDirection.rtl),
-          backgroundColor: Color(0xFFB71C1C),
+        SnackBar(
+          content: Text(
+            t.translateToEnglish ? 'Could not open the file.' : 'تعذر فتح الملف.',
+            textDirection: td,
+          ),
+          backgroundColor: const Color(0xFFB71C1C),
         ),
       );
     }
@@ -80,95 +87,108 @@ class PendingDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        bottomNavigationBar: NavBarSettingsArabic(
-          selectedIndex: 1,
-          onItemTapped: (index) {
-            if (index == 0) {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              );
-            } else if (index == 2) {
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const HomeScreen()),
-                (route) => false,
-              );
-            } else if (index == 1) {
-              Navigator.of(context).popUntil((route) => route.isFirst);
-            }
-          },
-        ),
-        body: SafeArea(
-          child: Column(
-            children: <Widget>[
-              _buildHeader(context),
-              Expanded(
-                child: StreamBuilder<Map<String, dynamic>?>(
-                  stream: _watchLatestPendingSubmission(),
-                  builder: (context, snap) {
-                    // If we already have data, keep showing it even if the stream later errors
-                    // (e.g., transient network / backend sync errors).
-                    if (snap.hasError && snap.data == null) {
-                      debugPrint('[PendingDetail] stream error: ${snap.error}');
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                        child: Text(
-                          'تعذر تحميل تفاصيل العذر.',
-                          textDirection: TextDirection.rtl,
-                          style: TextStyle(color: Color(0xFFB71C1C)),
-                        ),
-                      );
-                    }
+    return AnimatedBuilder(
+      animation: TranslationController.instance,
+      builder: (context, _) {
+        final translation = TranslationController.instance;
+        return Directionality(
+          textDirection: translation.textDirection,
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            bottomNavigationBar: NavBarSettingsArabic(
+              selectedIndex: 1,
+              onItemTapped: (index) {
+                if (index == 0) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  );
+                } else if (index == 2) {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const HomeScreen()),
+                    (route) => false,
+                  );
+                } else if (index == 1) {
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                }
+              },
+            ),
+            body: SafeArea(
+              child: Column(
+                children: <Widget>[
+                  _buildHeader(context),
+                  Expanded(
+                    child: StreamBuilder<Map<String, dynamic>?>(
+                      stream: _watchLatestPendingSubmission(),
+                      builder: (context, snap) {
+                        if (snap.hasError && snap.data == null) {
+                          debugPrint('[PendingDetail] stream error: ${snap.error}');
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 16,
+                            ),
+                            child: TText(
+                              'تعذر تحميل تفاصيل العذر.',
+                              style: const TextStyle(color: Color(0xFFB71C1C)),
+                              textAlign: TextAlign.start,
+                            ),
+                          );
+                        }
 
-                    if (snap.hasError) {
-                      debugPrint('[PendingDetail] stream error (ignored): ${snap.error}');
-                    }
+                        if (snap.hasError) {
+                          debugPrint(
+                            '[PendingDetail] stream error (ignored): ${snap.error}',
+                          );
+                        }
 
-                    final data = (snap.data ?? const <String, dynamic>{});
-                    final excuseText = ((data['excuseText'] ?? data['reasonText']) ?? '')
-                        .toString()
-                        .trim();
-                    final attachmentName =
-                        (data['attachmentName'] ?? '').toString().trim();
-                    final attachmentUrl =
-                        (data['attachmentUrl'] ?? '').toString().trim();
+                        final data = (snap.data ?? const <String, dynamic>{});
+                        final excuseText =
+                            ((data['excuseText'] ?? data['reasonText']) ?? '')
+                                .toString()
+                                .trim();
+                        final attachmentName =
+                            (data['attachmentName'] ?? '').toString().trim();
+                        final attachmentUrl =
+                            (data['attachmentUrl'] ?? '').toString().trim();
 
-                    return SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                      child: _buildDetailCard(
-                        context,
-                        excuseText: excuseText,
-                        attachmentName: attachmentName,
-                        attachmentUrl: attachmentUrl,
-                      ),
-                    );
-                  },
-                ),
+                        return SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 16,
+                          ),
+                          child: _buildDetailCard(
+                            context,
+                            excuseText: excuseText,
+                            attachmentName: attachmentName,
+                            attachmentUrl: attachmentUrl,
+                            translateToEnglish: translation.translateToEnglish,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
   Widget _buildHeader(BuildContext context) {
+    final translation = TranslationController.instance;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Row(
         children: <Widget>[
           IconButton(
-            icon: Transform(
-              alignment: Alignment.center,
-              transform: Matrix4.rotationY(3.14159),
-              child: const Icon(
-                Icons.arrow_back_ios,
-                color: Color(0xFF006571),
-                size: 16,
-              ),
+            icon: Icon(
+              translation.translateToEnglish
+                  ? Icons.arrow_back_ios_new
+                  : Icons.arrow_forward_ios,
+              color: const Color(0xFF006571),
+              size: 16,
             ),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -176,7 +196,7 @@ class PendingDetailScreen extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           const Expanded(
-            child: Text(
+            child: TText(
               'إدارة الأعذار',
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -197,6 +217,7 @@ class PendingDetailScreen extends StatelessWidget {
     required String excuseText,
     required String attachmentName,
     required String attachmentUrl,
+    required bool translateToEnglish,
   }) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -219,16 +240,16 @@ class PendingDetailScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Align(
-            alignment: Alignment.topLeft,
+            alignment: AlignmentDirectional.topStart,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: const Color(0xFFFFE082),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Text(
-                'قيد الانتظار',
-                style: TextStyle(
+              child: Text(
+                translateToEnglish ? 'Pending' : 'قيد الانتظار',
+                style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: Colors.white,
@@ -238,33 +259,33 @@ class PendingDetailScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Align(
-            alignment: Alignment.centerRight,
-            child: Text(
+            alignment: AlignmentDirectional.centerStart,
+            child: TText(
               course,
               style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF1A1A1A),
               ),
-              textAlign: TextAlign.right,
+              textAlign: TextAlign.start,
             ),
           ),
           const SizedBox(height: 12),
           Align(
-            alignment: Alignment.centerRight,
-            child: Text(
+            alignment: AlignmentDirectional.centerStart,
+            child: TText(
               dateText,
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF1A1A1A),
               ),
-              textAlign: TextAlign.right,
+              textAlign: TextAlign.start,
             ),
           ),
           const SizedBox(height: 4),
           Align(
-            alignment: Alignment.centerRight,
+            alignment: AlignmentDirectional.centerStart,
             child: Text(
               timeRange,
               style: const TextStyle(
@@ -272,12 +293,12 @@ class PendingDetailScreen extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF1A1A1A),
               ),
-              textAlign: TextAlign.right,
+              textAlign: TextAlign.start,
             ),
           ),
           const SizedBox(height: 24),
           Align(
-            alignment: Alignment.centerRight,
+            alignment: AlignmentDirectional.centerStart,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
@@ -287,9 +308,9 @@ class PendingDetailScreen extends StatelessWidget {
                   size: 20,
                 ),
                 const SizedBox(width: 8),
-                const Text(
-                  'النص :',
-                  style: TextStyle(
+                TText(
+                  translateToEnglish ? 'Text:' : 'النص :',
+                  style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF1A1A1A),
@@ -300,20 +321,30 @@ class PendingDetailScreen extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              excuseText.isEmpty ? '—' : excuseText,
-              style: const TextStyle(
-                fontSize: 14,
-                height: 1.5,
-                color: Color(0xFF1A1A1A),
-              ),
-              textAlign: TextAlign.right,
-            ),
+            alignment: AlignmentDirectional.centerStart,
+            child: excuseText.isEmpty
+                ? Text(
+                    '—',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      height: 1.5,
+                      color: Color(0xFF1A1A1A),
+                    ),
+                    textAlign: TextAlign.start,
+                  )
+                : TText(
+                    excuseText,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      height: 1.5,
+                      color: Color(0xFF1A1A1A),
+                    ),
+                    textAlign: TextAlign.start,
+                  ),
           ),
           const SizedBox(height: 24),
           Align(
-            alignment: Alignment.centerRight,
+            alignment: AlignmentDirectional.centerStart,
             child: GestureDetector(
               onTap: attachmentUrl.trim().isEmpty
                   ? null
@@ -334,8 +365,10 @@ class PendingDetailScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Text(
-                    attachmentName.isNotEmpty ? attachmentName : 'عذر',
+                  TText(
+                    attachmentName.isNotEmpty
+                        ? attachmentName
+                        : (translateToEnglish ? 'Attachment' : 'عذر'),
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -352,16 +385,18 @@ class PendingDetailScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 22),
-          const Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              'حالة العذر: بانتظار مراجعة الدكتور.',
-              style: TextStyle(
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TText(
+              translateToEnglish
+                  ? 'Excuse status: awaiting instructor review.'
+                  : 'حالة العذر: بانتظار مراجعة الدكتور.',
+              style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF666666),
               ),
-              textAlign: TextAlign.right,
+              textAlign: TextAlign.start,
             ),
           ),
         ],

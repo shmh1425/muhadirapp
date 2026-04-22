@@ -12,7 +12,10 @@ import 'home_screen.dart';
 import 'settings_screen.dart';
 import '../../services/student_auth_service.dart';
 import '../../services/excuse/excuse_service.dart';
+import '../../services/excuse/excuse_attendance_merge.dart';
 import '../../models/excuse/excuse_request.dart';
+import '../../features/translation/translation_controller.dart';
+import '../../features/translation/widgets/t_text.dart';
 
 class SubmitExcuseScreen extends StatefulWidget {
   final String? course;
@@ -44,6 +47,18 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
   Uint8List? _selectedFileBytes;
   bool _isSubmitting = false;
 
+  String _en(String ar, String eng) =>
+      TranslationController.instance.translateToEnglish ? eng : ar;
+
+  String _displayDateLine() {
+    final raw = (widget.dateText ?? '').trim();
+    if (!TranslationController.instance.translateToEnglish) {
+      if (raw.isNotEmpty) return raw;
+      return ExcuseAttendanceMerge.formatArabicLectureDate(widget.lectureDate);
+    }
+    return ExcuseAttendanceMerge.formatEnglishLectureDate(widget.lectureDate);
+  }
+
   Future<bool> _ensureFirebaseSignedIn() async {
     try {
       if (FirebaseAuth.instance.currentUser != null) return true;
@@ -72,8 +87,9 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (context) {
+        final td = TranslationController.instance.textDirection;
         return Directionality(
-          textDirection: TextDirection.rtl,
+          textDirection: td,
           child: SafeArea(
             top: false,
             child: Padding(
@@ -93,25 +109,25 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
                       borderRadius: BorderRadius.circular(99),
                     ),
                   ),
-                  const Text(
+                  const TText(
                     'اختر نوع المرفق',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF1A1A1A),
                     ),
-                    textAlign: TextAlign.right,
+                    textAlign: TextAlign.start,
                   ),
                   const SizedBox(height: 12),
                   ListTile(
                     leading: const Icon(Icons.image, color: Color(0xFF006571)),
-                    title: const Text('صورة من المعرض'),
+                    title: const TText('صورة من المعرض'),
                     onTap: () => Navigator.of(context).pop('gallery'),
                   ),
                   ListTile(
                     leading:
                         const Icon(Icons.picture_as_pdf, color: Color(0xFF006571)),
-                    title: const Text('ملف PDF'),
+                    title: const TText('ملف PDF'),
                     onTap: () => Navigator.of(context).pop('pdf'),
                   ),
                   const SizedBox(height: 6),
@@ -168,11 +184,12 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
     return <String>['', ''];
   }
 
-  void _showError(String message) {
+  void _showError(String ar, String en) {
     if (!mounted) return;
+    final td = TranslationController.instance.textDirection;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message, textDirection: TextDirection.rtl),
+        content: Text(_en(ar, en), textDirection: td),
         backgroundColor: const Color(0xFFB71C1C),
       ),
     );
@@ -183,11 +200,17 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
     final student = StudentAuthService.instance.currentStudent;
     final studentId = student?.studentId ?? 0;
     if (studentId <= 0) {
-      _showError('سجّل دخولك أولاً لإرسال العذر.');
+      _showError(
+        'سجّل دخولك أولاً لإرسال العذر.',
+        'Please sign in before submitting an excuse.',
+      );
       return;
     }
     if (widget.sectionId.trim().isEmpty) {
-      _showError('تعذر تحديد الشعبة. حاول مرة أخرى.');
+      _showError(
+        'تعذر تحديد الشعبة. حاول مرة أخرى.',
+        'Could not determine the section. Please try again.',
+      );
       return;
     }
 
@@ -196,11 +219,17 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
     final start = times[0];
     final end = times[1];
     if (start.isEmpty || end.isEmpty) {
-      _showError('وقت المحاضرة غير مكتمل. حاول مرة أخرى.');
+      _showError(
+        'وقت المحاضرة غير مكتمل. حاول مرة أخرى.',
+        'Lecture time is incomplete. Please try again.',
+      );
       return;
     }
     if (reason.isEmpty && (_selectedFileBytes == null || _selectedFileBytes!.isEmpty)) {
-      _showError('أضف نص أو أرفق ملف قبل الإرسال.');
+      _showError(
+        'أضف نص أو أرفق ملف قبل الإرسال.',
+        'Add text or attach a file before submitting.',
+      );
       return;
     }
 
@@ -210,7 +239,10 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       debugPrint('[SubmitExcuse] firebaseAuth signedIn=$signedIn uid=$uid');
       if (!signedIn) {
-        _showError('تعذر تفعيل صلاحيات الإرسال. فعّل Anonymous Auth في Firebase ثم جرّب.');
+        _showError(
+          'تعذر تفعيل صلاحيات الإرسال. فعّل Anonymous Auth في Firebase ثم جرّب.',
+          'Could not enable upload permissions. Enable Anonymous Auth in Firebase and try again.',
+        );
         return;
       }
 
@@ -227,7 +259,7 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
         try {
           await ref.putData(_selectedFileBytes!).timeout(const Duration(seconds: 30));
           attachmentUrl = await ref.getDownloadURL().timeout(const Duration(seconds: 15));
-          debugPrint('[SubmitExcuse] attachment uploaded url=${attachmentUrl?.substring(0, 32)}...');
+          debugPrint('[SubmitExcuse] attachment uploaded url=${attachmentUrl.substring(0, 32)}...');
         } on FirebaseException catch (e) {
           debugPrint('[SubmitExcuse] Storage FirebaseException: code=${e.code} message=${e.message}');
           rethrow;
@@ -275,27 +307,35 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
       final msg = (e.message ?? '').trim();
       final code = e.code.trim();
       _showError(
+        msg.isNotEmpty ? 'فشل إرسال العذر: $msg' : 'فشل إرسال العذر: $code',
         msg.isNotEmpty
-            ? 'فشل إرسال العذر: $msg'
-            : 'فشل إرسال العذر: $code',
+            ? 'Failed to submit excuse: $msg'
+            : 'Failed to submit excuse: $code',
       );
       debugPrint('[SubmitExcuse] FirebaseException: code=$code message=${e.message}');
     } on TimeoutException {
-      _showError('العملية أخذت وقت طويل. تأكد من الإنترنت وحاول مرة ثانية.');
+      _showError(
+        'العملية أخذت وقت طويل. تأكد من الإنترنت وحاول مرة ثانية.',
+        'This is taking too long. Check your internet and try again.',
+      );
     } catch (_) {
-      _showError('فشل إرسال العذر. حاول مرة أخرى.');
+      _showError(
+        'فشل إرسال العذر. حاول مرة أخرى.',
+        'Failed to submit excuse. Please try again.',
+      );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
   void _showSuccessDialog() {
+    final td = TranslationController.instance.textDirection;
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
         return Directionality(
-          textDirection: TextDirection.rtl,
+          textDirection: td,
           child: Dialog(
             backgroundColor: Colors.transparent,
             insetPadding: const EdgeInsets.symmetric(horizontal: 40),
@@ -317,7 +357,7 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
                 children: <Widget>[
                   // Close Button
                   Align(
-                    alignment: Alignment.topLeft,
+                    alignment: AlignmentDirectional.topEnd,
                     child: IconButton(
                       icon: Icon(
                         Icons.close,
@@ -348,7 +388,7 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
                   ),
                   const SizedBox(height: 24),
                   // Success Message
-                  const Text(
+                  const TText(
                     'تم إرسال العذر بنجاح',
                     style: TextStyle(
                       fontSize: 18,
@@ -368,76 +408,82 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        bottomNavigationBar: NavBarSettingsArabic(
-          selectedIndex: 1,
-          onItemTapped: (index) {
-            if (index == 0) {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              );
-            } else if (index == 2) {
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const HomeScreen()),
-                (route) => false,
-              );
-            } else if (index == 1) {
-              Navigator.of(context).popUntil((route) => route.isFirst);
-            }
-          },
-        ),
-        body: SafeArea(
-          child: Column(
-            children: <Widget>[
-              _buildHeader(context),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      _buildDetailsCard(),
-                      const SizedBox(height: 24),
-                      _buildFileUploadSection(),
-                      const SizedBox(height: 24),
-                      _buildTextInputSection(),
-                      const SizedBox(height: 32),
-                      _buildSubmitButton(),
-                    ],
+    return AnimatedBuilder(
+      animation: TranslationController.instance,
+      builder: (context, _) {
+        final translation = TranslationController.instance;
+        return Directionality(
+          textDirection: translation.textDirection,
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            bottomNavigationBar: NavBarSettingsArabic(
+              selectedIndex: 1,
+              onItemTapped: (index) {
+                if (index == 0) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  );
+                } else if (index == 2) {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const HomeScreen()),
+                    (route) => false,
+                  );
+                } else if (index == 1) {
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                }
+              },
+            ),
+            body: SafeArea(
+              child: Column(
+                children: <Widget>[
+                  _buildHeader(context),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
+                          _buildDetailsCard(),
+                          const SizedBox(height: 24),
+                          _buildFileUploadSection(),
+                          const SizedBox(height: 24),
+                          _buildTextInputSection(),
+                          const SizedBox(height: 32),
+                          _buildSubmitButton(),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
   Widget _buildHeader(BuildContext context) {
+    final translation = TranslationController.instance;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Row(
         children: <Widget>[
           IconButton(
-            icon: Transform(
-              alignment: Alignment.center,
-              transform: Matrix4.rotationY(3.14159),
-              child: const Icon(
-                Icons.arrow_back_ios,
-                color: Color(0xFF006571),
-                size: 16,
-              ),
+            icon: Icon(
+              translation.translateToEnglish
+                  ? Icons.arrow_back_ios_new
+                  : Icons.arrow_forward_ios,
+              color: const Color(0xFF006571),
+              size: 16,
             ),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
             onPressed: () => Navigator.of(context).maybePop(),
           ),
           const Expanded(
-            child: Text(
+            child: TText(
               'رفع عذر',
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -470,30 +516,35 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: <Widget>[
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: <Widget>[
-              Text(
-                widget.course ?? 'جودة البرمجيات',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1A1A1A),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                TText(
+                  widget.course ?? 'جودة البرمجيات',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1A1A1A),
+                  ),
+                  textAlign: TextAlign.start,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                textAlign: TextAlign.right,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                widget.dateText ?? 'الأربعاء, 14 مايو',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1A1A1A),
+                const SizedBox(height: 4),
+                Text(
+                  _displayDateLine(),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1A1A1A),
+                  ),
+                  textAlign: TextAlign.start,
                 ),
-                textAlign: TextAlign.right,
-              ),
-            ],
+              ],
+            ),
           ),
+          const SizedBox(width: 12),
           Text(
             widget.timeRange ?? '08:50-08:00',
             style: const TextStyle(
@@ -511,14 +562,14 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const Text(
+        const TText(
           'إضافة ملف',
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
             color: Color(0xFF1A1A1A),
           ),
-          textAlign: TextAlign.right,
+          textAlign: TextAlign.start,
         ),
         const SizedBox(height: 12),
         GestureDetector(
@@ -551,7 +602,7 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
                         size: 32,
                       ),
                       const SizedBox(width: 12),
-                      Text(
+                      TText(
                         _selectedFileName ?? 'ملف مرفق',
                         style: const TextStyle(
                           fontSize: 16,
@@ -580,14 +631,14 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const Text(
+        const TText(
           'إضافة نص',
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
             color: Color(0xFF1A1A1A),
           ),
-          textAlign: TextAlign.right,
+          textAlign: TextAlign.start,
         ),
         const SizedBox(height: 12),
         Container(
@@ -611,11 +662,15 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
           child: TextField(
             controller: _textController,
             maxLines: null,
-            textAlign: TextAlign.right,
-            decoration: const InputDecoration(
+            textAlign: TranslationController.instance.translateToEnglish
+                ? TextAlign.start
+                : TextAlign.end,
+            decoration: InputDecoration(
               border: InputBorder.none,
-              hintText: '...',
-              hintStyle: TextStyle(
+              hintText: TranslationController.instance.translateToEnglish
+                  ? 'Type your excuse here…'
+                  : '...',
+              hintStyle: const TextStyle(
                 color: Color(0xFF9E9E9E),
               ),
             ),
@@ -661,7 +716,7 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               )
-            : const Text(
+            : const TText(
                 'إرسال',
                 style: TextStyle(
                   fontSize: 18,

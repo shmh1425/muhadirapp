@@ -6,6 +6,8 @@ import 'notifications_screen.dart';
 import 'services_screen.dart';
 import 'settings_screen.dart';
 import '../../shared/widgets/chat_fab.dart';
+import '../../features/translation/translation_controller.dart';
+import '../../features/translation/widgets/t_text.dart';
 
 class NfcAttendanceScreen extends StatefulWidget {
   const NfcAttendanceScreen({super.key});
@@ -93,9 +95,12 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    final translation = TranslationController.instance;
+    return AnimatedBuilder(
+      animation: translation,
+      builder: (context, _) => Directionality(
+        textDirection: translation.textDirection,
+        child: Scaffold(
         backgroundColor: Colors.white,
         floatingActionButton: const ChatFAB(),
         bottomNavigationBar: NavBarSettingsArabic(
@@ -110,11 +115,15 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                 children: [
                   IconButton(
                     onPressed: () => Navigator.of(context).maybePop(),
-                    icon: const Icon(Icons.arrow_forward_ios,
-                        color: Color(0xFF006571)),
+                    icon: Icon(
+                      translation.translateToEnglish
+                          ? Icons.arrow_back_ios_new
+                          : Icons.arrow_forward_ios,
+                      color: const Color(0xFF006571),
+                    ),
                   ),
                   const SizedBox(width: 6),
-                  const Text(
+                  const TText(
                     'تسجيل الحضور',
                     style: TextStyle(
                       fontSize: 22,
@@ -137,7 +146,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
               ),
               const SizedBox(height: 12),
               const Center(
-                child: Text(
+                child: TText(
                   'سجل حضورك',
                   style: TextStyle(
                     fontSize: 18,
@@ -263,7 +272,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                               ),
                               child: TextButton(
                                 onPressed: () {},
-                                child: const Text(
+                                child: const TText(
                                   'امسح الآن',
                                   style: TextStyle(
                                     color: Colors.white,
@@ -282,6 +291,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
             ],
           ),
         ),
+      ),
       ),
     );
   }

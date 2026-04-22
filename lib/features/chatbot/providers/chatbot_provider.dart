@@ -7,6 +7,101 @@ import '../models/chat_message.dart';
 import '../models/attendance_context.dart';
 import '../../../services/student_auth_service.dart';
 
+/// في تقرير الغياب السريع: **1 ساعة = جلسة واحدة** (بدون اشتقاق من المخطط ÷ عدد الجلسات).
+double _avgSessionHours(CourseAttendanceSummary _) {
+  return 1.0;
+}
+
+/// أقصى استخدام نسبي للحدود (بدون عذر / بعذر / إجمالي) — يحدد مستوى الخطر.
+double _maxRiskUtilization(
+  CourseAttendanceSummary c,
+  int maxUnexcusedPercent,
+  int deprivationPercent,
+) {
+  final ru = maxUnexcusedPercent > 0
+      ? c.unexcusedAbsenceRate / maxUnexcusedPercent
+      : 0.0;
+  final re =
+      deprivationPercent > 0 ? c.excusedAbsenceRate / deprivationPercent : 0.0;
+  final rt =
+      deprivationPercent > 0 ? c.absenceRate / deprivationPercent : 0.0;
+  var m = 0.0;
+  for (final x in <double>[ru, re, rt]) {
+    if (x.isFinite && x > m) m = x;
+  }
+  return m.clamp(0.0, 99.0);
+}
+
+String _riskEmoji(double u) {
+  if (u >= 1.0) return '🔴';
+  if (u >= 0.8) return '🟠';
+  if (u >= 0.5) return '🟡';
+  return '🟢';
+}
+
+String _riskLabelAr(double u) {
+  if (u >= 1.0) return 'تجاوز الحد';
+  if (u >= 0.8) return 'خطر مرتفع';
+  if (u >= 0.5) return 'تنبيه مبكر';
+  return 'آمن';
+}
+
+String _absenceSessionsLine(int sessions, double hours) {
+  final h = hours.toStringAsFixed(1);
+  if (sessions <= 0) {
+    return '• الغياب: — ($h ساعة)';
+  }
+  final sessWord = sessions == 1
+      ? 'جلسة واحدة'
+      : sessions == 2
+          ? '2 جلسة'
+          : '$sessions جلسات';
+  return '• الغياب: $sessWord ($h ساعة)';
+}
+
+String _remainingLineCompact(String label, double remHours, double avgH) {
+  final h = remHours.toStringAsFixed(1);
+  if (!avgH.isFinite || avgH <= 0) {
+    return '• $label: $h س (—)';
+  }
+  final n = remHours / avgH;
+  if (n < 1.0) {
+    return '• $label: 0 س';
+  }
+  // بدون تقريب لأعلى: الجلسات = جزء صحيح من الساعات (مثلاً 13.5 س → 13 جلسة).
+  final sessions = n.floor().clamp(1, 9999);
+  if (sessions == 1) {
+    return '• $label: $h س ≈ جلسة واحدة';
+  }
+  return '• $label: $h س ≈ $sessions جلسات';
+}
+
+int _affordableSessionsFloor(double remHours, double avgSessionHours) {
+  if (!remHours.isFinite || remHours <= 0) return 0;
+  if (!avgSessionHours.isFinite || avgSessionHours <= 0) return 0;
+  return (remHours / avgSessionHours).floor();
+}
+
+String _hoursAmountDisplay(double v) {
+  if (!v.isFinite || v <= 0) return '0';
+  final r = v.round();
+  if ((v - r).abs() < 0.05) return r.toString();
+  return v.toStringAsFixed(1);
+}
+
+String _hourNounArForForecast(double hoursAmount) {
+  if (!hoursAmount.isFinite || hoursAmount <= 0) return 'ساعة';
+  final parsed = double.tryParse(_hoursAmountDisplay(hoursAmount));
+  final n = parsed ?? hoursAmount;
+  return (n - 1.0).abs() < 0.05 ? 'ساعة' : 'ساعات';
+}
+
+String _forecastUnexcusedHoursSentence(double remUnex) {
+  final amt = _hoursAmountDisplay(remUnex);
+  final noun = _hourNounArForForecast(remUnex);
+  return 'يمكنك غياب $amt $noun بدون عذر تقريبًا';
+}
+
 class ChatbotProvider extends ChangeNotifier {
   ChatbotProvider._();
   static final ChatbotProvider instance = ChatbotProvider._();
@@ -38,9 +133,12 @@ class ChatbotProvider extends ChangeNotifier {
 
   String _formatAbsenceQuickReply({
     required String userMessage,
-    required String studentName,
-    required List<CourseAttendanceSummary> courses,
+    required AttendanceContext context,
   }) {
+    final courses = context.courses;
+    final studentName = context.studentName;
+    final maxU = context.maxUnexcusedPercent;
+    final dep = context.deprivationPercent;
     final t = userMessage.trim().toLowerCase();
 
     CourseAttendanceSummary? pickCourseByMention() {
@@ -51,50 +149,79 @@ class ChatbotProvider extends ChangeNotifier {
       return null;
     }
 
+    String courseEmojiFor(CourseAttendanceSummary c) {
+      final idx = courses.indexOf(c);
+      switch (idx) {
+        case 0:
+          return '📘';
+        case 1:
+          return '📗';
+        case 2:
+          return '📙';
+        default:
+          return '📕';
+      }
+    }
+
     String oneCourse(CourseAttendanceSummary c) {
-      // Keep the old template but remove "إجمالي المحاضرات".
-      // absentCount = unexcused, excusedCount = excused.
-      final totalAbs = c.absentCount + c.excusedCount;
-      final pct = c.absenceRate.isFinite ? c.absenceRate : 0.0;
-      final pctText = pct.toStringAsFixed(1);
+      final totalPct = c.absenceRate.isFinite ? c.absenceRate : 0.0;
+      final excPct = c.excusedAbsenceRate.isFinite ? c.excusedAbsenceRate : 0.0;
+      final unexPct = c.unexcusedAbsenceRate.isFinite ? c.unexcusedAbsenceRate : 0.0;
 
-      final statusEmoji = c.isDeprivation
-          ? '🚫'
-          : (c.isWarning ? '⚠️' : '🟢');
-      final statusText = c.isDeprivation
-          ? 'أنت قريب/داخل الحرمان — انتبه جدًا.'
-          : (c.isWarning ? 'لديك نسبة غياب مرتفعة، كن حذرًا!' : 'وضعك سليم حاليًا');
+      final util = _maxRiskUtilization(c, maxU, dep);
+      final rEmoji = _riskEmoji(util);
+      final rLabel = _riskLabelAr(util);
 
-      final courseEmoji = () {
-        final idx = courses.indexOf(c);
-        switch (idx) {
-          case 0:
-            return '📘';
-          case 1:
-            return '📗';
-          case 2:
-            return '📙';
-          default:
-            return '📕';
+      final absH = c.absenceHours.isFinite ? c.absenceHours : 0.0;
+      final remUnex = c.remainingHoursUnexcusedBeforeLimit.isFinite
+          ? c.remainingHoursUnexcusedBeforeLimit
+          : 0.0;
+      final remExc = c.remainingHoursExcusedBeforeLimit.isFinite
+          ? c.remainingHoursExcusedBeforeLimit
+          : 0.0;
+      final remTotal =
+          c.remainingHoursBeforeDeprivation.isFinite ? c.remainingHoursBeforeDeprivation : 0.0;
+
+      final avgH = _avgSessionHours(c);
+      final absenceSessions = c.absentCount + c.excusedCount;
+      final uRatio = maxU > 0 ? unexPct / maxU : 0.0;
+
+      final canUnexFloor =
+          avgH > 0 ? _affordableSessionsFloor(remUnex, avgH) : 0;
+      final strictWarn = remUnex <= 0 ||
+          (remUnex > 0 && avgH > 0 && canUnexFloor <= 0) ||
+          (uRatio >= 0.8 && remUnex > 0);
+
+      final String forecastTail;
+      if (strictWarn) {
+        forecastTail = '\n\n⚠️ أي غياب بدون عذر = تجاوز الحد مباشرة';
+      } else if (avgH <= 0) {
+        forecastTail =
+            '\n\n📍 لا يمكن تقدير الجلسات المتبقية بدون معرفة متوسط طول الجلسة.';
+      } else {
+        final can = canUnexFloor;
+        if (can <= 0) {
+          forecastTail = '\n\n📍 يمكنك غياب أقل من ساعة بدون عذر تقريبًا';
+        } else {
+          forecastTail = '\n\n📍 ${_forecastUnexcusedHoursSentence(remUnex)}';
         }
-      }();
+      }
 
-      return '$courseEmoji ${c.displayName}\n'
-          '- الغياب: $totalAbs\n'
-          '- بدون عذر: ${c.absentCount}\n'
-          '- بعذر: ${c.excusedCount}\n'
-          '- نسبة الغياب: $pctText%\n'
-          '- المتبقي قبل الحرمان: ${c.remainingBeforeDeprivation} محاضرات\n'
-          '$statusEmoji الحالة: $statusText';
+      return '${courseEmojiFor(c)} ${c.displayName}\n\n'
+          '• بدون عذر: ${unexPct.toStringAsFixed(1)}% من أصل $maxU%\n'
+          '• بعذر: ${excPct.toStringAsFixed(1)}% من أصل $dep%\n'
+          '• الإجمالي: ${totalPct.toStringAsFixed(1)}% من أصل $dep%\n'
+          '${_absenceSessionsLine(absenceSessions, absH)}\n\n'
+          '$rEmoji $rLabel\n'
+          'المتبقي:\n'
+          '${_remainingLineCompact('بدون عذر', remUnex, avgH)}\n'
+          '${_remainingLineCompact('بعذر', remExc, avgH)}\n'
+          '${_remainingLineCompact('حتى الحد الإجمالي', remTotal, avgH)}'
+          '$forecastTail';
     }
 
     if (courses.isEmpty) {
       return 'ما عندي بيانات غياب كافية حالياً.';
-    }
-
-    final mentioned = pickCourseByMention();
-    if (mentioned != null) {
-      return oneCourse(mentioned);
     }
 
     String shortName(String raw) {
@@ -110,32 +237,24 @@ class ChatbotProvider extends ChangeNotifier {
     final pickedName = shortName(studentName);
     final displayName = (pickedName.isEmpty || containsLatin(pickedName)) ? fallbackArName : pickedName;
 
-    final greetName = displayName.isEmpty ? '' : ' $displayName';
-    final lines = <String>['هلًا$greetName!'];
-    for (final c in courses) {
-      lines.add(oneCourse(c));
-      lines.add(''); // blank line
-    }
-    // remove trailing blank
-    while (lines.isNotEmpty && lines.last.trim().isEmpty) {
-      lines.removeLast();
-    }
-    // Overall summary: one concise line like the old behavior.
-    final warnings = courses.where((c) => c.isWarning && !c.isDeprivation).toList();
-    final deprivations = courses.where((c) => c.isDeprivation).toList();
+    final greet = displayName.trim().isEmpty
+        ? 'هلًا! 👋'
+        : 'هلًا ${displayName.trim()}! 👋';
+    final header = <String>[greet, '📊 تقرير الغياب', ''];
 
-    String overall;
-    if (deprivations.isNotEmpty) {
-      final name = deprivations.first.displayName;
-      overall = '📊 وضعك العام: لديك خطر حرمان في $name 🚫';
-    } else if (warnings.isNotEmpty) {
-      final name = warnings.first.displayName;
-      overall = '📊 وضعك العام: انتبه للغياب في $name ⚠️';
-    } else {
-      overall = '📊 وضعك العام: وضعك ممتاز حاليًا 🟢';
+    final mentioned = pickCourseByMention();
+    if (mentioned != null) {
+      return [...header, oneCourse(mentioned)].join('\n');
     }
 
-    return [...lines, '', overall].join('\n');
+    final parts = <String>[...header];
+    for (var i = 0; i < courses.length; i++) {
+      if (i > 0) {
+        parts.add('');
+      }
+      parts.add(oneCourse(courses[i]));
+    }
+    return parts.join('\n');
   }
 
   String _userFriendlyError(Object e) {
@@ -204,8 +323,7 @@ class ChatbotProvider extends ChangeNotifier {
       if (_isAbsenceQuickQuery(text) && attendanceContextObj != null) {
         final reply = _formatAbsenceQuickReply(
           userMessage: text,
-          studentName: attendanceContextObj!.studentName,
-          courses: attendanceContextObj!.courses,
+          context: attendanceContextObj!,
         );
         _messages.add(ChatMessage(
           id: 'bot_${DateTime.now().millisecondsSinceEpoch}',

@@ -7,6 +7,8 @@ import 'settings_screen.dart';
 import 'notifications_screen.dart';
 import '../../services/student_auth_service.dart';
 import '../../shared/widgets/chat_fab.dart';
+import '../../features/translation/translation_controller.dart';
+import '../../features/translation/widgets/t_text.dart';
 
 DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
 
@@ -326,6 +328,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     'الخميس',
   ];
 
+  /// عربي (RTL): الأحد أول الأسبوع على **يمين** الجدول بجانب عمود الوقت.
+  List<String> _daysInTableOrder(bool rtl) {
+    return rtl ? _days.reversed.toList() : _days;
+  }
+
   // أوقات الجدول ساعة ساعة من 08:00 إلى 18:00 (المحاضرات تبدأ من 8)
   final List<TimeSlot> _timeSlots = <TimeSlot>[
     TimeSlot(start: '08:00', end: '09:00'),
@@ -469,41 +476,48 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        floatingActionButton: const ChatFAB(),
-        bottomNavigationBar: NavBarSettingsArabic(
-          selectedIndex: 1,
-          onItemTapped: (index) {
-            if (index == 0) {
-              Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
-            } else if (index == 2) {
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const HomeScreen()),
-                (route) => false,
-              );
-            } else if (index == 1) {
-              Navigator.of(context).popUntil((route) => route.isFirst);
-            }
-          },
-        ),
-        body: SafeArea(
-          child: Column(
-            children: <Widget>[
-              _buildHeader(context),
-              Expanded(child: _buildScheduleBody()),
-            ],
+    final translation = TranslationController.instance;
+    return AnimatedBuilder(
+      animation: translation,
+      builder: (context, _) {
+        return Directionality(
+          textDirection: translation.textDirection,
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            floatingActionButton: const ChatFAB(),
+            bottomNavigationBar: NavBarSettingsArabic(
+              selectedIndex: 1,
+              onItemTapped: (index) {
+                if (index == 0) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  );
+                } else if (index == 2) {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const HomeScreen()),
+                    (route) => false,
+                  );
+                } else if (index == 1) {
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                }
+              },
+            ),
+            body: SafeArea(
+              child: Column(
+                children: <Widget>[
+                  _buildHeader(context),
+                  Expanded(child: _buildScheduleBody()),
+                ],
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
   Widget _buildHeader(BuildContext context) {
+    final translation = TranslationController.instance;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Row(
@@ -511,7 +525,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           IconButton(
             icon: Transform(
               alignment: Alignment.center,
-              transform: Matrix4.rotationY(3.14159),
+              transform: translation.textDirection == TextDirection.rtl
+                  ? Matrix4.rotationY(3.14159)
+                  : Matrix4.identity(),
               child: const Icon(
                 Icons.arrow_back_ios,
                 color: _primaryColor,
@@ -523,7 +539,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             onPressed: () => Navigator.of(context).maybePop(),
           ),
           const Expanded(
-            child: Text(
+            child: TText(
               'الجدول الدراسي',
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -550,7 +566,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     final student = StudentAuthService.instance.currentStudent;
     if (student == null) {
       return const Center(
-        child: Text('سجّل دخولك لعرض جدولك', style: TextStyle(fontSize: 16)),
+        child: TText('سجّل دخولك لعرض جدولك', style: TextStyle(fontSize: 16)),
       );
     }
     final enrollmentsRef = FirebaseFirestore.instance.collection(
@@ -582,7 +598,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             final courses = courseSnap.data ?? [];
             if (courses.isEmpty) {
               return Center(
-                child: Text(
+                child: TText(
                   sectionIds.isEmpty
                       ? 'لا توجد تسجيلات في مقررات لهذا الفصل'
                       : 'لا يوجد جدول معرّف للسكاشن المسجّل فيها',
@@ -629,7 +645,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Widget _buildSemesterRow() {
     return const Align(
       alignment: Alignment.centerRight,
-      child: Text(
+      child: TText(
         'الفصل الدراسي: الثاني 1447 هـ',
         style: TextStyle(
           fontSize: 16,
@@ -641,6 +657,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Widget _buildTable(double dayWidth, List<CourseSchedule> courses) {
+    final translation = TranslationController.instance;
+    final isRtl = translation.textDirection == TextDirection.rtl;
     final tableHeight = _timeSlots.length * _rowHeight;
 
     return ClipRRect(
@@ -650,78 +668,105 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           border: Border.all(color: _gridBorderColor, width: 1),
           color: Colors.white,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            _buildDaysHeader(dayWidth),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                SizedBox(
-                  width: _timeColWidth,
-                  height: tableHeight,
-                  child: _buildTimeColumn(),
-                ),
-                ..._days.map((day) {
-                  return SizedBox(
-                    width: dayWidth,
-                    height: tableHeight,
-                    child: _buildDayStack(day, dayWidth, tableHeight, courses),
-                  );
-                }),
-              ],
-            ),
-          ],
+        // اتجاه الرسم LTR ثابت؛ عمود الوقت يُوضع يمين/يسار حسب اللغة،
+        // وترتيب أعمدة الأيام يُعكس في العربية حتى يكون الأحد يمين الجدول.
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              _buildDaysHeader(dayWidth),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  if (!isRtl)
+                    SizedBox(
+                      width: _timeColWidth,
+                      height: tableHeight,
+                      child: _buildTimeColumn(),
+                    ),
+                  ..._daysInTableOrder(isRtl).map((day) {
+                    return SizedBox(
+                      width: dayWidth,
+                      height: tableHeight,
+                      child: _buildDayStack(day, dayWidth, tableHeight, courses),
+                    );
+                  }),
+                  if (isRtl)
+                    SizedBox(
+                      width: _timeColWidth,
+                      height: tableHeight,
+                      child: _buildTimeColumn(),
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildDaysHeader(double dayWidth) {
-    return Row(
-      children: <Widget>[
-        // خلية فارغة فوق عمود الأوقات (يظهر على اليمين في RTL)
-        SizedBox(
-          width: _timeColWidth,
-          child: Container(
-            height: 48,
-            decoration: const BoxDecoration(color: _headerCellColor),
-          ),
-        ),
-        ..._days.map((String day) {
-          return SizedBox(
-            width: dayWidth,
-            child: Container(
-              height: 48,
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(color: _headerCellColor),
-              child: Text(
-                day,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A1A1A),
-                ),
+    final translation = TranslationController.instance;
+    final isRtl = translation.textDirection == TextDirection.rtl;
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Row(
+        children: <Widget>[
+          if (!isRtl)
+            SizedBox(
+              width: _timeColWidth,
+              child: Container(
+                height: 48,
+                decoration: const BoxDecoration(color: _headerCellColor),
               ),
             ),
-          );
-        }),
-      ],
+          ..._daysInTableOrder(isRtl).map((String day) {
+            return SizedBox(
+              width: dayWidth,
+              child: Container(
+                height: 48,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(color: _headerCellColor),
+                child: TText(
+                  day,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1A1A1A),
+                  ),
+                ),
+              ),
+            );
+          }),
+          if (isRtl)
+            SizedBox(
+              width: _timeColWidth,
+              child: Container(
+                height: 48,
+                decoration: const BoxDecoration(color: _headerCellColor),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
   Widget _buildTimeColumn() {
+    final translation = TranslationController.instance;
+    final isRtl = translation.textDirection == TextDirection.rtl;
     return Column(
       children: _timeSlots.map((TimeSlot slot) {
         return Container(
           height: _rowHeight,
           padding: const EdgeInsets.symmetric(horizontal: 4),
-          alignment: Alignment.centerRight,
+          alignment: isRtl ? Alignment.centerRight : Alignment.centerLeft,
           decoration: const BoxDecoration(color: _headerCellColor),
           child: Text(
             _formatSlotLabel(slot),
-            textAlign: TextAlign.right,
+            textAlign: isRtl ? TextAlign.right : TextAlign.left,
             style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
@@ -815,7 +860,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                             mainAxisSize: MainAxisSize.min,
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(
+                              TText(
                                 course.courseName,
                                 style: const TextStyle(
                                   fontSize: 11,
@@ -830,7 +875,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                               if (course.location.isNotEmpty &&
                                   course.location != '—') ...[
                                 const SizedBox(height: 2),
-                                Text(
+                                TText(
                                   course.location,
                                   style: const TextStyle(
                                     fontSize: 9,
@@ -875,11 +920,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   void _showCourseDetails(CourseSchedule course) {
+    final translation = TranslationController.instance;
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return Directionality(
-          textDirection: TextDirection.rtl,
+          textDirection: translation.textDirection,
           child: Dialog(
             backgroundColor: Colors.transparent,
             insetPadding: const EdgeInsets.symmetric(
@@ -905,28 +951,28 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         ),
                         child: Row(
                           children: <Widget>[
+                            const Expanded(
+                              child: Text('', textAlign: TextAlign.center),
+                            ),
                             IconButton(
                               icon: const Icon(Icons.close, size: 22),
                               onPressed: () => Navigator.of(context).pop(),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
                             ),
-                            const Expanded(
-                              child: Text('', textAlign: TextAlign.center),
-                            ),
                           ],
                         ),
                       ),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Text(
+                        child: TText(
                           course.courseName,
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF1A1A1A),
                           ),
-                          textAlign: TextAlign.right,
+                          textAlign: TextAlign.center,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -955,6 +1001,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Widget _buildDetailRow(String label, String value) {
+    final translation = TranslationController.instance;
+    final isLtr = translation.textDirection == TextDirection.ltr;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       decoration: BoxDecoration(
@@ -966,26 +1014,26 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: <Widget>[
           Expanded(
-            child: Text(
+            child: TText(
               label,
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF1A1A1A),
               ),
-              textAlign: TextAlign.right,
+              textAlign: isLtr ? TextAlign.left : TextAlign.right,
               overflow: TextOverflow.ellipsis,
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
+            child: TText(
               value,
               style: const TextStyle(
                 fontSize: 13,
                 color: Color(0xFF1A1A1A),
               ),
-              textAlign: TextAlign.right,
+              textAlign: isLtr ? TextAlign.left : TextAlign.right,
               overflow: TextOverflow.ellipsis,
             ),
           ),

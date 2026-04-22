@@ -14,6 +14,8 @@ import 'home_screen.dart';
 import 'notifications_screen.dart';
 import 'settings_screen.dart';
 import '../../shared/widgets/chat_fab.dart';
+import '../../features/translation/translation_controller.dart';
+import '../../features/translation/widgets/t_text.dart';
 
 class AttendanceTrackingScreen extends StatefulWidget {
   const AttendanceTrackingScreen({super.key});
@@ -701,9 +703,12 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
+    final translation = TranslationController.instance;
+    return AnimatedBuilder(
+      animation: translation,
+      builder: (context, _) => Directionality(
+        textDirection: translation.textDirection,
+        child: Scaffold(
         backgroundColor: Colors.white,
         floatingActionButton: const ChatFAB(),
         bottomNavigationBar: NavBarSettingsArabic(
@@ -750,7 +755,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text(
+                                TText(
                                   _loadError!,
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(
@@ -762,7 +767,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
                                 TextButton.icon(
                                   onPressed: _bootstrapAttendance,
                                   icon: const Icon(Icons.refresh_rounded),
-                                  label: const Text('إعادة المحاولة'),
+                                  label: const TText('إعادة المحاولة'),
                                 ),
                               ],
                             ),
@@ -775,9 +780,9 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
                 ? Column(
                     children: <Widget>[
                       _buildHeader(context),
-                      const Expanded(
+                      Expanded(
                         child: Center(
-                          child: Text(
+                          child: TText(
                             'لا توجد سجلات تحضير حتى الآن',
                             style: TextStyle(
                               fontSize: 16,
@@ -804,16 +809,20 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
           ),
         ),
       ),
+      ),
     );
   }
 
   Widget _buildHeader(BuildContext context) {
+    final translation = TranslationController.instance;
     return Row(
       children: <Widget>[
         IconButton(
           icon: Transform(
             alignment: Alignment.center,
-            transform: Matrix4.rotationY(3.14159),
+            transform: translation.textDirection == TextDirection.rtl
+                ? Matrix4.rotationY(3.14159)
+                : Matrix4.identity(),
             child: const Icon(
               Icons.arrow_back_ios,
               color: _primaryColor,
@@ -824,17 +833,18 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
           constraints: const BoxConstraints(),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
-        const Expanded(
-          child: Text(
+        Expanded(
+          child: TText(
             'تتبع الحضور',
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
               color: _primaryColor,
             ),
           ),
         ),
+        const SizedBox(width: 44),
         NotificationBell(
           onTap: () {
             Navigator.push(
@@ -901,7 +911,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
         ),
         const SizedBox(width: 6),
         Expanded(
-          child: Text(
+          child: TText(
             label,
             style: const TextStyle(fontSize: 11, color: Color(0xFF1A1A1A)),
             overflow: TextOverflow.ellipsis,
@@ -912,6 +922,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
   }
 
   Widget _buildCourseTabs() {
+    final translation = TranslationController.instance;
     final courses = _courses;
     if (courses.isEmpty) return const SizedBox.shrink();
 
@@ -933,7 +944,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
-        reverse: true,
+        reverse: translation.textDirection == TextDirection.rtl,
         child: Row(
           children: courses.map((String course) {
             final bool isActive = course == _selectedCourse;
@@ -964,7 +975,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
                     color: isActive ? null : Colors.white,
                   ),
                   alignment: Alignment.center,
-                  child: Text(
+                  child: TText(
                     course,
                     style: TextStyle(
                       fontSize: 13,
@@ -1029,7 +1040,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   alignment: Alignment.center,
-                  child: Text(
+                  child: TText(
                     'الكل',
                     style: TextStyle(
                       fontSize: 12,
@@ -1073,7 +1084,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     alignment: Alignment.center,
-                    child: Text(
+                    child: TText(
                       displayText,
                       style: TextStyle(
                         fontSize: 10,
@@ -1117,7 +1128,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
 
     if (filteredRecords.isEmpty) {
       return const Center(
-        child: Text(
+        child: TText(
           'لا توجد سجلات',
           style: TextStyle(fontSize: 16, color: Color(0xFF9E9E9E)),
         ),
@@ -1128,9 +1139,10 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         const Align(
-          alignment: Alignment.centerRight,
-          child: Text(
+          alignment: AlignmentDirectional.centerStart,
+          child: TText(
             'سجل الحضور',
+            textAlign: TextAlign.start,
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -1273,6 +1285,109 @@ class _AttendanceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final translation = TranslationController.instance;
+    final isLtr = translation.textDirection == TextDirection.ltr;
+    final cross = isLtr ? CrossAxisAlignment.start : CrossAxisAlignment.end;
+    final textAlign = isLtr ? TextAlign.left : TextAlign.right;
+
+    final badge = Container(
+      width: 46,
+      constraints: const BoxConstraints(minHeight: 50),
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+      decoration: BoxDecoration(
+        color: _badgeColor,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          Text(
+            record.day,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 2),
+          TText(
+            record.dayName,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+
+    final timeColumn = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: cross,
+      children: <Widget>[
+        Text(
+          record.timeRange,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF1A1A1A),
+          ),
+          textAlign: textAlign,
+        ),
+        const SizedBox(height: 2),
+        TText(
+          'مدة المحاضرة',
+          style: const TextStyle(fontSize: 11, color: Color(0xFF1A1A1A)),
+          textAlign: textAlign,
+        ),
+      ],
+    );
+
+    final details = Expanded(
+      child: Align(
+        alignment:
+            isLtr ? Alignment.centerLeft : Alignment.centerRight,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: cross,
+          children: <Widget>[
+            TText(
+              record.course,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1A1A1A),
+              ),
+              textAlign: textAlign,
+            ),
+            const SizedBox(height: 2),
+            TText(
+              (record.courseType.isEmpty || record.courseType == '—')
+                  ? 'نظري'
+                  : record.courseType,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF1A1A1A),
+              ),
+              textAlign: textAlign,
+            ),
+            const SizedBox(height: 2),
+            TText(
+              weekLabel,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF1A1A1A),
+              ),
+              textAlign: textAlign,
+            ),
+          ],
+        ),
+      ),
+    );
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(10),
@@ -1287,106 +1402,27 @@ class _AttendanceCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Container(
-            width: 46,
-            constraints: const BoxConstraints(minHeight: 50),
-            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-            decoration: BoxDecoration(
-              color: _badgeColor,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Text(
-                  record.day,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  record.dayName,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: <Widget>[
-                  Text(
-                    record.course,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1A1A1A),
-                    ),
-                    textAlign: TextAlign.right,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    (record.courseType.isEmpty || record.courseType == '—')
-                        ? 'نظري'
-                        : record.courseType,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF1A1A1A),
-                    ),
-                    textAlign: TextAlign.right,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    weekLabel,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF1A1A1A),
-                    ),
-                    textAlign: TextAlign.right,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: <Widget>[
-              Text(
-                record.timeRange,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1A1A1A),
-                ),
-                textAlign: TextAlign.right,
-              ),
-              const SizedBox(height: 2),
-              const Text(
-                'مدة المحاضرة',
-                style: TextStyle(fontSize: 11, color: Color(0xFF1A1A1A)),
-                textAlign: TextAlign.right,
-              ),
+      child: Directionality(
+        textDirection: translation.textDirection,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            if (isLtr) ...[
+              details,
+              const SizedBox(width: 10),
+              timeColumn,
+              const SizedBox(width: 10),
+              badge,
+            ] else ...[
+              badge,
+              const SizedBox(width: 10),
+              details,
+              const SizedBox(width: 10),
+              timeColumn,
             ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1578,7 +1614,7 @@ class _CourseSummaryCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                TText(
                   courseLabel,
                   style: const TextStyle(
                     fontSize: 14,
@@ -1690,7 +1726,7 @@ class _LegendRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 6),
-        Text(
+        TText(
           label,
           style: const TextStyle(fontSize: 11, color: Color(0xFF1A1A1A)),
         ),

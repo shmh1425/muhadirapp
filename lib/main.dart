@@ -5,6 +5,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
 import 'theme/app_theme_controller.dart';
+import 'features/translation/translation_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,11 +54,22 @@ class MyApp extends StatelessWidget {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: appThemeMode,
       builder: (context, mode, _) {
+        final translation = TranslationController.instance;
         return MaterialApp(
           title: 'Flutter Demo',
           theme: _lightTheme,
           darkTheme: _darkTheme,
           themeMode: mode,
+          locale: translation.locale,
+          builder: (context, child) {
+            return AnimatedBuilder(
+              animation: translation,
+              builder: (context, _) => Directionality(
+                textDirection: translation.textDirection,
+                child: child ?? const SizedBox.shrink(),
+              ),
+            );
+          },
           home: const SplashScreen(),
         );
       },

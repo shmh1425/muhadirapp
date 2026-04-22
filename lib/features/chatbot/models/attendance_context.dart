@@ -5,11 +5,18 @@ class CourseAttendanceSummary {
     required this.courseNameAr,
     required this.sectionId,
     required this.totalLectures,
+    required this.weeklyScheduledHours,
+    required this.totalPlannedHours,
+    required this.absenceHours,
     required this.presentCount,
     required this.absentCount,
     required this.excusedCount,
     required this.absenceRate,
-    required this.remainingBeforeDeprivation,
+    required this.excusedAbsenceRate,
+    required this.unexcusedAbsenceRate,
+    required this.remainingHoursUnexcusedBeforeLimit,
+    required this.remainingHoursExcusedBeforeLimit,
+    required this.remainingHoursBeforeDeprivation,
     required this.isWarning,
     required this.isDeprivation,
   });
@@ -17,12 +24,29 @@ class CourseAttendanceSummary {
   final String courseName;
   final String courseNameAr;
   final String sectionId;
+  /// Expected number of class sessions (lecturesPerWeek × semester weeks).
   final int totalLectures;
+  /// Scheduled contact hours per week (from course/section or derived from schedule).
+  final double weeklyScheduledHours;
+  /// weeklyScheduledHours × semesterWeeks — denominator for absence %.
+  final double totalPlannedHours;
+  /// Sum of hours for sessions marked absent or excused.
+  final double absenceHours;
   final int presentCount;
   final int absentCount;
   final int excusedCount;
+  /// Total absence % (بعذر + بدون عذر) / المخطط.
   final double absenceRate;
-  final int remainingBeforeDeprivation;
+  /// غياب بعذر / المخطط × 100.
+  final double excusedAbsenceRate;
+  /// غياب بدون عذر / المخطط × 100.
+  final double unexcusedAbsenceRate;
+  /// ساعات غياب «بدون عذر» المتبقية حتى بلوغ حد الحرمان (نسبة من المخطط).
+  final double remainingHoursUnexcusedBeforeLimit;
+  /// ساعات غياب «بعذر» المتبقية حتى بلوغ حد الحرمان (نسبة من المخطط).
+  final double remainingHoursExcusedBeforeLimit;
+  /// (حد الإجمالي × المخطط) − ساعات الغياب الكلية، مقيّد بين 0 والمخطط.
+  final double remainingHoursBeforeDeprivation;
   final bool isWarning;
   final bool isDeprivation;
 
@@ -48,6 +72,7 @@ class AttendanceContext {
     required this.courses,
     required this.warningPercent,
     required this.deprivationPercent,
+    required this.maxUnexcusedPercent,
     required this.rawContextString,
   });
 
@@ -70,5 +95,7 @@ class AttendanceContext {
   final List<CourseAttendanceSummary> courses;
   final int warningPercent;
   final int deprivationPercent;
+  /// حد الغياب بدون عذر (نسبة من الوقت المخطط) — يُعرض للطالب وللـ AI.
+  final int maxUnexcusedPercent;
   final String rawContextString;
 }

@@ -8,6 +8,8 @@ import '../../models/term_week.dart';
 import '../../repositories/academic_term_repository.dart';
 import '../../services/admin/admin_auth_service.dart';
 import '../../services/admin/admin_user_image_service.dart';
+import '../../features/translation/translation_controller.dart';
+import '../../features/translation/widgets/t_text.dart';
 
 String _firebaseErrorMessage(FirebaseException e) {
   return switch (e.code) {
@@ -112,13 +114,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final translation = TranslationController.instance;
     return DefaultTabController(
       length: 6,
-      child: Directionality(
-        textDirection: TextDirection.rtl,
-        child: Scaffold(
+      child: AnimatedBuilder(
+        animation: translation,
+        builder: (context, _) => Directionality(
+          textDirection: translation.textDirection,
+          child: Scaffold(
           appBar: AppBar(
-            title: const Text('لوحة تحكم الأدمن'),
+            title: const TText('لوحة تحكم الأدمن'),
             actions: [
               IconButton(
                 onPressed: _isSigningOut ? null : _onSignOut,
@@ -132,15 +137,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 tooltip: 'تسجيل خروج',
               ),
             ],
-            bottom: const TabBar(
+            bottom: TabBar(
               isScrollable: true,
               tabs: [
-                Tab(text: 'الطلاب'),
-                Tab(text: 'المحاضرين'),
-                Tab(text: 'المقررات'),
-                Tab(text: 'التسجيل'),
-                Tab(text: 'الفصول الدراسية'),
-                Tab(text: 'صور البروفايل'),
+                Tab(child: TText('الطلاب')),
+                Tab(child: TText('المحاضرين')),
+                Tab(child: TText('المقررات')),
+                Tab(child: TText('التسجيل')),
+                Tab(child: TText('الفصول الدراسية')),
+                Tab(child: TText('صور البروفايل')),
               ],
             ),
           ),
@@ -153,6 +158,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               _AdminTermsTab(),
               AdminProfileImageManagementTab(),
             ],
+          ),
           ),
         ),
       ),
@@ -176,12 +182,14 @@ class _AdminStudentsTabState extends State<_AdminStudentsTab> {
   final _nameArController = TextEditingController();
   final _nameEnController = TextEditingController();
   final _emailController = TextEditingController();
+  final _departmentArController = TextEditingController();
+  final _departmentEnController = TextEditingController();
   final _majorController = TextEditingController();
+  final _majorArController = TextEditingController();
 
   String _selectedGender = 'F';
   int _selectedLevel = 1;
   bool _isSaving = false;
-  final Set<String> _uploadingStudentIds = <String>{};
 
   @override
   void dispose() {
@@ -189,7 +197,10 @@ class _AdminStudentsTabState extends State<_AdminStudentsTab> {
     _nameArController.dispose();
     _nameEnController.dispose();
     _emailController.dispose();
+    _departmentArController.dispose();
+    _departmentEnController.dispose();
     _majorController.dispose();
+    _majorArController.dispose();
     super.dispose();
   }
 
@@ -198,7 +209,10 @@ class _AdminStudentsTabState extends State<_AdminStudentsTab> {
     final nameAr = _nameArController.text.trim();
     final nameEn = _nameEnController.text.trim();
     final email = _emailController.text.trim().toLowerCase();
+    final departmentAr = _departmentArController.text.trim();
+    final departmentEn = _departmentEnController.text.trim();
     final major = _majorController.text.trim();
+    final majorAr = _majorArController.text.trim();
 
     if (studentId == null || nameAr.isEmpty || email.isEmpty) {
       _showMessage(
@@ -218,7 +232,10 @@ class _AdminStudentsTabState extends State<_AdminStudentsTab> {
         'name': nameEn,
         'email': email,
         'role': 'student',
+        'department_ar': departmentAr,
+        'department': departmentEn,
         'major': major,
+        'major_ar': majorAr,
         'level': _selectedLevel,
         'gender': _selectedGender,
         'updatedAt': FieldValue.serverTimestamp(),
@@ -229,7 +246,10 @@ class _AdminStudentsTabState extends State<_AdminStudentsTab> {
       _nameArController.clear();
       _nameEnController.clear();
       _emailController.clear();
+      _departmentArController.clear();
+      _departmentEnController.clear();
       _majorController.clear();
+      _majorArController.clear();
       if (!mounted) return;
       _showMessage('تم حفظ بيانات الطالب');
     } on FirebaseException catch (e) {
@@ -240,42 +260,6 @@ class _AdminStudentsTabState extends State<_AdminStudentsTab> {
     } finally {
       if (mounted) {
         setState(() => _isSaving = false);
-      }
-    }
-  }
-
-  Future<void> _uploadStudentImage({
-    required String docId,
-    required Map<String, dynamic> data,
-  }) async {
-    final parsed = int.tryParse(docId) ??
-        (data['studentId'] is int ? data['studentId'] as int : null) ??
-        int.tryParse((data['studentId'] ?? '').toString());
-    if (parsed == null || parsed <= 0) {
-      _showMessage('رقم الطالب غير صالح لرفع الصورة.');
-      return;
-    }
-
-    if (_uploadingStudentIds.contains(docId)) return;
-    setState(() => _uploadingStudentIds.add(docId));
-    try {
-      final file = await AdminUserImageService.instance.pickImageFromGallery();
-      if (file == null) return;
-      await AdminUserImageService.instance.uploadStudentImage(
-        studentId: parsed,
-        file: file,
-      );
-      if (!mounted) return;
-      _showMessage('تم رفع صورة الطالب');
-    } on FirebaseException catch (e) {
-      if (!mounted) return;
-      _showMessage(_firebaseErrorMessage(e));
-    } catch (e) {
-      if (!mounted) return;
-      _showMessage('فشل رفع الصورة: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _uploadingStudentIds.remove(docId));
       }
     }
   }
@@ -321,7 +305,26 @@ class _AdminStudentsTabState extends State<_AdminStudentsTab> {
             textDirection: TextDirection.ltr,
             textAlign: TextAlign.left,
           ),
-          _AdminTextField(controller: _majorController, label: 'التخصص'),
+          _AdminTextField(
+            controller: _departmentArController,
+            label: 'القسم بالعربي',
+          ),
+          _AdminTextField(
+            controller: _departmentEnController,
+            label: 'القسم بالإنجليزي',
+            textDirection: TextDirection.ltr,
+            textAlign: TextAlign.left,
+          ),
+          _AdminTextField(
+            controller: _majorArController,
+            label: 'التخصص بالعربي',
+          ),
+          _AdminTextField(
+            controller: _majorController,
+            label: 'التخصص بالإنجليزي',
+            textDirection: TextDirection.ltr,
+            textAlign: TextAlign.left,
+          ),
           DropdownButtonFormField<int>(
             initialValue: _selectedLevel,
             decoration: const InputDecoration(
@@ -398,7 +401,6 @@ class _AdminStudentsTabState extends State<_AdminStudentsTab> {
                     final major = (data['major'] ?? '').toString();
                     final photoUrl =
                         (data['photoUrl'] ?? data['photo_url'] ?? '').toString();
-                    final isUploading = _uploadingStudentIds.contains(doc.id);
 
                     return ListTile(
                       leading: CircleAvatar(
@@ -417,36 +419,13 @@ class _AdminStudentsTabState extends State<_AdminStudentsTab> {
                       subtitle: Text(
                         'ID: ${doc.id} | $email | مستوى $level | $major',
                       ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            tooltip: 'رفع/تغيير الصورة',
-                            onPressed: isUploading
-                                ? null
-                                : () => _uploadStudentImage(
-                                      docId: doc.id,
-                                      data: data,
-                                    ),
-                            icon: isUploading
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.photo_camera_outlined),
-                          ),
-                          IconButton(
-                            tooltip: 'حذف',
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              color: Colors.red,
-                            ),
-                            onPressed: () => _deleteStudent(doc.id),
-                          ),
-                        ],
+                      trailing: IconButton(
+                        tooltip: 'حذف',
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.red,
+                        ),
+                        onPressed: () => _deleteStudent(doc.id),
                       ),
                     );
                   },

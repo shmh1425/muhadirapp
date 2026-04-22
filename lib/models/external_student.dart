@@ -6,9 +6,13 @@ class ExternalStudent {
     required this.name,
     this.nameAr = '',
     this.photoUrl = '',
+    this.photoVersion = '',
     required this.gender,
     required this.level,
     required this.major,
+    this.majorAr,
+    this.department,
+    this.departmentAr,
   });
 
   final int studentId;
@@ -18,9 +22,17 @@ class ExternalStudent {
   /// الاسم بالعربية للعرض في الهوم والبطاقة
   final String nameAr;
   final String photoUrl;
+  final String photoVersion;
   final String gender;
   final int level;
   final String major;
+  final String? majorAr;
+  final String? department;
+  final String? departmentAr;
+
+  String get majorArSafe => (majorAr ?? '').toString();
+  String get departmentSafe => (department ?? '').toString();
+  String get departmentArSafe => (departmentAr ?? '').toString();
 
   /// للعرض في الواجهة: الاسم العربي إن وُجد وإلا الإنجليزي
   String get displayName => nameAr.trim().isNotEmpty ? nameAr : name;
@@ -49,9 +61,13 @@ class ExternalStudent {
       photoUrl: safeStr(
         safeStr(map['photoUrl']).isNotEmpty ? map['photoUrl'] : map['photoURL'],
       ),
+      photoVersion: safeStr(map['photoVersion']),
       gender: safeStr(map['gender']),
       level: safeInt(map['level']),
       major: safeStr(map['major']),
+      majorAr: safeStr(map['major_ar']),
+      department: safeStr(map['department']),
+      departmentAr: safeStr(map['department_ar']),
     );
   }
 
@@ -61,8 +77,12 @@ class ExternalStudent {
     'name': name,
     'name_ar': nameAr,
     'photoUrl': photoUrl,
+    'photoVersion': photoVersion,
     'gender': gender,
     'level': level,
     'major': major,
+    'major_ar': majorArSafe,
+    'department': departmentSafe,
+    'department_ar': departmentArSafe,
   };
 }

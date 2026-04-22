@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import '../../services/student_auth_service.dart';
 import '../../models/external_student.dart';
 import '../../shared/widgets/student_profile_avatar.dart';
+import '../../features/translation/translation_controller.dart';
+import '../../features/translation/widgets/t_text.dart';
 
 class StudentCardPage extends StatelessWidget {
   const StudentCardPage({super.key});
@@ -10,48 +12,59 @@ class StudentCardPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final student = StudentAuthService.instance.currentStudent;
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        automaticallyImplyLeading: false, // ⛔ يمنع السهم الافتراضي من اليسار
-        title: const Text(
-          'بطاقة الطالب',
-          style: TextStyle(
-            color: Color(0xFF00525D),
-            fontWeight: FontWeight.bold,
-            fontSize: 22,
-            fontFamily: 'Cairo',
-          ),
-        ),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.arrow_forward_ios, color: Colors.black87),
-            onPressed: () => Navigator.of(context).maybePop(),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Container(
-          width: double.infinity,
-          constraints: const BoxConstraints(
-            minHeight: double.infinity, // 👈 يخلي المحتوى يتمدد لطول الشاشة
-          ),
-          padding: const EdgeInsets.all(16),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildStudentCard(student),
-                const SizedBox(height: 20),
-                _buildElectronicWalletSection(context, student),
-              ],
+    final translation = TranslationController.instance;
+    return AnimatedBuilder(
+      animation: translation,
+      builder: (context, _) {
+        return Directionality(
+          textDirection: translation.textDirection,
+          child: Scaffold(
+            backgroundColor: const Color(0xFFF8F9FA),
+            appBar: AppBar(
+              backgroundColor: Colors.white,
+              elevation: 0,
+              automaticallyImplyLeading: false,
+              leading: Directionality(
+                // Keep back arrow on the left always.
+                textDirection: TextDirection.ltr,
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new,
+                      color: Colors.black87),
+                  onPressed: () => Navigator.of(context).maybePop(),
+                ),
+              ),
+              title: const TText(
+                'بطاقة الطالب',
+                style: TextStyle(
+                  color: Color(0xFF00525D),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 22,
+                  fontFamily: 'Cairo',
+                ),
+              ),
+              centerTitle: true,
+              actions: const [],
+            ),
+            body: SafeArea(
+              child: Container(
+                width: double.infinity,
+                constraints: const BoxConstraints(minHeight: double.infinity),
+                padding: const EdgeInsets.all(16),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildStudentCard(student),
+                      const SizedBox(height: 20),
+                      _buildElectronicWalletSection(context, student),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -59,8 +72,19 @@ class StudentCardPage extends StatelessWidget {
     final nameAr = student?.nameAr ?? '';
     final nameEn = student?.name ?? '';
     final studentId = student?.studentId.toString() ?? '-';
-    final major = student?.major ?? 'هندسة البرمجيات';
-    final majorEn = student?.major ?? 'Software Engineering';
+    final departmentAr = (student?.departmentArSafe ?? '').trim();
+    final departmentEn = (student?.departmentSafe ?? '').trim();
+    final majorAr = (student?.majorArSafe ?? '').trim();
+    final majorEn = (student?.major ?? '').trim();
+
+    final departmentArDisplay =
+        departmentAr.isNotEmpty ? departmentAr : (majorAr.isNotEmpty ? majorAr : 'هندسة البرمجيات');
+    final departmentEnDisplay =
+        departmentEn.isNotEmpty ? departmentEn : (majorEn.isNotEmpty ? majorEn : 'Software Engineering');
+    final majorArDisplay =
+        majorAr.isNotEmpty ? majorAr : (majorEn.isNotEmpty ? majorEn : 'هندسة البرمجيات');
+    final majorEnDisplay =
+        majorEn.isNotEmpty ? majorEn : (majorAr.isNotEmpty ? majorAr : 'Software Engineering');
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -80,16 +104,15 @@ class StudentCardPage extends StatelessWidget {
         children: [
           // 👇 Row مع اتجاه RTL عشان الصورة يمين والمعلومات يسار
           Directionality(
-            textDirection: TextDirection.rtl,
+            // Keep avatar + names on the right always (stable order).
+            textDirection: TextDirection.ltr,
             child: Row(
               children: [
-                const StudentProfileAvatar(size: 46),
-                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
+                      // Keep Arabic name always Arabic (no translation).
                       Text(
                         nameAr.isNotEmpty ? nameAr : nameEn,
                         style: const TextStyle(
@@ -98,8 +121,10 @@ class StudentCardPage extends StatelessWidget {
                           fontFamily: 'Cairo',
                           fontWeight: FontWeight.w700,
                         ),
+                        textAlign: TextAlign.right,
                       ),
                       const SizedBox(height: 4),
+                      // Keep English name as-is.
                       Text(
                         nameEn.isNotEmpty ? nameEn : nameAr,
                         style: const TextStyle(
@@ -108,9 +133,10 @@ class StudentCardPage extends StatelessWidget {
                           fontFamily: 'Cairo',
                           fontWeight: FontWeight.w400,
                         ),
+                        textAlign: TextAlign.right,
                       ),
                       const SizedBox(height: 8),
-                      Text(
+                      TText(
                         'رقم الطالب : $studentId',
                         style: TextStyle(
                           color: Colors.black.withOpacity(0.82),
@@ -118,59 +144,101 @@ class StudentCardPage extends StatelessWidget {
                           fontFamily: 'Tajawal',
                           fontWeight: FontWeight.w500,
                         ),
+                        textAlign: TextAlign.right,
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(width: 16),
+                const StudentProfileAvatar(size: 46),
               ],
             ),
           ),
 
           const SizedBox(height: 20),
 
-          // المعلومات السفلية معكوسة: العربي يمين والإنجليزي يسار
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Faculty: College of Computers\nDepartment: $majorEn\nMajor: $majorEn',
-                  style: TextStyle(
-                    color: Colors.black.withOpacity(0.88),
-                    fontSize: 12,
-                    fontFamily: 'Cairo',
-                    fontWeight: FontWeight.w500,
+          // Show Arabic + English info together (two columns).
+          // Keep columns stable: English left, Arabic right (regardless of page RTL/LTR).
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Directionality(
+                    textDirection: TextDirection.ltr,
+                    child: Text(
+                      'Faculty: College of Computers\nDepartment: $departmentEnDisplay\nMajor: $majorEnDisplay',
+                      textAlign: TextAlign.left,
+                      style: TextStyle(
+                        color: Colors.black.withOpacity(0.88),
+                        fontSize: 12,
+                        fontFamily: 'Cairo',
+                        fontWeight: FontWeight.w500,
+                        height: 1.70,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: Text(
-                  'الكلية: كلية الحاسبات\nقسم $major\nالتخصص: $major',
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    color: Colors.black.withOpacity(0.88),
-                    fontSize: 12,
-                    fontFamily: 'Tajawal',
-                    fontWeight: FontWeight.w500,
-                    height: 1.70,
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Directionality(
+                    textDirection: TextDirection.rtl,
+                    child: Text(
+                      'الكلية: كلية الحاسبات\nالقسم: $departmentArDisplay\nالتخصص: $majorArDisplay',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        color: Colors.black.withOpacity(0.88),
+                        fontSize: 12,
+                        fontFamily: 'Tajawal',
+                        fontWeight: FontWeight.w500,
+                        height: 1.70,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
 
           const SizedBox(height: 16),
 
-          Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              'Issue Date: 05/2025 - تاريخ الإصدار',
-              style: TextStyle(
-                color: Colors.black.withOpacity(0.88),
-                fontSize: 12,
-                fontFamily: 'Tajawal',
-                fontWeight: FontWeight.w400,
-              ),
+          // Issue date in both languages (stable columns).
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Directionality(
+                    textDirection: TextDirection.ltr,
+                    child: Text(
+                      'Issue Date: 05/2025',
+                      textAlign: TextAlign.left,
+                      style: TextStyle(
+                        color: Colors.black.withOpacity(0.88),
+                        fontSize: 12,
+                        fontFamily: 'Cairo',
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Directionality(
+                    textDirection: TextDirection.rtl,
+                    child: Text(
+                      'تاريخ الإصدار: 05/2025',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        color: Colors.black.withOpacity(0.88),
+                        fontSize: 12,
+                        fontFamily: 'Tajawal',
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -179,7 +247,7 @@ class StudentCardPage extends StatelessWidget {
   }
 
   Widget _buildElectronicWalletSection(BuildContext context, ExternalStudent? student) {
-    final nameAr = student?.nameAr ?? '-';
+    final nameAr = (student?.nameAr ?? '').trim();
     final nameEn = student?.name ?? '-';
     final studentId = student?.studentId.toString() ?? '-';
     final email = student?.email ?? '-';
@@ -198,7 +266,7 @@ class StudentCardPage extends StatelessWidget {
       child: Column(
         children: [
           Directionality(
-            textDirection: TextDirection.rtl,
+            textDirection: TranslationController.instance.textDirection,
             child: Container(
               decoration: const BoxDecoration(
                 color: Color(0xFF006571),
@@ -210,7 +278,7 @@ class StudentCardPage extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
               child: Row(
                 children: [
-                  const Text(
+                  const TText(
                     'المحفظة الإلكترونية',
                     style: TextStyle(
                       color: Colors.white,
@@ -236,7 +304,12 @@ class StudentCardPage extends StatelessWidget {
               ),
             ),
           ),
-          _buildWalletRow(context, 'الاسم', nameAr),
+          _buildWalletRow(
+            context,
+            'الاسم',
+            nameAr.isNotEmpty ? nameAr : nameEn,
+            valueForceRtl: true, // always show first name in Arabic direction
+          ),
           _buildWalletRow(context, 'الاسم بالإنجليزي', nameEn, valueLtr: true),
           _buildWalletRow(context, 'رقم الطالب', studentId, valueLtr: true),
           _buildWalletRow(context, 'البريد الإلكتروني', email, valueLtr: true),
@@ -245,9 +318,27 @@ class StudentCardPage extends StatelessWidget {
     );
   }
 
-  Widget _buildWalletRow(BuildContext context, String label, String value, {bool valueLtr = false}) {
+  Widget _buildWalletRow(
+    BuildContext context,
+    String label,
+    String value, {
+    bool valueLtr = false,
+    bool valueForceRtl = false,
+  }) {
+    final translation = TranslationController.instance;
+    final baseDir = translation.textDirection;
+    final valueDir = valueForceRtl
+        ? TextDirection.rtl
+        : (valueLtr ? TextDirection.ltr : baseDir);
+    final labelAlign = baseDir == TextDirection.ltr
+        ? TextAlign.left
+        : TextAlign.right;
+    final valueAlign = valueDir == TextDirection.ltr
+        ? TextAlign.left
+        : TextAlign.right;
+
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: baseDir,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
         decoration: BoxDecoration(
@@ -264,8 +355,9 @@ class StudentCardPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  TText(
                     label,
+                    textAlign: labelAlign,
                     style: const TextStyle(
                       fontSize: 13,
                       color: Colors.black54,
@@ -274,12 +366,23 @@ class StudentCardPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  valueLtr
-                      ? Directionality(
-                          textDirection: TextDirection.ltr,
-                          child: Text(
+                  Directionality(
+                    textDirection: valueDir,
+                    child: valueForceRtl
+                        // Keep Arabic name visible as Arabic (no translation).
+                        ? Text(
                             value,
-                            textAlign: TextAlign.left,
+                            textAlign: valueAlign,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              color: Colors.black,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'Cairo',
+                            ),
+                          )
+                        : TText(
+                            value,
+                            textAlign: valueAlign,
                             style: const TextStyle(
                               fontSize: 15,
                               color: Colors.black,
@@ -287,16 +390,7 @@ class StudentCardPage extends StatelessWidget {
                               fontFamily: 'Cairo',
                             ),
                           ),
-                        )
-                      : Text(
-                          value,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            color: Colors.black,
-                            fontWeight: FontWeight.w600,
-                            fontFamily: 'Cairo',
-                          ),
-                        ),
+                  ),
                 ],
               ),
             ),
@@ -308,7 +402,7 @@ class StudentCardPage extends StatelessWidget {
                   SnackBar(
                     content: Directionality(
                       textDirection: TextDirection.rtl,
-                      child: const Text(
+                      child: const TText(
                         'تم النسخ',
                         style: TextStyle(color: Colors.white),
                       ),

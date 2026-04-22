@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../features/translation/translation_controller.dart';
+import '../features/translation/widgets/t_text.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'student/home_screen.dart';
 import 'lecturer/lecturer_main_shell.dart';
@@ -316,30 +318,43 @@ class _LoginScreenState extends State<LoginScreen> {
         _selectedRole == _UserRole.lecturer ||
         _selectedRole == _UserRole.security;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        body: SafeArea(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              Stack(
+    final translation = TranslationController.instance;
+    return AnimatedBuilder(
+      animation: translation,
+      builder: (context, _) {
+        final titleLogin = translation.translateToEnglish ? 'Sign in' : 'تسجيل الدخول';
+        final titleApp = translation.translateToEnglish ? 'In Muhadir app' : 'في تطبيق محضر';
+        final labelEmail =
+            translation.translateToEnglish ? 'University email:' : 'الإيميل الجامعي :';
+        final labelPassword =
+            translation.translateToEnglish ? 'Password:' : 'الرقم السري :';
+        final forgot =
+            translation.translateToEnglish ? 'Forgot password?' : 'نسيت كلمة المرور؟';
+        final terms = translation.translateToEnglish
+            ? 'By signing in, you agree to the Terms of Use and Privacy Policy.'
+            : 'بدخولك إلى هذا التطبيق، فإنك توافق على شروط الاستخدام وسياسة الخصوصية.';
+        final termsError = translation.translateToEnglish
+            ? 'You must agree to the terms of use'
+            : 'يجب الموافقة على شروط الاستخدام';
+        final btnLogin = translation.translateToEnglish ? 'Sign in' : 'تسجيل الدخول';
+
+        return Directionality(
+          textDirection: translation.textDirection,
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            body: SafeArea(
+              child: ListView(
+                padding: EdgeInsets.zero,
                 children: [
-                  Image.asset(
-                    'assets/images/gate_background.jpg',
-                    width: double.infinity,
-                    height: 230,
-                    fit: BoxFit.cover,
-                  ),
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: IconButton(
-                      onPressed: () {},
-                      icon: const Icon(Icons.language, color: Colors.white),
-                    ),
-                  ),
+                  Stack(
+                    children: [
+                      Image.asset(
+                        'assets/images/gate_background.jpg',
+                        width: double.infinity,
+                        height: 230,
+                        fit: BoxFit.cover,
+                      ),
+                      // Language toggle moved to Settings screen only.
                   Positioned(
                     top: 150,
                     left: 24,
@@ -364,7 +379,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           children: [
                             Expanded(
                               child: _RoleChip(
-                                label: 'محاضر',
+                                label: translation.translateToEnglish
+                                    ? 'Lecturer'
+                                    : 'محاضر',
                                 isActive: _selectedRole == _UserRole.lecturer,
                                 onTap: () {
                                   setState(() {
@@ -375,7 +392,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             Expanded(
                               child: _RoleChip(
-                                label: 'طالب/ـة',
+                                label: translation.translateToEnglish
+                                    ? 'Student'
+                                    : 'طالب/ـة',
                                 isActive: _selectedRole == _UserRole.student,
                                 onTap: () {
                                   setState(() {
@@ -386,7 +405,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             Expanded(
                               child: _RoleChip(
-                                label: 'الأدمن',
+                                label:
+                                    translation.translateToEnglish ? 'Admin' : 'الأدمن',
                                 isActive: _selectedRole == _UserRole.admin,
                                 onTap: () {
                                   setState(() {
@@ -397,7 +417,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             Expanded(
                               child: _RoleChip(
-                                label: 'الأمن',
+                                label: translation.translateToEnglish
+                                    ? 'Security'
+                                    : 'الأمن',
                                 isActive: _selectedRole == _UserRole.security,
                                 onTap: () {
                                   setState(() {
@@ -425,10 +447,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
-                      'تسجيل الدخول',
+                    TText(
+                      titleLogin,
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                         color: Color(0xFF006571),
@@ -436,19 +458,19 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
-                      'في تطبيق محضر',
+                    TText(
+                      titleApp,
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 16,
                         color: Color(0xFFB08B50),
                         fontFamily: 'Cairo',
                       ),
                     ),
                     const SizedBox(height: 22),
-                    const Text(
-                      'الإيميل الجامعي :',
-                      style: TextStyle(
+                    TText(
+                      labelEmail,
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                         color: Color(0xFF222222),
@@ -473,9 +495,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     if (needsPassword) ...[
                       const SizedBox(height: 18),
-                      const Text(
-                        'الرقم السري :',
-                        style: TextStyle(
+                      TText(
+                        labelPassword,
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                           color: Color(0xFF222222),
@@ -508,9 +530,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         alignment: Alignment.centerRight,
                         child: TextButton(
                           onPressed: () {},
-                          child: const Text(
-                            'نسيت كلمة المرور؟',
-                            style: TextStyle(
+                          child: TText(
+                            forgot,
+                            style: const TextStyle(
                               color: Color(0xFF444444),
                               fontFamily: 'Cairo',
                             ),
@@ -532,10 +554,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           },
                           activeColor: const Color(0xFF006571),
                         ),
-                        const Expanded(
-                          child: Text(
-                            'بدخولك إلى هذا التطبيق، فإنك توافق على شروط الاستخدام وسياسة الخصوصية.',
-                            style: TextStyle(
+                        Expanded(
+                          child: TText(
+                            terms,
+                            style: const TextStyle(
                               fontSize: 12,
                               color: Color(0xFF444444),
                               fontFamily: 'Cairo',
@@ -546,9 +568,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     if (_termsError) ...[
                       const SizedBox(height: 6),
-                      const Text(
-                        'يجب الموافقة على شروط الاستخدام',
-                        style: TextStyle(
+                      TText(
+                        termsError,
+                        style: const TextStyle(
                           color: Color(0xFFD32F2F),
                           fontSize: 12,
                           fontFamily: 'Cairo',
@@ -578,9 +600,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                     color: Colors.white,
                                   ),
                                 )
-                              : const Text(
-                                  'تسجيل الدخول',
-                                  style: TextStyle(
+                              : TText(
+                                  btnLogin,
+                                  style: const TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.w600,
                                     fontFamily: 'Cairo',
@@ -597,6 +619,8 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
+        );
+      },
     );
   }
 }

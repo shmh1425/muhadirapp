@@ -1,11 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../../services/attendance/attendance_planned_summary.dart';
 import '../../../../services/student_auth_service.dart';
 import '../models/attendance_context.dart';
 
 /// Fetches real attendance data from Firestore for the chatbot.
 /// Supports all 3 methods: Manual, QR Code, NFC — with deduplication by lecture date.
-/// All calculations (absence rate, remaining, totalLectures) are done in Dart only — not stored in Firestore.
+/// Planned hours + absence % use [AttendancePlannedSummary] / [AttendanceSemesterContext]
+/// — same rules as [AttendanceTrackingScreen] [_CourseSummaryCard].
+/// All values are computed in Dart only — not stored in Firestore.
 class ChatbotRepository {
   ChatbotRepository._();
   static final ChatbotRepository instance = ChatbotRepository._();
@@ -64,7 +67,7 @@ class ChatbotRepository {
       String termStartDate = '';
       String termEndDate = '';
       int currentWeekNumber = 0;
-      int totalWeeks = 10; // default
+      int totalWeeks = 15;
       int remainingWeeks = 0;
       try {
         final termsSnap = await _firestore
@@ -77,9 +80,13 @@ class ChatbotRepository {
           final termData = termsSnap.docs.first.data();
           currentTermName =
               termData['termName']?.toString() ?? termData['name']?.toString() ?? '';
-          totalWeeks = (termData['semesterWeeks'] as num?)?.toInt() ??
-              (termData['totalWeeks'] as num?)?.toInt() ??
-              10;
+          final sw = (termData['semesterWeeks'] as num?)?.toInt();
+          final tw0 = (termData['totalWeeks'] as num?)?.toInt();
+          if (sw != null && sw > 0) {
+            totalWeeks = sw;
+          } else if (tw0 != null && tw0 > 0) {
+            totalWeeks = tw0;
+          }
 
           final startRaw = termData['startDate'];
           final endRaw = termData['endDate'];
@@ -112,6 +119,7 @@ class ChatbotRepository {
 
       int warningPercent = 15;
       int deprivationPercent = 25;
+      int maxUnexcusedPercent = 15;
       try {
         final rulesRef =
             _firestore.collection(_academicRulesCollection).doc('default');
@@ -122,6 +130,9 @@ class ChatbotRepository {
             warningPercent = (data['warningPercent'] as num?)?.toInt() ?? 15;
             deprivationPercent =
                 (data['maxAbsencePercent'] as num?)?.toInt() ?? 25;
+            maxUnexcusedPercent =
+                (data['maxUnexcusedPercent'] as num?)?.toInt() ??
+                    maxUnexcusedPercent;
           }
         } else {
           await rulesRef.set({
@@ -131,6 +142,10 @@ class ChatbotRepository {
           });
         }
       } catch (_) {}
+
+      final semesterCtx = await AttendanceSemesterContext.load(_firestore);
+      totalWeeks = semesterCtx.semesterWeeksCount;
+      if (currentWeekNumber > totalWeeks) currentWeekNumber = totalWeeks;
 
       final List<CourseAttendanceSummary> courses = [];
       final List<String> contextLines = [];
@@ -150,6 +165,7 @@ class ChatbotRepository {
       final String todayNameEn = _getTodayEnglish().toLowerCase();
       final int todayDayOfWeek = DateTime.now().weekday;
       int totalCreditHours = 0;
+      final Map<String, int> codeToWeeklyMinutesCache = <String, int>{};
 
       for (final enrollDoc in enrollmentDocs) {
         final sectionId =
@@ -170,18 +186,26 @@ class ChatbotRepository {
 
         String courseNameAr = '';
         int creditHours = 0;
+        Map<String, dynamic> courseMapForHours = <String, dynamic>{};
         if (courseCode.isNotEmpty) {
           final courseDoc = await _firestore
               .collection(_coursesCollection)
               .doc(courseCode)
               .get();
           if (courseDoc.exists) {
-            final courseData = courseDoc.data() ?? {};
+            courseMapForHours = courseDoc.data() ?? <String, dynamic>{};
             courseNameAr =
-                (courseData['courseName_Ar'] ?? courseData['courseNameAr'] ?? '')
+                (courseMapForHours['courseName_Ar'] ?? courseMapForHours['courseNameAr'] ?? '')
                     .toString()
                     .trim();
-            creditHours = (courseData['creditHours'] as num?)?.toInt() ?? 0;
+            creditHours = (courseMapForHours['creditHours'] as num?)?.toInt() ?? 0;
+          }
+          if (courseCode.isNotEmpty &&
+              !codeToWeeklyMinutesCache.containsKey(courseCode) &&
+              courseMapForHours.isNotEmpty) {
+            final wm =
+                AttendancePlannedSummary.weeklyMinutesFromCourseMap(courseMapForHours);
+            if (wm > 0) codeToWeeklyMinutesCache[courseCode] = wm;
           }
         }
         final displayCourseName =
@@ -352,9 +376,8 @@ class ChatbotRepository {
             .where((d) => d['status']?.toString() == 'present')
             .length;
 
-        // STEP 3: Calculate totalLectures dynamically
-        // First: get lecturesPerWeek from the section document
-        int lecturesPerWeek = 2; // default fallback
+        // STEP 3: Session count (informational) + same planned/absence math as attendance tracking.
+        int lecturesPerWeek = 2;
         final lecturesPerWeekRaw = sectionData['lecturesPerWeek'];
         if (lecturesPerWeekRaw is int && lecturesPerWeekRaw > 0) {
           lecturesPerWeek = lecturesPerWeekRaw;
@@ -362,52 +385,81 @@ class ChatbotRepository {
           lecturesPerWeek = lecturesPerWeekRaw.toInt();
         }
 
-        // Second: get semesterWeeks
-        // Priority 1 → fetch from Firestore collection 'academic_calendar' doc 'current'
-        // Priority 2 → fallback to 10 weeks (temporary default until calendar is added)
-        int semesterWeeks = 10; // temporary default
-        try {
-          final calendarDoc = await _firestore
-              .collection('academic_calendar')
-              .doc('current')
-              .get();
-          if (calendarDoc.exists) {
-            final calendarData = calendarDoc.data();
-            final weeksRaw = calendarData?['semesterWeeks'];
-            if (weeksRaw is int && weeksRaw > 0) {
-              semesterWeeks = weeksRaw;
-            } else if (weeksRaw is num) {
-              semesterWeeks = weeksRaw.toInt();
-            }
-          }
-        } catch (_) {
-          // calendar not added yet → keep default 10 weeks
-        }
+        final int semesterWeeksForPlan = semesterCtx.semesterWeeksCount.clamp(1, 60);
+        int totalLectures = lecturesPerWeek * semesterWeeksForPlan;
+        if (totalLectures <= 0) totalLectures = 20;
 
-        // Third: calculate total lectures
-        int totalLectures = lecturesPerWeek * semesterWeeks;
-        if (totalLectures <= 0) totalLectures = 20; // absolute fallback
+        final planned = AttendancePlannedSummary.forSectionRecords(
+          courseCode: courseCode,
+          codeToWeeklyMinutes: codeToWeeklyMinutesCache,
+          dedupedRecords: allRecords,
+          semesterWeeksCount: semesterWeeksForPlan,
+          semesterStartDate: semesterCtx.semesterStartDate,
+        );
 
-        // STEP 4: Calculate absence rate and remaining lectures (in Dart only — not stored in Firestore)
-        double absenceRate = totalLectures > 0
-            ? (absent + excused) / totalLectures * 100
+        final double weeklyScheduledHours = planned.weeklyContactMinutes / 60.0;
+        final double totalPlannedHours = planned.totalPlannedMinutes / 60.0;
+        final double absenceHours = planned.absenceMinutes / 60.0;
+        final double excusedHours = planned.excusedMinutes / 60.0;
+        final double unexcusedHours = planned.unexcusedMinutes / 60.0;
+        final double absenceRate = planned.absenceRatePercent;
+        final double excusedAbsenceRate = planned.excusedAbsenceRatePercent;
+        final double unexcusedAbsenceRate = planned.unexcusedAbsenceRatePercent;
+
+        final double maxUnexcusedAbsenceHours =
+            totalPlannedHours * (maxUnexcusedPercent / 100.0);
+        final double maxExcusedAbsenceHours =
+            totalPlannedHours * (deprivationPercent / 100.0);
+        final double maxTotalAbsenceHours =
+            totalPlannedHours * (deprivationPercent / 100.0);
+
+        final double remainingUnexcusedClamped = totalPlannedHours > 0
+            ? (maxUnexcusedAbsenceHours - unexcusedHours)
+                .clamp(0.0, totalPlannedHours)
             : 0.0;
-        double remaining = (totalLectures * 0.25) - (absent + excused);
+        final double remainingExcusedClamped = totalPlannedHours > 0
+            ? (maxExcusedAbsenceHours - excusedHours)
+                .clamp(0.0, totalPlannedHours)
+            : 0.0;
+        final double remainingHours =
+            maxTotalAbsenceHours - absenceHours;
+        final double remainingHoursClamped = totalPlannedHours > 0
+            ? remainingHours.clamp(0.0, totalPlannedHours)
+            : 0.0;
 
-        final isWarning =
-            absenceRate >= warningPercent && absenceRate < deprivationPercent;
-        final isDeprivation = absenceRate >= deprivationPercent;
+        // Unexcused / excused: reaching the configured % = deprivation (≥).
+        // Total: deprivation only when strictly above max total % (>).
+        final isDeprivation = unexcusedAbsenceRate >= maxUnexcusedPercent ||
+            excusedAbsenceRate >= deprivationPercent ||
+            absenceRate > deprivationPercent;
+
+        final unexcusedWarnLo = (maxUnexcusedPercent - 5).clamp(0, 100);
+        final excusedWarnLo = (deprivationPercent - 5).clamp(0, 100);
+        final isWarning = !isDeprivation &&
+            ((unexcusedAbsenceRate > unexcusedWarnLo &&
+                    unexcusedAbsenceRate < maxUnexcusedPercent) ||
+                (excusedAbsenceRate > excusedWarnLo &&
+                    excusedAbsenceRate < deprivationPercent) ||
+                (absenceRate >= warningPercent &&
+                    absenceRate <= deprivationPercent));
 
         courses.add(CourseAttendanceSummary(
           courseName: courseName,
           courseNameAr: courseNameAr,
           sectionId: sectionId,
           totalLectures: totalLectures,
+          weeklyScheduledHours: weeklyScheduledHours,
+          totalPlannedHours: totalPlannedHours,
+          absenceHours: absenceHours,
           presentCount: present,
           absentCount: absent,
           excusedCount: excused,
           absenceRate: absenceRate,
-          remainingBeforeDeprivation: remaining.clamp(0, totalLectures).toInt(),
+          excusedAbsenceRate: excusedAbsenceRate,
+          unexcusedAbsenceRate: unexcusedAbsenceRate,
+          remainingHoursUnexcusedBeforeLimit: remainingUnexcusedClamped,
+          remainingHoursExcusedBeforeLimit: remainingExcusedClamped,
+          remainingHoursBeforeDeprivation: remainingHoursClamped,
           isWarning: isWarning,
           isDeprivation: isDeprivation,
         ));
@@ -417,15 +469,24 @@ class ChatbotRepository {
 Student Attendance Data:
 - Course: $courseName / $courseNameAr
 - Lectures Per Week: $lecturesPerWeek
-- Semester Weeks: $semesterWeeks
-- Total Lectures (calculated): $totalLectures
-- Unexcused Absences: $absent
-- Excused Absences: $excused
-- Present: $present
-- Absence Rate: ${absenceRate.toStringAsFixed(1)}%
-- Remaining Before Deprivation (25% rule): ${remaining.toStringAsFixed(0)} lectures
-- Warning Threshold: $warningPercent%
-- Deprivation Threshold: $deprivationPercent%
+- Semester Weeks (attendance-tracking logic): $semesterWeeksForPlan
+- Total Lectures (session estimate): $totalLectures
+- Weekly Contact Minutes (DB or fallback): ${planned.weeklyContactMinutes}
+- Total Planned Minutes (same as attendance card): ${planned.totalPlannedMinutes}
+- Total Planned Hours: ${totalPlannedHours.toStringAsFixed(2)}
+- Absence Minutes (absent + excused): ${planned.absenceMinutes}
+- Absence Hours: ${absenceHours.toStringAsFixed(2)}
+- Unexcused Absence Sessions: $absent
+- Excused Absence Sessions: $excused
+- Present Sessions: $present
+- Excused absence % (of planned time): ${excusedAbsenceRate.toStringAsFixed(1)}%
+- Unexcused absence % (of planned time): ${unexcusedAbsenceRate.toStringAsFixed(1)}%
+- Total absence % (excused + unexcused): ${absenceRate.toStringAsFixed(1)}%
+- Remaining unexcused absence hours before $maxUnexcusedPercent% limit: ${remainingUnexcusedClamped.toStringAsFixed(2)}
+- Remaining excused absence hours before $deprivationPercent% limit: ${remainingExcusedClamped.toStringAsFixed(2)}
+- Remaining total absence hours before $deprivationPercent% combined cap (hours): ${remainingHoursClamped.toStringAsFixed(2)}
+- Deprivation: unexcused absence % ≥ $maxUnexcusedPercent OR excused absence % ≥ $deprivationPercent OR total absence % > $deprivationPercent
+- Warning band (total absence %): $warningPercent%–$deprivationPercent% when no deprivation; also warn when approaching unexcused/excused limits (see app logic)
 ''';
         contextLines.add(context.trim());
       }
@@ -438,6 +499,7 @@ Student Attendance Data:
 - University ID: $universityId
 - Major: $major
 - Total Credit Hours (Enrolled): $totalCreditHours
+- Official limits: unexcused absence ≤ $maxUnexcusedPercent% of planned time; excused absence ≤ $deprivationPercent%; total absence cap for hours model ≤ $deprivationPercent% of planned time (deprivation if total % > $deprivationPercent%)
 
 === CURRENT ACADEMIC TERM ===
 - Term: $currentTermName
@@ -492,6 +554,7 @@ ${contextLines.join('\n')}
         courses: courses,
         warningPercent: warningPercent,
         deprivationPercent: deprivationPercent,
+        maxUnexcusedPercent: maxUnexcusedPercent,
         rawContextString: rawContextString,
       );
     } catch (e) {

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../services/student_auth_service.dart';
 import '../../services/student_notifications_service.dart';
 import '../../shared/widgets/chat_fab.dart';
+import '../../features/translation/translation_controller.dart';
+import '../../features/translation/widgets/t_text.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -22,56 +24,66 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        floatingActionButton: const ChatFAB(),
-        body: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            children: [
-              Row(
+    final translation = TranslationController.instance;
+    return AnimatedBuilder(
+      animation: translation,
+      builder: (context, _) {
+        return Directionality(
+          textDirection: translation.textDirection,
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            floatingActionButton: const ChatFAB(),
+            body: SafeArea(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 children: [
-                  IconButton(
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    icon: const Icon(
-                      Icons.arrow_forward_ios,
-                      color: Color(0xFF006571),
-                    ),
+                  Row(
+                    children: [
+                      IconButton(
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        icon: Icon(
+                          translation.translateToEnglish
+                              ? Icons.arrow_back_ios_new
+                              : Icons.arrow_forward_ios,
+                          color: const Color(0xFF006571),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Expanded(
+                        child: TText(
+                          'التنبيهات',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF006571),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 40),
+                    ],
                   ),
-                  const SizedBox(width: 6),
-                  const Expanded(
-                    child: Text(
-                      'التنبيهات',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF006571),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: translation.textDirection == TextDirection.ltr
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: _studentId <= 0 ? null : _hideAllNotifications,
+                      child: const TText(
+                        'حذف الكل',
+                        style: TextStyle(color: Color(0xFFE53935)),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 40),
+                  const SizedBox(height: 6),
+                  ..._buildNotificationContent(),
                 ],
               ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: _studentId <= 0 ? null : _hideAllNotifications,
-                  child: const Text(
-                    'حذف الكل',
-                    style: TextStyle(color: Color(0xFFE53935)),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              ..._buildNotificationContent(),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -243,7 +255,7 @@ class _NotificationCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                TText(
                   item.title,
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
@@ -251,12 +263,12 @@ class _NotificationCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
+                TText(
                   item.message,
                   style: const TextStyle(fontSize: 12, color: Colors.black87),
                 ),
                 const SizedBox(height: 4),
-                Text(
+                TText(
                   item.date,
                   style: const TextStyle(fontSize: 11, color: Colors.black45),
                 ),
@@ -488,7 +500,7 @@ class _EmptyNotificationsMessage extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 48),
       child: Center(
-        child: Text(
+        child: TText(
           message,
           style: const TextStyle(
             fontSize: 16,

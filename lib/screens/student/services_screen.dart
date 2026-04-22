@@ -9,6 +9,8 @@ import 'excuse_screen.dart';
 import 'attendance_tracking_screen.dart';
 import 'schedule_screen.dart';
 import '../../shared/widgets/chat_fab.dart';
+import '../../features/translation/translation_controller.dart';
+import '../../features/translation/widgets/t_text.dart';
 
 class ServicesScreen extends StatelessWidget {
   const ServicesScreen({super.key});
@@ -16,129 +18,60 @@ class ServicesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const primaryColor = Color(0xFF006571);
+    final translation = TranslationController.instance;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        floatingActionButton: const ChatFAB(),
-        bottomNavigationBar: NavBarSettingsArabic(
-          selectedIndex: 1,
-          onItemTapped: (index) {
-            if (index == 0) {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              );
-            } else if (index == 1) {
-              // Stay on services screen
-            } else if (index == 2) {
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const HomeScreen()),
-                (route) => false,
-              );
-            }
-          },
-        ),
-        body: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            children: [
-              Row(
+    return AnimatedBuilder(
+      animation: translation,
+      builder: (context, _) {
+        return Directionality(
+          textDirection: translation.textDirection,
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            floatingActionButton: const ChatFAB(),
+            bottomNavigationBar: NavBarSettingsArabic(
+              selectedIndex: 1,
+              onItemTapped: (index) {
+                if (index == 0) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  );
+                } else if (index == 1) {
+                  // Stay on services screen
+                } else if (index == 2) {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const HomeScreen()),
+                    (route) => false,
+                  );
+                }
+              },
+            ),
+            body: SafeArea(
+              child: ListView(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_forward_ios,
-                        color: primaryColor),
-                    onPressed: () => Navigator.of(context).maybePop(),
-                  ),
-                  const SizedBox(width: 6),
-                  const Text(
-                    'خدمات الطالب',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: primaryColor,
-                    ),
-                  ),
-                  const Spacer(),
-                  NotificationBell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const NotificationsScreen(),
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          translation.translateToEnglish
+                              ? Icons.arrow_back_ios_new
+                              : Icons.arrow_forward_ios,
+                          color: primaryColor,
                         ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 36),
-              Wrap(
-                spacing: 14,
-                runSpacing: 18,
-                alignment: WrapAlignment.end,
-                children: [
-                  _ServiceCard(
-                    title: 'تتبع الحضور',
-                    icon: Icons.access_time,
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const AttendanceTrackingScreen(),
+                        onPressed: () => Navigator.of(context).maybePop(),
+                      ),
+                      const SizedBox(width: 6),
+                      const TText(
+                        'خدمات الطالب',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: primaryColor,
                         ),
-                      );
-                    },
-                  ),
-                  _ServiceCard(
-                    title: 'الجدول الدراسي',
-                    icon: Icons.calendar_today,
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => ScheduleScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  _ServiceCard(
-                    title: 'التحضير',
-                    icon: Icons.wifi_tethering,
-                    backgroundImage: 'assets/images/NFC_logo.jpeg',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const NfcAttendanceScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  _ServiceCard(
-                    title: 'إدارة الأعذار',
-                    icon: Icons.insert_chart_outlined,
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const ExcuseScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 26),
-              Builder(
-                builder: (context) {
-                  final cardWidth =
-                      (MediaQuery.of(context).size.width - 24 * 2 - 14) / 2;
-                  return Align(
-                    alignment: Alignment.center,
-                    child: SizedBox(
-                      width: cardWidth,
-                      child: _ServiceCard(
-                        title: 'التنبيهات',
-                        icon: Icons.notifications,
-                        width: cardWidth,
+                      ),
+                      const Spacer(),
+                      NotificationBell(
                         onTap: () {
                           Navigator.push(
                             context,
@@ -148,14 +81,96 @@ class ServicesScreen extends StatelessWidget {
                           );
                         },
                       ),
-                    ),
-                  );
-                },
+                    ],
+                  ),
+                  const SizedBox(height: 36),
+                  Wrap(
+                    spacing: 14,
+                    runSpacing: 18,
+                    alignment: WrapAlignment.end,
+                    children: [
+                      _ServiceCard(
+                        title: 'تتبع الحضور',
+                        icon: Icons.access_time,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const AttendanceTrackingScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _ServiceCard(
+                        title: 'الجدول الدراسي',
+                        icon: Icons.calendar_today,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => ScheduleScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _ServiceCard(
+                        title: translation.translateToEnglish
+                            ? 'Mark Attendance'
+                            : 'التحضير الآن',
+                        icon: Icons.wifi_tethering,
+                        backgroundImage: 'assets/images/NFC_logo.jpeg',
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const NfcAttendanceScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _ServiceCard(
+                        title: 'إدارة الأعذار',
+                        icon: Icons.insert_chart_outlined,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const ExcuseScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 26),
+                  Builder(
+                    builder: (context) {
+                      final cardWidth =
+                          (MediaQuery.of(context).size.width - 24 * 2 - 14) / 2;
+                      return Align(
+                        alignment: Alignment.center,
+                        child: SizedBox(
+                          width: cardWidth,
+                          child: _ServiceCard(
+                            title: 'التنبيهات',
+                            icon: Icons.notifications,
+                            width: cardWidth,
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const NotificationsScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -245,7 +260,7 @@ class _ServiceCard extends StatelessWidget {
                     Center(
                       child: Padding(
                         padding: const EdgeInsets.only(top: 16),
-                        child: Text(
+                        child: TText(
                           title,
                           style: const TextStyle(
                             color: primaryColor,

@@ -19,6 +19,8 @@ import '../../models/excuse/excuse_request.dart';
 import '../../models/attendance/manual_attendance_record.dart';
 import '../../shared/widgets/student_profile_avatar.dart';
 import '../../shared/widgets/chat_fab.dart';
+import '../../features/translation/translation_controller.dart';
+import '../../features/translation/widgets/t_text.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -115,41 +117,55 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl, // Force RTL direction
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        floatingActionButton: const ChatFAB(),
-        bottomNavigationBar: NavBarSettingsArabic(
-          selectedIndex: selectedIndex,
-          onItemTapped: _onItemTapped,
-        ),
-        body: SafeArea(
-          child: ListView(
-            clipBehavior: Clip.none,
-            padding:
-                const EdgeInsets.only(top: 36, left: 30, right: 16, bottom: 16),
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    final translation = TranslationController.instance;
+    return AnimatedBuilder(
+      animation: translation,
+      builder: (context, _) {
+        return Directionality(
+          textDirection: translation.textDirection,
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            floatingActionButton: const ChatFAB(),
+            bottomNavigationBar: NavBarSettingsArabic(
+              selectedIndex: selectedIndex,
+              onItemTapped: _onItemTapped,
+            ),
+            body: SafeArea(
+              child: ListView(
+                clipBehavior: Clip.none,
+                padding: const EdgeInsets.only(
+                  top: 36,
+                  left: 30,
+                  right: 16,
+                  bottom: 16,
+                ),
                 children: [
-                  Text(
-                    'أهلاً ${_greetingName()}',
-                    style: const TextStyle(
-                        fontSize: 24, fontWeight: FontWeight.bold),
-                  ),
-                  NotificationBell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const NotificationsScreen(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TText(
+                        'أهلاً ${_greetingName()}',
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
                         ),
-                      );
-                    },
+                      ),
+                      Row(
+                        children: [
+                          NotificationBell(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const NotificationsScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                ],
-              ),
               const SizedBox(height: 30),
 
               // زر التحضير الآن بأبعاد ثابتة
@@ -183,9 +199,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         borderRadius: BorderRadius.circular(45),
                       ),
                     ),
-                    child: const Text(
-                      'التحضير الآن',
-                      style: TextStyle(
+                    child: TText(
+                      translation.translateToEnglish
+                          ? 'Mark Attendance'
+                          : 'التحضير الآن',
+                      style: const TextStyle(
                         fontSize: 23,
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
@@ -202,9 +220,12 @@ class _HomeScreenState extends State<HomeScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  const TText(
                     'محاضرات اليوم:',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
                   ),
                   TextButton(
                     onPressed: () {
@@ -227,7 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const Color(0x22006571),
                       ),
                     ),
-                    child: const Text(
+                    child: const TText(
                       ' الجدول الأسبوعي >',
                       style: TextStyle(fontWeight: FontWeight.w500),
                     ),
@@ -243,7 +264,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  const TText(
                     'الغيابات النشطة:',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                   ),
@@ -268,7 +289,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const Color(0x22006571),
                       ),
                     ),
-                    child: const Text(
+                    child: const TText(
                       ' عرض الغيابات >',
                       style: TextStyle(fontWeight: FontWeight.w500),
                     ),
@@ -282,10 +303,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 height: 180,
                 child: _buildActiveAbsencesSection(context),
               ),
-            ],
+                ],
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -457,7 +480,7 @@ class _HomeScreenState extends State<HomeScreen> {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Text(
+                child: TText(
                   'لا توجد محاضرات اليوم',
                   style: TextStyle(fontSize: 15, color: Colors.grey[600]),
                 ),
@@ -537,13 +560,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            StudentAuthService.instance.currentStudent?.displayName ?? '-',
+                          TText(
+                            StudentAuthService
+                                    .instance.currentStudent?.displayName ??
+                                '-',
                             style: const TextStyle(
                                 fontWeight: FontWeight.bold, fontSize: 14),
                           ),
                           const SizedBox(height: 4),
-                          Text(
+                          TText(
                             'رقم الطالب : ${StudentAuthService.instance.currentStudent?.studentId ?? '-'}',
                             style: const TextStyle(
                                 fontSize: 13, color: Colors.black54),
@@ -578,7 +603,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   alignment: Alignment.center,
-                  child: const Text(
+                  child: const TText(
                     'المحفظة الإلكترونية',
                     style: TextStyle(
                       color: Colors.white,
@@ -603,6 +628,7 @@ class _HomeScreenState extends State<HomeScreen> {
     String? statusText,
     Color? statusColor,
   }) {
+    final isEn = TranslationController.instance.translateToEnglish;
     return Container(
       width: 220,
       decoration: BoxDecoration(
@@ -621,15 +647,21 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          TText(
             title,
-            textAlign: TextAlign.right,
+            textAlign: TextAlign.start,
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
           const SizedBox(height: 8),
-          const Text('نظري', textAlign: TextAlign.right),
-          Text('الشعبة $section', textAlign: TextAlign.right),
-          Text('القاعة $room', textAlign: TextAlign.right),
+          TText(isEn ? 'Lecture' : 'نظري', textAlign: TextAlign.start),
+          TText(
+            isEn ? 'Section $section' : 'الشعبة $section',
+            textAlign: TextAlign.start,
+          ),
+          TText(
+            isEn ? 'Room $room' : 'القاعة $room',
+            textAlign: TextAlign.start,
+          ),
           if (statusText != null) ...[
             const SizedBox(height: 12),
             Container(
@@ -640,7 +672,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Center(
-                child: Text(
+                child: TText(
                   statusText,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,

@@ -235,9 +235,6 @@ class _AdminProfileImageManagementTabState
         'photoVersion': photoVersion,
         'updatedAt': FieldValue.serverTimestamp(),
       };
-      if (_selectedRole == AdminProfileRole.student) {
-        payload['photoURL'] = downloadUrl;
-      }
 
       await _firestore
           .collection(_selectedRole.collectionName)

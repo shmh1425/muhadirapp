@@ -13,6 +13,18 @@ class StudentAuthService {
   /// الطالب المسجل حالياً (إن وجد)
   ExternalStudent? get currentStudent => _currentStudent;
 
+  /// Apply a live Firestore snapshot to the currently logged-in student.
+  /// Returns the updated student, or null if snapshot is invalid.
+  ExternalStudent? applyCurrentStudentSnapshot(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    if (!doc.exists) return null;
+    final updated = _fromDocSnapshot(doc);
+    _currentStudent = updated;
+    _currentStudentDocId = doc.id;
+    return updated;
+  }
+
   Stream<DocumentSnapshot<Map<String, dynamic>>> watchCurrentStudentDoc() {
     final docId = (_currentStudentDocId ?? '').trim();
     final fallbackStudentId = _currentStudent?.studentId;

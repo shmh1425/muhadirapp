@@ -11,19 +11,51 @@ class StudentProfileImageService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
-  final Map<String, Future<String?>> _cache = <String, Future<String?>>{};
+  /// Cache to avoid spamming Firestore/Storage, but keep it short-lived so
+  /// profile image updates (photoVersion) show up without restarting the app.
+  final Map<String, _CacheEntry> _cache = <String, _CacheEntry>{};
+  static const Duration _cacheTtl = Duration(minutes: 2);
 
   Future<String?> getProfileImageUrl({
-    required int studentId,
+    int studentId = 0,
     String? email,
   }) {
-    if (studentId <= 0) return Future.value(null);
     final normalizedEmail = (email ?? '').trim().toLowerCase();
-    final key = normalizedEmail.isEmpty ? '$studentId' : '$studentId|$normalizedEmail';
-    return _cache.putIfAbsent(
-      key,
-      () => _load(studentId: studentId, email: normalizedEmail),
-    );
+    final key = normalizedEmail.isNotEmpty
+        ? 'email|$normalizedEmail'
+        : (studentId > 0 ? '$studentId' : 'none');
+    if (key == 'none') return Future.value(null);
+    final now = DateTime.now();
+    final existing = _cache[key];
+    if (existing != null && now.difference(existing.createdAt) < _cacheTtl) {
+      return existing.future;
+    }
+    final future = studentId > 0
+        ? _load(studentId: studentId, email: normalizedEmail)
+        : _loadByEmail(normalizedEmail);
+    _cache[key] = _CacheEntry(future: future, createdAt: now);
+    return future;
+  }
+
+  Future<String?> _loadByEmail(String email) async {
+    if (email.trim().isEmpty) return null;
+    try {
+      final qEmail = await _firestore
+          .collection('external_students')
+          .where('email', isEqualTo: email.trim().toLowerCase())
+          .limit(1)
+          .get();
+      if (qEmail.docs.isEmpty) return null;
+      final data = qEmail.docs.first.data();
+      final stored = _pickUrlField(data);
+      if (stored == null) return null;
+      final resolved = await _resolveStoredPhotoValue(stored);
+      if (resolved == null) return null;
+      return _withVersion(resolved, data['photoVersion']);
+    } catch (e) {
+      debugPrint('[StudentProfileImage] email lookup failed: $e');
+      return null;
+    }
   }
 
   Future<String?> _load({
@@ -38,12 +70,14 @@ class StudentProfileImageService {
           .get();
       if (doc.exists) {
         final data = doc.data() ?? <String, dynamic>{};
-        final url = _pickUrlField(data);
-        if (url != null) {
+        final stored = _pickUrlField(data);
+        if (stored != null) {
           debugPrint(
             '[StudentProfileImage] Firestore doc hit external_students/$studentId',
           );
-          return url;
+          final resolved = await _resolveStoredPhotoValue(stored);
+          if (resolved == null) return null;
+          return _withVersion(resolved, data['photoVersion']);
         }
       } else {
         debugPrint(
@@ -68,12 +102,15 @@ class StudentProfileImageService {
           .limit(1)
           .get();
       if (qInt.docs.isNotEmpty) {
-        final url = _pickUrlField(qInt.docs.first.data());
-        if (url != null) {
+        final data = qInt.docs.first.data();
+        final stored = _pickUrlField(data);
+        if (stored != null) {
           debugPrint(
             '[StudentProfileImage] Firestore query hit studentId(int)=$studentId docId=${qInt.docs.first.id}',
           );
-          return url;
+          final resolved = await _resolveStoredPhotoValue(stored);
+          if (resolved == null) return null;
+          return _withVersion(resolved, data['photoVersion']);
         }
       }
     } catch (_) {
@@ -87,12 +124,15 @@ class StudentProfileImageService {
           .limit(1)
           .get();
       if (qString.docs.isNotEmpty) {
-        final url = _pickUrlField(qString.docs.first.data());
-        if (url != null) {
+        final data = qString.docs.first.data();
+        final stored = _pickUrlField(data);
+        if (stored != null) {
           debugPrint(
             '[StudentProfileImage] Firestore query hit studentId(string)=$studentId docId=${qString.docs.first.id}',
           );
-          return url;
+          final resolved = await _resolveStoredPhotoValue(stored);
+          if (resolved == null) return null;
+          return _withVersion(resolved, data['photoVersion']);
         }
       }
     } catch (_) {
@@ -107,12 +147,15 @@ class StudentProfileImageService {
             .limit(1)
             .get();
         if (qEmail.docs.isNotEmpty) {
-          final url = _pickUrlField(qEmail.docs.first.data());
-          if (url != null) {
+          final data = qEmail.docs.first.data();
+          final stored = _pickUrlField(data);
+          if (stored != null) {
             debugPrint(
               '[StudentProfileImage] Firestore query hit email=$email docId=${qEmail.docs.first.id}',
             );
-            return url;
+            final resolved = await _resolveStoredPhotoValue(stored);
+            if (resolved == null) return null;
+            return _withVersion(resolved, data['photoVersion']);
           }
         }
       } catch (_) {
@@ -180,6 +223,7 @@ class StudentProfileImageService {
     }
 
     return asNonEmptyString(data['photoUrl']) ??
+        asNonEmptyString(data['photoURL']) ??
         asNonEmptyString(data['photo_url']) ??
         asNonEmptyString(data['imageUrl']) ??
         asNonEmptyString(data['image_url']) ??
@@ -187,6 +231,49 @@ class StudentProfileImageService {
         asNonEmptyString(data['profile_url']);
   }
 
+  String _withVersion(String rawUrl, dynamic versionValue) {
+    final url = rawUrl.trim();
+    if (url.isEmpty) return url;
+    final version = (versionValue ?? '').toString().trim();
+    if (version.isEmpty) return url;
+    final separator = url.contains('?') ? '&' : '?';
+    return '$url${separator}v=$version';
+  }
+
+  /// Resolves what we store in Firestore into a HTTP download URL.
+  ///
+  /// We support:
+  /// - https://... (already a download URL)
+  /// - gs://bucket/path (storage URL)
+  /// - path/in/bucket.jpg (storage object path)
+  Future<String?> _resolveStoredPhotoValue(String stored) async {
+    final v = stored.trim();
+    if (v.isEmpty) return null;
+    if (v.startsWith('http://') || v.startsWith('https://')) return v;
+
+    try {
+      if (v.startsWith('gs://')) {
+        return await _storage.refFromURL(v).getDownloadURL();
+      }
+      // Treat as object path in the bucket.
+      return await _storage.ref().child(v).getDownloadURL();
+    } on FirebaseException catch (e) {
+      debugPrint(
+        '[StudentProfileImage] resolve stored photo failed: code=${e.code} message=${e.message}',
+      );
+      return null;
+    } catch (e) {
+      debugPrint('[StudentProfileImage] resolve stored photo failed: $e');
+      return null;
+    }
+  }
+
   void clearCache() => _cache.clear();
+}
+
+class _CacheEntry {
+  const _CacheEntry({required this.future, required this.createdAt});
+  final Future<String?> future;
+  final DateTime createdAt;
 }
 
