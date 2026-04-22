@@ -847,9 +847,11 @@ class _ExcuseCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  const TText(
-                    'أولى-ثانية',
-                    style: TextStyle(
+                  TText(
+                    item.timeRange.trim().isEmpty
+                        ? '—'
+                        : item.timeRange.trim().replaceAll('-', ' — '),
+                    style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: Color(0xFF1A1A1A),

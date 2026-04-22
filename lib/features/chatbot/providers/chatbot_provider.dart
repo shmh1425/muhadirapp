@@ -192,8 +192,13 @@ class ChatbotProvider extends ChangeNotifier {
           (remUnex > 0 && avgH > 0 && canUnexFloor <= 0) ||
           (uRatio >= 0.8 && remUnex > 0);
 
+      /// يطابق منطق الحرمان في التطبيق؛ عندها لا نكرر تنبيه «أي غياب إضافي».
+      final inDeprivation = c.isDeprivation || util >= 1.0;
+
       final String forecastTail;
-      if (strictWarn) {
+      if (inDeprivation) {
+        forecastTail = '';
+      } else if (strictWarn) {
         forecastTail = '\n\n⚠️ أي غياب بدون عذر = تجاوز الحد مباشرة';
       } else if (avgH <= 0) {
         forecastTail =
@@ -212,7 +217,7 @@ class ChatbotProvider extends ChangeNotifier {
           '• بعذر: ${excPct.toStringAsFixed(1)}% من أصل $dep%\n'
           '• الإجمالي: ${totalPct.toStringAsFixed(1)}% من أصل $dep%\n'
           '${_absenceSessionsLine(absenceSessions, absH)}\n\n'
-          '$rEmoji $rLabel\n'
+          '$rEmoji $rLabel${inDeprivation ? '\n🚫 حرمان أكاديمي' : ''}\n'
           'المتبقي:\n'
           '${_remainingLineCompact('بدون عذر', remUnex, avgH)}\n'
           '${_remainingLineCompact('بعذر', remExc, avgH)}\n'

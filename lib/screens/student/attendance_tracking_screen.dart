@@ -1447,9 +1447,10 @@ class _CourseSummaryCard extends StatelessWidget {
   final int weeksCountForTerm;
   final Map<String, int> codeToWeeklyMinutes;
 
+  /// عرض النسبة كعدد صحيح (تقريب أقرب) ليتوافق مع فهم المستخدم والوسط في الدائرة.
   int _truncatePct(double v) {
     if (!v.isFinite || v <= 0) return 0;
-    return v.floor().clamp(0, 100);
+    return v.round().clamp(0, 100);
   }
 
   int _minutesFromTimeRange(String timeRange) {
@@ -1543,7 +1544,7 @@ class _CourseSummaryCard extends StatelessWidget {
         .where((r) => r.status == 'excused')
         .fold<int>(0, (s, r) => s + _minutesFromTimeRange(r.timeRange));
     final unexcusedMinutes = records
-        .where((r) => r.status == 'unexcused')
+        .where((r) => r.status == 'unexcused' || r.status == 'absent')
         .fold<int>(0, (s, r) => s + _minutesFromTimeRange(r.timeRange));
     final lateMinutes = records
         .where((r) => r.status == 'late')
@@ -1593,6 +1594,9 @@ class _CourseSummaryCard extends StatelessWidget {
     final totalAbsencePct = pct(excusedMinutes + unexcusedMinutes);
     final unexcusedOverLimit = unexcusedPct > 15;
     final totalOverLimit = totalAbsencePct > 25;
+    final excusedOverLimit = excusedPct > 25;
+    final academicDeprivation =
+        unexcusedOverLimit || excusedOverLimit || totalOverLimit;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1633,12 +1637,19 @@ class _CourseSummaryCard extends StatelessWidget {
                   color: const Color(0xFF2196F3),
                   label: 'بعذر',
                   percentage: excusedPct,
-                  isOverLimit: excusedPct > 25,
+                  isOverLimit: excusedOverLimit,
+                ),
+                const SizedBox(height: 8),
+                _LegendRow(
+                  color: const Color(0xFFC62828),
+                  label: 'إجمالي الغياب',
+                  percentage: totalAbsencePct,
+                  isOverLimit: totalOverLimit,
                 ),
                 const SizedBox(height: 8),
                 _LegendRow(
                   color: const Color(0xFFFF9800),
-                  label: 'بدون عذر',
+                  label: 'بدون عذر فقط',
                   percentage: unexcusedPct,
                   isOverLimit: unexcusedOverLimit,
                 ),
@@ -1666,16 +1677,39 @@ class _CourseSummaryCard extends StatelessWidget {
                     unexcusedOverLimit: unexcusedOverLimit,
                   ),
                 ),
-                Text(
-                  '${_truncatePct(totalAbsencePct)}%',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: totalOverLimit
-                        ? const Color(0xFFD32F2F)
-                        : const Color(0xFF006571),
-                  ),
-                ),
+                academicDeprivation
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Text(
+                            '${_truncatePct(totalAbsencePct)}%',
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFD32F2F),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            'حرمان أكاديمي',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFFD32F2F),
+                              height: 1.1,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Text(
+                        '${_truncatePct(totalAbsencePct)}%',
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF006571),
+                        ),
+                      ),
               ],
             ),
           ),
@@ -1700,7 +1734,7 @@ class _LegendRow extends StatelessWidget {
 
   int _truncatePct(double v) {
     if (!v.isFinite || v <= 0) return 0;
-    return v.floor().clamp(0, 100);
+    return v.round().clamp(0, 100);
   }
 
   @override
