@@ -13,6 +13,7 @@ import '../../services/notifications/lecture_action_notification_service.dart';
 import '../../utils/shared/time_utils.dart';
 import '../../widgets/monthly_calendar.dart';
 import 'lecturer_language.dart';
+import 'lecturer_navigation.dart';
 import 'widgets/profile_back_button.dart';
 
 /// شاشة إدارة المحاضرات: فلترة، إشعار تأخير، إشعار إلغاء
@@ -680,6 +681,14 @@ class _LecturerManageLecturesScreenState
                 ),
               ),
               centerTitle: true,
+              actions: [
+                IconButton(
+                  tooltip: _tr('جلسة NFC', 'NFC session'),
+                  onPressed: () =>
+                      LecturerNavigation.goToNfcSessionManagement(context),
+                  icon: const Icon(Icons.nfc_rounded, color: _primary),
+                ),
+              ],
             ),
             body: SafeArea(
               child: _isLoadingLectures

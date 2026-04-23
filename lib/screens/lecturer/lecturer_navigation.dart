@@ -4,6 +4,7 @@ import '../../models/lecturer/lecture_item.dart';
 import 'lecturer_attendance_screen.dart';
 import 'lecturer_excuse_management_screen.dart';
 import 'lecturer_manage_lectures_screen.dart';
+import 'lecturer_nfc_session_management_screen.dart';
 
 /// نقطة تنقل موحدة لشاشات المحاضر — تجنب تكرار منطق Navigator في أكثر من مكان.
 class LecturerNavigation {
@@ -14,6 +15,16 @@ class LecturerNavigation {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const LecturerManageLecturesScreen()),
+    );
+  }
+
+  /// الانتقال إلى شاشة إدارة جلسات NFC (فتح/إغلاق جلسة تحضير تلقائي).
+  static void goToNfcSessionManagement(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const LecturerNfcSessionManagementScreen(),
+      ),
     );
   }
 

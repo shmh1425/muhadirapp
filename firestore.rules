@@ -124,6 +124,12 @@ service cloud.firestore {
       allow write: if isSignedIn();
     }
 
+    // NFC attendance sessions (lecturer opens/closes attendance session).
+    match /nfc_attendance_sessions/{sessionId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
     // Student app notifications generated from lecturer actions.
     match /student_notifications/{notificationId} {
       // Students log in by email (without Firebase Auth), so read must remain public

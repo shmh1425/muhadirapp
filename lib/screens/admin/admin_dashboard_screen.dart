@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:nfc_manager/nfc_manager.dart';
 
 import 'admin_profile_image_management_tab.dart';
 import '../../models/academic_term.dart';
@@ -8,6 +12,7 @@ import '../../models/term_week.dart';
 import '../../repositories/academic_term_repository.dart';
 import '../../services/admin/admin_auth_service.dart';
 import '../../services/admin/admin_user_image_service.dart';
+import '../../services/attendance/nfc_attendance_service.dart';
 import '../../features/translation/translation_controller.dart';
 import '../../features/translation/widgets/t_text.dart';
 
@@ -122,43 +127,43 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         builder: (context, _) => Directionality(
           textDirection: translation.textDirection,
           child: Scaffold(
-          appBar: AppBar(
-            title: const TText('لوحة تحكم الأدمن'),
-            actions: [
-              IconButton(
-                onPressed: _isSigningOut ? null : _onSignOut,
-                icon: _isSigningOut
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.logout),
-                tooltip: 'تسجيل خروج',
+            appBar: AppBar(
+              title: const TText('لوحة تحكم الأدمن'),
+              actions: [
+                IconButton(
+                  onPressed: _isSigningOut ? null : _onSignOut,
+                  icon: _isSigningOut
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.logout),
+                  tooltip: 'تسجيل خروج',
+                ),
+              ],
+              bottom: TabBar(
+                isScrollable: true,
+                tabs: [
+                  Tab(child: TText('الطلاب')),
+                  Tab(child: TText('المحاضرين')),
+                  Tab(child: TText('المقررات')),
+                  Tab(child: TText('التسجيل')),
+                  Tab(child: TText('الفصول الدراسية')),
+                  Tab(child: TText('صور البروفايل')),
+                ],
               ),
-            ],
-            bottom: TabBar(
-              isScrollable: true,
-              tabs: [
-                Tab(child: TText('الطلاب')),
-                Tab(child: TText('المحاضرين')),
-                Tab(child: TText('المقررات')),
-                Tab(child: TText('التسجيل')),
-                Tab(child: TText('الفصول الدراسية')),
-                Tab(child: TText('صور البروفايل')),
+            ),
+            body: const TabBarView(
+              children: [
+                _AdminStudentsTab(),
+                _AdminLecturersTab(),
+                _AdminCoursesTab(),
+                _AdminEnrollmentTab(),
+                _AdminTermsTab(),
+                AdminProfileImageManagementTab(),
               ],
             ),
-          ),
-          body: const TabBarView(
-            children: [
-              _AdminStudentsTab(),
-              _AdminLecturersTab(),
-              _AdminCoursesTab(),
-              _AdminEnrollmentTab(),
-              _AdminTermsTab(),
-              AdminProfileImageManagementTab(),
-            ],
-          ),
           ),
         ),
       ),
@@ -282,158 +287,171 @@ class _AdminStudentsTabState extends State<_AdminStudentsTab> {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          const _SectionTitle('إضافة/تحديث طالب'),
-          _AdminTextField(
-            controller: _studentIdController,
-            label: 'رقم الطالب',
-            keyboardType: TextInputType.number,
-          ),
-          _AdminTextField(
-            controller: _nameArController,
-            label: 'الاسم بالعربي',
-          ),
-          _AdminTextField(
-            controller: _nameEnController,
-            label: 'الاسم بالإنجليزي',
-          ),
-          _AdminTextField(
-            controller: _emailController,
-            label: 'الإيميل الجامعي',
-            keyboardType: TextInputType.emailAddress,
-            textDirection: TextDirection.ltr,
-            textAlign: TextAlign.left,
-          ),
-          _AdminTextField(
-            controller: _departmentArController,
-            label: 'القسم بالعربي',
-          ),
-          _AdminTextField(
-            controller: _departmentEnController,
-            label: 'القسم بالإنجليزي',
-            textDirection: TextDirection.ltr,
-            textAlign: TextAlign.left,
-          ),
-          _AdminTextField(
-            controller: _majorArController,
-            label: 'التخصص بالعربي',
-          ),
-          _AdminTextField(
-            controller: _majorController,
-            label: 'التخصص بالإنجليزي',
-            textDirection: TextDirection.ltr,
-            textAlign: TextAlign.left,
-          ),
-          DropdownButtonFormField<int>(
-            initialValue: _selectedLevel,
-            decoration: const InputDecoration(
-              labelText: 'المستوى',
-              border: OutlineInputBorder(),
-            ),
-            items: _levelOptions
-                .map(
-                  (level) => DropdownMenuItem<int>(
-                    value: level,
-                    child: Text('مستوى $level'),
-                  ),
-                )
-                .toList(),
-            onChanged: (value) {
-              if (value == null) return;
-              setState(() => _selectedLevel = value);
-            },
-          ),
-          const SizedBox(height: 10),
-          Row(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final studentsListHeight = constraints.maxHeight > 700
+              ? constraints.maxHeight * 0.45
+              : 280.0;
+
+          return ListView(
             children: [
-              const Text('الجنس:'),
-              const SizedBox(width: 12),
-              DropdownButton<String>(
-                value: _selectedGender,
-                items: const [
-                  DropdownMenuItem(value: 'F', child: Text('طالبة F')),
-                  DropdownMenuItem(value: 'M', child: Text('طالب M')),
-                ],
+              const _SectionTitle('إضافة/تحديث طالب'),
+              _AdminTextField(
+                controller: _studentIdController,
+                label: 'رقم الطالب',
+                keyboardType: TextInputType.number,
+              ),
+              _AdminTextField(
+                controller: _nameArController,
+                label: 'الاسم بالعربي',
+              ),
+              _AdminTextField(
+                controller: _nameEnController,
+                label: 'الاسم بالإنجليزي',
+              ),
+              _AdminTextField(
+                controller: _emailController,
+                label: 'الإيميل الجامعي',
+                keyboardType: TextInputType.emailAddress,
+                textDirection: TextDirection.ltr,
+                textAlign: TextAlign.left,
+              ),
+              _AdminTextField(
+                controller: _departmentArController,
+                label: 'القسم بالعربي',
+              ),
+              _AdminTextField(
+                controller: _departmentEnController,
+                label: 'القسم بالإنجليزي',
+                textDirection: TextDirection.ltr,
+                textAlign: TextAlign.left,
+              ),
+              _AdminTextField(
+                controller: _majorArController,
+                label: 'التخصص بالعربي',
+              ),
+              _AdminTextField(
+                controller: _majorController,
+                label: 'التخصص بالإنجليزي',
+                textDirection: TextDirection.ltr,
+                textAlign: TextAlign.left,
+              ),
+              DropdownButtonFormField<int>(
+                initialValue: _selectedLevel,
+                decoration: const InputDecoration(
+                  labelText: 'المستوى',
+                  border: OutlineInputBorder(),
+                ),
+                items: _levelOptions
+                    .map(
+                      (level) => DropdownMenuItem<int>(
+                        value: level,
+                        child: Text('مستوى $level'),
+                      ),
+                    )
+                    .toList(),
                 onChanged: (value) {
                   if (value == null) return;
-                  setState(() => _selectedGender = value);
+                  setState(() => _selectedLevel = value);
                 },
               ),
-              const Spacer(),
-              FilledButton(
-                onPressed: _isSaving ? null : _saveStudent,
-                child: _isSaving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('حفظ الطالب'),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Text('الجنس:'),
+                  const SizedBox(width: 12),
+                  DropdownButton<String>(
+                    value: _selectedGender,
+                    items: const [
+                      DropdownMenuItem(value: 'F', child: Text('طالبة F')),
+                      DropdownMenuItem(value: 'M', child: Text('طالب M')),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _selectedGender = value);
+                    },
+                  ),
+                  const Spacer(),
+                  FilledButton(
+                    onPressed: _isSaving ? null : _saveStudent,
+                    child: _isSaving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('حفظ الطالب'),
+                  ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          const _SectionTitle('الطلاب الحاليين'),
-          Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: _studentsRef.orderBy('studentId').snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+              const SizedBox(height: 16),
+              const _SectionTitle('الطلاب الحاليين'),
+              SizedBox(
+                height: studentsListHeight,
+                child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: _studentsRef.orderBy('studentId').snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(child: Text('لا يوجد طلاب حالياً'));
-                }
+                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                      return const Center(child: Text('لا يوجد طلاب حالياً'));
+                    }
 
-                final docs = snapshot.data!.docs;
-                return ListView.separated(
-                  itemCount: docs.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final doc = docs[index];
-                    final data = doc.data();
-                    final displayName = (data['name_ar'] ?? data['name'] ?? '')
-                        .toString();
-                    final email = (data['email'] ?? '').toString();
-                    final level = (data['level'] ?? '').toString();
-                    final major = (data['major'] ?? '').toString();
-                    final photoUrl =
-                        (data['photoUrl'] ?? data['photo_url'] ?? '').toString();
+                    final docs = snapshot.data!.docs;
+                    return ListView.separated(
+                      itemCount: docs.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final doc = docs[index];
+                        final data = doc.data();
+                        final displayName =
+                            (data['name_ar'] ?? data['name'] ?? '').toString();
+                        final email = (data['email'] ?? '').toString();
+                        final level = (data['level'] ?? '').toString();
+                        final major = (data['major'] ?? '').toString();
+                        final photoUrl =
+                            (data['photoUrl'] ?? data['photo_url'] ?? '')
+                                .toString();
 
-                    return ListTile(
-                      leading: CircleAvatar(
-                        radius: 22,
-                        backgroundColor: const Color(0x11006571),
-                        foregroundImage: photoUrl.trim().isNotEmpty
-                            ? NetworkImage(photoUrl)
-                            : null,
-                        child: photoUrl.trim().isEmpty
-                            ? const Icon(Icons.person, color: Color(0xFF006571))
-                            : null,
-                      ),
-                      title: Text(
-                        displayName.isEmpty ? 'بدون اسم' : displayName,
-                      ),
-                      subtitle: Text(
-                        'ID: ${doc.id} | $email | مستوى $level | $major',
-                      ),
-                      trailing: IconButton(
-                        tooltip: 'حذف',
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          color: Colors.red,
-                        ),
-                        onPressed: () => _deleteStudent(doc.id),
-                      ),
+                        return ListTile(
+                          leading: CircleAvatar(
+                            radius: 22,
+                            backgroundColor: const Color(0x11006571),
+                            foregroundImage: photoUrl.trim().isNotEmpty
+                                ? NetworkImage(photoUrl)
+                                : null,
+                            child: photoUrl.trim().isEmpty
+                                ? const Icon(
+                                    Icons.person,
+                                    color: Color(0xFF006571),
+                                  )
+                                : null,
+                          ),
+                          title: Text(
+                            displayName.isEmpty ? 'بدون اسم' : displayName,
+                          ),
+                          subtitle: Text(
+                            'ID: ${doc.id} | $email | مستوى $level | $major',
+                          ),
+                          trailing: IconButton(
+                            tooltip: 'حذف',
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Colors.red,
+                            ),
+                            onPressed: () => _deleteStudent(doc.id),
+                          ),
+                        );
+                      },
                     );
                   },
-                );
-              },
-            ),
-          ),
-        ],
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -543,9 +561,7 @@ class _AdminLecturersTabState extends State<_AdminLecturersTab> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
-  Future<void> _uploadLecturerImage({
-    required String lecturerId,
-  }) async {
+  Future<void> _uploadLecturerImage({required String lecturerId}) async {
     if (lecturerId.trim().isEmpty) return;
     if (_uploadingLecturerIds.contains(lecturerId)) return;
     setState(() => _uploadingLecturerIds.add(lecturerId));
@@ -652,18 +668,33 @@ class _AdminLecturersTabState extends State<_AdminLecturersTab> {
             },
           ),
           const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton(
-              onPressed: _isSaving ? null : _saveLecturer,
-              child: _isSaving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('حفظ المحاضر'),
-            ),
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              FilledButton(
+                onPressed: _isSaving ? null : _saveLecturer,
+                child: _isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('حفظ المحاضر'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const _AdminLecturerNfcBindingScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.nfc_rounded),
+                label: const Text('إدارة بطاقات NFC'),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           const _SectionTitle('المحاضرين الحاليين'),
@@ -690,8 +721,12 @@ class _AdminLecturersTabState extends State<_AdminLecturersTab> {
                         .toString();
                     final email = (data['email'] ?? '').toString();
                     final department = (data['department'] ?? '').toString();
+                    final cardId = (data['lecturerCardId'] ?? '')
+                        .toString()
+                        .trim();
                     final photoUrl =
-                        (data['photoUrl'] ?? data['photo_url'] ?? '').toString();
+                        (data['photoUrl'] ?? data['photo_url'] ?? '')
+                            .toString();
                     final isUploading = _uploadingLecturerIds.contains(doc.id);
 
                     return ListTile(
@@ -706,7 +741,10 @@ class _AdminLecturersTabState extends State<_AdminLecturersTab> {
                             : null,
                       ),
                       title: Text(name.isEmpty ? 'بدون اسم' : name),
-                      subtitle: Text('ID: ${doc.id} | $email | $department'),
+                      subtitle: Text(
+                        'ID: ${doc.id} | $email | $department'
+                        '${cardId.isNotEmpty ? ' | NFC: $cardId' : ' | NFC: غير مضاف'}',
+                      ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -714,9 +752,8 @@ class _AdminLecturersTabState extends State<_AdminLecturersTab> {
                             tooltip: 'رفع/تغيير الصورة',
                             onPressed: isUploading
                                 ? null
-                                : () => _uploadLecturerImage(
-                                      lecturerId: doc.id,
-                                    ),
+                                : () =>
+                                      _uploadLecturerImage(lecturerId: doc.id),
                             icon: isUploading
                                 ? const SizedBox(
                                     width: 18,
@@ -744,6 +781,302 @@ class _AdminLecturersTabState extends State<_AdminLecturersTab> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _AdminLecturerNfcBindingScreen extends StatefulWidget {
+  const _AdminLecturerNfcBindingScreen();
+
+  @override
+  State<_AdminLecturerNfcBindingScreen> createState() =>
+      _AdminLecturerNfcBindingScreenState();
+}
+
+class _AdminLecturerNfcBindingScreenState
+    extends State<_AdminLecturerNfcBindingScreen> {
+  final _lecturersRef = FirebaseFirestore.instance.collection(
+    'external_lecturers',
+  );
+
+  String? _selectedLecturerId;
+  bool _isBindingCard = false;
+
+  void _showMessage(String text) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  Future<void> _bindCardToSelectedLecturer() async {
+    final lecturerId = (_selectedLecturerId ?? '').trim();
+    if (lecturerId.isEmpty) {
+      _showMessage('اختاري المحاضر أولاً من القائمة.');
+      return;
+    }
+
+    setState(() => _isBindingCard = true);
+    try {
+      final available = await NfcManager.instance.isAvailable();
+      if (!available) {
+        _showMessage(
+          'NFC غير متاح. في iPhone يلزم تفعيل Near Field Communication Tag Reading في التوقيع.',
+        );
+        return;
+      }
+
+      _showMessage('تم تفعيل وضع القراءة. قرّبي الجهاز من بطاقة المحاضر...');
+      final cardId = await _scanSingleCardId();
+      if (!mounted || cardId == null || cardId.isEmpty) return;
+
+      await NfcAttendanceService.instance.saveLecturerCardId(
+        lecturerId: lecturerId,
+        lecturerCardId: cardId,
+      );
+
+      if (!mounted) return;
+      _showMessage('تم ربط البطاقة ($cardId) بالمحاضر بنجاح.');
+    } catch (e) {
+      _showMessage('تعذر ربط البطاقة: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isBindingCard = false);
+      }
+    }
+  }
+
+  Future<String?> _scanSingleCardId() async {
+    final completer = Completer<String?>();
+    bool handled = false;
+
+    await NfcManager.instance.startSession(
+      onDiscovered: (tag) async {
+        if (handled) return;
+        handled = true;
+
+        final cardId = _extractCardIdFromTagData(tag.data);
+        if (cardId.isEmpty) {
+          await NfcManager.instance.stopSession(
+            errorMessage: 'تعذر قراءة معرّف البطاقة.',
+          );
+          completer.complete(null);
+          return;
+        }
+
+        await NfcManager.instance.stopSession(
+          alertMessage: 'تمت القراءة بنجاح',
+        );
+        completer.complete(cardId);
+      },
+    );
+
+    return completer.future.timeout(
+      const Duration(seconds: 20),
+      onTimeout: () async {
+        try {
+          await NfcManager.instance.stopSession(
+            errorMessage: 'انتهت مهلة القراءة. أعيدي المحاولة.',
+          );
+        } catch (_) {
+          // no-op
+        }
+        return null;
+      },
+    );
+  }
+
+  String _extractCardIdFromTagData(Map<dynamic, dynamic> data) {
+    final candidates = <dynamic>[
+      _dig(data, ['nfca', 'identifier']),
+      _dig(data, ['mifareclassic', 'identifier']),
+      _dig(data, ['mifareultralight', 'identifier']),
+      _dig(data, ['nfcv', 'identifier']),
+      _dig(data, ['nfcb', 'identifier']),
+      _dig(data, ['isodep', 'identifier']),
+      _dig(data, ['felica', 'currentIDm']),
+      _dig(data, ['ndef', 'identifier']),
+    ];
+
+    for (final candidate in candidates) {
+      final id = _bytesToHex(candidate);
+      if (id.isNotEmpty) {
+        return NfcAttendanceService.normalizeLecturerCardId(id);
+      }
+    }
+    return '';
+  }
+
+  dynamic _dig(Map<dynamic, dynamic> map, List<String> path) {
+    dynamic current = map;
+    for (final key in path) {
+      if (current is Map && current.containsKey(key)) {
+        current = current[key];
+      } else {
+        return null;
+      }
+    }
+    return current;
+  }
+
+  String _bytesToHex(dynamic value) {
+    List<int> bytes = <int>[];
+    if (value is Uint8List) {
+      bytes = value.toList();
+    } else if (value is List) {
+      bytes = value.whereType<num>().map((e) => e.toInt()).toList();
+    } else if (value is String) {
+      final normalized = value.trim().replaceAll(' ', '');
+      if (RegExp(r'^[A-Fa-f0-9]+$').hasMatch(normalized)) {
+        return normalized.toUpperCase();
+      }
+    }
+    if (bytes.isEmpty) return '';
+    return bytes
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join()
+        .toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('إدارة بطاقات NFC')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _lecturersRef.orderBy('nameAr').snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+              return const Center(
+                child: Text('لا يوجد محاضرين لربط البطاقات حالياً'),
+              );
+            }
+
+            final docs = snapshot.data!.docs;
+            final selectedExists = docs.any(
+              (doc) => doc.id == _selectedLecturerId,
+            );
+            final selectedId = selectedExists ? _selectedLecturerId : null;
+            QueryDocumentSnapshot<Map<String, dynamic>>? selectedDoc;
+            for (final doc in docs) {
+              if (doc.id == selectedId) {
+                selectedDoc = doc;
+                break;
+              }
+            }
+            final currentCardId = selectedDoc == null
+                ? ''
+                : (selectedDoc.data()['lecturerCardId'] ?? '')
+                      .toString()
+                      .trim();
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const _SectionTitle('ربط بطاقة NFC بمحاضر'),
+                DropdownButtonFormField<String?>(
+                  initialValue: selectedId,
+                  decoration: const InputDecoration(
+                    labelText: 'اختيار المحاضر',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('اختر محاضر'),
+                    ),
+                    ...docs.map((doc) {
+                      final data = doc.data();
+                      final nameAr = (data['nameAr'] ?? '').toString().trim();
+                      final nameEn = (data['nameEn'] ?? '').toString().trim();
+                      final displayName = nameAr.isNotEmpty
+                          ? nameAr
+                          : (nameEn.isNotEmpty ? nameEn : doc.id);
+                      return DropdownMenuItem<String?>(
+                        value: doc.id,
+                        child: Text('$displayName - ${doc.id}'),
+                      );
+                    }),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _selectedLecturerId = value);
+                  },
+                ),
+                const SizedBox(height: 8),
+                if (selectedId != null)
+                  Text(
+                    currentCardId.isEmpty
+                        ? 'لا توجد بطاقة مرتبطة حالياً بهذا المحاضر.'
+                        : 'البطاقة الحالية: $currentCardId',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: currentCardId.isEmpty
+                          ? Colors.grey.shade700
+                          : const Color(0xFF006571),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                const SizedBox(height: 10),
+                FilledButton.icon(
+                  onPressed: _isBindingCard
+                      ? null
+                      : _bindCardToSelectedLecturer,
+                  icon: _isBindingCard
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.nfc_rounded),
+                  label: Text(
+                    _isBindingCard
+                        ? 'وضع القراءة مفعّل...'
+                        : 'تفعيل وضع القراءة وربط البطاقة',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const _SectionTitle('بطاقات المحاضرين الحالية'),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: docs.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final doc = docs[index];
+                      final data = doc.data();
+                      final name = (data['nameAr'] ?? data['nameEn'] ?? '')
+                          .toString()
+                          .trim();
+                      final cardId = (data['lecturerCardId'] ?? '')
+                          .toString()
+                          .trim();
+
+                      return ListTile(
+                        leading: const Icon(Icons.badge_outlined),
+                        title: Text(name.isEmpty ? doc.id : name),
+                        subtitle: Text('ID: ${doc.id}'),
+                        trailing: Text(
+                          cardId.isEmpty ? 'غير مربوط' : cardId,
+                          style: TextStyle(
+                            color: cardId.isEmpty
+                                ? Colors.grey.shade700
+                                : const Color(0xFF006571),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -1072,6 +1405,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
           'nameAr': 'د. فاطمة أحمد',
           'nameEn': 'Dr. Fatimah Ahmed',
           'email': 'l1001@uqu.edu.sa',
+          'lecturerCardId': '04A1B2C3D4',
           'role': 'lecturer',
           'college': 'College of Computing and Information',
           'department': 'Software Engineering',
@@ -1081,6 +1415,7 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
           'nameAr': 'د. نورة علي',
           'nameEn': 'Dr. Nora Ali',
           'email': 'l1002@uqu.edu.sa',
+          'lecturerCardId': '04B1C2D3E4',
           'role': 'lecturer',
           'college': 'College of Computing and Information',
           'department': 'Software Engineering',
