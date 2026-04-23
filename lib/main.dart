@@ -31,22 +31,64 @@ Future<void> main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  static const _brandTeal = Color(0xFF27A2A9);
+  static const _brandTealDark = Color(0xFF006571);
+  static const _textOnLight = Color(0xFF111827);
+
   static final ThemeData _lightTheme = ThemeData(
-    useMaterial3: true,
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: const Color(0xFF27A2A9),
-      brightness: Brightness.light,
-    ),
+    useMaterial3: false,
+    brightness: Brightness.light,
     fontFamily: 'Cairo',
+    colorScheme: const ColorScheme.light(
+      primary: _brandTealDark,
+      onPrimary: Colors.white,
+      secondary: _brandTeal,
+      onSecondary: Colors.white,
+      surface: Colors.white,
+      onSurface: _textOnLight,
+      error: Color(0xFFB71C1C),
+      onError: Colors.white,
+    ),
+    scaffoldBackgroundColor: Colors.white,
+    cardTheme: const CardThemeData(
+      color: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+    ),
+    dialogTheme: const DialogThemeData(
+      surfaceTintColor: Colors.transparent,
+    ),
+    bottomSheetTheme: const BottomSheetThemeData(
+      surfaceTintColor: Colors.transparent,
+    ),
   );
 
   static final ThemeData _darkTheme = ThemeData(
-    useMaterial3: true,
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: const Color(0xFF27A2A9),
-      brightness: Brightness.dark,
-    ),
+    useMaterial3: false,
+    brightness: Brightness.dark,
     fontFamily: 'Cairo',
+    colorScheme: const ColorScheme.dark(
+      primary: _brandTeal,
+      onPrimary: Colors.black,
+      secondary: _brandTeal,
+      onSecondary: Colors.black,
+      surface: Color(0xFF0B1220),
+      onSurface: Colors.white,
+      error: Color(0xFFCF6679),
+      onError: Colors.black,
+    ),
+    scaffoldBackgroundColor: const Color(0xFF050A14),
+    cardTheme: const CardThemeData(
+      color: Color(0xFF0B1220),
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+    ),
+    dialogTheme: const DialogThemeData(
+      surfaceTintColor: Colors.transparent,
+    ),
+    bottomSheetTheme: const BottomSheetThemeData(
+      surfaceTintColor: Colors.transparent,
+    ),
   );
 
   @override

@@ -30,6 +30,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static const _textStrong = Color(0xFF111827);
+  static const _textMuted = Color(0xFF6B7280);
   int selectedIndex = 2; // Start with Home selected (index 2 for Home)
   final ManualAttendanceService _attendance = ManualAttendanceService.instance;
   final ExcuseService _excuses = ExcuseService.instance;
@@ -108,9 +110,12 @@ class _HomeScreenState extends State<HomeScreen> {
   String _greetingName() {
     final s = StudentAuthService.instance.currentStudent;
     if (s == null) return 'طالب';
+    final isEn = TranslationController.instance.translateToEnglish;
     final nameAr = (s.nameAr).trim();
     final nameEn = (s.name).trim();
-    final raw = nameAr.isNotEmpty ? nameAr : nameEn;
+    final raw = isEn
+        ? (nameEn.isNotEmpty ? nameEn : nameAr)
+        : (nameAr.isNotEmpty ? nameAr : nameEn);
     if (raw.isEmpty) return 'طالب';
     return raw.split(' ').first;
   }
@@ -148,6 +153,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
+                          color: _textStrong,
                         ),
                       ),
                       Row(
@@ -225,6 +231,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
+                      color: _textStrong,
                     ),
                   ),
                   TextButton(
@@ -266,7 +273,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   const TText(
                     'الغيابات النشطة:',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: _textStrong,
+                    ),
                   ),
                   TextButton(
                     onPressed: () {
@@ -300,7 +311,9 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 5),
 
               SizedBox(
-                height: 180,
+                // Cards can grow slightly when showing status badges / longer text.
+                // Keep a bit of extra vertical space to avoid bottom overflow on small devices.
+                height: 208,
                 child: _buildActiveAbsencesSection(context),
               ),
                 ],
@@ -560,12 +573,27 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          TText(
-                            StudentAuthService
-                                    .instance.currentStudent?.displayName ??
-                                '-',
+                          Text(
+                            (() {
+                              final s = StudentAuthService.instance.currentStudent;
+                              if (s == null) return '-';
+                              final isEn =
+                                  TranslationController.instance.translateToEnglish;
+                              final ar = (s.nameAr).trim();
+                              final en = (s.name).trim();
+                              final chosen = isEn
+                                  ? (en.isNotEmpty ? en : ar)
+                                  : (ar.isNotEmpty ? ar : en);
+                              return chosen.isEmpty ? '-' : chosen;
+                            })(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 14),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: Color(0xFF111827),
+                              fontFamily: 'Cairo',
+                            ),
                           ),
                           const SizedBox(height: 4),
                           TText(
@@ -650,17 +678,27 @@ class _HomeScreenState extends State<HomeScreen> {
           TText(
             title,
             textAlign: TextAlign.start,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: _textStrong,
+            ),
           ),
           const SizedBox(height: 8),
-          TText(isEn ? 'Lecture' : 'نظري', textAlign: TextAlign.start),
+          TText(
+            isEn ? 'Lecture' : 'نظري',
+            textAlign: TextAlign.start,
+            style: const TextStyle(color: _textMuted),
+          ),
           TText(
             isEn ? 'Section $section' : 'الشعبة $section',
             textAlign: TextAlign.start,
+            style: const TextStyle(color: _textMuted),
           ),
           TText(
             isEn ? 'Room $room' : 'القاعة $room',
             textAlign: TextAlign.start,
+            style: const TextStyle(color: _textMuted),
           ),
           if (statusText != null) ...[
             const SizedBox(height: 12),

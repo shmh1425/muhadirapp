@@ -41,6 +41,21 @@ class SettingsScreen extends StatelessWidget {
   Widget _buildStudentDataSection() {
     final student = StudentAuthService.instance.currentStudent;
     if (student == null) return const SizedBox.shrink();
+    final isEn = TranslationController.instance.translateToEnglish;
+    final majorAr = (student.majorArSafe).trim();
+    final majorEn = student.major.trim();
+    String normalizeMajorAr(String rawAr, String rawEn) {
+      final ar = rawAr.trim();
+      final en = rawEn.trim().toLowerCase();
+      // Fix common transliterations / wrong Arabic labels.
+      if (ar == 'ايكونومك' || ar.contains('ايكونوم')) return 'اقتصاد';
+      if (en == 'economics' || en == 'economic') return 'اقتصاد';
+      return ar;
+    }
+
+    final majorArNormalized = normalizeMajorAr(majorAr, majorEn);
+    final majorDisplay =
+        isEn ? majorEn : (majorArNormalized.isNotEmpty ? majorArNormalized : majorEn);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -56,7 +71,7 @@ class SettingsScreen extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         TText(
-          student.major,
+          majorDisplay,
           style: const TextStyle(
             color: Color(0xFF444444),
             fontSize: 14,
@@ -98,7 +113,10 @@ class SettingsScreen extends StatelessWidget {
                     const TText(
                       'هل أنت متأكد أنك تريد تسجيل الخروج؟',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF111827),
+                      ),
                     ),
                     const SizedBox(height: 16),
                     SizedBox(

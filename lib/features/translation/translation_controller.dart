@@ -23,6 +23,7 @@ class TranslationController extends ChangeNotifier {
   }
 
   /// Returns proper label for the toggle button.
-  String get toggleLabel => _translateToEnglish ? 'Arabic' : 'Translate';
+  String get toggleLabel =>
+      _translateToEnglish ? 'Translate to Arabic' : 'Translate to English';
 }
 

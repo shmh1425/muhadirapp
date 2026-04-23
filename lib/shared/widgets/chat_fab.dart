@@ -8,10 +8,13 @@ class ChatFAB extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dir = Directionality.of(context);
+    // Nudge the custom icon outward to hug the screen edge.
+    final dx = dir == TextDirection.ltr ? 22.0 : -22.0;
     return Material(
       color: Colors.transparent,
       child: Transform.translate(
-        offset: const Offset(-22, 40),
+        offset: Offset(dx, 40),
         child: InkWell(
           onTap: () {
             Navigator.of(context).push(

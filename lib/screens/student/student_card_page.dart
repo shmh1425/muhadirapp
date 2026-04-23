@@ -72,17 +72,38 @@ class StudentCardPage extends StatelessWidget {
     final nameAr = student?.nameAr ?? '';
     final nameEn = student?.name ?? '';
     final studentId = student?.studentId.toString() ?? '-';
+    final collegeAr = (student?.collegeArSafe ?? '').trim();
+    final collegeEn = (student?.collegeSafe ?? '').trim();
     final departmentAr = (student?.departmentArSafe ?? '').trim();
     final departmentEn = (student?.departmentSafe ?? '').trim();
     final majorAr = (student?.majorArSafe ?? '').trim();
     final majorEn = (student?.major ?? '').trim();
 
+    String normalizeMajorAr(String rawAr, String rawEn) {
+      final ar = rawAr.trim();
+      final en = rawEn.trim().toLowerCase();
+      if (ar == 'ايكونومك' || ar.contains('ايكونوم')) return 'اقتصاد';
+      if (en == 'economics' || en == 'economic') return 'اقتصاد';
+      return ar;
+    }
+
+    final majorArNormalized = normalizeMajorAr(majorAr, majorEn);
+
+    final collegeArDisplay =
+        collegeAr.isNotEmpty ? collegeAr : (collegeEn.isNotEmpty ? collegeEn : '—');
+    final collegeEnDisplay =
+        collegeEn.isNotEmpty ? collegeEn : (collegeAr.isNotEmpty ? collegeAr : '—');
+
     final departmentArDisplay =
-        departmentAr.isNotEmpty ? departmentAr : (majorAr.isNotEmpty ? majorAr : 'هندسة البرمجيات');
+        departmentAr.isNotEmpty
+            ? departmentAr
+            : (majorArNormalized.isNotEmpty ? majorArNormalized : 'هندسة البرمجيات');
     final departmentEnDisplay =
         departmentEn.isNotEmpty ? departmentEn : (majorEn.isNotEmpty ? majorEn : 'Software Engineering');
     final majorArDisplay =
-        majorAr.isNotEmpty ? majorAr : (majorEn.isNotEmpty ? majorEn : 'هندسة البرمجيات');
+        majorArNormalized.isNotEmpty
+            ? majorArNormalized
+            : (majorEn.isNotEmpty ? majorEn : 'هندسة البرمجيات');
     final majorEnDisplay =
         majorEn.isNotEmpty ? majorEn : (majorAr.isNotEmpty ? majorAr : 'Software Engineering');
     return Container(
@@ -167,7 +188,7 @@ class StudentCardPage extends StatelessWidget {
                   child: Directionality(
                     textDirection: TextDirection.ltr,
                     child: Text(
-                      'Faculty: College of Computers\nDepartment: $departmentEnDisplay\nMajor: $majorEnDisplay',
+                      'Faculty: $collegeEnDisplay\nDepartment: $departmentEnDisplay\nMajor: $majorEnDisplay',
                       textAlign: TextAlign.left,
                       style: TextStyle(
                         color: Colors.black.withOpacity(0.88),
@@ -184,7 +205,7 @@ class StudentCardPage extends StatelessWidget {
                   child: Directionality(
                     textDirection: TextDirection.rtl,
                     child: Text(
-                      'الكلية: كلية الحاسبات\nالقسم: $departmentArDisplay\nالتخصص: $majorArDisplay',
+                      'الكلية: $collegeArDisplay\nالقسم: $departmentArDisplay\nالتخصص: $majorArDisplay',
                       textAlign: TextAlign.right,
                       style: TextStyle(
                         color: Colors.black.withOpacity(0.88),

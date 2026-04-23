@@ -482,11 +482,13 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
             constraints: const BoxConstraints(),
             onPressed: () => Navigator.of(context).maybePop(),
           ),
-          const Expanded(
+          Expanded(
             child: TText(
-              'رفع عذر',
+              translation.translateToEnglish
+                  ? 'Submit Excuse Request'
+                  : 'رفع عذر',
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF006571),

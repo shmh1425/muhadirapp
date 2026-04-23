@@ -553,6 +553,19 @@ class _LoginScreenState extends State<LoginScreen> {
                             });
                           },
                           activeColor: const Color(0xFF006571),
+                          checkColor: Colors.white,
+                          side: const BorderSide(
+                            color: Color(0xFF006571),
+                            width: 1.4,
+                          ),
+                          fillColor:
+                              WidgetStateProperty.resolveWith<Color>((states) {
+                            if (states.contains(WidgetState.selected)) {
+                              return const Color(0xFF006571);
+                            }
+                            // Keep unchecked box clearly visible on white backgrounds.
+                            return Colors.white;
+                          }),
                         ),
                         Expanded(
                           child: TText(
