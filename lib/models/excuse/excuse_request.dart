@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 enum ExcuseRequestStatus { pending, accepted, rejected, expired }
 
@@ -26,6 +27,7 @@ class ExcuseRequest {
     this.reviewDeadlineAt,
     this.reviewedBy,
     this.reviewedAt,
+    this.isPartialDocument = false,
   });
 
   final String id;
@@ -59,6 +61,9 @@ class ExcuseRequest {
   final DateTime? reviewDeadlineAt;
   final String? reviewedBy;
   final DateTime? reviewedAt;
+
+  /// True when key fields are missing (legacy / minimal Firestore documents).
+  final bool isPartialDocument;
 
   static ExcuseRequestStatus statusFromString(String raw) {
     switch (raw.trim().toLowerCase()) {
@@ -102,19 +107,64 @@ class ExcuseRequest {
       final y = _safeInt(data['lectureYear']);
       final m = _safeInt(data['lectureMonth']);
       final d = _safeInt(data['lectureDay']);
-      lectureDate = (y > 0 && m > 0 && d > 0) ? DateTime(y, m, d) : DateTime.now();
+      if (y > 0 && m > 0 && d > 0) {
+        lectureDate = DateTime(y, m, d);
+      } else {
+        // Avoid misleading "today" for empty legacy docs; UI can show a dash.
+        lectureDate = DateTime.utc(2000, 1, 1);
+        debugPrint(
+          '[ExcuseRequest] fromDoc ${doc.id}: missing lectureDate / lectureYear fields; '
+          'using placeholder date.',
+        );
+      }
     }
 
     DateTime? parseTs(dynamic v) => v is Timestamp ? v.toDate() : null;
 
     final sid = (data['sessionId'] ?? '').toString().trim();
     final attId = (data['attendanceRecordId'] ?? '').toString().trim();
+    final parsedStudentId = _safeInt(data['studentId']);
+    final parsedSectionId = (data['sectionId'] ?? '').toString().trim();
+    if (parsedStudentId <= 0) {
+      debugPrint(
+        '[ExcuseRequest] fromDoc ${doc.id}: missing or invalid studentId.',
+      );
+    }
+    if (parsedSectionId.isEmpty) {
+      debugPrint(
+        '[ExcuseRequest] fromDoc ${doc.id}: missing sectionId.',
+      );
+    }
+    if (sid.isEmpty) {
+      debugPrint(
+        '[ExcuseRequest] fromDoc ${doc.id}: missing sessionId.',
+      );
+    }
+    if (attId.isEmpty) {
+      debugPrint(
+        '[ExcuseRequest] fromDoc ${doc.id}: missing attendanceRecordId.',
+      );
+    }
+
+    final courseAr =
+        (data['courseNameAr'] ?? data['courseName_Ar'] ?? '').toString().trim();
+    final partial =
+        parsedStudentId <= 0 || parsedSectionId.isEmpty || courseAr.isEmpty;
+    final parsedAttachmentName = (data['attachmentName'] ?? '').toString().trim();
+    final parsedAttachmentUrl =
+        (data['attachmentUrl'] ?? data['attachmentURL'] ?? '').toString().trim();
+    debugPrint(
+      '[ExcuseRequest] fromDoc ${doc.id}: '
+      'hasAttachment=${parsedAttachmentUrl.isNotEmpty} '
+      'attachmentName="$parsedAttachmentName" '
+      'attachmentUrl="$parsedAttachmentUrl"',
+    );
 
     return ExcuseRequest(
       id: doc.id,
-      studentId: _safeInt(data['studentId']),
-      sectionId: (data['sectionId'] ?? '').toString().trim(),
-      courseNameAr: (data['courseNameAr'] ?? data['courseName_Ar'] ?? '').toString().trim(),
+      studentId: parsedStudentId,
+      sectionId: parsedSectionId,
+      courseNameAr: courseAr,
       lectureDate: lectureDate,
       lectureStartTime: (data['lectureStartTime'] ?? '').toString().trim(),
       lectureEndTime: (data['lectureEndTime'] ?? '').toString().trim(),
@@ -122,12 +172,12 @@ class ExcuseRequest {
       reasonText: (data['reasonText'] ?? data['reason'] ?? '').toString().trim().isEmpty
           ? null
           : (data['reasonText'] ?? data['reason'] ?? '').toString().trim(),
-      attachmentUrl: (data['attachmentUrl'] ?? data['attachmentURL'] ?? '').toString().trim().isEmpty
+      attachmentUrl: parsedAttachmentUrl.isEmpty
           ? null
-          : (data['attachmentUrl'] ?? data['attachmentURL'] ?? '').toString().trim(),
-      attachmentName: (data['attachmentName'] ?? '').toString().trim().isEmpty
+          : parsedAttachmentUrl,
+      attachmentName: parsedAttachmentName.isEmpty
           ? null
-          : (data['attachmentName'] ?? '').toString().trim(),
+          : parsedAttachmentName,
       rejectionReason: (data['rejectionReason'] ?? '').toString().trim().isEmpty
           ? null
           : (data['rejectionReason'] ?? '').toString().trim(),
@@ -147,6 +197,7 @@ class ExcuseRequest {
           ? null
           : (data['reviewedBy'] ?? '').toString().trim(),
       reviewedAt: parseTs(data['reviewedAt']),
+      isPartialDocument: partial,
     );
   }
 
