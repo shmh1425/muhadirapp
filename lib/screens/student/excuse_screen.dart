@@ -149,6 +149,8 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
         course: courseOverride ?? item.course,
         status: status,
         rejectionReason: req?.rejectionReason,
+        attachmentUrl: req?.attachmentUrl,
+        attachmentName: req?.attachmentName,
       ));
     }
     return updated;
@@ -620,6 +622,8 @@ class _ExcuseItem {
     required this.attendanceRecordId,
     required this.rawStartTime,
     this.rejectionReason,
+    this.attachmentUrl,
+    this.attachmentName,
   });
 
   final String course;
@@ -632,11 +636,15 @@ class _ExcuseItem {
   final String attendanceRecordId;
   final String rawStartTime;
   final String? rejectionReason;
+  final String? attachmentUrl;
+  final String? attachmentName;
 
   _ExcuseItem copyWith({
     String? course,
     String? status,
     String? rejectionReason,
+    String? attachmentUrl,
+    String? attachmentName,
   }) {
     return _ExcuseItem(
       course: course ?? this.course,
@@ -649,6 +657,8 @@ class _ExcuseItem {
       attendanceRecordId: attendanceRecordId,
       rawStartTime: rawStartTime,
       rejectionReason: rejectionReason ?? this.rejectionReason,
+      attachmentUrl: attachmentUrl ?? this.attachmentUrl,
+      attachmentName: attachmentName ?? this.attachmentName,
     );
   }
 }
@@ -762,6 +772,8 @@ class _ExcuseCard extends StatelessWidget {
             lectureDate: item.rawDate,
             sessionId: item.sessionId,
             attendanceRecordId: item.attendanceRecordId,
+            attachmentUrl: item.attachmentUrl,
+            attachmentName: item.attachmentName,
           ),
         ),
       );

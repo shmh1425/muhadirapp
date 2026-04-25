@@ -266,10 +266,14 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
         }
       }
 
-      final requestId = FirebaseFirestore.instance
-          .collection(ExcuseService.excusesCollection)
-          .doc()
-          .id;
+      final sessionId = widget.sessionId.trim();
+      final recordId = widget.attendanceRecordId.trim();
+      final String requestId = recordId.isNotEmpty
+          ? recordId
+          : (sessionId.isNotEmpty ? '${sessionId}_$studentId' : FirebaseFirestore.instance
+              .collection(ExcuseService.excusesCollection)
+              .doc()
+              .id);
 
       final studentDisplayName = (student?.nameAr ?? '').trim().isNotEmpty
           ? (student!.nameAr).trim()
@@ -287,19 +291,25 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
         reasonText: reason.isEmpty ? null : reason,
         attachmentUrl: attachmentUrl,
         attachmentName: attachmentName,
-        sessionId: widget.sessionId.trim().isEmpty ? null : widget.sessionId.trim(),
-        attendanceRecordId: widget.attendanceRecordId.trim().isEmpty
-            ? null
-            : widget.attendanceRecordId.trim(),
+        sessionId: sessionId.isEmpty ? null : sessionId,
+        attendanceRecordId: recordId.isEmpty ? null : recordId,
         studentName:
             studentDisplayName.trim().isEmpty ? null : studentDisplayName.trim(),
+        submittedAt: DateTime.now(),
       );
 
       debugPrint('[SubmitExcuse] submitting request id=$requestId sectionId=${widget.sectionId} sessionId=${widget.sessionId} recordId=${widget.attendanceRecordId}');
-      await ExcuseService.instance.submitRequestAndNotifyLecturer(
+      final storedInExcuseRequests = await ExcuseService.instance.submitRequestAndNotifyLecturer(
         request: request,
         studentDisplayName: studentDisplayName.isEmpty ? studentId.toString() : studentDisplayName,
       );
+      if (!storedInExcuseRequests) {
+        _showError(
+          'تم رفع الملف، لكن لم يتم حفظ بيانات العذر في قاعدة البيانات (excuse_requests). تأكد من نشر قواعد Firestore وتفعيل Anonymous Auth ثم أعد الإرسال.',
+          'The file was uploaded, but the excuse document was not saved in Firestore (excuse_requests). Deploy Firestore rules and enable Anonymous Auth, then resubmit.',
+        );
+        return;
+      }
 
       if (!mounted) return;
       _showSuccessDialog();

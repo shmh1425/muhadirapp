@@ -452,6 +452,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                   lectureDate: r.lectureDate,
                                   sessionId: r.sessionId,
                                   attendanceRecordId: r.recordId,
+                                  attachmentUrl: req?.attachmentUrl,
+                                  attachmentName: req?.attachmentName,
                                 ),
                               ),
                             );

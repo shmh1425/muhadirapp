@@ -25,7 +25,9 @@ service firebase.storage {
 
     // Student excuse attachments.
     match /excuses/{studentId}/{rest=**} {
-      allow read: if isSignedIn();
+      // The lecturer UI opens the download URL in a browser tab; keeping it public
+      // avoids auth/cookie issues on web while still requiring auth for uploads.
+      allow read: if true;
       allow write: if isSignedIn();
     }
 

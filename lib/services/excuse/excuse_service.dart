@@ -230,11 +230,14 @@ class ExcuseService {
         .set(request.toMap(), SetOptions(merge: true));
   }
 
-  Future<void> submitRequestAndNotifyLecturer({
+  /// Returns true if the request was stored in `excuse_requests`.
+  /// Returns false if rules blocked storing there (permission-denied), while still
+  /// creating a lecturer notification + student pending marker.
+  Future<bool> submitRequestAndNotifyLecturer({
     required ExcuseRequest request,
     required String studentDisplayName,
   }) async {
-    if (!enabled) return;
+    if (!enabled) return false;
 
     final lecturerId = await _lookupLecturerIdForSection(request.sectionId);
     var storedInExcuseRequests = true;
@@ -249,7 +252,7 @@ class ExcuseService {
       if (e.code != 'permission-denied') rethrow;
     }
 
-    if (lecturerId.isEmpty) return;
+    if (lecturerId.isEmpty) return storedInExcuseRequests;
 
     final ref = _firestore.collection(_lecturerNotificationsCollection).doc();
     await ref.set({
@@ -312,6 +315,7 @@ class ExcuseService {
       'attachmentUrl': request.attachmentUrl ?? '',
       'createdAt': FieldValue.serverTimestamp(),
     });
+    return storedInExcuseRequests;
   }
 
   Future<String> _lookupLecturerIdForSection(String sectionId) async {

@@ -65,6 +65,7 @@ class OpenAIService {
     required String userMessage,
     required String attendanceContext,
     required List<Map<String, String>> chatHistory,
+    bool forceEnglish = false,
   }) async {
     if (_apiKey.isEmpty ||
         _apiKey.toUpperCase().contains('YOUR_KEY_HERE') ||
@@ -78,6 +79,19 @@ class OpenAIService {
 
     // 1. System prompt (personality + rules)
     messages.add({'role': 'system', 'content': _systemPrompt});
+
+    // App-level override: when UI is set to English, enforce English-only output.
+    if (forceEnglish) {
+      messages.add({
+        'role': 'system',
+        'content': '''
+The app UI language is English.
+You MUST respond in English only.
+Do NOT include any Arabic words, Arabic characters, or Arabic punctuation.
+If the user's message is Arabic or the context is Arabic, still reply in English only.
+''',
+      });
+    }
 
     // 2. Attendance context as first assistant-facing info
     if (attendanceContext.isNotEmpty) {
@@ -169,8 +183,11 @@ For other questions, respond naturally without mentioning this data.
         'تجاوز حد الاستخدام أو انتهى الرصيد. تحقق من حساب OpenAI.',
       );
     }
+    final bodyPreview = response.body.length > 80
+        ? '${response.body.substring(0, 80)}...'
+        : response.body;
     throw ChatbotException(
-      'OpenAI error: ${response.statusCode} — ${response.body.length > 80 ? response.body.substring(0, 80) + '...' : response.body}',
+      'OpenAI error: ${response.statusCode} — $bodyPreview',
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'components/notification_bell.dart';
 import 'components/custom_nav_bar_icons.dart';
+import 'excuse_attachment_preview_screen.dart';
 import 'home_screen.dart';
 import 'submit_excuse_screen.dart';
 import 'settings_screen.dart';
@@ -14,6 +15,8 @@ class RejectionDetailScreen extends StatelessWidget {
   final DateTime lectureDate;
   final String sessionId;
   final String attendanceRecordId;
+  final String? attachmentUrl;
+  final String? attachmentName;
 
   const RejectionDetailScreen({
     super.key,
@@ -25,6 +28,8 @@ class RejectionDetailScreen extends StatelessWidget {
     required this.lectureDate,
     required this.sessionId,
     required this.attendanceRecordId,
+    this.attachmentUrl,
+    this.attachmentName,
   });
 
   @override
@@ -116,7 +121,7 @@ class RejectionDetailScreen extends StatelessWidget {
         ),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -225,34 +230,65 @@ class RejectionDetailScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          // Document Icon - في أقصى اليمين
+          // Document — معاينة المرفق عند توفر الرابط
           Align(
             alignment: Alignment.centerRight,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF5F5F5),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.description_outlined,
-                    color: Color(0xFF616161),
-                    size: 24,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: (attachmentUrl ?? '').trim().isEmpty
+                    ? null
+                    : () {
+                        Navigator.push<void>(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => ExcuseAttachmentPreviewScreen(
+                              url: attachmentUrl!.trim(),
+                              displayName: attachmentName?.trim().isNotEmpty == true
+                                  ? attachmentName!.trim()
+                                  : null,
+                            ),
+                          ),
+                        );
+                      },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF5F5F5),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.description_outlined,
+                          color: Color(0xFF616161),
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        attachmentName?.trim().isNotEmpty == true
+                            ? attachmentName!.trim()
+                            : 'عذر',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: (attachmentUrl ?? '').trim().isEmpty
+                              ? Colors.grey.shade400
+                              : const Color(0xFF006571),
+                          decoration: (attachmentUrl ?? '').trim().isEmpty
+                              ? TextDecoration.none
+                              : TextDecoration.underline,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                Text(
-                  'عذر',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade400,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
           const SizedBox(height: 32),

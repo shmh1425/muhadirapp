@@ -6,6 +6,7 @@ import 'components/custom_nav_bar_icons.dart';
 import 'components/notification_bell.dart';
 import 'home_screen.dart';
 import 'settings_screen.dart';
+import 'submit_excuse_screen.dart';
 import '../../features/translation/translation_controller.dart';
 import '../../features/translation/widgets/t_text.dart';
 
@@ -62,6 +63,48 @@ class PendingDetailScreen extends StatelessWidget {
 
       return (best ?? snap.docs.first).data();
     });
+  }
+
+  Future<({String sectionId, String sessionId, DateTime lectureDate, String timeRange})?>
+      _fetchAttendanceMeta() async {
+    final rid = attendanceRecordId.trim();
+    if (rid.isEmpty) return null;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('manual_attendance_records')
+          .doc(rid)
+          .get();
+      if (!snap.exists) return null;
+      final data = snap.data() ?? <String, dynamic>{};
+      final sectionId = (data['sectionId'] ?? '').toString().trim();
+      final sessionId = (data['sessionId'] ?? '').toString().trim();
+
+      DateTime lectureDate;
+      final ts = data['lectureDate'];
+      if (ts is Timestamp) {
+        final d = ts.toDate();
+        lectureDate = DateTime(d.year, d.month, d.day);
+      } else {
+        final y = int.tryParse((data['lectureYear'] ?? '').toString()) ?? 0;
+        final m = int.tryParse((data['lectureMonth'] ?? '').toString()) ?? 0;
+        final d = int.tryParse((data['lectureDay'] ?? '').toString()) ?? 0;
+        lectureDate = (y > 0 && m > 0 && d > 0) ? DateTime(y, m, d) : DateTime.now();
+      }
+
+      final start = (data['lectureStartTime'] ?? '').toString().trim();
+      final end = (data['lectureEndTime'] ?? '').toString().trim();
+      final range = (start.isNotEmpty && end.isNotEmpty) ? '$start-$end' : timeRange;
+
+      if (sectionId.isEmpty || sessionId.isEmpty) return null;
+      return (
+        sectionId: sectionId,
+        sessionId: sessionId,
+        lectureDate: lectureDate,
+        timeRange: range,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _openAttachment(BuildContext context, String url) async {
@@ -398,6 +441,91 @@ class PendingDetailScreen extends StatelessWidget {
               ),
               textAlign: TextAlign.start,
             ),
+          ),
+          const SizedBox(height: 22),
+          FutureBuilder<
+              ({
+                String sectionId,
+                String sessionId,
+                DateTime lectureDate,
+                String timeRange
+              })?>(
+            future: _fetchAttendanceMeta(),
+            builder: (context, metaSnap) {
+              final meta = metaSnap.data;
+              final bool loading = metaSnap.connectionState == ConnectionState.waiting;
+
+              return SizedBox(
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: loading
+                      ? null
+                      : () async {
+                          final picked = meta ?? await _fetchAttendanceMeta();
+                          if (picked == null) {
+                            if (!context.mounted) return;
+                            final t = TranslationController.instance;
+                            final td = t.textDirection;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  translateToEnglish
+                                      ? 'Could not load lecture details. Please try again.'
+                                      : 'تعذر تحميل بيانات المحاضرة. حاول مرة أخرى.',
+                                  textDirection: td,
+                                ),
+                                backgroundColor: const Color(0xFFB71C1C),
+                              ),
+                            );
+                            return;
+                          }
+                          if (!context.mounted) return;
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => SubmitExcuseScreen(
+                                course: course,
+                                dateText: dateText,
+                                timeRange: picked.timeRange,
+                                sectionId: picked.sectionId,
+                                lectureDate: picked.lectureDate,
+                                sessionId: picked.sessionId,
+                                attendanceRecordId: attendanceRecordId,
+                              ),
+                            ),
+                          );
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF006571),
+                    disabledBackgroundColor:
+                        const Color(0xFF006571).withValues(alpha: 0.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                  ),
+                  child: loading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : TText(
+                          translateToEnglish
+                              ? 'Update excuse'
+                              : 'تعديل / إعادة رفع العذر',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                ),
+              );
+            },
           ),
         ],
       ),

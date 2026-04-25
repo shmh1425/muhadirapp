@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/chat_message.dart';
 import '../providers/chatbot_provider.dart';
+import '../../translation/translation_controller.dart';
 
 class ChatbotScreen extends StatelessWidget {
   const ChatbotScreen({super.key});
@@ -15,82 +16,93 @@ class ChatbotScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
       value: ChatbotProvider.instance,
-      child: Directionality(
-        textDirection: TextDirection.rtl,
-        child: Scaffold(
-          backgroundColor: Colors.white,
-          appBar: AppBar(
-            backgroundColor: Colors.white,
-            elevation: 0,
-            leading: IconButton(
-              icon: Transform(
-                alignment: Alignment.center,
-                transform: Matrix4.rotationY(3.14159),
-                child: const Icon(Icons.arrow_back_ios_new, color: _primaryColor),
+      child: AnimatedBuilder(
+        animation: TranslationController.instance,
+        builder: (context, _) {
+          final controller = TranslationController.instance;
+          final dir = controller.textDirection;
+          return Directionality(
+            textDirection: dir,
+            child: Scaffold(
+              backgroundColor: Colors.white,
+              appBar: AppBar(
+                backgroundColor: Colors.white,
+                elevation: 0,
+                leading: IconButton(
+                  icon: Transform(
+                    alignment: Alignment.center,
+                    transform: Matrix4.rotationY(dir == TextDirection.rtl ? 3.14159 : 0),
+                    child: const Icon(Icons.arrow_back_ios_new, color: _primaryColor),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                titleSpacing: 0,
+                title: Align(
+                  alignment: dir == TextDirection.rtl
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _ChatbotAvatar(size: 90),
+                      const SizedBox(width: 4),
+                      Text(
+                        controller.translateToEnglish
+                            ? 'Your smart assistant'
+                            : 'مساعدك الذكي',
+                        style: const TextStyle(
+                          color: Color(0xFF1A1A1A),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                centerTitle: false,
               ),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            titleSpacing: 0,
-            title: Align(
-              alignment: Alignment.centerRight,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+              body: Column(
                 children: [
-                  _ChatbotAvatar(size: 90),
-                  const SizedBox(width: 4),
-                  const Text(
-                    'مساعدك الذكي',
-                    style: TextStyle(
-                      color: Color(0xFF1A1A1A),
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                  Expanded(
+                    child: Consumer<ChatbotProvider>(
+                      builder: (context, provider, _) {
+                        if (provider.messages.isEmpty) {
+                          return _EmptyState(
+                            onSuggestionTap: provider.sendMessage,
+                          );
+                        }
+                        return ListView.builder(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          reverse: true,
+                          itemCount: provider.messages.length +
+                              (provider.isLoading ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (provider.isLoading && index == 0) {
+                              return _TypingIndicator();
+                            }
+                            final msgIndex = provider.isLoading
+                                ? provider.messages.length - index
+                                : provider.messages.length - 1 - index;
+                            final message = provider.messages[msgIndex];
+                            return _MessageBubble(message: message);
+                          },
+                        );
+                      },
                     ),
+                  ),
+                  _InputBar(
+                    onSend: (text) {
+                      ChatbotProvider.instance.sendMessage(text);
+                    },
                   ),
                 ],
               ),
             ),
-            centerTitle: false,
-          ),
-          body: Column(
-            children: [
-              Expanded(
-                child: Consumer<ChatbotProvider>(
-                  builder: (context, provider, _) {
-                    if (provider.messages.isEmpty) {
-                      return _EmptyState(
-                        onSuggestionTap: provider.sendMessage,
-                      );
-                    }
-                    return ListView.builder(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      reverse: true,
-                      itemCount: provider.messages.length +
-                          (provider.isLoading ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (provider.isLoading && index == 0) {
-                          return _TypingIndicator();
-                        }
-                        final msgIndex = provider.isLoading
-                            ? provider.messages.length - index
-                            : provider.messages.length - 1 - index;
-                        final message = provider.messages[msgIndex];
-                        return _MessageBubble(message: message);
-                      },
-                    );
-                  },
-                ),
-              ),
-              _InputBar(
-                onSend: (text) {
-                  ChatbotProvider.instance.sendMessage(text);
-                },
-              ),
-            ],
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -103,75 +115,94 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          const SizedBox(height: 24),
-          Text(
-            'مساعدك الذكي',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[800],
-            ),
-          ),
-          const SizedBox(height: 32),
-          Text(
-            'مرحباً! كيف أقدر أساعدك اليوم؟',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[600],
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 32),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 10,
-            runSpacing: 10,
+    return AnimatedBuilder(
+      animation: TranslationController.instance,
+      builder: (context, _) {
+        final english = TranslationController.instance.translateToEnglish;
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
             children: [
-              _SuggestionChip(
-                label: 'سلام 👋',
-                onTap: () => onSuggestionTap('سلام 👋'),
+              const SizedBox(height: 24),
+              Text(
+                english ? 'Your smart assistant' : 'مساعدك الذكي',
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF424242),
+                ),
               ),
-              _SuggestionChip(
-                label: 'كم غيابي؟',
-                onTap: () => onSuggestionTap('كم غيابي؟'),
+              const SizedBox(height: 32),
+              Text(
+                english
+                    ? 'Hello! How can I help you today?'
+                    : 'مرحباً! كيف أقدر أساعدك اليوم؟',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: Color(0xFF757575),
+                  height: 1.4,
+                ),
               ),
-              _SuggestionChip(
-                label: 'هل أنا بخطر من الحرمان؟',
-                onTap: () => onSuggestionTap('هل أنا بخطر من الحرمان؟'),
-              ),
-              _SuggestionChip(
-                label: 'ملخص كل موادي',
-                onTap: () => onSuggestionTap('ملخص كل موادي'),
-              ),
-              _SuggestionChip(
-                label: 'نصيحة للدراسة',
-                onTap: () => onSuggestionTap('نصيحة للدراسة'),
-              ),
-              _SuggestionChip(
-                label: 'Hello 👋',
-                onTap: () => onSuggestionTap('Hello 👋'),
-              ),
-              _SuggestionChip(
-                label: 'How many absences do I have?',
-                onTap: () => onSuggestionTap('How many absences do I have?'),
-              ),
-              _SuggestionChip(
-                label: 'Am I at risk of deprivation?',
-                onTap: () => onSuggestionTap('Am I at risk of deprivation?'),
-              ),
-              _SuggestionChip(
-                label: 'Summary of all my courses',
-                onTap: () => onSuggestionTap('Summary of all my courses'),
+              const SizedBox(height: 32),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 10,
+                runSpacing: 10,
+                children: english
+                    ? <Widget>[
+                        _SuggestionChip(
+                          label: 'Hello 👋',
+                          onTap: () => onSuggestionTap('Hello 👋'),
+                        ),
+                        _SuggestionChip(
+                          label: 'How many absences do I have?',
+                          onTap: () =>
+                              onSuggestionTap('How many absences do I have?'),
+                        ),
+                        _SuggestionChip(
+                          label: 'Am I at risk of deprivation?',
+                          onTap: () =>
+                              onSuggestionTap('Am I at risk of deprivation?'),
+                        ),
+                        _SuggestionChip(
+                          label: 'Summary of all my courses',
+                          onTap: () =>
+                              onSuggestionTap('Summary of all my courses'),
+                        ),
+                        _SuggestionChip(
+                          label: 'Study tips',
+                          onTap: () => onSuggestionTap('Study tips'),
+                        ),
+                      ]
+                    : <Widget>[
+                        _SuggestionChip(
+                          label: 'سلام 👋',
+                          onTap: () => onSuggestionTap('سلام 👋'),
+                        ),
+                        _SuggestionChip(
+                          label: 'كم غيابي؟',
+                          onTap: () => onSuggestionTap('كم غيابي؟'),
+                        ),
+                        _SuggestionChip(
+                          label: 'هل أنا بخطر من الحرمان؟',
+                          onTap: () =>
+                              onSuggestionTap('هل أنا بخطر من الحرمان؟'),
+                        ),
+                        _SuggestionChip(
+                          label: 'ملخص كل موادي',
+                          onTap: () => onSuggestionTap('ملخص كل موادي'),
+                        ),
+                        _SuggestionChip(
+                          label: 'نصيحة للدراسة',
+                          onTap: () => onSuggestionTap('نصيحة للدراسة'),
+                        ),
+                      ],
               ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -220,10 +251,11 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUser = message.isUser;
+    final dir = Directionality.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        textDirection: TextDirection.ltr,
+        textDirection: dir,
         mainAxisAlignment:
             isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -258,6 +290,7 @@ class _MessageBubble extends StatelessWidget {
                       color: isUser ? Colors.white : Colors.black87,
                       height: 1.35,
                     ),
+                    textDirection: dir,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -278,7 +311,8 @@ class _MessageBubble extends StatelessWidget {
 
   String _formatTime(DateTime t) {
     final hour = t.hour > 12 ? t.hour - 12 : (t.hour == 0 ? 12 : t.hour);
-    final ampm = t.hour >= 12 ? 'م' : 'ص';
+    final english = TranslationController.instance.translateToEnglish;
+    final ampm = english ? (t.hour >= 12 ? 'PM' : 'AM') : (t.hour >= 12 ? 'م' : 'ص');
     final min = t.minute.toString().padLeft(2, '0');
     return '$hour:$min $ampm';
   }
@@ -317,10 +351,11 @@ class _BotAvatar extends StatelessWidget {
 class _TypingIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final dir = Directionality.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        textDirection: TextDirection.ltr,
+        textDirection: dir,
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -432,6 +467,9 @@ class _InputBarState extends State<_InputBar> {
 
   @override
   Widget build(BuildContext context) {
+    final controller = TranslationController.instance;
+    final english = controller.translateToEnglish;
+    final dir = controller.textDirection;
     return Container(
       padding: EdgeInsets.fromLTRB(
         12,
@@ -464,9 +502,9 @@ class _InputBarState extends State<_InputBar> {
             child: TextField(
               controller: _controller,
               focusNode: _focusNode,
-              textDirection: TextDirection.rtl,
+              textDirection: dir,
               decoration: InputDecoration(
-                hintText: 'اكتب رسالتك...',
+                hintText: english ? 'Type your message…' : 'اكتب رسالتك...',
                 hintStyle: TextStyle(color: Colors.grey[500], fontSize: 15),
                 filled: true,
                 fillColor: Colors.grey[100],

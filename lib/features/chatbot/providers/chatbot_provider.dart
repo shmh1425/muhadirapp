@@ -5,6 +5,8 @@ import '../data/chatbot_repository.dart';
 import '../data/openai_service.dart';
 import '../models/chat_message.dart';
 import '../models/attendance_context.dart';
+import '../../translation/translation_controller.dart';
+import '../../translation/translation_service.dart';
 import '../../../services/student_auth_service.dart';
 
 /// في تقرير الغياب السريع: **1 ساعة = جلسة واحدة** (بدون اشتقاق من المخطط ÷ عدد الجلسات).
@@ -44,6 +46,13 @@ String _riskLabelAr(double u) {
   if (u >= 0.8) return 'خطر مرتفع';
   if (u >= 0.5) return 'تنبيه مبكر';
   return 'آمن';
+}
+
+String _riskLabelEn(double u) {
+  if (u >= 1.0) return 'Over the limit';
+  if (u >= 0.8) return 'High risk';
+  if (u >= 0.5) return 'Early warning';
+  return 'Safe';
 }
 
 String _absenceSessionsLine(int sessions, double hours) {
@@ -114,9 +123,6 @@ class ChatbotProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get lastError => _lastError;
 
-  static const String _errorGeneric =
-      'عذراً، حدث خطأ. تحقق من اتصالك وحاول مجدداً 🔄';
-
   bool _isAbsenceQuickQuery(String text) {
     final t = text.trim().toLowerCase();
     if (t.isEmpty) return false;
@@ -135,11 +141,14 @@ class ChatbotProvider extends ChangeNotifier {
     required String userMessage,
     required AttendanceContext context,
   }) {
+    final englishUi = TranslationController.instance.translateToEnglish;
     final courses = context.courses;
     final studentName = context.studentName;
     final maxU = context.maxUnexcusedPercent;
     final dep = context.deprivationPercent;
     final t = userMessage.trim().toLowerCase();
+    bool containsLatin(String s) => RegExp(r'[A-Za-z]').hasMatch(s);
+    final english = englishUi || containsLatin(userMessage);
 
     CourseAttendanceSummary? pickCourseByMention() {
       for (final c in courses) {
@@ -170,7 +179,7 @@ class ChatbotProvider extends ChangeNotifier {
 
       final util = _maxRiskUtilization(c, maxU, dep);
       final rEmoji = _riskEmoji(util);
-      final rLabel = _riskLabelAr(util);
+      final rLabel = english ? _riskLabelEn(util) : _riskLabelAr(util);
 
       final absH = c.absenceHours.isFinite ? c.absenceHours : 0.0;
       final remUnex = c.remainingHoursUnexcusedBeforeLimit.isFinite
@@ -212,21 +221,39 @@ class ChatbotProvider extends ChangeNotifier {
         }
       }
 
+      if (!english) {
+        return '${courseEmojiFor(c)} ${c.displayName}\n\n'
+            '• بدون عذر: ${unexPct.toStringAsFixed(1)}% من أصل $maxU%\n'
+            '• بعذر: ${excPct.toStringAsFixed(1)}% من أصل $dep%\n'
+            '• الإجمالي: ${totalPct.toStringAsFixed(1)}% من أصل $dep%\n'
+            '${_absenceSessionsLine(absenceSessions, absH)}\n\n'
+            '$rEmoji $rLabel${inDeprivation ? '\n🚫 حرمان أكاديمي' : ''}\n'
+            'المتبقي:\n'
+            '${_remainingLineCompact('بدون عذر', remUnex, avgH)}\n'
+            '${_remainingLineCompact('بعذر', remExc, avgH)}\n'
+            '${_remainingLineCompact('حتى الحد الإجمالي', remTotal, avgH)}'
+            '$forecastTail';
+      }
+
+      final absSessionsLine = absenceSessions <= 0
+          ? '• Absences: — (${absH.toStringAsFixed(1)} h)'
+          : '• Absences: $absenceSessions sessions (${absH.toStringAsFixed(1)} h)';
       return '${courseEmojiFor(c)} ${c.displayName}\n\n'
-          '• بدون عذر: ${unexPct.toStringAsFixed(1)}% من أصل $maxU%\n'
-          '• بعذر: ${excPct.toStringAsFixed(1)}% من أصل $dep%\n'
-          '• الإجمالي: ${totalPct.toStringAsFixed(1)}% من أصل $dep%\n'
-          '${_absenceSessionsLine(absenceSessions, absH)}\n\n'
-          '$rEmoji $rLabel${inDeprivation ? '\n🚫 حرمان أكاديمي' : ''}\n'
-          'المتبقي:\n'
-          '${_remainingLineCompact('بدون عذر', remUnex, avgH)}\n'
-          '${_remainingLineCompact('بعذر', remExc, avgH)}\n'
-          '${_remainingLineCompact('حتى الحد الإجمالي', remTotal, avgH)}'
-          '$forecastTail';
+          '• Unexcused: ${unexPct.toStringAsFixed(1)}% (cap $maxU%)\n'
+          '• Excused: ${excPct.toStringAsFixed(1)}% (cap $dep%)\n'
+          '• Total: ${totalPct.toStringAsFixed(1)}% (cap $dep%)\n'
+          '$absSessionsLine\n\n'
+          '$rEmoji $rLabel${inDeprivation ? '\n🚫 Academic deprivation' : ''}\n'
+          'Remaining:\n'
+          '• Unexcused: ${remUnex.toStringAsFixed(1)} h\n'
+          '• Excused: ${remExc.toStringAsFixed(1)} h\n'
+          '• Total cap: ${remTotal.toStringAsFixed(1)} h';
     }
 
     if (courses.isEmpty) {
-      return 'ما عندي بيانات غياب كافية حالياً.';
+      return english
+          ? 'I do not have enough absence data right now.'
+          : 'ما عندي بيانات غياب كافية حالياً.';
     }
 
     String shortName(String raw) {
@@ -236,16 +263,17 @@ class ChatbotProvider extends ChangeNotifier {
       return parts.isEmpty ? '' : parts.first.trim();
     }
 
-    bool containsLatin(String s) => RegExp(r'[A-Za-z]').hasMatch(s);
-
     final fallbackArName = shortName(StudentAuthService.instance.currentStudent?.nameAr ?? '');
+    final fallbackEnName = shortName(StudentAuthService.instance.currentStudent?.name ?? '');
     final pickedName = shortName(studentName);
-    final displayName = (pickedName.isEmpty || containsLatin(pickedName)) ? fallbackArName : pickedName;
+    final displayName = english
+        ? (pickedName.isEmpty ? fallbackEnName : pickedName)
+        : ((pickedName.isEmpty || containsLatin(pickedName)) ? fallbackArName : pickedName);
 
     final greet = displayName.trim().isEmpty
-        ? 'هلًا! 👋'
-        : 'هلًا ${displayName.trim()}! 👋';
-    final header = <String>[greet, '📊 تقرير الغياب', ''];
+        ? (english ? 'Hi! 👋' : 'هلًا! 👋')
+        : (english ? 'Hi ${displayName.trim()}! 👋' : 'هلًا ${displayName.trim()}! 👋');
+    final header = <String>[greet, english ? '📊 Absence report' : '📊 تقرير الغياب', ''];
 
     final mentioned = pickCourseByMention();
     if (mentioned != null) {
@@ -286,6 +314,11 @@ class ChatbotProvider extends ChangeNotifier {
   Future<void> sendMessage(String userMessage) async {
     final text = userMessage.trim();
     if (text.isEmpty) return;
+
+    final forceEnglish = TranslationController.instance.translateToEnglish;
+    final translatedUserMessage = forceEnglish
+        ? await TranslationService.instance.toEnglish(text)
+        : text;
 
     _lastError = null;
     _messages.add(ChatMessage(
@@ -328,7 +361,7 @@ class ChatbotProvider extends ChangeNotifier {
       if (_isAbsenceQuickQuery(text) && attendanceContextObj != null) {
         final reply = _formatAbsenceQuickReply(
           userMessage: text,
-          context: attendanceContextObj!,
+          context: attendanceContextObj,
         );
         _messages.add(ChatMessage(
           id: 'bot_${DateTime.now().millisecondsSinceEpoch}',
@@ -340,14 +373,18 @@ class ChatbotProvider extends ChangeNotifier {
       }
 
       final reply = await OpenAIService.instance.sendMessage(
-        userMessage: text,
+        userMessage: translatedUserMessage,
         attendanceContext: attendanceString,
         chatHistory: history,
+        forceEnglish: forceEnglish,
       );
 
+      final normalizedReply = forceEnglish
+          ? await TranslationService.instance.toEnglish(reply)
+          : reply;
       _messages.add(ChatMessage(
         id: 'bot_${DateTime.now().millisecondsSinceEpoch}',
-        text: reply,
+        text: normalizedReply,
         isUser: false,
         timestamp: DateTime.now(),
       ));
