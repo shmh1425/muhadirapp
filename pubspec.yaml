@@ -49,6 +49,7 @@ dependencies:
   file_picker: ^11.0.2
   image_picker: ^1.2.1
   nfc_manager: ^3.5.0
+  syncfusion_flutter_pdfviewer: ^33.2.3
 
 dev_dependencies:
   flutter_test:
