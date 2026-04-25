@@ -1,6 +1,10 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/attendance/manual_attendance_record.dart';
 import '../../models/excuse/excuse_request.dart';
@@ -45,7 +49,7 @@ class _LecturerExcuseManagementScreenState
   List<ManualAttendanceRecord> _records = const [];
   bool _seenExcuseSnapshot = false;
   bool _seenRecordsSnapshot = false;
-  String? _streamError;
+  String? _excuseStreamError;
 
   final Map<String, ExcuseStatus> _staged = {};
   final Map<String, String> _stagedRejectReason = {};
@@ -71,7 +75,374 @@ class _LecturerExcuseManagementScreenState
     }
   }
 
+  bool _isValidAttachmentUrl(String raw) {
+    final value = raw.trim();
+    final uri = Uri.tryParse(value);
+    return value.isNotEmpty &&
+        uri != null &&
+        uri.isAbsolute &&
+        uri.scheme.toLowerCase() == 'https';
+  }
+
+  bool _looksLikeImageAttachment({
+    required String attachmentName,
+    required String attachmentUrl,
+  }) {
+    final lowerName = attachmentName.toLowerCase();
+    final lowerUrl = attachmentUrl.toLowerCase();
+    const imageExt = <String>[
+      '.png',
+      '.jpg',
+      '.jpeg',
+      '.webp',
+      '.gif',
+      '.bmp',
+    ];
+    for (final ext in imageExt) {
+      if (lowerName.endsWith(ext) || lowerUrl.contains(ext)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _looksLikePdfAttachment({
+    required String attachmentName,
+    required String attachmentUrl,
+  }) {
+    final lowerName = attachmentName.toLowerCase();
+    final lowerUrl = attachmentUrl.toLowerCase();
+    return lowerName.endsWith('.pdf') || lowerUrl.contains('.pdf');
+  }
+
+  Future<void> _showAttachmentPreviewDialog({
+    required String excuseId,
+    required String attachmentName,
+    required String attachmentUrl,
+    required bool validUrl,
+  }) async {
+    debugPrint(
+      '[LecturerExcuseManagement] preview dialog open: '
+      'excuseId="$excuseId" name="$attachmentName" url="$attachmentUrl" validUrl=$validUrl',
+    );
+    if (!validUrl) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_tr('رابط المرفق غير صالح.', 'Invalid attachment link.')),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
+      return;
+    }
+
+    final isImage = _looksLikeImageAttachment(
+      attachmentName: attachmentName,
+      attachmentUrl: attachmentUrl,
+    );
+    final isPdf = _looksLikePdfAttachment(
+      attachmentName: attachmentName,
+      attachmentUrl: attachmentUrl,
+    );
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return Directionality(
+          textDirection: LecturerLanguageController.direction(),
+          child: Dialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: SizedBox(
+              width: double.infinity,
+              height: MediaQuery.of(ctx).size.height * 0.75,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 10, 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            attachmentName.isNotEmpty
+                                ? attachmentName
+                                : _tr('معاينة المرفق', 'Attachment preview'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontFamily: 'Cairo',
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                              color: Color(0xFF213236),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          icon: const Icon(Icons.close),
+                          tooltip: _tr('إغلاق', 'Close'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                  Expanded(
+                    child: isImage
+                        ? Container(
+                            color: const Color(0xFFF8FAFC),
+                            child: InteractiveViewer(
+                              minScale: 1,
+                              maxScale: 8,
+                              child: Center(
+                                child: Image.network(
+                                  attachmentUrl,
+                                  fit: BoxFit.contain,
+                                  filterQuality: FilterQuality.high,
+                                  errorBuilder: (_, __, ___) => Center(
+                                    child: Text(
+                                      _tr(
+                                        'تعذر معاينة المرفق.\nيمكنك فتحه في تبويب جديد.',
+                                        'Could not preview attachment.\nYou can open it in a new tab.',
+                                      ),
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        fontFamily: 'Cairo',
+                                        color: Color(0xFF64748B),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          )
+                        : isPdf
+                            ? Container(
+                                color: const Color(0xFFF8FAFC),
+                                child: kIsWeb
+                                    ? Center(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(16),
+                                          child: Text(
+                                            _tr(
+                                              'معاينة PDF داخل التطبيق على الويب تتطلب إعداد CORS صحيح في Firebase Storage.\nيمكنك فتح الملف في تبويب جديد.',
+                                              'In-app PDF preview on Web requires proper Firebase Storage CORS configuration.\nYou can open the file in a new tab.',
+                                            ),
+                                            textAlign: TextAlign.center,
+                                            style: const TextStyle(
+                                              fontFamily: 'Cairo',
+                                              color: Color(0xFF64748B),
+                                              height: 1.4,
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                    : SfPdfViewer.network(
+                                        attachmentUrl,
+                                        canShowScrollHead: true,
+                                        canShowScrollStatus: true,
+                                        onDocumentLoaded: (_) {
+                                          debugPrint(
+                                            '[LecturerExcuseManagement] PDF preview loaded successfully: '
+                                            'url="$attachmentUrl"',
+                                          );
+                                        },
+                                        onDocumentLoadFailed: (details) {
+                                          debugPrint(
+                                            '[LecturerExcuseManagement] PDF preview failed: '
+                                            '${details.error} (${details.description}) '
+                                            'url="$attachmentUrl"',
+                                          );
+                                          if (!mounted) return;
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                _tr(
+                                                  'تعذر معاينة المرفق.',
+                                                  'Could not preview attachment.',
+                                                ),
+                                              ),
+                                              backgroundColor: const Color(0xFFD32F2F),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                              )
+                            : Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Center(
+                              child: Text(
+                                _tr(
+                                  'هذا النوع من الملفات لا يدعم المعاينة المدمجة حالياً.\nيمكنك فتحه في تبويب جديد.',
+                                  'This file type is not supported for inline preview.\nYou can open it in a new tab.',
+                                ),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontFamily: 'Cairo',
+                                  color: Color(0xFF64748B),
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+                    child: SizedBox(
+                      height: 44,
+                      child: OutlinedButton(
+                        onPressed: () => _openAttachmentUrl(
+                          excuseId: excuseId,
+                          attachmentName: attachmentName,
+                          attachmentUrl: attachmentUrl,
+                          validUrl: validUrl,
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _primary,
+                          side: const BorderSide(color: Color(0xFF006571)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            _tr('فتح في تبويب جديد', 'Open in new tab'),
+                            style: const TextStyle(
+                              fontFamily: 'Cairo',
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _openAttachmentUrl({
+    required String excuseId,
+    required String attachmentName,
+    required String attachmentUrl,
+    required bool validUrl,
+  }) async {
+    debugPrint(
+      'ATTACHMENT_TAP_CALLED '
+      'excuseId="$excuseId" '
+      'attachmentName="$attachmentName" '
+      'attachmentUrl="$attachmentUrl" '
+      'validUrl=$validUrl',
+    );
+    final raw = attachmentUrl.trim();
+    debugPrint('[LecturerExcuseManagement] attachment tap: rawUrl="$raw"');
+    if (raw.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_tr('لا يوجد رابط مرفق.', 'No attachment URL.')),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
+      return;
+    }
+    if (!raw.toLowerCase().startsWith('https://')) {
+      debugPrint(
+        '[LecturerExcuseManagement] invalid attachment URL (must be https): $raw',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_tr('رابط المرفق غير صالح.', 'Attachment URL is invalid.')),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
+      return;
+    }
+    final uri = Uri.tryParse(raw);
+    if (uri == null || !uri.isAbsolute || uri.scheme.toLowerCase() != 'https') {
+      debugPrint(
+        '[LecturerExcuseManagement] invalid attachment URL parse: raw="$raw", uri="$uri"',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_tr('رابط المرفق غير صالح.', 'Attachment URL is invalid.')),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
+      return;
+    }
+    try {
+      debugPrint('[LecturerExcuseManagement] opening attachment with platformDefault: $uri');
+      var ok = await launchUrl(uri, mode: LaunchMode.platformDefault);
+      debugPrint('[LecturerExcuseManagement] launchUrl(platformDefault) result=$ok');
+      if (!ok) {
+        debugPrint(
+          '[LecturerExcuseManagement] platformDefault failed, retry web new tab: $uri',
+        );
+        ok = await launchUrl(
+          uri,
+          mode: LaunchMode.platformDefault,
+          webOnlyWindowName: '_blank',
+        );
+        debugPrint('[LecturerExcuseManagement] launchUrl(webOnlyWindowName=_blank) result=$ok');
+      }
+      if (!ok) {
+        debugPrint(
+          '[LecturerExcuseManagement] platformDefault failed, retry externalApplication: $uri',
+        );
+        ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        debugPrint('[LecturerExcuseManagement] launchUrl(externalApplication) result=$ok');
+      }
+      if (!ok && mounted) {
+        debugPrint(
+          '[LecturerExcuseManagement] failed to open attachment after retries: $uri',
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_tr('تعذر فتح المرفق.', 'Could not open attachment.')),
+            backgroundColor: const Color(0xFFD32F2F),
+          ),
+        );
+      }
+    } catch (e, st) {
+      debugPrint(
+        '[LecturerExcuseManagement] exception while opening attachment: $e\n$st',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_tr('تعذر فتح المرفق.', 'Could not open attachment.')),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
+    }
+  }
+
   LectureItem get _lecture => widget.lecture;
+
+  String _excuseLectureDateLabel(ExcuseRequest item) {
+    final d = item.lectureDate;
+    if (d.year == 2000 && d.month == 1 && d.day == 1) {
+      return _tr('—', '—');
+    }
+    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  }
+
+  String _excuseTimeRangeLabel(ExcuseRequest item) {
+    final a = item.lectureStartTime.trim();
+    final b = item.lectureEndTime.trim();
+    if (a.isEmpty && b.isEmpty) return _tr('—', '—');
+    if (a.isEmpty) return b;
+    if (b.isEmpty) return a;
+    return '$a - $b';
+  }
 
   String get _lectureTimeRange {
     final slots = _lecture.timeSlots;
@@ -90,7 +461,7 @@ class _LecturerExcuseManagementScreenState
   bool get _hasPendingDecisions => _staged.isNotEmpty;
 
   bool get _initialLoading =>
-      (!_seenExcuseSnapshot || !_seenRecordsSnapshot) && _streamError == null;
+      !_seenExcuseSnapshot || !_seenRecordsSnapshot;
 
   Map<int, String> get _nameByStudentId {
     final m = <int, String>{};
@@ -103,9 +474,15 @@ class _LecturerExcuseManagementScreenState
   List<ExcuseRequest> get _sectionScopedExcuses {
     final want = (_lecture.sectionId ?? '').trim();
     if (want.isEmpty) return List<ExcuseRequest>.from(_excuses);
-    return _excuses.where((e) => e.sectionId.trim() == want).toList();
+    return _excuses
+        .where(
+          (e) => e.sectionId.trim() == want || e.sectionId.trim().isEmpty,
+        )
+        .toList();
   }
 
+  // Policy note: only [reviewDeadlineAt] on the excuse document disables actions.
+  // There is no global "N hours after submit" rule in code yet.
   bool _isPastReviewDeadline(ExcuseRequest r) {
     final d = r.reviewDeadlineAt;
     if (d == null) return false;
@@ -145,7 +522,15 @@ class _LecturerExcuseManagementScreenState
       final nm = (e.studentName?.trim().isNotEmpty ?? false)
           ? e.studentName!.trim()
           : (names[e.studentId] ?? '${e.studentId}');
-      rows.add(_ExcuseViewRow(request: e, displayName: nm, academicId: '${e.studentId}'));
+      rows.add(
+        _ExcuseViewRow(
+          request: e,
+          displayName: nm,
+          academicId: e.studentId > 0
+              ? '${e.studentId}'
+              : _tr('غير متوفر', 'N/A'),
+        ),
+      );
     }
     return rows;
   }
@@ -174,33 +559,33 @@ class _LecturerExcuseManagementScreenState
     final validIds = _sectionScopedExcuses.map((e) => e.id).toSet();
     _staged.removeWhere((id, _) => !validIds.contains(id));
     _stagedRejectReason.removeWhere((id, _) => !validIds.contains(id));
-    for (final e in _sectionScopedExcuses) {
-      if (e.status != ExcuseRequestStatus.pending) {
-        _staged.remove(e.id);
-        _stagedRejectReason.remove(e.id);
-      }
-    }
   }
 
   @override
   void initState() {
     super.initState();
     _excuseSub = _excuseService
-        .watchSessionExcuseRequests(widget.sessionId)
+        .watchExcuseRequestsForAttendanceSession(
+          sessionId: widget.sessionId,
+          sectionId: _lecture.sectionId,
+          sessionDay: widget.sessionDate,
+          lectureStartTime: _lecture.startTime,
+        )
         .listen(
       (list) {
         if (!mounted) return;
         setState(() {
           _excuses = list;
           _seenExcuseSnapshot = true;
-          _streamError = null;
+          _excuseStreamError = null;
           _pruneStaged();
         });
       },
       onError: (Object e) {
+        debugPrint('[LecturerExcuseManagement] excuse stream failed: $e');
         if (!mounted) return;
         setState(() {
-          _streamError = e.toString();
+          _excuseStreamError = e.toString();
           _seenExcuseSnapshot = true;
         });
       },
@@ -214,9 +599,9 @@ class _LecturerExcuseManagementScreenState
         });
       },
       onError: (Object e) {
+        debugPrint('[LecturerExcuseManagement] records stream failed: $e');
         if (!mounted) return;
         setState(() {
-          _streamError = e.toString();
           _seenRecordsSnapshot = true;
         });
       },
@@ -231,17 +616,7 @@ class _LecturerExcuseManagementScreenState
   }
 
   void _onViewRow(_ExcuseViewRow row) {
-    final r = row.request;
-    if (!_canReview(r)) {
-      _showDetailSheet(row);
-      return;
-    }
-    final staged = _staged[r.id];
-    if (staged == null) {
-      _showAcceptRejectSheet(row);
-    } else {
-      _showDetailSheet(row);
-    }
+    _showDetailSheet(row);
   }
 
   Future<void> _showAcceptRejectSheet(_ExcuseViewRow row) async {
@@ -307,6 +682,44 @@ class _LecturerExcuseManagementScreenState
                         ),
                       ),
                     ],
+                    if ((item.attachmentUrl ?? '').trim().isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 44,
+                        child: OutlinedButton(
+                          onPressed: () async {
+                            final attachmentName =
+                                (item.attachmentName ?? '').trim();
+                            final attachmentUrl =
+                                (item.attachmentUrl ?? '').trim();
+                            final validAttachmentUrl =
+                                _isValidAttachmentUrl(attachmentUrl);
+                            await _showAttachmentPreviewDialog(
+                              excuseId: item.id,
+                              attachmentName: attachmentName,
+                              attachmentUrl: attachmentUrl,
+                              validUrl: validAttachmentUrl,
+                            );
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: _primary,
+                            side: const BorderSide(color: Color(0xFF006571)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: Text(
+                            _tr('معاينة العذر', 'Preview attachment'),
+                            style: const TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 24),
                     SizedBox(
                       width: double.infinity,
@@ -359,6 +772,105 @@ class _LecturerExcuseManagementScreenState
                           ),
                         ),
                       ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<bool?> _confirmDecisionChange() {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return Directionality(
+          textDirection: LecturerLanguageController.direction(),
+          child: Dialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 340),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      _tr('تعديل القرار', 'Change decision'),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF213236),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      _tr(
+                        'هل أنت متأكد من تعديل قرار العذر؟',
+                        'Are you sure you want to change the excuse decision?',
+                      ),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 14,
+                        height: 1.4,
+                        color: Color(0xFF475569),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(ctx).pop(false),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF64748B),
+                              side: const BorderSide(color: Color(0xFFE2E8F0)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Text(
+                              _tr('إلغاء', 'Cancel'),
+                              style: const TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: () => Navigator.of(ctx).pop(true),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _primary,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Text(
+                              _tr('متابعة', 'Continue'),
+                              style: const TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -444,9 +956,24 @@ class _LecturerExcuseManagementScreenState
                           const SizedBox(height: 12),
                           TextField(
                             controller: reasonController,
+                            minLines: 3,
                             maxLines: 3,
+                            textAlign: TextAlign.start,
+                            textDirection: LecturerLanguageController.direction(),
+                            cursorColor: _primary,
+                            style: const TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF0F172A),
+                            ),
                             decoration: InputDecoration(
                               hintText: _tr('اكتب سبب الرفض', 'Write the rejection reason'),
+                              hintStyle: const TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 14,
+                                color: Color(0xFF94A3B8),
+                              ),
                               filled: true,
                               fillColor: const Color(0xFFF8FAFC),
                               border: OutlineInputBorder(
@@ -589,6 +1116,15 @@ class _LecturerExcuseManagementScreenState
     final rejectShown = eff == ExcuseStatus.rejected
         ? (_stagedRejectReason[item.id] ?? item.rejectionReason ?? '')
         : '';
+    final attachmentName = (item.attachmentName ?? '').trim();
+    final attachmentUrl = (item.attachmentUrl ?? '').trim();
+    final hasAttachment = attachmentUrl.isNotEmpty;
+    final validAttachmentUrl = _isValidAttachmentUrl(attachmentUrl);
+    debugPrint(
+      '[LecturerExcuseManagement] detail sheet excuseId=${item.id} '
+      'hasAttachment=$hasAttachment attachmentName="$attachmentName" '
+      'attachmentUrl="$attachmentUrl" validUrl=$validAttachmentUrl',
+    );
 
     showModalBottomSheet<void>(
       context: context,
@@ -616,10 +1152,11 @@ class _LecturerExcuseManagementScreenState
                     ),
                   ],
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
                     Text(
                       row.displayName,
                       style: const TextStyle(
@@ -638,6 +1175,107 @@ class _LecturerExcuseManagementScreenState
                         color: Color(0xFF64748B),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    Text(
+                      _tr('المقرر', 'Course'),
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF94A3B8),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      item.courseNameAr.trim().isNotEmpty
+                          ? item.courseNameAr.trim()
+                          : _lecture.courseName,
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 14,
+                        color: Color(0xFF334155),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      _tr('الشعبة', 'Section'),
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF94A3B8),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      item.sectionId.trim().isNotEmpty
+                          ? item.sectionId.trim()
+                          : '${_tr('الشعبة', 'Section')} ${_lecture.section}',
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 14,
+                        color: Color(0xFF334155),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      _tr('تاريخ المحاضرة', 'Lecture date'),
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF94A3B8),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _excuseLectureDateLabel(item),
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 14,
+                        color: Color(0xFF334155),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      _tr('وقت المحاضرة', 'Lecture time'),
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF94A3B8),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _excuseTimeRangeLabel(item),
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 14,
+                        color: Color(0xFF334155),
+                      ),
+                    ),
+                    if ((item.attachmentName ?? '').trim().isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        _tr('اسم المرفق', 'Attachment name'),
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF94A3B8),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        item.attachmentName!.trim(),
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 13,
+                          color: Color(0xFF334155),
+                        ),
+                      ),
+                    ],
                     if ((item.reasonText ?? '').trim().isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Text(
@@ -660,27 +1298,64 @@ class _LecturerExcuseManagementScreenState
                         ),
                       ),
                     ],
-                    if ((item.attachmentUrl ?? '').trim().isNotEmpty) ...[
-                      const SizedBox(height: 12),
+                    const SizedBox(height: 12),
+                    Text(
+                      _tr('مرفق', 'Attachment'),
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF94A3B8),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    if (!hasAttachment)
                       Text(
-                        _tr('مرفق', 'Attachment'),
+                        _tr('لا يوجد مرفق مرفوع.', 'No attachment uploaded.'),
                         style: const TextStyle(
                           fontFamily: 'Cairo',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF94A3B8),
+                          fontSize: 13,
+                          color: Color(0xFF64748B),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      SelectableText(
-                        item.attachmentUrl!.trim(),
+                      )
+                    else if (!validAttachmentUrl)
+                      Text(
+                        _tr('رابط المرفق غير صالح.', 'Invalid attachment link.'),
                         style: const TextStyle(
                           fontFamily: 'Cairo',
-                          fontSize: 12,
-                          color: Color(0xFF006571),
+                          fontSize: 13,
+                          color: Color(0xFFB91C1C),
+                        ),
+                      )
+                    else
+                      InkWell(
+                        onTap: () async {
+                          debugPrint(
+                            '[LecturerExcuseManagement] attachment widget tapped for excuseId=${item.id}',
+                          );
+                          await _showAttachmentPreviewDialog(
+                            excuseId: item.id,
+                            attachmentName: attachmentName,
+                            attachmentUrl: attachmentUrl,
+                            validUrl: validAttachmentUrl,
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Text(
+                            attachmentName.isNotEmpty
+                                ? attachmentName
+                                : _tr('فتح المرفق', 'Open attachment'),
+                            style: const TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 13,
+                              color: Color(0xFF006571),
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
                         ),
                       ),
-                    ],
                     const SizedBox(height: 16),
                     Text(
                       _statusFullLabel(eff),
@@ -715,7 +1390,68 @@ class _LecturerExcuseManagementScreenState
                         ),
                       ),
                     ],
-                  ],
+                    const SizedBox(height: 16),
+                    if (_canReview(item))
+                      SizedBox(
+                        width: double.infinity,
+                        height: 44,
+                        child: OutlinedButton(
+                          onPressed: () async {
+                            Navigator.of(ctx).pop();
+                            await Future<void>.delayed(const Duration(milliseconds: 80));
+                            if (!mounted) return;
+                            await _showAcceptRejectSheet(row);
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: _primary,
+                            side: const BorderSide(color: Color(0xFF006571)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(
+                            _tr('اتخاذ القرار', 'Take decision'),
+                            style: const TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      )
+                    else if (item.status == ExcuseRequestStatus.accepted ||
+                        item.status == ExcuseRequestStatus.rejected)
+                      SizedBox(
+                        width: double.infinity,
+                        height: 44,
+                        child: OutlinedButton(
+                          onPressed: () async {
+                            Navigator.of(ctx).pop();
+                            await Future<void>.delayed(const Duration(milliseconds: 80));
+                            if (!mounted) return;
+                            final ok = await _confirmDecisionChange();
+                            if (ok != true || !mounted) return;
+                            await _showAcceptRejectSheet(row);
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: _primary,
+                            side: const BorderSide(color: Color(0xFF006571)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(
+                            _tr('تعديل القرار', 'Change decision'),
+                            style: const TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -811,7 +1547,6 @@ class _LecturerExcuseManagementScreenState
         }
       }
       if (req == null) continue;
-      if (req.status != ExcuseRequestStatus.pending) continue;
       if (_isPastReviewDeadline(req)) continue;
 
       final ui = entry.value;
@@ -820,7 +1555,12 @@ class _LecturerExcuseManagementScreenState
           LecturerExcuseDecision(
             excuseRequestId: req.id,
             studentId: req.studentId,
+            oldStatus: req.status,
             newStatus: ExcuseRequestStatus.accepted,
+            attendanceRecordId: req.attendanceRecordId,
+            notificationSessionId: req.sessionId ?? widget.sessionId,
+            courseNameAr: req.courseNameAr,
+            sectionId: req.sectionId,
           ),
         );
       } else if (ui == ExcuseStatus.rejected) {
@@ -828,8 +1568,13 @@ class _LecturerExcuseManagementScreenState
           LecturerExcuseDecision(
             excuseRequestId: req.id,
             studentId: req.studentId,
+            oldStatus: req.status,
             newStatus: ExcuseRequestStatus.rejected,
             rejectionReason: _stagedRejectReason[req.id],
+            attendanceRecordId: req.attendanceRecordId,
+            notificationSessionId: req.sessionId ?? widget.sessionId,
+            courseNameAr: req.courseNameAr,
+            sectionId: req.sectionId,
           ),
         );
       }
@@ -866,7 +1611,17 @@ class _LecturerExcuseManagementScreenState
         ),
       );
       if (mounted) Navigator.of(context).pop(true);
-    } catch (e) {
+    } on FirebaseException catch (e, st) {
+      debugPrint('[LecturerExcuseManagement] save failed: $e\n$st');
+      if (mounted) setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_tr('فشل الحفظ. حاول مرة أخرى.', 'Save failed. Please try again.')),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
+    } catch (e, st) {
+      debugPrint('[LecturerExcuseManagement] save failed: $e\n$st');
       if (mounted) setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1085,7 +1840,12 @@ class _LecturerExcuseManagementScreenState
         ),
       );
     }
-    if (_streamError != null) {
+    final hasAnyExcuses = _sectionScopedExcuses.isNotEmpty;
+    final blockingExcuseError = _excuseStreamError != null &&
+        !hasAnyExcuses &&
+        _seenExcuseSnapshot &&
+        _seenRecordsSnapshot;
+    if (blockingExcuseError) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
