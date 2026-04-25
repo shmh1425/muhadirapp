@@ -191,6 +191,35 @@ class ManualAttendanceService {
     await batch.commit();
   }
 
+  /// Sets [status] on a single attendance record when the document exists.
+  /// Used by excuse review when [attendanceRecordId] is explicit in Firestore.
+  Future<bool> updateRecordStatusIfExists({
+    required String recordId,
+    required ManualAttendanceStatus status,
+  }) async {
+    final id = recordId.trim();
+    if (id.isEmpty) return false;
+    final ref = _firestore.collection(_recordsCollection).doc(id);
+    final snap = await ref.get();
+    if (!snap.exists) {
+      return false;
+    }
+    final nowStamp = FieldValue.serverTimestamp();
+    final updater =
+        LecturerAuthService.instance.currentLecturer?.lecturerId ?? '';
+    await ref.set(
+      <String, dynamic>{
+        'status': ManualAttendanceRecord.statusToString(status),
+        'attendanceTime': _attendanceTimeForStatus(status),
+        'updatedAt': nowStamp,
+        'updatedBy': updater,
+        'attendanceMethod': 'manual',
+      },
+      SetOptions(merge: true),
+    );
+    return true;
+  }
+
   Future<void> _upsertSessionDoc({
     required String sessionId,
     required String sectionId,
