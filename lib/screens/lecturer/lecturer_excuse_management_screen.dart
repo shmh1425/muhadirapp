@@ -1,16 +1,15 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/attendance/manual_attendance_record.dart';
 import '../../models/excuse/excuse_request.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../services/attendance/manual_attendance_service.dart';
 import '../../services/excuse/excuse_service.dart';
+import '../../widgets/lecturer/excuse_attachment_preview.dart';
+import '../../widgets/lecturer/excuse_rejection_reason_dialog.dart';
 import 'lecturer_language.dart';
 import 'widgets/profile_back_button.dart';
 
@@ -76,353 +75,22 @@ class _LecturerExcuseManagementScreenState
   }
 
   bool _isValidAttachmentUrl(String raw) {
-    final value = raw.trim();
-    final uri = Uri.tryParse(value);
-    return value.isNotEmpty &&
-        uri != null &&
-        uri.isAbsolute &&
-        uri.scheme.toLowerCase() == 'https';
-  }
-
-  bool _looksLikeImageAttachment({
-    required String attachmentName,
-    required String attachmentUrl,
-  }) {
-    final lowerName = attachmentName.toLowerCase();
-    final lowerUrl = attachmentUrl.toLowerCase();
-    const imageExt = <String>[
-      '.png',
-      '.jpg',
-      '.jpeg',
-      '.webp',
-      '.gif',
-      '.bmp',
-    ];
-    for (final ext in imageExt) {
-      if (lowerName.endsWith(ext) || lowerUrl.contains(ext)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  bool _looksLikePdfAttachment({
-    required String attachmentName,
-    required String attachmentUrl,
-  }) {
-    final lowerName = attachmentName.toLowerCase();
-    final lowerUrl = attachmentUrl.toLowerCase();
-    return lowerName.endsWith('.pdf') || lowerUrl.contains('.pdf');
+    return ExcuseAttachmentPreview.isValidAttachmentUrl(raw);
   }
 
   Future<void> _showAttachmentPreviewDialog({
-    required String excuseId,
     required String attachmentName,
     required String attachmentUrl,
-    required bool validUrl,
   }) async {
-    debugPrint(
-      '[LecturerExcuseManagement] preview dialog open: '
-      'excuseId="$excuseId" name="$attachmentName" url="$attachmentUrl" validUrl=$validUrl',
-    );
-    if (!validUrl) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_tr('رابط المرفق غير صالح.', 'Invalid attachment link.')),
-          backgroundColor: const Color(0xFFD32F2F),
-        ),
-      );
-      return;
-    }
-
-    final isImage = _looksLikeImageAttachment(
-      attachmentName: attachmentName,
-      attachmentUrl: attachmentUrl,
-    );
-    final isPdf = _looksLikePdfAttachment(
-      attachmentName: attachmentName,
-      attachmentUrl: attachmentUrl,
-    );
-
-    await showDialog<void>(
+    await ExcuseAttachmentPreview.showAttachmentPreviewDialog(
       context: context,
-      builder: (ctx) {
-        return Directionality(
-          textDirection: LecturerLanguageController.direction(),
-          child: Dialog(
-            insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            child: SizedBox(
-              width: double.infinity,
-              height: MediaQuery.of(ctx).size.height * 0.75,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 10, 10),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            attachmentName.isNotEmpty
-                                ? attachmentName
-                                : _tr('معاينة المرفق', 'Attachment preview'),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontFamily: 'Cairo',
-                              fontWeight: FontWeight.w800,
-                              fontSize: 14,
-                              color: Color(0xFF213236),
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.of(ctx).pop(),
-                          icon: const Icon(Icons.close),
-                          tooltip: _tr('إغلاق', 'Close'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
-                  Expanded(
-                    child: isImage
-                        ? Container(
-                            color: const Color(0xFFF8FAFC),
-                            child: InteractiveViewer(
-                              minScale: 1,
-                              maxScale: 8,
-                              child: Center(
-                                child: Image.network(
-                                  attachmentUrl,
-                                  fit: BoxFit.contain,
-                                  filterQuality: FilterQuality.high,
-                                  errorBuilder: (_, __, ___) => Center(
-                                    child: Text(
-                                      _tr(
-                                        'تعذر معاينة المرفق.\nيمكنك فتحه في تبويب جديد.',
-                                        'Could not preview attachment.\nYou can open it in a new tab.',
-                                      ),
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        fontFamily: 'Cairo',
-                                        color: Color(0xFF64748B),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          )
-                        : isPdf
-                            ? Container(
-                                color: const Color(0xFFF8FAFC),
-                                child: kIsWeb
-                                    ? Center(
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(16),
-                                          child: Text(
-                                            _tr(
-                                              'معاينة PDF داخل التطبيق على الويب تتطلب إعداد CORS صحيح في Firebase Storage.\nيمكنك فتح الملف في تبويب جديد.',
-                                              'In-app PDF preview on Web requires proper Firebase Storage CORS configuration.\nYou can open the file in a new tab.',
-                                            ),
-                                            textAlign: TextAlign.center,
-                                            style: const TextStyle(
-                                              fontFamily: 'Cairo',
-                                              color: Color(0xFF64748B),
-                                              height: 1.4,
-                                            ),
-                                          ),
-                                        ),
-                                      )
-                                    : SfPdfViewer.network(
-                                        attachmentUrl,
-                                        canShowScrollHead: true,
-                                        canShowScrollStatus: true,
-                                        onDocumentLoaded: (_) {
-                                          debugPrint(
-                                            '[LecturerExcuseManagement] PDF preview loaded successfully: '
-                                            'url="$attachmentUrl"',
-                                          );
-                                        },
-                                        onDocumentLoadFailed: (details) {
-                                          debugPrint(
-                                            '[LecturerExcuseManagement] PDF preview failed: '
-                                            '${details.error} (${details.description}) '
-                                            'url="$attachmentUrl"',
-                                          );
-                                          if (!mounted) return;
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                _tr(
-                                                  'تعذر معاينة المرفق.',
-                                                  'Could not preview attachment.',
-                                                ),
-                                              ),
-                                              backgroundColor: const Color(0xFFD32F2F),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                              )
-                            : Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Center(
-                              child: Text(
-                                _tr(
-                                  'هذا النوع من الملفات لا يدعم المعاينة المدمجة حالياً.\nيمكنك فتحه في تبويب جديد.',
-                                  'This file type is not supported for inline preview.\nYou can open it in a new tab.',
-                                ),
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  fontFamily: 'Cairo',
-                                  color: Color(0xFF64748B),
-                                  height: 1.4,
-                                ),
-                              ),
-                            ),
-                          ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-                    child: SizedBox(
-                      height: 44,
-                      child: OutlinedButton(
-                        onPressed: () => _openAttachmentUrl(
-                          excuseId: excuseId,
-                          attachmentName: attachmentName,
-                          attachmentUrl: attachmentUrl,
-                          validUrl: validUrl,
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: _primary,
-                          side: const BorderSide(color: Color(0xFF006571)),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            _tr('فتح في تبويب جديد', 'Open in new tab'),
-                            style: const TextStyle(
-                              fontFamily: 'Cairo',
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+      attachmentName: attachmentName,
+      attachmentUrl: attachmentUrl,
+      tr: _tr,
+      textDirection: LecturerLanguageController.direction(),
+      primaryColor: _primary,
+      logTag: '[LecturerExcuseManagement]',
     );
-  }
-
-  Future<void> _openAttachmentUrl({
-    required String excuseId,
-    required String attachmentName,
-    required String attachmentUrl,
-    required bool validUrl,
-  }) async {
-    debugPrint(
-      'ATTACHMENT_TAP_CALLED '
-      'excuseId="$excuseId" '
-      'attachmentName="$attachmentName" '
-      'attachmentUrl="$attachmentUrl" '
-      'validUrl=$validUrl',
-    );
-    final raw = attachmentUrl.trim();
-    debugPrint('[LecturerExcuseManagement] attachment tap: rawUrl="$raw"');
-    if (raw.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_tr('لا يوجد رابط مرفق.', 'No attachment URL.')),
-          backgroundColor: const Color(0xFFD32F2F),
-        ),
-      );
-      return;
-    }
-    if (!raw.toLowerCase().startsWith('https://')) {
-      debugPrint(
-        '[LecturerExcuseManagement] invalid attachment URL (must be https): $raw',
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_tr('رابط المرفق غير صالح.', 'Attachment URL is invalid.')),
-          backgroundColor: const Color(0xFFD32F2F),
-        ),
-      );
-      return;
-    }
-    final uri = Uri.tryParse(raw);
-    if (uri == null || !uri.isAbsolute || uri.scheme.toLowerCase() != 'https') {
-      debugPrint(
-        '[LecturerExcuseManagement] invalid attachment URL parse: raw="$raw", uri="$uri"',
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_tr('رابط المرفق غير صالح.', 'Attachment URL is invalid.')),
-          backgroundColor: const Color(0xFFD32F2F),
-        ),
-      );
-      return;
-    }
-    try {
-      debugPrint('[LecturerExcuseManagement] opening attachment with platformDefault: $uri');
-      var ok = await launchUrl(uri, mode: LaunchMode.platformDefault);
-      debugPrint('[LecturerExcuseManagement] launchUrl(platformDefault) result=$ok');
-      if (!ok) {
-        debugPrint(
-          '[LecturerExcuseManagement] platformDefault failed, retry web new tab: $uri',
-        );
-        ok = await launchUrl(
-          uri,
-          mode: LaunchMode.platformDefault,
-          webOnlyWindowName: '_blank',
-        );
-        debugPrint('[LecturerExcuseManagement] launchUrl(webOnlyWindowName=_blank) result=$ok');
-      }
-      if (!ok) {
-        debugPrint(
-          '[LecturerExcuseManagement] platformDefault failed, retry externalApplication: $uri',
-        );
-        ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-        debugPrint('[LecturerExcuseManagement] launchUrl(externalApplication) result=$ok');
-      }
-      if (!ok && mounted) {
-        debugPrint(
-          '[LecturerExcuseManagement] failed to open attachment after retries: $uri',
-        );
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_tr('تعذر فتح المرفق.', 'Could not open attachment.')),
-            backgroundColor: const Color(0xFFD32F2F),
-          ),
-        );
-      }
-    } catch (e, st) {
-      debugPrint(
-        '[LecturerExcuseManagement] exception while opening attachment: $e\n$st',
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_tr('تعذر فتح المرفق.', 'Could not open attachment.')),
-          backgroundColor: const Color(0xFFD32F2F),
-        ),
-      );
-    }
   }
 
   LectureItem get _lecture => widget.lecture;
@@ -693,13 +361,9 @@ class _LecturerExcuseManagementScreenState
                                 (item.attachmentName ?? '').trim();
                             final attachmentUrl =
                                 (item.attachmentUrl ?? '').trim();
-                            final validAttachmentUrl =
-                                _isValidAttachmentUrl(attachmentUrl);
                             await _showAttachmentPreviewDialog(
-                              excuseId: item.id,
                               attachmentName: attachmentName,
                               attachmentUrl: attachmentUrl,
-                              validUrl: validAttachmentUrl,
                             );
                           },
                           style: OutlinedButton.styleFrom(
@@ -882,232 +546,23 @@ class _LecturerExcuseManagementScreenState
     );
   }
 
-  static const int _rejectOptionNotValid = 0;
-  static const int _rejectOptionDateMismatch = 1;
-  static const int _rejectOptionOther = 2;
-
   Future<void> _showRejectReasonDialog(
     BuildContext sheetContext,
     _ExcuseViewRow row,
   ) async {
     final item = row.request;
-    final reasonController = TextEditingController();
-    int? selectedOption = _rejectOptionNotValid;
-    await showDialog<void>(
+    final reason = await showExcuseRejectionReasonDialog(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.4),
-      builder: (ctx) {
-        return Directionality(
-          textDirection: LecturerLanguageController.direction(),
-          child: StatefulBuilder(
-            builder: (context, setDialogState) {
-              return Dialog(
-                backgroundColor: Colors.transparent,
-                insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.08),
-                        blurRadius: 24,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          _tr('سبب الرفض', 'Rejection reason'),
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF213236),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        _buildRejectOption(
-                          setDialogState,
-                          selected: selectedOption == _rejectOptionNotValid,
-                          label: _tr('ليس عذراً صحيحاً موثوقاً', 'Not a valid or reliable excuse'),
-                          onTap: () => setDialogState(() => selectedOption = _rejectOptionNotValid),
-                        ),
-                        const SizedBox(height: 8),
-                        _buildRejectOption(
-                          setDialogState,
-                          selected: selectedOption == _rejectOptionDateMismatch,
-                          label: _tr('تاريخ الغياب غير متوافق', 'Absence date does not match'),
-                          onTap: () => setDialogState(() => selectedOption = _rejectOptionDateMismatch),
-                        ),
-                        const SizedBox(height: 8),
-                        _buildRejectOption(
-                          setDialogState,
-                          selected: selectedOption == _rejectOptionOther,
-                          label: _tr('سبب آخر', 'Other reason'),
-                          onTap: () => setDialogState(() => selectedOption = _rejectOptionOther),
-                        ),
-                        if (selectedOption == _rejectOptionOther) ...[
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: reasonController,
-                            minLines: 3,
-                            maxLines: 3,
-                            textAlign: TextAlign.start,
-                            textDirection: LecturerLanguageController.direction(),
-                            cursorColor: _primary,
-                            style: const TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF0F172A),
-                            ),
-                            decoration: InputDecoration(
-                              hintText: _tr('اكتب سبب الرفض', 'Write the rejection reason'),
-                              hintStyle: const TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 14,
-                                color: Color(0xFF94A3B8),
-                              ),
-                              filled: true,
-                              fillColor: const Color(0xFFF8FAFC),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(color: _primary, width: 1.5),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 14,
-                              ),
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 20),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 48,
-                          child: Material(
-                            color: _primary,
-                            borderRadius: BorderRadius.circular(14),
-                            child: InkWell(
-                              onTap: () {
-                                String reason;
-                                if (selectedOption == _rejectOptionNotValid) {
-                                  reason = _tr('ليس عذراً صحيحاً موثوقاً', 'Not a valid or reliable excuse');
-                                } else if (selectedOption == _rejectOptionDateMismatch) {
-                                  reason = _tr('تاريخ الغياب غير متوافق', 'Absence date does not match');
-                                } else {
-                                  reason = reasonController.text.trim().isEmpty
-                                      ? _tr('سبب آخر', 'Other reason')
-                                      : reasonController.text.trim();
-                                }
-                                setState(() {
-                                  _staged[item.id] = ExcuseStatus.rejected;
-                                  _stagedRejectReason[item.id] = reason;
-                                });
-                                Navigator.of(ctx).pop();
-                                Navigator.of(sheetContext).pop();
-                              },
-                              borderRadius: BorderRadius.circular(14),
-                              child: Center(
-                                child: Text(
-                                  _tr('تأكيد الرفض', 'Confirm'),
-                                  style: const TextStyle(
-                                    fontFamily: 'Cairo',
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Center(
-                          child: TextButton(
-                            onPressed: () => Navigator.of(ctx).pop(),
-                            child: Text(
-                              _tr('إلغاء', 'Cancel'),
-                              style: const TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF64748B),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        );
-      },
+      tr: _tr,
+      textDirection: LecturerLanguageController.direction(),
+      primaryColor: _primary,
     );
-  }
-
-  Widget _buildRejectOption(
-    void Function(void Function()) setDialogState, {
-    required bool selected,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: selected ? _primary.withValues(alpha: 0.12) : const Color(0xFFF8FAFC),
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: selected ? _primary : const Color(0xFFE2E8F0),
-              width: selected ? 1.5 : 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                selected ? Icons.radio_button_checked : Icons.radio_button_off_outlined,
-                size: 22,
-                color: selected ? _primary : const Color(0xFF94A3B8),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: selected ? const Color(0xFF213236) : const Color(0xFF64748B),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    if (!mounted || reason == null) return;
+    setState(() {
+      _staged[item.id] = ExcuseStatus.rejected;
+      _stagedRejectReason[item.id] = reason;
+    });
+    if (sheetContext.mounted) Navigator.of(sheetContext).pop();
   }
 
   void _showDetailSheet(_ExcuseViewRow row) {
@@ -1334,10 +789,8 @@ class _LecturerExcuseManagementScreenState
                             '[LecturerExcuseManagement] attachment widget tapped for excuseId=${item.id}',
                           );
                           await _showAttachmentPreviewDialog(
-                            excuseId: item.id,
                             attachmentName: attachmentName,
                             attachmentUrl: attachmentUrl,
-                            validUrl: validAttachmentUrl,
                           );
                         },
                         borderRadius: BorderRadius.circular(8),
