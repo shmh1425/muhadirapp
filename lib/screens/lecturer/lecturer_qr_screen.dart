@@ -1,10 +1,13 @@
 import 'dart:async';
-import 'dart:math';
+import 'dart:convert';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../models/lecturer/lecture_item.dart';
+import '../../models/attendance/qr_attendance_session.dart';
+import '../../services/attendance/qr_attendance_service.dart';
 import '../../services/lecturer/lecture_repository.dart';
 import '../../services/lecturer/calendar_sync_service.dart';
 import '../../services/lecturer/lecturer_sections_service.dart';
@@ -23,10 +26,14 @@ class LecturerQrScreen extends StatefulWidget {
 class _LecturerQrScreenState extends State<LecturerQrScreen> {
   List<LectureItem> _allLectures = [];
   final LectureRepository _calendarRepository = LectureRepository();
+  final QrAttendanceService _qrAttendanceService = QrAttendanceService.instance;
   StreamSubscription<void>? _calendarSyncSub;
   late String _qrData;
   LectureItem? _activeLecture;
+  QrAttendanceSession? _qrSession;
   bool _isSyncRefreshing = false;
+  bool _isLoadingSession = false;
+  String? _sessionErrorMessage;
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
@@ -54,11 +61,11 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
       if (!mounted) return;
       setState(() {
         _allLectures = list;
-        _syncLectureAndCode(generateCode: true);
       });
+      await _syncLectureAndCode();
     } catch (_) {
       if (!mounted) return;
-      setState(() => _syncLectureAndCode(generateCode: true));
+      await _syncLectureAndCode();
     }
   }
 
@@ -68,9 +75,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
     try {
       await _calendarRepository.refreshAcademicCalendar();
       if (!mounted) return;
-      setState(() {
-        _syncLectureAndCode(generateCode: true);
-      });
+      await _syncLectureAndCode();
     } catch (_) {
       // Ignore transient realtime listener errors.
     } finally {
@@ -78,14 +83,82 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
     }
   }
 
-  void _syncLectureAndCode({required bool generateCode}) {
-    _activeLecture = _resolveCurrentLecture();
-    if (_activeLecture == null) {
-      _qrData = '';
+  Future<void> _syncLectureAndCode() async {
+    final lecture = _resolveCurrentLecture();
+    if (mounted) {
+      setState(() {
+        _activeLecture = lecture;
+        _sessionErrorMessage = null;
+      });
+    }
+
+    if (lecture == null) {
+      if (!mounted) return;
+      setState(() {
+        _qrSession = null;
+        _qrData = '';
+      });
       return;
     }
-    if (generateCode || _qrData.isEmpty) {
-      _qrData = _generateNewCode(_activeLecture!);
+
+    final missingFields = <String>[];
+    if ((lecture.sectionId ?? '').trim().isEmpty) {
+      missingFields.add('sectionId');
+    }
+    if (lecture.startTime.trim().isEmpty) {
+      missingFields.add('startTime');
+    }
+
+    if (missingFields.isNotEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _qrSession = null;
+        _qrData = '';
+        _sessionErrorMessage =
+            'تعذر إنشاء جلسة QR: بيانات المحاضرة ناقصة (${missingFields.join(', ')}).';
+      });
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isLoadingSession = true;
+    });
+
+    try {
+      final session = await _qrAttendanceService.createOrGetSessionForLecture(
+        lecture: lecture,
+      );
+      if (!mounted) return;
+      setState(() {
+        _qrSession = session;
+        _qrData = _buildQrPayload(session);
+        _sessionErrorMessage = null;
+      });
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _qrSession = null;
+        _qrData = '';
+        if (e.code == 'permission-denied') {
+          _sessionErrorMessage = 'فشل إنشاء جلسة QR: لا توجد صلاحية للوصول إلى Firestore.';
+        } else {
+          _sessionErrorMessage = 'فشل إنشاء/جلب جلسة QR من Firestore.';
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _qrSession = null;
+        _qrData = '';
+        _sessionErrorMessage = 'فشل إنشاء/جلب جلسة QR من Firestore.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingSession = false;
+        });
+      }
     }
   }
 
@@ -115,27 +188,74 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
     return isAfterStart && isBeforeEnd;
   }
 
-  String _generateNewCode(LectureItem lecture) {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final rand = Random.secure();
-    final code = List.generate(
-      8,
-      (_) => chars[rand.nextInt(chars.length)],
-    ).join();
-    return '${lecture.crn}-$code-${DateTime.now().millisecondsSinceEpoch}';
+  String _buildQrPayload(QrAttendanceSession session) {
+    return jsonEncode(<String, dynamic>{
+      'sessionId': session.sessionId,
+      'sectionId': session.sectionId,
+      'tokenId': session.currentTokenId,
+      'tokenVersion': session.tokenVersion,
+      'expiresAt': session.expiresAt.toUtc().toIso8601String(),
+    });
   }
 
-  void _onRefreshPressed() {
-    setState(() {
-      _syncLectureAndCode(generateCode: true);
-    });
-
-    if (_activeLecture == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+  Future<void> _onRefreshPressed() async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final lecture = _activeLecture;
+    if (lecture == null) {
+      if (!mounted) return;
+      messenger?.showSnackBar(
         SnackBar(
           content: Text(
             _tr('لا توجد محاضرة حالياً', 'No lecture is currently active'),
           ),
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isLoadingSession = true;
+      _sessionErrorMessage = null;
+    });
+
+    try {
+      if (_qrSession != null) {
+        final refreshed = await _qrAttendanceService.refreshSessionToken(
+          _qrSession!.sessionId,
+        );
+        if (!mounted) return;
+        setState(() {
+          _qrSession = refreshed;
+          _qrData = _buildQrPayload(refreshed);
+        });
+      } else {
+        await _syncLectureAndCode();
+      }
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _sessionErrorMessage = e.code == 'permission-denied'
+            ? 'فشل تحديث رمز QR: لا توجد صلاحية للوصول إلى Firestore.'
+            : 'فشل تحديث رمز QR من Firestore.';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _sessionErrorMessage = 'فشل تحديث رمز QR من Firestore.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingSession = false;
+        });
+      }
+    }
+
+    if (_sessionErrorMessage != null) {
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(_sessionErrorMessage!),
         ),
       );
     }
@@ -202,6 +322,30 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
                             fontFamily: 'Cairo',
                           ),
                         ),
+                        if (lecture.location != null &&
+                            lecture.location!.trim().isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            '${_tr('الموقع', 'Location')}: ${lecture.location!.trim()}',
+                            textAlign: TextAlign.right,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Colors.black54,
+                              fontFamily: 'Cairo',
+                            ),
+                          ),
+                        ] else if (lecture.hall.trim().isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            '${_tr('القاعة', 'Hall')}: ${lecture.hall.trim()}',
+                            textAlign: TextAlign.right,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Colors.black54,
+                              fontFamily: 'Cairo',
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 12),
                         Container(
                           width: double.infinity,
@@ -274,7 +418,30 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (lecture == null) ...[
+                          if (_isLoadingSession) ...[
+                            const SizedBox(
+                              width: 36,
+                              height: 36,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 3,
+                                color: primaryColor,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              _tr(
+                                'جاري تحميل جلسة QR...',
+                                'Loading QR session...',
+                              ),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF465A5F),
+                                fontFamily: 'Cairo',
+                              ),
+                            ),
+                          ] else if (lecture == null) ...[
                             const Icon(
                               Icons.event_busy_rounded,
                               size: 48,
@@ -289,6 +456,23 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
                               textAlign: TextAlign.center,
                               style: const TextStyle(
                                 fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF465A5F),
+                                fontFamily: 'Cairo',
+                              ),
+                            ),
+                          ] else if (_sessionErrorMessage != null) ...[
+                            const Icon(
+                              Icons.error_outline_rounded,
+                              size: 48,
+                              color: primaryColor,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              _sessionErrorMessage!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 15,
                                 fontWeight: FontWeight.w700,
                                 color: Color(0xFF465A5F),
                                 fontFamily: 'Cairo',
@@ -318,6 +502,19 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
                                 ),
                               ),
                             ),
+                            const SizedBox(height: 10),
+                            Text(
+                              _tr(
+                                'الجلسة متصلة بـ Firestore',
+                                'Session is connected to Firestore',
+                              ),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF5F7A80),
+                                fontFamily: 'Cairo',
+                              ),
+                            ),
                           ],
                           if (lecture != null) ...[
                             const SizedBox(height: 22),
@@ -337,7 +534,9 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
                                   borderRadius: BorderRadius.circular(26),
                                 ),
                                 child: TextButton.icon(
-                                  onPressed: _onRefreshPressed,
+                                  onPressed: _isLoadingSession
+                                      ? null
+                                      : _onRefreshPressed,
                                   style: TextButton.styleFrom(
                                     foregroundColor: Colors.white,
                                     shape: RoundedRectangleBorder(
