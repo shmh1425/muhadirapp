@@ -6,6 +6,7 @@ import '../../utils/hijri_converter.dart';
 /// Service لإدارة منطق التقويم وحالة الأيام
 class CalendarService {
   final LectureRepository _repository;
+  static const int _editableWindowDays = 14;
 
   CalendarService(this._repository);
 
@@ -66,10 +67,12 @@ class CalendarService {
   /// تحديد حالة اليوم حسب الأولوية
   /// 1) اليوم الحالي (أخضر غامق) → أعلى أولوية
   /// 2) عطلة رسمية من Firebase
-  /// 3) أي يوم فيه محاضرات وليس عطلة:
-  ///    - ماضي: قابل للتعديل
+  /// 3) يوم بدون محاضرات: none
+  /// 4) أي يوم فيه محاضرات وليس عطلة:
+  ///    - ماضي خارج آخر أسبوعين: عرض فقط
+  ///    - ماضي داخل آخر أسبوعين: قابل للتعديل
   ///    - مستقبل: مقفل حتى يحين يومه
-  /// 4) افتراضي (بدون تلوين)
+  /// 5) افتراضي (بدون تلوين)
   DayStatus _determineDayStatus({
     required DateTime date,
     required DateTime today,
@@ -79,6 +82,7 @@ class CalendarService {
     final bool isHoliday = _repository.isHoliday(date);
     final bool isFuture = date.isAfter(today);
     final bool isPast = date.isBefore(today);
+    final cutoff = today.subtract(const Duration(days: _editableWindowDays));
 
     if (isToday) {
       // اليوم الحالي → أعلى أولوية
@@ -90,13 +94,22 @@ class CalendarService {
       return DayStatus.holiday;
     }
 
+    if (lecturesCount == 0) {
+      // يوم بدون محاضرات: لا نقاط ولا فتح سجلات.
+      return DayStatus.none;
+    }
+
     if (lecturesCount > 0 && isFuture) {
       // مستقبل مع محاضرات: مغلق حتى يحين يومه.
       return DayStatus.futureLocked;
     }
 
     if (isPast && lecturesCount > 0) {
-      // أي يوم ماضي وفيه محاضرات (وليس عطلة): قابل للتعديل.
+      if (date.isBefore(cutoff)) {
+        // تاريخ قديم خارج نافذة التعديل.
+        return DayStatus.viewOnly;
+      }
+      // تاريخ ماضٍ داخل نافذة آخر أسبوعين.
       return DayStatus.editable;
     }
 

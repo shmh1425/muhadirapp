@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../student/components/notification_bell.dart';
-import '../student/notifications_screen.dart';
+import 'lecturer_notifications_screen.dart';
 import 'lecturer_language.dart';
 import '../../widgets/monthly_calendar.dart';
 import '../../models/lecturer/lecture_item.dart';
@@ -288,7 +288,8 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => const NotificationsScreen(),
+                                    builder: (_) =>
+                                        const LecturerNotificationsScreen(),
                                   ),
                                 );
                               },

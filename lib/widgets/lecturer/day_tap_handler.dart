@@ -20,7 +20,10 @@ class DayTapHandler {
         // 🔴 يوم مستقبلي: لا يفتح → تظهر رسالة "لا يمكن فتح هذا التاريخ الآن"
         _showSnackBar(
           context: context,
-          message: LecturerLanguageController.tr('لا يمكن فتح هذا التاريخ الآن', 'This date cannot be opened now'),
+          message: LecturerLanguageController.tr(
+            'هذا تاريخ مستقبلي. لا توجد سجلات متاحة حالياً',
+            'This is a future date. No records available',
+          ),
           icon: Icons.lock,
           backgroundColor: Colors.red.shade500,
         );

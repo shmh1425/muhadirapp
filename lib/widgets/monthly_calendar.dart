@@ -45,26 +45,19 @@ class MonthlyCalendar extends StatelessWidget {
   }
 
   Widget _buildMonthHeader(String monthName, String year) {
+    final isArabic = LecturerLanguageController.isArabic;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // سهم الشهر السابق: ← (الماضي)
-        IconButton(
+        _MonthNavButton(
+          tooltip: _tr('الشهر السابق', 'Previous month'),
+          label: _tr('السابق', 'Previous'),
+          icon: isArabic
+              ? Icons.chevron_left_rounded
+              : Icons.chevron_left_rounded,
           onPressed: () {
-            final prevMonth = DateTime(
-              currentMonth.year,
-              currentMonth.month - 1,
-              1,
-            );
-            onMonthChanged(prevMonth);
+            onMonthChanged(DateTime(currentMonth.year, currentMonth.month - 1, 1));
           },
-          icon: const Icon(Icons.chevron_left),
-          style: IconButton.styleFrom(
-            backgroundColor: const Color(0xFFF5F5F5),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
         ),
         // اسم الشهر والسنة
         Column(
@@ -89,23 +82,15 @@ class MonthlyCalendar extends StatelessWidget {
             ),
           ],
         ),
-        // سهم الشهر التالي: → (المستقبل)
-        IconButton(
+        _MonthNavButton(
+          tooltip: _tr('الشهر التالي', 'Next month'),
+          label: _tr('التالي', 'Next'),
+          icon: isArabic
+              ? Icons.chevron_right_rounded
+              : Icons.chevron_right_rounded,
           onPressed: () {
-            final nextMonth = DateTime(
-              currentMonth.year,
-              currentMonth.month + 1,
-              1,
-            );
-            onMonthChanged(nextMonth);
+            onMonthChanged(DateTime(currentMonth.year, currentMonth.month + 1, 1));
           },
-          icon: const Icon(Icons.chevron_right),
-          style: IconButton.styleFrom(
-            backgroundColor: const Color(0xFFF5F5F5),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
         ),
       ],
     );
@@ -253,13 +238,20 @@ class MonthlyCalendar extends StatelessWidget {
     final visualHolidayType = day.holidayType;
     final hasLectures = day.lecturesCount > 0;
     final isHoliday = status == DayStatus.holiday;
-    final isLectureDay = hasLectures && !isHoliday && !isToday;
+    final isFutureLocked = status == DayStatus.futureLocked;
+    final isViewOnly = status == DayStatus.viewOnly;
+    final isEditable = status == DayStatus.editable || status == DayStatus.today;
+    final isLectureDay = hasLectures && (isEditable || isViewOnly || isFutureLocked);
     final backgroundColor = isToday
         ? DayStatus.today.color
         : isHoliday
         ? _holidayFillColor(visualHolidayType)
-        : isLectureDay
-        ? _lectureDayFillColor()
+        : isFutureLocked
+        ? DayStatus.futureLocked.color
+        : isViewOnly
+        ? DayStatus.viewOnly.color
+        : status == DayStatus.editable
+        ? DayStatus.editable.color
         : Colors.transparent;
 
     return GestureDetector(
@@ -277,7 +269,11 @@ class MonthlyCalendar extends StatelessWidget {
                   color: _holidayBorderColor(visualHolidayType),
                   width: 1.5,
                 )
-              : isLectureDay
+              : isFutureLocked
+              ? Border.all(color: const Color(0xFFD14A4A), width: 1.2)
+              : isViewOnly
+              ? Border.all(color: const Color(0xFF4A90E2), width: 1.2)
+              : status == DayStatus.editable
               ? Border.all(color: _lectureDayBorderColor(), width: 1.2)
               : null,
           // إضافة ظل خفيف للأيام التي تحتوي على محاضرات
@@ -333,6 +329,12 @@ class MonthlyCalendar extends StatelessWidget {
         return Colors.white;
       case DayStatus.holiday:
         return _holidayTextColor(holidayType);
+      case DayStatus.futureLocked:
+        return const Color(0xFFB3261E);
+      case DayStatus.viewOnly:
+        return const Color(0xFF1E5AA8);
+      case DayStatus.editable:
+        return const Color(0xFF1B5E20);
       default:
         if (isLectureDay) return const Color(0xFF1B5E20);
         return const Color(0xFF222222);
@@ -345,6 +347,15 @@ class MonthlyCalendar extends StatelessWidget {
     switch (status) {
       case DayStatus.today:
         dotColor = Colors.white; // أبيض على خلفية خضراء غامقة
+        break;
+      case DayStatus.futureLocked:
+        dotColor = const Color(0xFFB3261E);
+        break;
+      case DayStatus.viewOnly:
+        dotColor = const Color(0xFF1E5AA8);
+        break;
+      case DayStatus.editable:
+        dotColor = const Color(0xFF1B5E20);
         break;
       default:
         dotColor = const Color(0xFF1B5E20);
@@ -427,12 +438,22 @@ class MonthlyCalendar extends StatelessWidget {
           ),
           _legendItem(
             _lectureDayFillColor(),
-            _tr('يوم محاضرة', 'Lecture day'),
+            _tr('داخل آخر أسبوعين (قابل للتعديل)', 'Within last 2 weeks (editable)'),
+            false,
+          ),
+          _legendItem(
+            DayStatus.viewOnly.color,
+            _tr('أقدم من أسبوعين (عرض فقط)', 'Older than 2 weeks (view only)'),
+            false,
+          ),
+          _legendItem(
+            DayStatus.futureLocked.color,
+            _tr('تاريخ مستقبلي (مغلق)', 'Future date (locked)'),
             false,
           ),
           _legendItem(
             _holidayFillColor('weekend'),
-            _tr('عطلة أسبوعية', 'Weekend'),
+            _tr('عطلة', 'Holiday'),
             false,
           ),
           ...monthHolidayTypes.map(
@@ -494,43 +515,29 @@ class MonthlyCalendar extends StatelessWidget {
 
   Color _holidayFillColor(String? type) {
     switch ((type ?? '').trim().toLowerCase()) {
-      case 'holiday':
       case 'break':
-      case 'suspension':
-      case 'other':
+        // Academic break: keep it clearly yellow.
         return const Color(0xFFFFF5CC);
-      case 'weekend':
-        return const Color(0xFFFFE2E2);
       default:
-        return const Color(0xFFFFF5CC);
+        return const Color(0xFFE0E0E0);
     }
   }
 
   Color _holidayBorderColor(String? type) {
     switch ((type ?? '').trim().toLowerCase()) {
-      case 'holiday':
       case 'break':
-      case 'suspension':
-      case 'other':
         return const Color(0xFFE0B422);
-      case 'weekend':
-        return const Color(0xFFD34A4A);
       default:
-        return const Color(0xFFE0B422);
+        return const Color(0xFF9E9E9E);
     }
   }
 
   Color _holidayTextColor(String? type) {
     switch ((type ?? '').trim().toLowerCase()) {
-      case 'holiday':
       case 'break':
-      case 'suspension':
-      case 'other':
         return const Color(0xFF8A6A00);
-      case 'weekend':
-        return const Color(0xFFB3261E);
       default:
-        return const Color(0xFF8A6A00);
+        return const Color(0xFF616161);
     }
   }
 
@@ -627,6 +634,49 @@ class MonthlyCalendar extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _MonthNavButton extends StatelessWidget {
+  const _MonthNavButton({
+    required this.tooltip,
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: FilledButton.icon(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          backgroundColor: const Color(0xFFE6F3F5),
+          foregroundColor: const Color(0xFF006571),
+          elevation: 0,
+          minimumSize: const Size(96, 44),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: Color(0xFFB8DDE2)),
+          ),
+        ),
+        icon: Icon(icon, size: 22),
+        label: Text(
+          label,
+          style: const TextStyle(
+            fontFamily: 'Cairo',
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
     );
   }
 }
