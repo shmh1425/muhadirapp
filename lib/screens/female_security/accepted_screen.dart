@@ -228,6 +228,20 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
     );
   }
 
+  List<SecurityGateScanRecord> _filterScans(
+    List<SecurityGateScanRecord> scans,
+  ) {
+    final query = _searchController.text.trim().toLowerCase();
+    if (query.isEmpty) return scans;
+    return scans
+        .where(
+          (scan) =>
+              scan.studentName.toLowerCase().contains(query) ||
+              scan.universityId.contains(query),
+        )
+        .toList(growable: false);
+  }
+
   void _logAcceptedQueryError({
     required Object error,
     required StackTrace? stackTrace,
@@ -253,10 +267,10 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
 
   void _logAcceptedQueryValues(String gateId) {
     final message =
-        '[AcceptedScreen] using simplified accepted query. '
+        '[AcceptedScreen] using accepted query. '
         'collection=student_gate_scans, status=accepted, '
-        'ignoredGateId=$gateId, '
-        'ignoredScanDateKey=${formatScanDateKey(_selectedDate)}';
+        'gateId=$gateId, '
+        'scanDateKey=${formatScanDateKey(_selectedDate)}';
     if (_lastAcceptedQueryLog == message) return;
     _lastAcceptedQueryLog = message;
     debugPrint(message);
@@ -291,7 +305,9 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
                             gateId: gateId,
                           );
                         }
-                        final scans = snapshot.data ?? const [];
+                        final scans = _filterScans(
+                          snapshot.data ?? const <SecurityGateScanRecord>[],
+                        );
                         return ListView(
                           padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
                           children: [

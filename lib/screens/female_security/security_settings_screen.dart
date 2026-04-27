@@ -341,8 +341,10 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: () {
+                    onPressed: () async {
                       Navigator.of(ctx).pop();
+                      await _authService.signOut();
+                      if (!mounted) return;
                       Navigator.of(context).pushAndRemoveUntil(
                         MaterialPageRoute(builder: (_) => const LoginScreen()),
                         (route) => false,

@@ -284,13 +284,12 @@ class FemaleSecurityGateScanService {
     required String gateId,
     required DateTime date,
   }) {
-    debugPrint(
-      '[FemaleSecurityGateScanService] getAcceptedScans using simplified query: '
-      'collection=student_gate_scans, status=accepted',
-    );
     return _firestore
         .collection('student_gate_scans')
+        .where('gateId', isEqualTo: gateId)
+        .where('scanDateKey', isEqualTo: formatScanDateKey(date))
         .where('status', isEqualTo: 'accepted')
+        .orderBy('scanTime', descending: true)
         .snapshots()
         .map(
           (snapshot) => snapshot.docs
@@ -399,16 +398,29 @@ class FemaleSecurityGateScanService {
   }
 
   Future<List<SecurityRejectionReason>> getActiveRejectionReasons() async {
-    final snapshot = await _firestore
-        .collection('security_rejection_reasons')
-        .where('isActive', isEqualTo: true)
-        .orderBy('sortOrder')
-        .get();
+    try {
+      final snapshot = await _firestore
+          .collection('security_rejection_reasons')
+          .where('isActive', isEqualTo: true)
+          .orderBy('sortOrder')
+          .get();
 
-    final reasons = snapshot.docs
-        .map(SecurityRejectionReason.fromDoc)
-        .toList(growable: false);
-    if (reasons.isNotEmpty) return reasons;
+      final reasons = snapshot.docs
+          .map(SecurityRejectionReason.fromDoc)
+          .toList(growable: false);
+      if (reasons.isNotEmpty) return reasons;
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[FemaleSecurityGateScanService] getActiveRejectionReasons failed: '
+        '$error',
+      );
+      debugPrintStack(
+        label:
+            '[FemaleSecurityGateScanService] '
+            'getActiveRejectionReasons stackTrace',
+        stackTrace: stackTrace,
+      );
+    }
 
     return const [
       SecurityRejectionReason(reasonId: 'graduated', titleAr: 'الطالبة متخرجة'),

@@ -43,6 +43,18 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Security gate metadata used to scope scans to assigned gates.
+    match /campus_gates/{gateId} {
+      allow read: if isActiveSecurityStaff();
+      allow write: if isAdmin();
+    }
+
+    // Rejection reasons shown in the security verification dialog.
+    match /security_rejection_reasons/{reasonId} {
+      allow read: if isActiveSecurityStaff();
+      allow write: if isAdmin();
+    }
+
     // Lecture schedules managed by admin dashboard.
     match /lecture_schedules/{scheduleId} {
       allow read: if true;
@@ -162,7 +174,9 @@ service cloud.firestore {
     // Female security accepted/rejected gate scan history.
     match /student_gate_scans/{scanId} {
       allow read: if isActiveSecurityStaff();
-      allow write: if false;
+      allow create: if isActiveSecurityStaff();
+      allow update: if isActiveSecurityStaff();
+      allow delete: if false;
     }
 
     // Deny everything else by default.
