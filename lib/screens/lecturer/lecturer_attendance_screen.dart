@@ -1,15 +1,19 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/attendance/manual_attendance_record.dart';
+import '../../models/attendance/nfc_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../services/attendance/attendance_session_export_service.dart';
 import '../../services/attendance/manual_attendance_service.dart';
+import '../../services/attendance/nfc_attendance_service.dart';
 import '../../services/lecturer/lecture_repository.dart';
 import '../../services/lecturer/calendar_sync_service.dart';
 import 'lecturer_language.dart';
 import 'lecturer_navigation.dart';
+import 'lecturer_qr_screen.dart';
 import 'widgets/profile_back_button.dart';
 
 /// Figure 10 – Live Attendance – Current Day & Lecture.
@@ -67,8 +71,10 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   final ManualAttendanceService _manualAttendanceService =
       ManualAttendanceService.instance;
   final LectureRepository _calendarRepository = LectureRepository();
+  final NfcAttendanceService _nfcAttendanceService = NfcAttendanceService.instance;
   StreamSubscription<List<ManualAttendanceRecord>>? _recordsSubscription;
   StreamSubscription<void>? _calendarSyncSub;
+  StreamSubscription<List<NfcAttendanceSession>>? _nfcSessionsSubscription;
 
   String? _sessionId;
   List<_StudentRow> _students = <_StudentRow>[];
@@ -81,6 +87,10 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   String? _attendanceLoadError;
   DateTime? _calendarReferenceDate;
   bool _isSyncRefreshing = false;
+  AttendanceMethod _selectedMethod = AttendanceMethod.manual;
+  bool _isProcessingMethodAction = false;
+  bool _isNfcActiveForLecture = false;
+  String? _methodStatusMessage;
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
@@ -328,6 +338,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   void dispose() {
     _recordsSubscription?.cancel();
     _calendarSyncSub?.cancel();
+    _nfcSessionsSubscription?.cancel();
     super.dispose();
   }
 
@@ -349,6 +360,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       _calendarReferenceDate = DateTime.now();
     }
     await _loadManualAttendance();
+    _attachNfcSessionWatcher();
   }
 
   Future<void> _handleRealtimeCalendarChange() async {
@@ -420,6 +432,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
       if (!mounted) return;
       _attachSessionStream(sessionId);
+      _refreshNfcStatusFromSessionId(sessionId);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -451,6 +464,197 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
             });
           },
         );
+  }
+
+  void _attachNfcSessionWatcher() {
+    _nfcSessionsSubscription?.cancel();
+    _nfcSessionsSubscription = _nfcAttendanceService
+        .watchOpenSessionsForCurrentLecturer()
+        .listen((sessions) {
+          if (!mounted) return;
+          final currentSessionId = _sessionId ?? _buildSessionIdForCurrentLecture();
+          final isOpen = sessions.any(
+            (s) => s.sessionId == currentSessionId && s.isOpen,
+          );
+          setState(() {
+            _isNfcActiveForLecture = isOpen;
+            if (isOpen) {
+              _methodStatusMessage = _tr(
+                'التحضير عبر NFC نشط لهذه المحاضرة.',
+                'NFC attendance is active for this lecture.',
+              );
+            }
+          });
+        });
+  }
+
+  void _refreshNfcStatusFromSessionId(String sessionId) {
+    // يتم تحديث الحالة الفعلية عبر الـ stream؛ هنا نعيد ضبط رسالة الحالة فقط.
+    if (!mounted) return;
+    setState(() {
+      if (!_isNfcActiveForLecture) {
+        _methodStatusMessage = null;
+      }
+    });
+  }
+
+  String _buildSessionIdForCurrentLecture() {
+    final sectionId = (_lecture.sectionId ?? '').trim();
+    if (sectionId.isEmpty) return '';
+    return ManualAttendanceService.buildSessionId(
+      sectionId: sectionId,
+      sessionDate: _sessionDate,
+      lectureStartTime: _lecture.startTime,
+    );
+  }
+
+  bool _hasRequiredLectureData() {
+    final sectionId = (_lecture.sectionId ?? '').trim();
+    return sectionId.isNotEmpty &&
+        _lecture.courseName.trim().isNotEmpty &&
+        _lecture.startTime.trim().isNotEmpty &&
+        _lecture.endTime.trim().isNotEmpty;
+  }
+
+  Future<void> _onSelectMethod(AttendanceMethod method) async {
+    if (_isProcessingMethodAction) return;
+    if (!_hasRequiredLectureData()) {
+      _showMethodSnack(
+        _tr(
+          'بيانات المحاضرة ناقصة. لا يمكن اختيار طريقة التحضير.',
+          'Lecture data is missing. Cannot select attendance method.',
+        ),
+        error: true,
+      );
+      return;
+    }
+
+    setState(() {
+      _selectedMethod = method;
+      _isProcessingMethodAction = true;
+      _methodStatusMessage = null;
+    });
+
+    try {
+      switch (method) {
+        case AttendanceMethod.manual:
+          setState(() {
+            _methodStatusMessage = _tr(
+              'تم تفعيل التحضير اليدوي لهذه المحاضرة.',
+              'Manual attendance is active for this lecture.',
+            );
+          });
+          break;
+        case AttendanceMethod.qr:
+          if (!mounted) return;
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => LecturerQrScreen(lecture: _lecture),
+            ),
+          );
+          break;
+        case AttendanceMethod.nfc:
+          await _openOrConfirmNfcForCurrentLecture();
+          break;
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessingMethodAction = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _openOrConfirmNfcForCurrentLecture() async {
+    final sectionId = (_lecture.sectionId ?? '').trim();
+    if (sectionId.isEmpty) {
+      _showMethodSnack(
+        _tr(
+          'لا يمكن تفعيل NFC لعدم توفر sectionId للمحاضرة.',
+          'Cannot enable NFC because sectionId is missing.',
+        ),
+        error: true,
+      );
+      return;
+    }
+
+    if (_isNfcActiveForLecture) {
+      setState(() {
+        _methodStatusMessage = _tr(
+          'التحضير عبر NFC نشط بالفعل لهذه المحاضرة.',
+          'NFC attendance is already active for this lecture.',
+        );
+      });
+      return;
+    }
+
+    try {
+      await _nfcAttendanceService.openSessionForLecture(
+        lecture: _lecture,
+        lectureDate: _sessionDate,
+      );
+      if (!mounted) return;
+      setState(() {
+        _isNfcActiveForLecture = true;
+        _methodStatusMessage = _tr(
+          'تم تفعيل التحضير عبر NFC لهذه المحاضرة.',
+          'NFC attendance is now active for this lecture.',
+        );
+      });
+    } on NfcAttendanceException catch (e) {
+      _showMethodSnack(_mapNfcErrorToArabic(e), error: true);
+    } on FirebaseException catch (e) {
+      final message = e.code == 'permission-denied'
+          ? _tr(
+              'تعذر تفعيل NFC: لا توجد صلاحية للوصول إلى Firestore.',
+              'Failed to enable NFC: Firestore permission denied.',
+            )
+          : _tr(
+              'تعذر تفعيل NFC لهذه المحاضرة.',
+              'Failed to enable NFC for this lecture.',
+            );
+      _showMethodSnack(message, error: true);
+    } catch (_) {
+      _showMethodSnack(
+        _tr(
+          'طريقة التحضير NFC غير متاحة حالياً.',
+          'NFC attendance method is currently unavailable.',
+        ),
+        error: true,
+      );
+    }
+  }
+
+  String _mapNfcErrorToArabic(NfcAttendanceException error) {
+    switch (error.code) {
+      case NfcAttendanceErrorCode.missingLecturerCard:
+        return _tr(
+          'NFC غير متاح: لا توجد بطاقة NFC مرتبطة بحسابك.',
+          'NFC unavailable: no lecturer card is assigned to your account.',
+        );
+      case NfcAttendanceErrorCode.invalidInput:
+        return _tr(
+          'فشل تفعيل NFC بسبب نقص بيانات المحاضرة.',
+          'Failed to enable NFC because lecture data is incomplete.',
+        );
+      default:
+        return _tr(
+          'تعذر تفعيل NFC لهذه المحاضرة.',
+          'Failed to enable NFC for this lecture.',
+        );
+    }
+  }
+
+  void _showMethodSnack(String text, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(text),
+        backgroundColor: error ? const Color(0xFFD32F2F) : const Color(0xFF2B9E56),
+      ),
+    );
   }
 
   _StudentRow _studentFromRecord(ManualAttendanceRecord record) {
@@ -534,6 +738,10 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
               child: Column(
                 children: [
                   _buildHeader(),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: _buildAttendanceMethodSelector(),
+                  ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
                     child: _buildFilterBar(),
@@ -792,6 +1000,123 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildAttendanceMethodSelector() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFDCE6E8)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _tr('طريقة التحضير', 'Attendance Method'),
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontWeight: FontWeight.w800,
+              fontSize: 14,
+              color: Color(0xFF1F2E33),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _methodButton(
+                  labelAr: 'التحضير عبر NFC',
+                  labelEn: 'NFC Attendance',
+                  method: AttendanceMethod.nfc,
+                  icon: Icons.nfc_rounded,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _methodButton(
+                  labelAr: 'التحضير عبر QR',
+                  labelEn: 'QR Attendance',
+                  method: AttendanceMethod.qr,
+                  icon: Icons.qr_code_rounded,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _methodButton(
+                  labelAr: 'التحضير اليدوي',
+                  labelEn: 'Manual Attendance',
+                  method: AttendanceMethod.manual,
+                  icon: Icons.edit_note_rounded,
+                ),
+              ),
+            ],
+          ),
+          if (_methodStatusMessage != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _methodStatusMessage!,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF496169),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _methodButton({
+    required String labelAr,
+    required String labelEn,
+    required AttendanceMethod method,
+    required IconData icon,
+  }) {
+    final selected = _selectedMethod == method;
+    return InkWell(
+      onTap: _isProcessingMethodAction ? null : () => _onSelectMethod(method),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF006571) : const Color(0xFFF2F5F6),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? const Color(0xFF006571) : const Color(0xFFD5E0E3),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: selected ? Colors.white : const Color(0xFF50656B),
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                _tr(labelAr, labelEn),
+                style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? Colors.white : const Color(0xFF50656B),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1493,6 +1818,7 @@ const TextStyle _tableHeaderStyle = TextStyle(
 enum AttendanceStatusFilter { all, present, excused, absent, late }
 
 enum AttendanceStatus { present, absent, excused, late }
+enum AttendanceMethod { nfc, qr, manual }
 
 class _StudentRow {
   _StudentRow({
