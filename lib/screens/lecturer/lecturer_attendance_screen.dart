@@ -1,19 +1,22 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../models/attendance/manual_attendance_record.dart';
 import '../../models/attendance/nfc_attendance_session.dart';
+import '../../models/attendance/qr_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../services/attendance/attendance_session_export_service.dart';
 import '../../services/attendance/manual_attendance_service.dart';
 import '../../services/attendance/nfc_attendance_service.dart';
+import '../../services/attendance/qr_attendance_service.dart';
 import '../../services/lecturer/lecture_repository.dart';
 import '../../services/lecturer/calendar_sync_service.dart';
 import 'lecturer_language.dart';
 import 'lecturer_navigation.dart';
-import 'lecturer_qr_screen.dart';
 import 'widgets/profile_back_button.dart';
 
 /// Figure 10 – Live Attendance – Current Day & Lecture.
@@ -72,6 +75,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       ManualAttendanceService.instance;
   final LectureRepository _calendarRepository = LectureRepository();
   final NfcAttendanceService _nfcAttendanceService = NfcAttendanceService.instance;
+  final QrAttendanceService _qrAttendanceService = QrAttendanceService.instance;
   StreamSubscription<List<ManualAttendanceRecord>>? _recordsSubscription;
   StreamSubscription<void>? _calendarSyncSub;
   StreamSubscription<List<NfcAttendanceSession>>? _nfcSessionsSubscription;
@@ -91,6 +95,13 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   bool _isProcessingMethodAction = false;
   bool _isNfcActiveForLecture = false;
   String? _methodStatusMessage;
+  QrAttendanceSession? _qrSession;
+  String _qrData = '';
+  bool _isLoadingQr = false;
+  bool _isRefreshingQrToken = false;
+  Timer? _qrAutoRefreshTimer;
+  static const int _qrAutoRefreshIntervalSeconds = 30;
+  int _qrAutoRefreshSecondsLeft = _qrAutoRefreshIntervalSeconds;
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
@@ -339,6 +350,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     _recordsSubscription?.cancel();
     _calendarSyncSub?.cancel();
     _nfcSessionsSubscription?.cancel();
+    _stopQrAutoRefreshTimer();
     super.dispose();
   }
 
@@ -432,7 +444,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
       if (!mounted) return;
       _attachSessionStream(sessionId);
-      _refreshNfcStatusFromSessionId(sessionId);
+      _refreshNfcStatusFromSessionId();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -488,7 +500,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         });
   }
 
-  void _refreshNfcStatusFromSessionId(String sessionId) {
+  void _refreshNfcStatusFromSessionId() {
     // يتم تحديث الحالة الفعلية عبر الـ stream؛ هنا نعيد ضبط رسالة الحالة فقط.
     if (!mounted) return;
     setState(() {
@@ -534,25 +546,19 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       _isProcessingMethodAction = true;
       _methodStatusMessage = null;
     });
+    if (method != AttendanceMethod.qr) {
+      _stopQrAutoRefreshTimer();
+    }
 
     try {
       switch (method) {
         case AttendanceMethod.manual:
           setState(() {
-            _methodStatusMessage = _tr(
-              'تم تفعيل التحضير اليدوي لهذه المحاضرة.',
-              'Manual attendance is active for this lecture.',
-            );
+            _methodStatusMessage = null;
           });
           break;
         case AttendanceMethod.qr:
-          if (!mounted) return;
-          await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => LecturerQrScreen(lecture: _lecture),
-            ),
-          );
+          await _loadQrForCurrentLecture();
           break;
         case AttendanceMethod.nfc:
           await _openOrConfirmNfcForCurrentLecture();
@@ -565,6 +571,190 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         });
       }
     }
+  }
+
+  Future<void> _loadQrForCurrentLecture({bool refreshToken = false}) async {
+    final sectionId = (_lecture.sectionId ?? '').trim();
+    if (sectionId.isEmpty) {
+      _showMethodSnack(
+        _tr(
+          'بيانات المحاضرة ناقصة: sectionId غير متوفر.',
+          'Lecture data is missing: sectionId is not available.',
+        ),
+        error: true,
+      );
+      return;
+    }
+    if (_lecture.startTime.trim().isEmpty || _lecture.endTime.trim().isEmpty) {
+      _showMethodSnack(
+        _tr(
+          'بيانات المحاضرة ناقصة: وقت المحاضرة غير مكتمل.',
+          'Lecture data is missing: lecture time is incomplete.',
+        ),
+        error: true,
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoadingQr = true;
+    });
+
+    try {
+      final session = await _qrAttendanceService.createOrGetSessionForLecture(
+        lecture: _lecture,
+        lectureDate: _sessionDate,
+      );
+      final effectiveSession = refreshToken
+          ? await _qrAttendanceService.refreshSessionToken(session.sessionId)
+          : session;
+      if (!mounted) return;
+      setState(() {
+        _qrSession = effectiveSession;
+        _qrData = _buildQrPayload(effectiveSession);
+        _methodStatusMessage = _tr(
+          'تم تفعيل التحضير عبر QR لهذه المحاضرة.',
+          'QR attendance is active for this lecture.',
+        );
+      });
+    } on FirebaseException catch (e) {
+      final message = e.code == 'permission-denied'
+          ? _tr(
+              'تعذر إنشاء جلسة QR: لا توجد صلاحية للوصول إلى Firestore.',
+              'Failed to create QR session: Firestore permission denied.',
+            )
+          : _tr(
+              'فشل إنشاء/جلب جلسة QR لهذه المحاضرة.',
+              'Failed to create/fetch QR session for this lecture.',
+            );
+      _showMethodSnack(message, error: true);
+    } catch (_) {
+      _showMethodSnack(
+        _tr(
+          'فشل تحديث أو تحميل رمز QR.',
+          'Failed to load or refresh QR code.',
+        ),
+        error: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingQr = false;
+        });
+      }
+    }
+  }
+
+  Future<bool> _refreshQrSessionToken({bool showErrorSnack = true}) async {
+    if (_isRefreshingQrToken || _qrSession == null) {
+      return false;
+    }
+    if (_selectedMethod != AttendanceMethod.qr) {
+      return false;
+    }
+    _isRefreshingQrToken = true;
+    try {
+      final refreshed = await _qrAttendanceService.refreshSessionToken(
+        _qrSession!.sessionId,
+      );
+      if (!mounted) return false;
+      setState(() {
+        _qrSession = refreshed;
+        _qrData = _buildQrPayload(refreshed);
+      });
+      return true;
+    } on FirebaseException catch (e) {
+      if (showErrorSnack) {
+        final message = e.code == 'permission-denied'
+            ? _tr(
+                'تعذر تحديث رمز QR: لا توجد صلاحية للوصول إلى Firestore.',
+                'Failed to refresh QR: Firestore permission denied.',
+              )
+            : _tr(
+                'فشل تحديث رمز QR بسبب مشكلة اتصال أو صلاحيات.',
+                'Failed to refresh QR due to network or permission issue.',
+              );
+        _showMethodSnack(message, error: true);
+      }
+      return false;
+    } catch (_) {
+      if (showErrorSnack) {
+        _showMethodSnack(
+          _tr(
+            'فشل تحديث رمز QR. تأكدي من الاتصال ثم حاولي مجدداً.',
+            'Failed to refresh QR. Check your network and try again.',
+          ),
+          error: true,
+        );
+      }
+      return false;
+    } finally {
+      _isRefreshingQrToken = false;
+    }
+  }
+
+  void _startQrAutoRefreshTimer({
+    void Function(int secondsLeft)? onTick,
+    void Function(String message)? onError,
+    void Function(bool refreshing)? onRefreshStateChanged,
+  }) {
+    _stopQrAutoRefreshTimer();
+    _qrAutoRefreshSecondsLeft = _qrAutoRefreshIntervalSeconds;
+    onTick?.call(_qrAutoRefreshSecondsLeft);
+    _qrAutoRefreshTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      if (!mounted ||
+          _selectedMethod != AttendanceMethod.qr ||
+          _qrSession == null) {
+        _stopQrAutoRefreshTimer();
+        return;
+      }
+      _qrAutoRefreshSecondsLeft = _qrAutoRefreshSecondsLeft - 1;
+      if (_qrAutoRefreshSecondsLeft > 0) {
+        onTick?.call(_qrAutoRefreshSecondsLeft);
+        debugPrint('QR_AUTO_REFRESH_COUNTDOWN: $_qrAutoRefreshSecondsLeft');
+        return;
+      }
+      if (_isRefreshingQrToken) {
+        _qrAutoRefreshSecondsLeft = 1;
+        onTick?.call(_qrAutoRefreshSecondsLeft);
+        return;
+      }
+
+      debugPrint('QR_AUTO_REFRESH_TRIGGERED');
+      onRefreshStateChanged?.call(true);
+      final ok = await _refreshQrSessionToken(showErrorSnack: false);
+      onRefreshStateChanged?.call(false);
+      _qrAutoRefreshSecondsLeft = _qrAutoRefreshIntervalSeconds;
+      onTick?.call(_qrAutoRefreshSecondsLeft);
+      if (!ok && onError != null) {
+        debugPrint('QR_AUTO_REFRESH_FAILED error=refresh_failed');
+        onError(
+          _tr(
+            'تعذر التحديث التلقائي لرمز QR. استخدمي زر التحديث يدوياً.',
+            'Automatic QR refresh failed. Use manual refresh button.',
+          ),
+        );
+      } else if (ok) {
+        debugPrint(
+          'QR_AUTO_REFRESH_SUCCESS tokenVersion=${_qrSession?.tokenVersion ?? -1}',
+        );
+      }
+    });
+  }
+
+  void _stopQrAutoRefreshTimer() {
+    _qrAutoRefreshTimer?.cancel();
+    _qrAutoRefreshTimer = null;
+  }
+
+  String _buildQrPayload(QrAttendanceSession session) {
+    return jsonEncode(<String, dynamic>{
+      'sessionId': session.sessionId,
+      'sectionId': session.sectionId,
+      'tokenId': session.currentTokenId,
+      'tokenVersion': session.tokenVersion,
+      'expiresAt': session.expiresAt.toUtc().toIso8601String(),
+    });
   }
 
   Future<void> _openOrConfirmNfcForCurrentLecture() async {
@@ -739,13 +929,33 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                 children: [
                   _buildHeader(),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    child: _buildAttendanceMethodSelector(),
-                  ),
-                  Padding(
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
                     child: _buildFilterBar(),
                   ),
+                  if (_methodStatusMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: Text(
+                          _methodStatusMessage!,
+                          style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF496169),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (_selectedMethod == AttendanceMethod.qr)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                      child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: _buildCompactQrActionButton(),
+                      ),
+                    ),
                   _buildSyncLegend(),
                   const SizedBox(height: 14),
                   Expanded(child: _buildTableSection()),
@@ -862,56 +1072,62 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
               ],
             ),
           ),
-          if (_exportButtonVisible)
-            Tooltip(
-              message:
-                  !_exportButtonEnabled &&
-                      _hasPendingChanges &&
-                      !_effectiveViewOnly
-                  ? _tr(
-                      'احفظي التعديلات قبل التصدير.',
-                      'Save changes before export.',
-                    )
-                  : _tr(
-                      'تصدير حضور هذه الجلسة CSV',
-                      'Export this session as CSV',
-                    ),
-              child: IconButton(
-                onPressed: _isExporting
-                    ? null
-                    : _exportButtonEnabled
-                    ? _exportSessionCsv
-                    : (!_effectiveViewOnly && _hasPendingChanges)
-                    ? () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              _tr(
-                                'احفظي تعديلات الحضور قبل التصدير.',
-                                'Save attendance changes before exporting.',
-                              ),
-                            ),
-                          ),
-                        );
-                      }
-                    : null,
-                icon: _isExporting
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Color(0xFF006571),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_exportButtonVisible)
+                Tooltip(
+                  message:
+                      !_exportButtonEnabled &&
+                          _hasPendingChanges &&
+                          !_effectiveViewOnly
+                      ? _tr(
+                          'احفظي التعديلات قبل التصدير.',
+                          'Save changes before export.',
+                        )
+                      : _tr(
+                          'تصدير حضور هذه الجلسة CSV',
+                          'Export this session as CSV',
                         ),
-                      )
-                    : Icon(
-                        Icons.share_rounded,
-                        color: _exportButtonEnabled
-                            ? const Color(0xFF006571)
-                            : const Color(0xFFB0BEC5),
-                      ),
-              ),
-            ),
+                  child: IconButton(
+                    onPressed: _isExporting
+                        ? null
+                        : _exportButtonEnabled
+                        ? _exportSessionCsv
+                        : (!_effectiveViewOnly && _hasPendingChanges)
+                        ? () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  _tr(
+                                    'احفظي تعديلات الحضور قبل التصدير.',
+                                    'Save attendance changes before exporting.',
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+                        : null,
+                    icon: _isExporting
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Color(0xFF006571),
+                            ),
+                          )
+                        : Icon(
+                            Icons.share_rounded,
+                            color: _exportButtonEnabled
+                                ? const Color(0xFF006571)
+                                : const Color(0xFFB0BEC5),
+                          ),
+                  ),
+                ),
+              _buildCompactMethodMenu(),
+            ],
+          ),
         ],
       ),
     );
@@ -1004,117 +1220,51 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     );
   }
 
-  Widget _buildAttendanceMethodSelector() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFDCE6E8)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            _tr('طريقة التحضير', 'Attendance Method'),
-            style: const TextStyle(
-              fontFamily: 'Cairo',
-              fontWeight: FontWeight.w800,
-              fontSize: 14,
-              color: Color(0xFF1F2E33),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _methodButton(
-                  labelAr: 'التحضير عبر NFC',
-                  labelEn: 'NFC Attendance',
-                  method: AttendanceMethod.nfc,
-                  icon: Icons.nfc_rounded,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _methodButton(
-                  labelAr: 'التحضير عبر QR',
-                  labelEn: 'QR Attendance',
-                  method: AttendanceMethod.qr,
-                  icon: Icons.qr_code_rounded,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _methodButton(
-                  labelAr: 'التحضير اليدوي',
-                  labelEn: 'Manual Attendance',
-                  method: AttendanceMethod.manual,
-                  icon: Icons.edit_note_rounded,
-                ),
-              ),
-            ],
-          ),
-          if (_methodStatusMessage != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              _methodStatusMessage!,
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF496169),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _methodButton({
-    required String labelAr,
-    required String labelEn,
-    required AttendanceMethod method,
-    required IconData icon,
-  }) {
-    final selected = _selectedMethod == method;
-    return InkWell(
-      onTap: _isProcessingMethodAction ? null : () => _onSelectMethod(method),
-      borderRadius: BorderRadius.circular(10),
+  Widget _buildCompactMethodMenu() {
+    return PopupMenuButton<AttendanceMethod>(
+      tooltip: _tr('اختيار طريقة التحضير', 'Select attendance method'),
+      onSelected: _onSelectMethod,
+      itemBuilder: (context) => [
+        PopupMenuItem<AttendanceMethod>(
+          value: AttendanceMethod.qr,
+          child: Text(_tr('التحضير عبر QR', 'QR Code')),
+        ),
+        PopupMenuItem<AttendanceMethod>(
+          value: AttendanceMethod.nfc,
+          child: Text(_tr('التحضير عبر NFC', 'NFC')),
+        ),
+      ],
       child: Container(
-        height: 44,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF006571) : const Color(0xFFF2F5F6),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: selected ? const Color(0xFF006571) : const Color(0xFFD5E0E3),
-          ),
+          color: const Color(0xFFF2F5F6),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: const Color(0xFFD5E0E3)),
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              icon,
+              _selectedMethod == AttendanceMethod.nfc
+                  ? Icons.nfc_rounded
+                  : Icons.qr_code_rounded,
               size: 16,
-              color: selected ? Colors.white : const Color(0xFF50656B),
+              color: const Color(0xFF50656B),
             ),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                _tr(labelAr, labelEn),
-                style: TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: selected ? Colors.white : const Color(0xFF50656B),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
+            const SizedBox(width: 4),
+            Text(
+              _selectedMethod == AttendanceMethod.nfc
+                  ? 'NFC'
+                  : (_selectedMethod == AttendanceMethod.qr ? 'QR' : _tr('الطريقة', 'Method')),
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF50656B),
               ),
             ),
+            const SizedBox(width: 2),
+            const Icon(Icons.arrow_drop_down_rounded, size: 18, color: Color(0xFF50656B)),
           ],
         ),
       ),
@@ -1169,6 +1319,10 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       );
     }
 
+    return _buildAttendanceTableContainer();
+  }
+
+  Widget _buildAttendanceTableContainer() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
@@ -1233,6 +1387,244 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
               ),
       ),
     );
+  }
+
+  Widget _buildCompactQrActionButton() {
+    final canOpen = _qrSession != null && _qrData.isNotEmpty && !_isLoadingQr;
+    return OutlinedButton.icon(
+      onPressed: _isLoadingQr
+          ? null
+          : () {
+              if (!canOpen) {
+                _showMethodSnack(
+                  _tr(
+                    'جاري تجهيز رمز QR، حاول مرة أخرى بعد لحظات.',
+                    'QR is still loading, please try again shortly.',
+                  ),
+                  error: true,
+                );
+                return;
+              }
+              _showQrPopup();
+            },
+      icon: const Icon(Icons.qr_code_rounded, size: 18),
+      label: Text(_tr('عرض رمز التحضير', 'Show QR Code')),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFF006571),
+        side: const BorderSide(color: Color(0xFFD5E0E3)),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        textStyle: const TextStyle(
+          fontFamily: 'Cairo',
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showQrPopup() async {
+    if (!mounted || _qrSession == null || _qrData.isEmpty) return;
+    bool dialogOpen = true;
+    bool timerBound = false;
+    String? dialogError;
+    int countdown = _qrAutoRefreshSecondsLeft;
+    bool popupRefreshing = false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          backgroundColor: const Color(0xFFFAFDFD),
+          surfaceTintColor: Colors.transparent,
+          child: StatefulBuilder(
+            builder: (context, setDialogState) {
+              if (!timerBound) {
+                timerBound = true;
+                _startQrAutoRefreshTimer(
+                  onTick: (secondsLeft) {
+                    if (!dialogOpen) return;
+                    countdown = secondsLeft;
+                    setDialogState(() {});
+                  },
+                  onError: (message) {
+                    if (!dialogOpen) return;
+                    dialogError = message;
+                    setDialogState(() {});
+                  },
+                  onRefreshStateChanged: (refreshing) {
+                    if (!dialogOpen) return;
+                    popupRefreshing = refreshing;
+                    setDialogState(() {});
+                  },
+                );
+              }
+              final expiresText = _qrSession!.expiresAt.toLocal().toString();
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _tr('التحضير عبر QR', 'QR Attendance'),
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1F2E33),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'MUHADIR | Umm Al-Qura University',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF5A6F76),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _tr(
+                        'امسحي الرمز من تطبيق الطالب لتسجيل الحضور',
+                        'Scan from student app to mark attendance',
+                      ),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 11.5,
+                        color: Color(0xFF5A6F76),
+                      ),
+                    ),
+                    if (dialogError != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        dialogError!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFD14A4A),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFF006571), width: 1.8),
+                      ),
+                      child: QrImageView(
+                        data: _qrData,
+                        size: 220,
+                        backgroundColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${_tr('ينتهي', 'Expires')}: $expiresText',
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 11,
+                        color: Color(0xFF5A6F76),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    if (popupRefreshing)
+                      Text(
+                        _tr('جاري تحديث الرمز...', 'Refreshing QR code...'),
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF006571),
+                        ),
+                      )
+                    else
+                      RichText(
+                        textAlign: TextAlign.center,
+                        text: TextSpan(
+                          style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 11,
+                            color: Color(0xFF5A6F76),
+                          ),
+                          children: [
+                            TextSpan(
+                              text: _tr(
+                                'يتجدد تلقائيًا خلال: ',
+                                'Auto refresh in: ',
+                              ),
+                            ),
+                            TextSpan(
+                              text: '$countdown',
+                              style: const TextStyle(
+                                color: Color(0xFF006571),
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            TextSpan(text: _tr(' ثانية', 's')),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton.icon(
+                            onPressed: _isRefreshingQrToken
+                                ? null
+                                : () async {
+                                    dialogError = null;
+                                    popupRefreshing = true;
+                                    setDialogState(() {});
+                                    final ok = await _refreshQrSessionToken(
+                                      showErrorSnack: false,
+                                    );
+                                    if (mounted) {
+                                      popupRefreshing = false;
+                                      _qrAutoRefreshSecondsLeft =
+                                          _qrAutoRefreshIntervalSeconds;
+                                      countdown = _qrAutoRefreshSecondsLeft;
+                                      if (!ok) {
+                                        dialogError = _tr(
+                                          'فشل تحديث رمز QR. حاولي مرة أخرى.',
+                                          'Failed to refresh QR. Try again.',
+                                        );
+                                      }
+                                      setDialogState(() {});
+                                    }
+                                  },
+                            icon: const Icon(Icons.refresh_rounded, size: 18),
+                            label: Text(_tr('تحديث QR', 'Refresh QR')),
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF006571),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            child: Text(_tr('إغلاق', 'Close')),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+    dialogOpen = false;
+    _stopQrAutoRefreshTimer();
   }
 
   Widget _buildTableHeader() {
@@ -1650,6 +2042,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
+        final maxSheetHeight = MediaQuery.of(ctx).size.height * 0.7;
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
           child: Container(
@@ -1666,69 +2059,74 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                 ),
               ],
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _tr('تعديل حالة الطالب', 'Edit student status'),
-                  style: const TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: _primary,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  student.name,
-                  style: const TextStyle(
-                    fontFamily: 'Cairo',
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF213236),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ...AttendanceStatus.values.map((status) {
-                  final style = _statusStyle(status);
-                  final selected = _effectiveStatus(student) == status;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () {
-                        _setDraftStatus(student.academicNumber, status);
-                        Navigator.of(ctx).pop();
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: style.bg,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: selected
-                                ? style.fg
-                                : style.fg.withValues(alpha: 0.25),
-                          ),
-                        ),
-                        child: Text(
-                          style.label,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontFamily: 'Cairo',
-                            fontWeight: FontWeight.w800,
-                            color: style.fg,
-                          ),
-                        ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: maxSheetHeight),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _tr('تعديل حالة الطالب', 'Edit student status'),
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: _primary,
                       ),
                     ),
-                  );
-                }),
-              ],
+                    const SizedBox(height: 6),
+                    Text(
+                      student.name,
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF213236),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ...AttendanceStatus.values.map((status) {
+                      final style = _statusStyle(status);
+                      final selected = _effectiveStatus(student) == status;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () {
+                            _setDraftStatus(student.academicNumber, status);
+                            Navigator.of(ctx).pop();
+                          },
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: style.bg,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: selected
+                                    ? style.fg
+                                    : style.fg.withValues(alpha: 0.25),
+                              ),
+                            ),
+                            child: Text(
+                              style.label,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontWeight: FontWeight.w800,
+                                color: style.fg,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
             ),
           ),
         );
