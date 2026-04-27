@@ -34,6 +34,7 @@ class LecturerAttendanceScreen extends StatefulWidget {
     required this.lecture,
     this.viewOnly = false,
     this.selectedDate,
+    this.sessionId,
   });
 
   final LectureItem lecture;
@@ -44,6 +45,9 @@ class LecturerAttendanceScreen extends StatefulWidget {
   /// تاريخ اليوم المعروضة تقاريره (للوضع View Only من التقويم).
   final DateTime? selectedDate;
 
+  /// Optional existing session id passed from Attendance Report.
+  final String? sessionId;
+
   @override
   State<LecturerAttendanceScreen> createState() =>
       _LecturerAttendanceScreenState();
@@ -51,6 +55,7 @@ class LecturerAttendanceScreen extends StatefulWidget {
 
 class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   static const Color _primary = Color(0xFF006571);
+  static const int _editableWindowDays = 14;
 
   // عرض الأعمدة ثابت لتفادي اهتزاز المحاذاة بين الهيدر والصفوف
   static const double _colIdWidth = 88.0;
@@ -82,6 +87,17 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   LectureItem get _lecture => widget.lecture;
   bool get _viewOnly => widget.viewOnly;
   DateTime? get _selectedDate => widget.selectedDate;
+  String? get _providedSessionId => widget.sessionId;
+  bool get _effectiveViewOnly => _viewOnly || !_isWithinEditableWindow;
+
+  bool get _isWithinEditableWindow {
+    if (_selectedDate == null) return true;
+    final target = _sessionDate;
+    final now = _calendarReferenceDate ?? DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final cutoff = today.subtract(const Duration(days: _editableWindowDays));
+    return !target.isBefore(cutoff);
+  }
 
   /// صيغة موحدة لعرض النسبة: "N٪" بدون مسافات أو رموز زيادة.
   String _formatPercentage(int value) => '$value٪';
@@ -126,6 +142,19 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   /// حفظ التعديلات للجلسة الحالية فقط (مربوط بـ CRN + تاريخ اليوم).
   /// التعديل على أيام سابقة من [Attendance Reports].
   Future<void> _saveChanges() async {
+    if (_effectiveViewOnly) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _tr(
+              'عرض فقط — لا يمكن تعديل الحضور.',
+              'Preview only — attendance cannot be edited.',
+            ),
+          ),
+        ),
+      );
+      return;
+    }
     if (!_hasPendingChanges) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -221,13 +250,13 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
   bool get _exportButtonEnabled {
     if (!_exportButtonVisible || _isExporting || _isSaving) return false;
-    if (!_viewOnly && _hasPendingChanges) return false;
+    if (!_effectiveViewOnly && _hasPendingChanges) return false;
     return true;
   }
 
   Future<void> _exportSessionCsv() async {
     if (!_exportButtonEnabled) {
-      if (!_viewOnly && _hasPendingChanges) {
+      if (!_effectiveViewOnly && _hasPendingChanges) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -244,14 +273,14 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     final sid = _sessionId!;
     setState(() => _isExporting = true);
     try {
-      await AttendanceSessionExportService.instance.exportSessionCsvAndShare(sid);
+      await AttendanceSessionExportService.instance.exportSessionCsvAndShare(
+        sid,
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            '${_tr('فشل التصدير.', 'Export failed.')} $e',
-          ),
+          content: Text('${_tr('فشل التصدير.', 'Export failed.')} $e'),
           backgroundColor: const Color(0xFFD32F2F),
         ),
       );
@@ -374,12 +403,15 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       }
 
       final targetDate = _sessionDate;
-      final sessionId = ManualAttendanceService.buildSessionId(
-        sectionId: sectionId,
-        sessionDate: targetDate,
-        lectureStartTime: _lecture.startTime,
-      );
-      if (!_viewOnly) {
+      final providedSessionId = _providedSessionId?.trim() ?? '';
+      final sessionId = providedSessionId.isNotEmpty
+          ? providedSessionId
+          : ManualAttendanceService.buildSessionId(
+              sectionId: sectionId,
+              sessionDate: targetDate,
+              lectureStartTime: _lecture.startTime,
+            );
+      if (!_effectiveViewOnly && providedSessionId.isEmpty) {
         await _manualAttendanceService.prepareSessionForLecture(
           lecture: _lecture,
           sessionDate: targetDate,
@@ -563,7 +595,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (_viewOnly)
+                    if (_effectiveViewOnly)
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
@@ -577,7 +609,12 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                           border: Border.all(color: const Color(0xFF4A90E2)),
                         ),
                         child: Text(
-                          _tr('عرض فقط', 'View only'),
+                          _viewOnly
+                              ? _tr('عرض فقط', 'View only')
+                              : _tr(
+                                  'معاينة فقط (أكثر من أسبوعين)',
+                                  'Preview only (older than 2 weeks)',
+                                ),
                           style: const TextStyle(
                             fontFamily: 'Cairo',
                             fontSize: 11,
@@ -619,7 +656,10 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           ),
           if (_exportButtonVisible)
             Tooltip(
-              message: !_exportButtonEnabled && _hasPendingChanges && !_viewOnly
+              message:
+                  !_exportButtonEnabled &&
+                      _hasPendingChanges &&
+                      !_effectiveViewOnly
                   ? _tr(
                       'احفظي التعديلات قبل التصدير.',
                       'Save changes before export.',
@@ -632,21 +672,21 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                 onPressed: _isExporting
                     ? null
                     : _exportButtonEnabled
-                        ? _exportSessionCsv
-                        : (!_viewOnly && _hasPendingChanges)
-                            ? () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      _tr(
-                                        'احفظي تعديلات الحضور قبل التصدير.',
-                                        'Save attendance changes before exporting.',
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }
-                            : null,
+                    ? _exportSessionCsv
+                    : (!_effectiveViewOnly && _hasPendingChanges)
+                    ? () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              _tr(
+                                'احفظي تعديلات الحضور قبل التصدير.',
+                                'Save attendance changes before exporting.',
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                    : null,
                 icon: _isExporting
                     ? const SizedBox(
                         width: 22,
@@ -1031,7 +1071,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     final showSync = student.isOffline;
     final chipLabel = effectiveStyle.chipLabel;
     final isSuspended = student.isSuspended ?? false;
-    final VoidCallback onChipTap = _viewOnly
+    final VoidCallback onChipTap = _effectiveViewOnly
         ? () => ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -1158,7 +1198,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     final hasChanges = _hasPendingChanges;
     final canTap = !_isSaving;
 
-    if (_viewOnly) {
+    if (_effectiveViewOnly) {
       return SizedBox(
         height: height,
         child: Material(
@@ -1477,6 +1517,10 @@ class _StudentRow {
   /// عندما true يُلوّن صف الطالب بالأحمر فقط — لا توجد حالة "محروم" في الحالات (حاضر/غائب/غياب بعذر/تأخر).
   /// nullable للتوافق مع Hot Reload عند وجود نسخ قديمة من الصفوف.
   final bool? isSuspended;
+
+  // NOTE: This payload does not currently include cumulative absence count
+  // or threshold flags, so FR-L22 threshold highlighting cannot be derived
+  // safely in this screen without adding a new data source.
 }
 
 class _StatusStyle {

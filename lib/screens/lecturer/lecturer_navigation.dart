@@ -10,6 +10,16 @@ import 'lecturer_nfc_session_management_screen.dart';
 class LecturerNavigation {
   LecturerNavigation._();
 
+  static const int _editableWindowDays = 14;
+
+  static bool _isEditableDate(DateTime date) {
+    final normalized = DateTime(date.year, date.month, date.day);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final cutoff = today.subtract(const Duration(days: _editableWindowDays));
+    return !normalized.isBefore(cutoff);
+  }
+
   /// الانتقال إلى صفحة إدارة المحاضرات (من الهوم، البروفايل، أو أي مكان).
   static void goToManageLectures(BuildContext context) {
     Navigator.push(
@@ -33,13 +43,22 @@ class LecturerNavigation {
     BuildContext context,
     LectureItem lecture, {
     DateTime? selectedDate,
+    String? sessionId,
   }) {
+    final normalizedDate = selectedDate == null
+        ? null
+        : DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
+    final forceViewOnly =
+        normalizedDate != null && !_isEditableDate(normalizedDate);
+
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => LecturerAttendanceScreen(
           lecture: lecture,
-          selectedDate: selectedDate,
+          selectedDate: normalizedDate,
+          viewOnly: forceViewOnly,
+          sessionId: sessionId,
         ),
       ),
     );
@@ -50,8 +69,9 @@ class LecturerNavigation {
   static void goToAttendanceViewOnly(
     BuildContext context,
     LectureItem lecture,
-    DateTime selectedDate,
-  ) {
+    DateTime selectedDate, {
+    String? sessionId,
+  }) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -59,6 +79,7 @@ class LecturerNavigation {
           lecture: lecture,
           viewOnly: true,
           selectedDate: selectedDate,
+          sessionId: sessionId,
         ),
       ),
     );

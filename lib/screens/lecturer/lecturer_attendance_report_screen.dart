@@ -3,13 +3,11 @@ import 'dart:math' show min;
 
 import 'package:flutter/material.dart';
 
-import '../../models/calendar_day.dart';
 import '../../models/attendance/manual_attendance_record.dart';
 import '../../models/attendance/manual_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../services/attendance/attendance_session_export_service.dart';
 import '../../services/attendance/manual_attendance_service.dart';
-import '../../services/lecturer/calendar_service.dart';
 import '../../services/lecturer/calendar_sync_service.dart';
 import '../../services/lecturer/lecture_repository.dart';
 import '../../services/lecturer/lecturer_sections_service.dart';
@@ -18,7 +16,6 @@ import 'lecturer_language.dart';
 import 'lecturer_navigation.dart';
 import 'widgets/modern_popup_dialog.dart';
 import 'widgets/profile_back_button.dart';
-import '../../widgets/monthly_calendar.dart';
 
 class LecturerAttendanceReportScreen extends StatefulWidget {
   const LecturerAttendanceReportScreen({super.key});
@@ -31,20 +28,18 @@ class LecturerAttendanceReportScreen extends StatefulWidget {
 class _LecturerAttendanceReportScreenState
     extends State<LecturerAttendanceReportScreen> {
   static const Color _primary = Color(0xFF006571);
+  static const int _editableWindowDays = 14;
   static const List<int> _defaultWeekdayOrder = [7, 1, 2, 3, 4];
   static const List<int> _allWeekdayOrder = [7, 1, 2, 3, 4, 5, 6];
 
   final ManualAttendanceService _manualAttendanceService =
       ManualAttendanceService.instance;
   final LectureRepository _calendarRepository = LectureRepository();
-  late final CalendarService _calendarService;
   StreamSubscription<void>? _calendarSyncSub;
   DateTime _calendarNow = DateTime.now();
   bool _isSyncRefreshing = false;
-  List<LectureItem> _lecturerLectures = <LectureItem>[];
   LectureItem? _selectedLectureForCalendar;
   DateTime _calendarSelectedDate = DateTime.now();
-  DateTime _calendarSelectedMonth = DateTime.now();
 
   List<_LectureAttendanceGroup> _groups = <_LectureAttendanceGroup>[];
   bool _isLoading = true;
@@ -55,12 +50,14 @@ class _LecturerAttendanceReportScreenState
   bool _isEditMode = false;
   bool _hasPendingChanges = false;
   bool _weekIsAuto = true;
+
   /// When true, shows filters, session chips, student table, summary, edit, and export.
   final bool _showLegacyReportPanel = true;
   int? _selectedWeekNumber;
   late int _selectedDayOfWeek;
-  String? _selectedCourse;
-  String? _selectedSection;
+  bool _hasExplicitDateSelection = false;
+  String? _selectedCourseCode;
+  String? _selectedSectionId;
   String? _selectedSessionId;
   _StatusFilter _statusFilter = _StatusFilter.all;
   Map<String, _AttendanceStatus> _draftStatuses = <String, _AttendanceStatus>{};
@@ -70,7 +67,6 @@ class _LecturerAttendanceReportScreenState
   @override
   void initState() {
     super.initState();
-    _calendarService = CalendarService(_calendarRepository);
     _selectedDayOfWeek = DateTime.now().weekday;
     _calendarSyncSub = CalendarSyncService.instance.watchChanges().listen(
       (_) => _handleRealtimeCalendarChange(),
@@ -86,18 +82,15 @@ class _LecturerAttendanceReportScreenState
 
   int get _currentWeekNumber => _calendarRepository.getWeekNumber(_calendarNow);
   int get _maxSelectableWeeks => _calendarRepository.semesterWeeks.clamp(1, 60);
-  int get _displayWeekNumber => _weekIsAuto
-      ? _currentWeekNumber
-      : (_selectedWeekNumber ?? _currentWeekNumber);
-
-  List<_LectureAttendanceGroup> get _groupsForSelectedDayWeek {
-    return _groups
-        .where(
-          (group) =>
-              group.dayOfWeek == _selectedDayOfWeek &&
-              group.weekNumber == _displayWeekNumber,
-        )
-        .toList();
+  bool _isDateWithinEditWindow(DateTime date) {
+    final normalized = DateTime(date.year, date.month, date.day);
+    final today = DateTime(
+      _calendarNow.year,
+      _calendarNow.month,
+      _calendarNow.day,
+    );
+    final cutoff = today.subtract(const Duration(days: _editableWindowDays));
+    return !normalized.isBefore(cutoff);
   }
 
   List<int> get _availableDayOptions {
@@ -106,40 +99,112 @@ class _LecturerAttendanceReportScreenState
     return _allWeekdayOrder.where(days.contains).toList();
   }
 
-  List<String> get _courseOptions {
-    return _groupsForSelectedDayWeek
-        .where(
-          (group) =>
-              _selectedSection == null || group.section == _selectedSection,
-        )
-        .map((group) => group.courseName)
-        .toSet()
-        .toList()
-      ..sort();
+  bool get _isDateSelected => _hasExplicitDateSelection;
+  bool get _isSelectedDateInFuture {
+    if (!_isDateSelected) return false;
+    final today = DateTime(
+      _calendarNow.year,
+      _calendarNow.month,
+      _calendarNow.day,
+    );
+    return _normalizedSelectedDate.isAfter(today);
   }
 
-  List<String> get _sectionOptions {
-    return _groupsForSelectedDayWeek
-        .where(
-          (group) =>
-              _selectedCourse == null || group.courseName == _selectedCourse,
-        )
-        .map((group) => group.section)
-        .toSet()
-        .toList()
-      ..sort();
+  bool get _isCourseSelected =>
+      _selectedCourseCode != null && _selectedCourseCode!.trim().isNotEmpty;
+  bool get _isSectionSelected =>
+      _selectedSectionId != null && _selectedSectionId!.trim().isNotEmpty;
+  bool get _hasCompleteRequiredSelection =>
+      _isDateSelected &&
+      !_isSelectedDateInFuture &&
+      _isCourseSelected &&
+      _isSectionSelected;
+
+  DateTime get _normalizedSelectedDate => DateTime(
+    _calendarSelectedDate.year,
+    _calendarSelectedDate.month,
+    _calendarSelectedDate.day,
+  );
+
+  List<_LectureAttendanceGroup> get _groupsForSelectedDate {
+    if (!_isDateSelected) return const <_LectureAttendanceGroup>[];
+    final selectedDate = _normalizedSelectedDate;
+    return _groups.where((group) {
+      final groupDate = DateTime(
+        group.lectureDate.year,
+        group.lectureDate.month,
+        group.lectureDate.day,
+      );
+      return groupDate == selectedDate;
+    }).toList();
+  }
+
+  List<_CourseOption> get _courseOptions {
+    if (!_isDateSelected || _isSelectedDateInFuture) {
+      return const <_CourseOption>[];
+    }
+    final map = <String, _CourseOption>{};
+    for (final group in _groupsForSelectedDate) {
+      final key = group.courseCode.trim().isNotEmpty
+          ? group.courseCode.trim()
+          : group.courseName.trim();
+      map.putIfAbsent(
+        key,
+        () => _CourseOption(code: key, label: group.courseName.trim()),
+      );
+    }
+    final options = map.values.toList()
+      ..sort((a, b) => a.label.compareTo(b.label));
+    return options;
+  }
+
+  List<_SectionOption> get _sectionOptions {
+    if (!_isDateSelected || _isSelectedDateInFuture || !_isCourseSelected) {
+      return const <_SectionOption>[];
+    }
+    final map = <String, _SectionOption>{};
+    for (final group in _groupsForSelectedDate) {
+      final courseKey = group.courseCode.trim().isNotEmpty
+          ? group.courseCode.trim()
+          : group.courseName.trim();
+      if (courseKey != _selectedCourseCode) continue;
+      final sectionKey = group.sectionId.trim().isNotEmpty
+          ? group.sectionId.trim()
+          : group.section.trim();
+      map.putIfAbsent(
+        sectionKey,
+        () => _SectionOption(id: sectionKey, label: group.section.trim()),
+      );
+    }
+    final options = map.values.toList()
+      ..sort((a, b) => a.label.compareTo(b.label));
+    return options;
   }
 
   List<_LectureAttendanceGroup> get _filteredGroups {
-    var list = _groupsForSelectedDayWeek;
-    if (_selectedCourse != null && _selectedCourse!.trim().isNotEmpty) {
-      list = list
-          .where((group) => group.courseName == _selectedCourse)
-          .toList();
+    if (_isSelectedDateInFuture) {
+      return const <_LectureAttendanceGroup>[];
     }
-    if (_selectedSection != null && _selectedSection!.trim().isNotEmpty) {
-      list = list.where((group) => group.section == _selectedSection).toList();
+    if (!_hasCompleteRequiredSelection) {
+      return const <_LectureAttendanceGroup>[];
     }
+    final selectedDate = _normalizedSelectedDate;
+    var list = _groups.where((group) {
+      final groupDate = DateTime(
+        group.lectureDate.year,
+        group.lectureDate.month,
+        group.lectureDate.day,
+      );
+      final courseKey = group.courseCode.trim().isNotEmpty
+          ? group.courseCode.trim()
+          : group.courseName.trim();
+      final sectionKey = group.sectionId.trim().isNotEmpty
+          ? group.sectionId.trim()
+          : group.section.trim();
+      return groupDate == selectedDate &&
+          courseKey == _selectedCourseCode &&
+          sectionKey == _selectedSectionId;
+    }).toList();
     list.sort((a, b) {
       final byDate = b.lectureDate.compareTo(a.lectureDate);
       if (byDate != 0) return byDate;
@@ -161,6 +226,28 @@ class _LecturerAttendanceReportScreenState
       }
     }
     return list.first;
+  }
+
+  String get _selectedCourseLabel {
+    final key = _selectedCourseCode;
+    if (key == null || key.trim().isEmpty) {
+      return _tr('غير محدد', 'Not selected');
+    }
+    for (final option in _courseOptions) {
+      if (option.code == key) return option.label;
+    }
+    return key;
+  }
+
+  String get _selectedSectionLabel {
+    final key = _selectedSectionId;
+    if (key == null || key.trim().isEmpty) {
+      return _tr('غير محدد', 'Not selected');
+    }
+    for (final option in _sectionOptions) {
+      if (option.id == key) return option.label;
+    }
+    return key;
   }
 
   List<_StudentAttendanceRecord> get _visibleStudents {
@@ -194,14 +281,6 @@ class _LecturerAttendanceReportScreenState
       }
       final lectures = await LecturerSectionsService.instance
           .getLecturesForCurrentLecturer();
-      final sortedLectures = [...lectures]
-        ..sort((a, b) {
-          final byCourse = a.courseName.compareTo(b.courseName);
-          if (byCourse != 0) return byCourse;
-          final aTime = TimeUtils.parseTimeString(a.startTime);
-          final bTime = TimeUtils.parseTimeString(b.startTime);
-          return (aTime.$1 * 60 + aTime.$2).compareTo(bTime.$1 * 60 + bTime.$2);
-        });
       final lectureBySection = <String, LectureItem>{};
       final sectionIds = <String>{};
       for (final lecture in lectures) {
@@ -224,24 +303,10 @@ class _LecturerAttendanceReportScreenState
 
       if (!mounted) return;
       setState(() {
-        _lecturerLectures = sortedLectures;
-        _selectedLectureForCalendar =
-            (sortedLectures.any(
-              (lecture) =>
-                  lecture.sectionId == _selectedLectureForCalendar?.sectionId &&
-                  lecture.startTime == _selectedLectureForCalendar?.startTime,
-            ))
-            ? _selectedLectureForCalendar
-            : (sortedLectures.isNotEmpty ? sortedLectures.first : null);
         _calendarSelectedDate = DateTime(
           _calendarNow.year,
           _calendarNow.month,
           _calendarNow.day,
-        );
-        _calendarSelectedMonth = DateTime(
-          _calendarSelectedDate.year,
-          _calendarSelectedDate.month,
-          1,
         );
         if (groups.isNotEmpty) {
           final latest = groups.first;
@@ -250,6 +315,10 @@ class _LecturerAttendanceReportScreenState
           _selectedWeekNumber = latest.weekNumber;
         }
         _groups = groups;
+        _hasExplicitDateSelection = false;
+        _selectedCourseCode = null;
+        _selectedSectionId = null;
+        _statusFilter = _StatusFilter.all;
         _normalizeLinkedSelections();
         _normalizeSelectedSession();
         _isLoading = false;
@@ -308,9 +377,15 @@ class _LecturerAttendanceReportScreenState
       final courseName = session.courseName.trim().isNotEmpty
           ? session.courseName
           : (lecture?.courseName ?? session.sectionId);
+      final courseCode = (session.courseCode ?? '').trim().isNotEmpty
+          ? (session.courseCode ?? '').trim()
+          : lecture?.crn.trim() ?? '';
       final sectionLabel = session.sectionLabel.trim().isNotEmpty
           ? session.sectionLabel
           : (lecture?.section ?? '-');
+      final sectionId = session.sectionId.trim().isNotEmpty
+          ? session.sectionId.trim()
+          : (lecture?.sectionId ?? '').trim();
       final effectiveWeekday = effectiveDate.weekday;
       final students = records
           .map(
@@ -332,7 +407,9 @@ class _LecturerAttendanceReportScreenState
           sessionId: session.sessionId,
           lecture: lecture,
           courseName: courseName,
+          courseCode: courseCode,
           section: sectionLabel,
+          sectionId: sectionId,
           dayOfWeek: effectiveWeekday,
           weekNumber:
               session.officialWeekNumber ??
@@ -397,21 +474,15 @@ class _LecturerAttendanceReportScreenState
         _availableDayOptions.isNotEmpty) {
       _selectedDayOfWeek = _availableDayOptions.first;
     }
-    if (_selectedCourse != null && !_courseOptions.contains(_selectedCourse)) {
-      _selectedCourse = null;
+    final selectedCourseCode = _selectedCourseCode;
+    if (selectedCourseCode != null &&
+        !_courseOptions.any((option) => option.code == selectedCourseCode)) {
+      _selectedCourseCode = null;
     }
-    if (_selectedSection != null &&
-        !_sectionOptions.contains(_selectedSection)) {
-      _selectedSection = null;
-    }
-    if (_selectedCourse != null &&
-        _selectedSection != null &&
-        !_groupsForSelectedDayWeek.any(
-          (group) =>
-              group.courseName == _selectedCourse &&
-              group.section == _selectedSection,
-        )) {
-      _selectedSection = null;
+    final selectedSectionId = _selectedSectionId;
+    if (selectedSectionId != null &&
+        !_sectionOptions.any((option) => option.id == selectedSectionId)) {
+      _selectedSectionId = null;
     }
   }
 
@@ -439,60 +510,6 @@ class _LecturerAttendanceReportScreenState
     });
   }
 
-  void _openAttendanceDayActionPage() {
-    final sessions = _groupsForSelectedDayWeek;
-    if (sessions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _tr(
-              'لا توجد جلسات حضور لهذا اليوم.',
-              'No attendance sessions for this day.',
-            ),
-          ),
-        ),
-      );
-      return;
-    }
-
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (ctx) => _AttendanceDayActionScreen(
-          dayLabel: _dayName(_selectedDayOfWeek),
-          weekNumber: _displayWeekNumber,
-          sessions: sessions,
-          tr: _tr,
-          onExportCsv: (sessionId) => _exportSessionCsvFromContext(ctx, sessionId),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _exportSessionCsvFromContext(
-    BuildContext ctx,
-    String sessionId,
-  ) async {
-    if (_isExporting) return;
-    setState(() => _isExporting = true);
-    try {
-      await AttendanceSessionExportService.instance
-          .exportSessionCsvAndShare(sessionId);
-    } catch (e) {
-      if (ctx.mounted) {
-        ScaffoldMessenger.of(ctx).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${_tr('فشل التصدير.', 'Export failed.')} $e',
-            ),
-            backgroundColor: const Color(0xFFD32F2F),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isExporting = false);
-    }
-  }
-
   Future<void> _exportActiveSessionCsv(_LectureAttendanceGroup group) async {
     if (_isExporting) return;
     if (_isEditMode && _hasPendingChanges) {
@@ -510,15 +527,14 @@ class _LecturerAttendanceReportScreenState
     }
     setState(() => _isExporting = true);
     try {
-      await AttendanceSessionExportService.instance
-          .exportSessionCsvAndShare(group.sessionId);
+      await AttendanceSessionExportService.instance.exportSessionCsvAndShare(
+        group.sessionId,
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              '${_tr('فشل التصدير.', 'Export failed.')} $e',
-            ),
+            content: Text('${_tr('فشل التصدير.', 'Export failed.')} $e'),
             backgroundColor: const Color(0xFFD32F2F),
           ),
         );
@@ -528,26 +544,76 @@ class _LecturerAttendanceReportScreenState
     }
   }
 
-  void _onCalendarDaySelected(CalendarDay day) {
+  Future<void> _pickReportDate() async {
+    final initial = _isDateSelected ? _normalizedSelectedDate : DateTime.now();
+    final today = DateTime(
+      _calendarNow.year,
+      _calendarNow.month,
+      _calendarNow.day,
+    );
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      selectableDayPredicate: (day) {
+        final normalizedDay = DateTime(day.year, day.month, day.day);
+        return !normalizedDay.isAfter(today);
+      },
+      locale: LecturerLanguageController.isArabic
+          ? const Locale('ar')
+          : const Locale('en'),
+      builder: (dialogContext, child) {
+        final base = Theme.of(dialogContext);
+        return Theme(
+          data: base.copyWith(
+            colorScheme: base.colorScheme.copyWith(
+              primary: _primary,
+              onPrimary: Colors.white,
+              surface: const Color(0xFFF8FBFB),
+              onSurface: const Color(0xFF23363B),
+            ),
+            dialogTheme: const DialogThemeData(
+              backgroundColor: Color(0xFFF8FBFB),
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: _primary,
+                textStyle: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+          child: Directionality(
+            textDirection: LecturerLanguageController.direction(),
+            child: Localizations.override(
+              context: dialogContext,
+              locale: LecturerLanguageController.isArabic
+                  ? const Locale('ar')
+                  : const Locale('en'),
+              child: child!,
+            ),
+          ),
+        );
+      },
+    );
+    if (!mounted || picked == null) return;
+
     setState(() {
-      _calendarSelectedDate = DateTime(
-        day.date.year,
-        day.date.month,
-        day.date.day,
-      );
+      _hasExplicitDateSelection = true;
+      _calendarSelectedDate = DateTime(picked.year, picked.month, picked.day);
+      _selectedCourseCode = null;
+      _selectedSectionId = null;
+      _selectedSessionId = null;
       _selectedDayOfWeek = _calendarSelectedDate.weekday;
-      _calendarSelectedMonth = DateTime(
-        _calendarSelectedDate.year,
-        _calendarSelectedDate.month,
-        1,
-      );
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _openCalendarActionPopup();
+      _statusFilter = _StatusFilter.all;
+      _resetEditState();
     });
   }
 
+  // ignore: unused_element
   Future<void> _openCalendarActionPopup() async {
     final lecture = _selectedLectureForCalendar;
     if (lecture == null) {
@@ -597,6 +663,7 @@ class _LecturerAttendanceReportScreenState
       _calendarNow.day,
     );
     final isFuture = selectedDate.isAfter(today);
+    final canEditInWindow = _isDateWithinEditWindow(selectedDate);
     final existingGroup = _findGroupForLectureAndDate(
       lecture: lecture,
       date: selectedDate,
@@ -615,7 +682,10 @@ class _LecturerAttendanceReportScreenState
           child: Dialog(
             elevation: 0,
             backgroundColor: Colors.transparent,
-            insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 28,
+            ),
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 maxWidth: maxCardW,
@@ -673,6 +743,7 @@ class _LecturerAttendanceReportScreenState
                       _sessionDecisionDialogActions(
                         dialogContext: dialogContext,
                         isFuture: isFuture,
+                        canEditInWindow: canEditInWindow,
                         hasExistingAttendance: hasExistingAttendance,
                       ),
                       const SizedBox(height: 4),
@@ -723,6 +794,14 @@ class _LecturerAttendanceReportScreenState
         break;
       case _AttendanceCalendarAction.editPrevious:
       case _AttendanceCalendarAction.attend:
+        if (!canEditInWindow) {
+          LecturerNavigation.goToAttendanceViewOnly(
+            context,
+            lecture,
+            selectedDate,
+          );
+          break;
+        }
         LecturerNavigation.goToAttendance(
           context,
           lecture,
@@ -737,6 +816,7 @@ class _LecturerAttendanceReportScreenState
   Widget _sessionDecisionDialogActions({
     required BuildContext dialogContext,
     required bool isFuture,
+    required bool canEditInWindow,
     required bool hasExistingAttendance,
   }) {
     const gap = SizedBox(height: 10);
@@ -770,10 +850,7 @@ class _LecturerAttendanceReportScreenState
               dialogContext,
             ).pop(_AttendanceCalendarAction.attend),
             icon: const Icon(Icons.fact_check_rounded, size: 18),
-            label: Text(
-              _tr('تحضير', 'Take attendance'),
-              style: labelStyle,
-            ),
+            label: Text(_tr('تحضير', 'Take attendance'), style: labelStyle),
           ),
           if (hasExistingAttendance) ...[
             gap,
@@ -783,16 +860,40 @@ class _LecturerAttendanceReportScreenState
                 dialogContext,
               ).pop(_AttendanceCalendarAction.exportCsv),
               icon: const Icon(Icons.share_rounded, size: 18),
-              label: Text(
-                _tr('تصدير CSV', 'Export CSV'),
-                style: labelStyle,
-              ),
+              label: Text(_tr('تصدير CSV', 'Export CSV'), style: labelStyle),
             ),
           ],
         ],
       );
     }
     if (hasExistingAttendance) {
+      if (!canEditInWindow) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            FilledButton.icon(
+              style: filledStyle,
+              onPressed: () => Navigator.of(
+                dialogContext,
+              ).pop(_AttendanceCalendarAction.preview),
+              icon: const Icon(Icons.visibility_rounded, size: 18),
+              label: Text(
+                _tr('معاينة الحضور', 'Preview attendance'),
+                style: labelStyle,
+              ),
+            ),
+            gap,
+            OutlinedButton.icon(
+              style: outlinedStyle,
+              onPressed: () => Navigator.of(
+                dialogContext,
+              ).pop(_AttendanceCalendarAction.exportCsv),
+              icon: const Icon(Icons.share_rounded, size: 18),
+              label: Text(_tr('تصدير CSV', 'Export CSV'), style: labelStyle),
+            ),
+          ],
+        );
+      }
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -826,10 +927,7 @@ class _LecturerAttendanceReportScreenState
               dialogContext,
             ).pop(_AttendanceCalendarAction.exportCsv),
             icon: const Icon(Icons.share_rounded, size: 18),
-            label: Text(
-              _tr('تصدير CSV', 'Export CSV'),
-              style: labelStyle,
-            ),
+            label: Text(_tr('تصدير CSV', 'Export CSV'), style: labelStyle),
           ),
         ],
       );
@@ -839,14 +937,10 @@ class _LecturerAttendanceReportScreenState
       children: [
         FilledButton.icon(
           style: filledStyle,
-          onPressed: () => Navigator.of(
-            dialogContext,
-          ).pop(_AttendanceCalendarAction.attend),
+          onPressed: () =>
+              Navigator.of(dialogContext).pop(_AttendanceCalendarAction.attend),
           icon: const Icon(Icons.fact_check_rounded, size: 18),
-          label: Text(
-            _tr('تحضير', 'Take attendance'),
-            style: labelStyle,
-          ),
+          label: Text(_tr('تحضير', 'Take attendance'), style: labelStyle),
         ),
       ],
     );
@@ -879,166 +973,54 @@ class _LecturerAttendanceReportScreenState
     return null;
   }
 
-  Widget _buildLectureCalendarSelectionPanel() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE3ECEE)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            _tr('1) اختار المحاضرة', '1) Choose lecture'),
-            style: const TextStyle(
-              fontFamily: 'Cairo',
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF2F4449),
-            ),
-          ),
-          const SizedBox(height: 8),
-          _buildLectureCards(),
-          const SizedBox(height: 12),
-          Text(
-            _tr('2) اختار اليوم من التقويم', '2) Choose day from calendar'),
-            style: const TextStyle(
-              fontFamily: 'Cairo',
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF2F4449),
-            ),
-          ),
-          const SizedBox(height: 8),
-          _buildLectureCalendar(),
-        ],
-      ),
-    );
+  void _onSectionChanged(String? sectionId) {
+    setState(() {
+      _selectedSectionId = sectionId;
+      final selectedCourseCode = _selectedCourseCode;
+      final selectedId = _selectedSectionId;
+      if (selectedCourseCode != null &&
+          selectedId != null &&
+          !_groupsForSelectedDate.any((group) {
+            final courseKey = group.courseCode.trim().isNotEmpty
+                ? group.courseCode.trim()
+                : group.courseName.trim();
+            final sectionKey = group.sectionId.trim().isNotEmpty
+                ? group.sectionId.trim()
+                : group.section.trim();
+            return courseKey == selectedCourseCode && sectionKey == selectedId;
+          })) {
+        _selectedCourseCode = null;
+      }
+      _statusFilter = _StatusFilter.all;
+      _normalizeLinkedSelections();
+      _normalizeSelectedSession();
+      _resetEditState();
+    });
   }
 
-  Widget _buildLectureCards() {
-    if (_lecturerLectures.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8FBFB),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFFE3ECEE)),
-        ),
-        child: Text(
-          _tr(
-            'لا توجد محاضرات مرتبطة بحسابك.',
-            'No lectures linked to account.',
-          ),
-          style: const TextStyle(
-            fontFamily: 'Cairo',
-            fontSize: 12,
-            color: Color(0xFF667A7F),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      );
-    }
-
-    return SizedBox(
-      height: 108,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: _lecturerLectures.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final lecture = _lecturerLectures[index];
-          final selected =
-              lecture.sectionId == _selectedLectureForCalendar?.sectionId &&
-              lecture.startTime == _selectedLectureForCalendar?.startTime &&
-              lecture.dayOfWeek == _selectedLectureForCalendar?.dayOfWeek;
-          final timeRange = TimeUtils.formatTimeRange(
-            lecture.startTime,
-            lecture.endTime,
-          );
-          return GestureDetector(
-            onTap: () {
-              setState(() {
-                _selectedLectureForCalendar = lecture;
-                _selectedCourse = lecture.courseName;
-                _selectedSection = lecture.section;
-              });
-            },
-            child: Container(
-              width: 220,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: selected ? const Color(0xFFE6F3F5) : Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: selected ? _primary : const Color(0xFFDDE7E9),
-                  width: selected ? 1.3 : 1,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    lecture.courseName,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: selected
-                          ? const Color(0xFF0A5A63)
-                          : const Color(0xFF243238),
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${_dayName(lecture.dayOfWeek)} • $timeRange',
-                    style: const TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 11.5,
-                      color: Color(0xFF60757A),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    '${_tr('الشعبة', 'Section')} ${lecture.section}',
-                    style: const TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 11.5,
-                      color: Color(0xFF60757A),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildLectureCalendar() {
-    final lecture = _selectedLectureForCalendar;
-    if (lecture == null) {
-      return const SizedBox.shrink();
-    }
-
-    return MonthlyCalendar(
-      currentMonth: _calendarSelectedMonth,
-      calendarDays: _calendarService.buildCalendarDays(_calendarSelectedMonth, [
-        lecture,
-      ]),
-      onDayTap: _onCalendarDaySelected,
-      onMonthChanged: (month) {
-        setState(() {
-          _calendarSelectedMonth = DateTime(month.year, month.month, 1);
-        });
-      },
-    );
+  void _onCourseChanged(String? courseCode) {
+    setState(() {
+      _selectedCourseCode = courseCode;
+      final selectedCourseCode = _selectedCourseCode;
+      final selectedId = _selectedSectionId;
+      if (selectedCourseCode != null &&
+          selectedId != null &&
+          !_groupsForSelectedDate.any((group) {
+            final courseKey = group.courseCode.trim().isNotEmpty
+                ? group.courseCode.trim()
+                : group.courseName.trim();
+            final sectionKey = group.sectionId.trim().isNotEmpty
+                ? group.sectionId.trim()
+                : group.section.trim();
+            return courseKey == selectedCourseCode && sectionKey == selectedId;
+          })) {
+        _selectedSectionId = null;
+      }
+      _statusFilter = _StatusFilter.all;
+      _normalizeLinkedSelections();
+      _normalizeSelectedSession();
+      _resetEditState();
+    });
   }
 
   void _onWeekChanged({required bool auto, int? week}) {
@@ -1051,43 +1033,10 @@ class _LecturerAttendanceReportScreenState
     });
   }
 
-  void _onSectionChanged(String? section) {
-    setState(() {
-      _selectedSection = section;
-      if (_selectedCourse != null &&
-          !_groupsForSelectedDayWeek.any(
-            (group) =>
-                group.courseName == _selectedCourse &&
-                group.section == _selectedSection,
-          )) {
-        _selectedCourse = null;
-      }
-      _normalizeLinkedSelections();
-      _normalizeSelectedSession();
-      _resetEditState();
-    });
-  }
-
-  void _onCourseChanged(String? course) {
-    setState(() {
-      _selectedCourse = course;
-      if (_selectedSection != null &&
-          !_groupsForSelectedDayWeek.any(
-            (group) =>
-                group.courseName == _selectedCourse &&
-                group.section == _selectedSection,
-          )) {
-        _selectedSection = null;
-      }
-      _normalizeLinkedSelections();
-      _normalizeSelectedSession();
-      _resetEditState();
-    });
-  }
-
   void _onSessionChanged(String? sessionId) {
     setState(() {
       _selectedSessionId = sessionId;
+      _statusFilter = _StatusFilter.all;
       _resetEditState();
     });
   }
@@ -1182,6 +1131,24 @@ class _LecturerAttendanceReportScreenState
             ),
           ),
         );
+      }
+      return;
+    }
+
+    if (!_isDateWithinEditWindow(group.lectureDate)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _tr(
+              'هذه الجلسة أقدم من أسبوعين — المعاينة فقط متاحة.',
+              'This session is older than two weeks — preview only is allowed.',
+            ),
+          ),
+        ),
+      );
+      if (exitEditMode) {
+        setState(() => _resetEditState());
       }
       return;
     }
@@ -1666,8 +1633,6 @@ class _LecturerAttendanceReportScreenState
   @override
   Widget build(BuildContext context) {
     final group = _activeGroup;
-    final currentFiltersLabel =
-        '${_tr('اليوم', 'Day')}: ${_dayName(_selectedDayOfWeek)}   •   ${_tr('الأسبوع', 'Week')}: $_displayWeekNumber';
 
     return ValueListenableBuilder<LecturerLanguage>(
       valueListenable: LecturerLanguageController.notifier,
@@ -1720,7 +1685,6 @@ class _LecturerAttendanceReportScreenState
                     )
                   : LayoutBuilder(
                       builder: (context, constraints) {
-                        final tableHeight = constraints.maxHeight * 0.56;
                         return SingleChildScrollView(
                           physics: const BouncingScrollPhysics(),
                           padding: const EdgeInsets.symmetric(
@@ -1735,26 +1699,21 @@ class _LecturerAttendanceReportScreenState
                                 child: ProfileBackButton(onTap: _goBack),
                               ),
                               const SizedBox(height: 10),
-                              _buildLectureCalendarSelectionPanel(),
-                              const SizedBox(height: 10),
                               if (_showLegacyReportPanel) ...[
-                                _buildFilters(currentFiltersLabel),
+                                _buildFilters(),
                                 const SizedBox(height: 10),
-                                if (group != null) ...[
+                                _buildSelectionStateBanner(),
+                                const SizedBox(height: 10),
+                                if (_hasCompleteRequiredSelection &&
+                                    group != null) ...[
                                   _buildSessionSelector(),
                                   const SizedBox(height: 10),
-                                  _buildControlBar(group),
+                                  _buildReportSummaryCard(group),
                                   const SizedBox(height: 10),
-                                  _buildStatusTabs(),
-                                  const SizedBox(height: 8),
-                                  _buildStudentsTable(tableHeight),
-                                  if (_isEditMode) ...[
-                                    const SizedBox(height: 12),
-                                    _buildSaveChangesButton(group),
-                                  ],
-                                ] else
+                                  _buildReportActionButtons(group),
+                                ] else if (_hasCompleteRequiredSelection)
                                   SizedBox(
-                                    height: constraints.maxHeight * 0.56,
+                                    height: constraints.maxHeight * 0.30,
                                     child: _buildEmptyState(),
                                   ),
                               ] else ...[
@@ -1773,13 +1732,7 @@ class _LecturerAttendanceReportScreenState
     );
   }
 
-  Widget _buildFilters(String currentFiltersLabel) {
-    final dayLabel = _dayName(_selectedDayOfWeek);
-    final weekLabel = '${_tr('أسبوع', 'Week')} $_displayWeekNumber';
-    final weekHint = _weekIsAuto
-        ? _tr('تلقائي: الأسبوع الحالي', 'Auto: current week')
-        : _tr('تم اختيار الأسبوع يدوياً', 'Manual week selection');
-
+  Widget _buildFilters() {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1794,7 +1747,7 @@ class _LecturerAttendanceReportScreenState
               const Icon(Icons.tune_rounded, color: _primary, size: 18),
               const SizedBox(width: 6),
               Text(
-                _tr('تصفية التقرير', 'Report Filters'),
+                _tr('اختيار التقرير', 'Report Selection'),
                 style: const TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 13,
@@ -1804,38 +1757,53 @@ class _LecturerAttendanceReportScreenState
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: Text(
-              currentFiltersLabel,
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11.5,
-                color: Color(0xFF667A7F),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
           const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
                 child: _FilterCard(
-                  title: _tr('اليوم', 'Day'),
-                  value: dayLabel,
-                  icon: Icons.calendar_today_rounded,
-                  onTap: _showDayPickerSheet,
+                  title: _tr('التاريخ', 'Date'),
+                  value: _isDateSelected
+                      ? _formatDate(_normalizedSelectedDate)
+                      : _tr('غير محدد', 'Not selected'),
+                  subtitle: _tr('اضغط لاختيار التاريخ', 'Tap to choose date'),
+                  icon: Icons.calendar_month_rounded,
+                  onTap: _pickReportDate,
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: _FilterCard(
-                  title: _tr('الأسبوع', 'Week'),
-                  value: weekLabel,
-                  subtitle: weekHint,
-                  icon: Icons.date_range_rounded,
-                  onTap: _showWeekPickerSheet,
+                  title: _tr('المقرر', 'Course'),
+                  value: _selectedCourseLabel,
+                  icon: Icons.menu_book_rounded,
+                  onTap: _isDateSelected
+                      ? (_isSelectedDateInFuture
+                            ? () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      _tr(
+                                        'لا يمكن عرض تقرير لتاريخ مستقبلي.',
+                                        'Cannot open report for a future date.',
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }
+                            : _showCoursePickerSheet)
+                      : () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                _tr(
+                                  'اختر التاريخ أولاً ثم المقرر.',
+                                  'Select date first, then choose course.',
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                 ),
               ),
             ],
@@ -1846,24 +1814,322 @@ class _LecturerAttendanceReportScreenState
               Expanded(
                 child: _FilterCard(
                   title: _tr('الشعبة', 'Section'),
-                  value: _selectedSection ?? _tr('الكل', 'All'),
+                  value: _selectedSectionLabel,
                   icon: Icons.groups_rounded,
-                  onTap: _showSectionPickerSheet,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _FilterCard(
-                  title: _tr('المقرر', 'Course'),
-                  value: _selectedCourse ?? _tr('الكل', 'All'),
-                  icon: Icons.menu_book_rounded,
-                  onTap: _showCoursePickerSheet,
+                  onTap: (_isDateSelected && _isCourseSelected)
+                      ? (_isSelectedDateInFuture
+                            ? () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      _tr(
+                                        'لا يمكن عرض تقرير لتاريخ مستقبلي.',
+                                        'Cannot open report for a future date.',
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }
+                            : _showSectionPickerSheet)
+                      : () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                _tr(
+                                  'اختر التاريخ والمقرر أولاً ثم الشعبة.',
+                                  'Select date and course first, then section.',
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                 ),
               ),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSelectionStateBanner() {
+    String message;
+    Color bg = const Color(0xFFF3F7F8);
+    Color border = const Color(0xFFD8E4E7);
+    Color text = const Color(0xFF455D63);
+    IconData icon = Icons.info_outline_rounded;
+
+    if (!_isDateSelected) {
+      message = _tr(
+        'لم يتم اختيار التاريخ بعد. يرجى اختيار التاريخ من التقويم.',
+        'Date is not selected yet. Please choose a date from the calendar.',
+      );
+    } else if (_isSelectedDateInFuture) {
+      message = _tr(
+        'هذا تاريخ مستقبلي. لا يمكن عرض تقرير لتاريخ مستقبلي.',
+        'This is a future date. Reports are not available yet.',
+      );
+      bg = const Color(0xFFFFF4E5);
+      border = const Color(0xFFF3D6A8);
+      text = const Color(0xFF8A5A00);
+      icon = Icons.schedule_rounded;
+    } else if (!_isCourseSelected) {
+      message = _tr('لم يتم اختيار المقرر بعد.', 'Course is not selected yet.');
+    } else if (!_isSectionSelected) {
+      message = _tr(
+        'لم يتم اختيار الشعبة بعد.',
+        'Section is not selected yet.',
+      );
+    } else {
+      final group = _activeGroup;
+      if (group == null) {
+        message = _tr(
+          'لا توجد محاضرة/تقرير مطابق للاختيارات المحددة.',
+          'No lecture/report matches the selected date, course, and section.',
+        );
+        icon = Icons.event_busy_rounded;
+      } else if (_isDateWithinEditWindow(group.lectureDate)) {
+        message = _tr(
+          'التقرير حديث: المعاينة والتعديل متاحان.',
+          'Recent report: preview and edit are available.',
+        );
+        bg = const Color(0xFFEAF7EF);
+        border = const Color(0xFFCBE8D2);
+        text = const Color(0xFF24643A);
+        icon = Icons.check_circle_outline_rounded;
+      } else {
+        message = _tr(
+          'التقرير قديم (أكثر من 14 يوم): المعاينة فقط.',
+          'Old report (older than 14 days): preview only.',
+        );
+        bg = const Color(0xFFFFF4E5);
+        border = const Color(0xFFF3D6A8);
+        text = const Color(0xFF8A5A00);
+        icon = Icons.visibility_rounded;
+      }
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: text),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: text,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openAttendanceForGroup(
+    _LectureAttendanceGroup group, {
+    required bool viewOnly,
+  }) async {
+    final lecture = group.lecture;
+    if (lecture == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _tr(
+              'لا يمكن فتح التقرير لأن بيانات المحاضرة غير مكتملة.',
+              'Cannot open report because lecture data is incomplete.',
+            ),
+          ),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
+      return;
+    }
+
+    if (viewOnly) {
+      LecturerNavigation.goToAttendanceViewOnly(
+        context,
+        lecture,
+        group.lectureDate,
+        sessionId: group.sessionId,
+      );
+      return;
+    }
+
+    LecturerNavigation.goToAttendance(
+      context,
+      lecture,
+      selectedDate: group.lectureDate,
+      sessionId: group.sessionId,
+    );
+  }
+
+  Widget _buildReportSummaryCard(_LectureAttendanceGroup group) {
+    final canEditInWindow = _isDateWithinEditWindow(group.lectureDate);
+    final statusLabel = canEditInWindow
+        ? _tr('قابل للتعديل', 'Editable')
+        : _tr('معاينة فقط', 'Preview only');
+    final statusColor = canEditInWindow
+        ? const Color(0xFF1B8E3E)
+        : const Color(0xFF8A5A00);
+    final statusBg = canEditInWindow
+        ? const Color(0xFFEAF7EF)
+        : const Color(0xFFFFF4E5);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFDCE7E9)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  group.courseName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF213236),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusBg,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: statusColor.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Text(
+                  statusLabel,
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${_tr('الشعبة', 'Section')}: ${group.section}',
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 12,
+              color: Color(0xFF55666B),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '${_tr('التاريخ', 'Date')}: ${_formatDate(group.lectureDate)}',
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 12,
+              color: Color(0xFF55666B),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReportActionButtons(_LectureAttendanceGroup group) {
+    final canEditInWindow = _isDateWithinEditWindow(group.lectureDate);
+    return Row(
+      children: [
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: () => _openAttendanceForGroup(group, viewOnly: true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF006571),
+              minimumSize: const Size.fromHeight(44),
+            ),
+            icon: const Icon(Icons.visibility_rounded, size: 18),
+            label: Text(
+              _tr('معاينة التقرير', 'Preview report'),
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        if (canEditInWindow) ...[
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => _openAttendanceForGroup(group, viewOnly: false),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(44),
+                side: const BorderSide(color: Color(0xFF006571)),
+                foregroundColor: const Color(0xFF006571),
+              ),
+              icon: const Icon(Icons.edit_rounded, size: 18),
+              label: Text(
+                _tr('تعديل التقرير', 'Edit report'),
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _isExporting
+                ? null
+                : () => _exportActiveSessionCsv(group),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(44),
+              side: const BorderSide(color: Color(0xFF006571)),
+              foregroundColor: const Color(0xFF006571),
+            ),
+            icon: _isExporting
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.share_rounded, size: 18),
+            label: Text(
+              _tr('تصدير CSV', 'Export CSV'),
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1921,10 +2187,20 @@ class _LecturerAttendanceReportScreenState
     );
   }
 
+  // ignore: unused_element
   Widget _buildControlBar(_LectureAttendanceGroup group) {
+    final canEditInWindow = _isDateWithinEditWindow(group.lectureDate);
+    if (!canEditInWindow && _isEditMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _resetEditState());
+      });
+    }
     final modeLabel = _isEditMode
         ? _tr('وضع التعديل مفعل', 'Edit mode enabled')
-        : _tr('وضع المعاينة', 'Preview mode');
+        : canEditInWindow
+        ? _tr('وضع المعاينة', 'Preview mode')
+        : _tr('تقرير قديم: معاينة فقط', 'Old report: preview only');
 
     return Container(
       width: double.infinity,
@@ -2011,10 +2287,10 @@ class _LecturerAttendanceReportScreenState
                 ),
               ),
               Switch.adaptive(
-                value: _isEditMode,
+                value: canEditInWindow && _isEditMode,
                 activeTrackColor: _primary.withValues(alpha: 0.5),
                 activeThumbColor: _primary,
-                onChanged: _isExporting
+                onChanged: (!canEditInWindow || _isExporting)
                     ? null
                     : (on) async {
                         if (on) {
@@ -2031,6 +2307,7 @@ class _LecturerAttendanceReportScreenState
     );
   }
 
+  // ignore: unused_element
   Widget _buildSaveChangesButton(_LectureAttendanceGroup group) {
     final isEnabled = _hasPendingChanges && !_isSaving;
     return Material(
@@ -2095,6 +2372,7 @@ class _LecturerAttendanceReportScreenState
     );
   }
 
+  // ignore: unused_element
   Widget _buildStatusTabs() {
     final tabs = <_StatusFilter>[
       _StatusFilter.all,
@@ -2143,7 +2421,9 @@ class _LecturerAttendanceReportScreenState
     );
   }
 
+  // ignore: unused_element
   Widget _buildStudentsTable(double height) {
+    final activeGroup = _activeGroup;
     return SizedBox(
       height: height.clamp(260.0, 560.0),
       child: Container(
@@ -2210,10 +2490,15 @@ class _LecturerAttendanceReportScreenState
               child: _visibleStudents.isEmpty
                   ? Center(
                       child: Text(
-                        _tr(
-                          'لا يوجد طلاب في هذا الفلتر.',
-                          'No students in this filter.',
-                        ),
+                        (activeGroup == null || activeGroup.students.isEmpty)
+                            ? _tr(
+                                'لا توجد سجلات حضور لهذه الجلسة.',
+                                'No attendance records for this session.',
+                              )
+                            : _tr(
+                                'لا يوجد طلاب مطابقون لهذا الفلتر.',
+                                'No students match this filter.',
+                              ),
                         style: const TextStyle(
                           fontFamily: 'Cairo',
                           color: Colors.black54,
@@ -2376,8 +2661,8 @@ class _LecturerAttendanceReportScreenState
             const SizedBox(height: 8),
             Text(
               _tr(
-                'لا توجد بيانات حضور لهذا الفلتر.',
-                'No attendance data for this filter.',
+                'لا توجد محاضرة/تقرير مطابق للتاريخ والمقرر والشعبة المختارة.',
+                'No lecture/report matches the selected date, course, and section.',
               ),
               textAlign: TextAlign.center,
               style: const TextStyle(
@@ -2389,8 +2674,8 @@ class _LecturerAttendanceReportScreenState
             const SizedBox(height: 10),
             Text(
               _tr(
-                'جرّبي أسبوعاً أو يوماً آخر، أو سجّلي الحضور أولاً. يظهر زر التصدير ضمن شريط التقرير عندما توجد جلسة مطابقة.',
-                'Try another week or day, or take attendance first. Export appears in the report actions row when a matching session exists.',
+                'يمكنك اختيار تاريخ مختلف أو مقرر/شعبة مختلفة، أو التأكد من وجود جلسة حضور محفوظة في Firestore لهذه الاختيارات.',
+                'Choose a different date/course/section, or verify that a matching attendance session exists in Firestore.',
               ),
               textAlign: TextAlign.center,
               style: const TextStyle(
@@ -2458,6 +2743,7 @@ class _LecturerAttendanceReportScreenState
     );
   }
 
+  // ignore: unused_element
   void _showWeekPickerSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -2570,6 +2856,7 @@ class _LecturerAttendanceReportScreenState
     );
   }
 
+  // ignore: unused_element
   void _showDayPickerSheet() {
     final options = _availableDayOptions;
 
@@ -2630,10 +2917,6 @@ class _LecturerAttendanceReportScreenState
                 onTap: () {
                   Navigator.pop(ctx);
                   _onDayChanged(w);
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!mounted) return;
-                    _openAttendanceDayActionPage();
-                  });
                 },
               );
             }),
@@ -2644,7 +2927,20 @@ class _LecturerAttendanceReportScreenState
   }
 
   void _showSectionPickerSheet() {
-    final options = [null, ..._sectionOptions];
+    final options = _sectionOptions;
+    if (options.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _tr(
+              'لا توجد شعب متاحة لهذا المقرر في التاريخ المختار.',
+              'No sections available for this course on selected date.',
+            ),
+          ),
+        ),
+      );
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -2685,11 +2981,10 @@ class _LecturerAttendanceReportScreenState
             ),
             const SizedBox(height: 8),
             ...options.map((section) {
-              final label = section ?? _tr('الكل', 'All');
-              final selected = _selectedSection == section;
+              final selected = _selectedSectionId == section.id;
               return ListTile(
                 title: Text(
-                  label,
+                  section.label,
                   style: TextStyle(
                     fontFamily: 'Cairo',
                     fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
@@ -2701,7 +2996,7 @@ class _LecturerAttendanceReportScreenState
                     : null,
                 onTap: () {
                   Navigator.pop(ctx);
-                  _onSectionChanged(section);
+                  _onSectionChanged(section.id);
                 },
               );
             }),
@@ -2712,7 +3007,20 @@ class _LecturerAttendanceReportScreenState
   }
 
   void _showCoursePickerSheet() {
-    final options = [null, ..._courseOptions];
+    final options = _courseOptions;
+    if (options.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _tr(
+              'لا توجد مقررات لها جلسة في التاريخ المختار.',
+              'No courses have a session on selected date.',
+            ),
+          ),
+        ),
+      );
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -2753,11 +3061,10 @@ class _LecturerAttendanceReportScreenState
             ),
             const SizedBox(height: 8),
             ...options.map((course) {
-              final label = course ?? _tr('الكل', 'All');
-              final selected = _selectedCourse == course;
+              final selected = _selectedCourseCode == course.code;
               return ListTile(
                 title: Text(
-                  label,
+                  course.label,
                   style: TextStyle(
                     fontFamily: 'Cairo',
                     fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
@@ -2770,7 +3077,7 @@ class _LecturerAttendanceReportScreenState
                     : null,
                 onTap: () {
                   Navigator.pop(ctx);
-                  _onCourseChanged(course);
+                  _onCourseChanged(course.code);
                 },
               );
             }),
@@ -2867,6 +3174,7 @@ class _FilterCard extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _AttendanceDayActionScreen extends StatelessWidget {
   const _AttendanceDayActionScreen({
     required this.dayLabel,
@@ -2909,6 +3217,7 @@ class _AttendanceDayActionScreen extends StatelessWidget {
         context,
         lecture,
         group.lectureDate,
+        sessionId: group.sessionId,
       );
       return;
     }
@@ -2916,6 +3225,7 @@ class _AttendanceDayActionScreen extends StatelessWidget {
       context,
       lecture,
       selectedDate: group.lectureDate,
+      sessionId: group.sessionId,
     );
   }
 
@@ -2980,6 +3290,9 @@ class _AttendanceDayActionScreen extends StatelessWidget {
                     group.lectureDate.day,
                   );
                   final isFuture = groupDate.isAfter(today);
+                  final canEditInWindow = !groupDate.isBefore(
+                    today.subtract(const Duration(days: 14)),
+                  );
                   final previewStudents = group.students.take(4).toList();
                   final moreCount =
                       group.students.length - previewStudents.length;
@@ -3098,8 +3411,7 @@ class _AttendanceDayActionScreen extends StatelessWidget {
                               children: [
                                 Expanded(
                                   child: FilledButton.icon(
-                                    onPressed: () =>
-                                        _openAttendanceForSession(
+                                    onPressed: () => _openAttendanceForSession(
                                       context,
                                       group,
                                       viewOnly: false,
@@ -3131,8 +3443,7 @@ class _AttendanceDayActionScreen extends StatelessWidget {
                                     onPressed: () =>
                                         onExportCsv(group.sessionId),
                                     style: OutlinedButton.styleFrom(
-                                      foregroundColor:
-                                          const Color(0xFF006571),
+                                      foregroundColor: const Color(0xFF006571),
                                       side: const BorderSide(
                                         color: Color(0xFF006571),
                                       ),
@@ -3163,15 +3474,13 @@ class _AttendanceDayActionScreen extends StatelessWidget {
                               children: [
                                 Expanded(
                                   child: OutlinedButton.icon(
-                                    onPressed: () =>
-                                        _openAttendanceForSession(
+                                    onPressed: () => _openAttendanceForSession(
                                       context,
                                       group,
-                                      viewOnly: false,
+                                      viewOnly: !canEditInWindow,
                                     ),
                                     style: OutlinedButton.styleFrom(
-                                      foregroundColor:
-                                          const Color(0xFF006571),
+                                      foregroundColor: const Color(0xFF006571),
                                       side: const BorderSide(
                                         color: Color(0xFF006571),
                                       ),
@@ -3182,12 +3491,22 @@ class _AttendanceDayActionScreen extends StatelessWidget {
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                     ),
-                                    icon: const Icon(
-                                      Icons.edit_rounded,
+                                    icon: Icon(
+                                      canEditInWindow
+                                          ? Icons.edit_rounded
+                                          : Icons.visibility_rounded,
                                       size: 18,
                                     ),
                                     label: Text(
-                                      tr('تعديل الحضور', 'Edit attendance'),
+                                      canEditInWindow
+                                          ? tr(
+                                              'تعديل الحضور',
+                                              'Edit attendance',
+                                            )
+                                          : tr(
+                                              'معاينة الحضور',
+                                              'Preview attendance',
+                                            ),
                                       maxLines: 2,
                                       textAlign: TextAlign.center,
                                       overflow: TextOverflow.ellipsis,
@@ -3197,15 +3516,13 @@ class _AttendanceDayActionScreen extends StatelessWidget {
                                 const SizedBox(width: 6),
                                 Expanded(
                                   child: FilledButton.icon(
-                                    onPressed: () =>
-                                        _openAttendanceForSession(
+                                    onPressed: () => _openAttendanceForSession(
                                       context,
                                       group,
                                       viewOnly: true,
                                     ),
                                     style: FilledButton.styleFrom(
-                                      backgroundColor:
-                                          const Color(0xFF006571),
+                                      backgroundColor: const Color(0xFF006571),
                                       padding: const EdgeInsets.symmetric(
                                         vertical: 12,
                                       ),
@@ -3231,8 +3548,7 @@ class _AttendanceDayActionScreen extends StatelessWidget {
                                     onPressed: () =>
                                         onExportCsv(group.sessionId),
                                     style: OutlinedButton.styleFrom(
-                                      foregroundColor:
-                                          const Color(0xFF006571),
+                                      foregroundColor: const Color(0xFF006571),
                                       side: const BorderSide(
                                         color: Color(0xFF006571),
                                       ),
@@ -3289,7 +3605,9 @@ class _LectureAttendanceGroup {
     required this.sessionId,
     required this.lecture,
     required this.courseName,
+    required this.courseCode,
     required this.section,
+    required this.sectionId,
     required this.dayOfWeek,
     required this.weekNumber,
     required this.lectureDate,
@@ -3301,13 +3619,29 @@ class _LectureAttendanceGroup {
   final String sessionId;
   final LectureItem? lecture;
   final String courseName;
+  final String courseCode;
   final String section;
+  final String sectionId;
   final int dayOfWeek;
   final int weekNumber;
   final DateTime lectureDate;
   final String startTime;
   final String timeRange;
   final List<_StudentAttendanceRecord> students;
+}
+
+class _CourseOption {
+  const _CourseOption({required this.code, required this.label});
+
+  final String code;
+  final String label;
+}
+
+class _SectionOption {
+  const _SectionOption({required this.id, required this.label});
+
+  final String id;
+  final String label;
 }
 
 class _StudentAttendanceRecord {
