@@ -20,6 +20,175 @@ service cloud.firestore {
           ).data.isActive == true;
     }
 
+    function currentStudentId() {
+      return request.auth.token.studentId is string
+          ? request.auth.token.studentId
+          : request.auth.uid;
+    }
+
+    function isActiveLecturerById(lecturerId) {
+      return isSignedIn() &&
+          lecturerId is string &&
+          lecturerId.size() > 0 &&
+          exists(
+            /databases/$(database)/documents/external_lecturers/$(lecturerId)
+          ) &&
+          get(
+            /databases/$(database)/documents/external_lecturers/$(lecturerId)
+          ).data.isActive == true &&
+          (
+            !(get(
+                /databases/$(database)/documents/external_lecturers/$(lecturerId)
+              ).data.role is string) ||
+            get(
+              /databases/$(database)/documents/external_lecturers/$(lecturerId)
+            ).data.role == 'lecturer'
+          ) &&
+          request.auth.token.email is string &&
+          get(
+            /databases/$(database)/documents/external_lecturers/$(lecturerId)
+          ).data.email == request.auth.token.email;
+    }
+
+    function isLecturerByClaimOrId(lecturerId) {
+      return isSignedIn() &&
+          lecturerId is string &&
+          (
+            (request.auth.token.lecturerId is string &&
+              request.auth.token.lecturerId == lecturerId) ||
+            isActiveLecturerById(lecturerId)
+          );
+    }
+
+    function isSectionAssignedToLecturer(sectionId, lecturerId) {
+      // Some projects store lecturer ownership in sections. If present, enforce it.
+      // If not present in schema, rely on strict lecturer identity checks above.
+      return sectionId is string &&
+          exists(/databases/$(database)/documents/sections/$(sectionId)) &&
+          (
+            !(get(/databases/$(database)/documents/sections/$(sectionId)).data.lecturerId is string) ||
+            get(/databases/$(database)/documents/sections/$(sectionId)).data.lecturerId == lecturerId
+          );
+    }
+
+    function isStudent() {
+      return isSignedIn() &&
+          (
+            request.auth.token.role == 'student' ||
+            request.auth.token.studentId is string ||
+            exists(
+              /databases/$(database)/documents/external_students/$(currentStudentId())
+            )
+          );
+    }
+
+    function hasQrSessionRequiredFields(data) {
+      return data.keys().hasAll([
+        'sessionId',
+        'sectionId',
+        'courseCode',
+        'courseName',
+        'lecturerId',
+        'lectureDate',
+        'lectureStartTime',
+        'lectureEndTime',
+        'dateKey',
+        'attendanceMethod',
+        'isOpen',
+        'currentTokenId',
+        'tokenVersion',
+        'generatedAt',
+        'expiresAt',
+        'createdAt',
+        'updatedAt',
+      ]);
+    }
+
+    function isValidQrSessionCreate(sessionId) {
+      let data = request.resource.data;
+      return hasQrSessionRequiredFields(data) &&
+          data.sessionId == sessionId &&
+          data.sessionId is string &&
+          data.sectionId is string &&
+          data.currentTokenId is string &&
+          data.tokenVersion is number &&
+          data.isOpen is bool &&
+          data.attendanceMethod == 'qr' &&
+          isLecturerByClaimOrId(data.lecturerId) &&
+          isSectionAssignedToLecturer(data.sectionId, data.lecturerId);
+    }
+
+    function isValidQrSessionUpdate() {
+      let data = request.resource.data;
+      let old = resource.data;
+      return data.lecturerId == old.lecturerId &&
+          data.sessionId == old.sessionId &&
+          data.sectionId == old.sectionId &&
+          data.attendanceMethod == 'qr' &&
+          data.currentTokenId is string &&
+          data.tokenVersion is number &&
+          data.isOpen is bool;
+    }
+
+    function canReadQrSession() {
+      // Student enrollment-doc IDs are not deterministic in rules, so
+      // signed-in read is kept for scanner validation. Write paths stay strict.
+      return isSignedIn();
+    }
+
+    function hasQrRecordRequiredFields(data) {
+      return data.keys().hasAll([
+        'recordId',
+        'sessionId',
+        'sectionId',
+        'studentId',
+        'studentDocId',
+        'studentName',
+        'studentEmail',
+        'courseCode',
+        'courseName',
+        'lectureDate',
+        'lectureStartTime',
+        'lectureEndTime',
+        'attendanceMethod',
+        'status',
+        'createdAt',
+        'updatedAt',
+      ]) &&
+          (
+            data.keys().hasAny(['attendanceTime']) ||
+            data.keys().hasAny(['scannedAt'])
+          );
+    }
+
+    function isValidQrRecordCreate(recordId) {
+      let data = request.resource.data;
+      return hasQrRecordRequiredFields(data) &&
+          data.recordId == recordId &&
+          data.recordId is string &&
+          data.sessionId is string &&
+          data.sectionId is string &&
+          data.studentDocId == currentStudentId() &&
+          data.attendanceMethod == 'qr' &&
+          (data.status == 'present' || data.status == 'late') &&
+          data.recordId.matches('^' + data.sessionId + '_.*$');
+    }
+
+    function canReadQrRecord() {
+      return isAdmin() ||
+          (isStudent() && resource.data.studentDocId == currentStudentId()) ||
+          (
+            exists(
+              /databases/$(database)/documents/qr_attendance_sessions/$(resource.data.sessionId)
+            ) &&
+            isActiveLecturerById(
+              get(
+                /databases/$(database)/documents/qr_attendance_sessions/$(resource.data.sessionId)
+              ).data.lecturerId
+            )
+          );
+    }
+
     match /admins/{uid} {
       allow read: if isSignedIn() && request.auth.uid == uid;
       allow write: if false;
@@ -124,10 +293,25 @@ service cloud.firestore {
       allow write: if isSignedIn();
     }
 
-    // QR Code attendance records (coming soon).
+    // QR attendance sessions: lecturer-owned session/token lifecycle.
+    // Students can read sessions for QR validation, but cannot modify session tokens.
+    match /qr_attendance_sessions/{sessionId} {
+      allow read: if canReadQrSession();
+      // Any active registered lecturer can create their own QR session.
+      allow create: if isValidQrSessionCreate(sessionId);
+      // Students cannot update sessions/tokens.
+      allow update: if isActiveLecturerById(resource.data.lecturerId) &&
+          isValidQrSessionUpdate();
+      // Block delete for audit integrity.
+      allow delete: if false;
+    }
+
+    // QR attendance records: students can create only their own record.
+    // No deletes to preserve audit integrity.
     match /qr_attendance_records/{recordId} {
-      allow read: if true;
-      allow write: if isSignedIn();
+      allow read: if canReadQrRecord();
+      allow create: if isStudent() && isValidQrRecordCreate(recordId);
+      allow update, delete: if false;
     }
 
     // NFC attendance records (coming soon).
