@@ -144,6 +144,12 @@ service cloud.firestore {
       allow write: if isSignedIn();
     }
 
+    // Official lecture action ledger (delay/cancel per section/date/start-time).
+    match /lecture_actions/{actionId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
     // Formal excuse requests (student creates — may require separate create rules when shipped).
     match /excuse_requests/{requestId} {
       // Student submits; lecturer/admin reviews.

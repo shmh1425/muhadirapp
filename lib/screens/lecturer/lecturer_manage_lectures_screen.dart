@@ -3,17 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../models/calendar_day.dart';
 import '../../models/lecturer/lecture_item.dart';
-import '../../services/lecturer/calendar_service.dart';
 import '../../services/lecturer/lecture_repository.dart';
 import '../../services/lecturer/calendar_sync_service.dart';
 import '../../services/lecturer/lecturer_sections_service.dart';
 import '../../services/notifications/lecture_action_notification_service.dart';
 import '../../utils/shared/time_utils.dart';
-import '../../widgets/monthly_calendar.dart';
 import 'lecturer_language.dart';
-import 'lecturer_navigation.dart';
 import 'widgets/profile_back_button.dart';
 
 /// شاشة إدارة المحاضرات: فلترة، إشعار تأخير، إشعار إلغاء
@@ -33,7 +29,6 @@ class _LecturerManageLecturesScreenState
 
   List<LectureItem> _allLectures = [];
   final LectureRepository _calendarRepository = LectureRepository();
-  late final CalendarService _calendarService;
   final LectureActionNotificationService _notificationService =
       LectureActionNotificationService.instance;
   bool _isLoadingLectures = true;
@@ -41,21 +36,15 @@ class _LecturerManageLecturesScreenState
   StreamSubscription<void>? _calendarSyncSub;
   bool _isSyncRefreshing = false;
 
-  // اختيار المادة ثم اليوم من التقويم
-  DateTime _selectedDate = DateTime.now();
-  DateTime _currentCalendarMonth = DateTime.now();
-  late int _selectedDayOfWeek;
-  String? _selectedCourse;
-
-  /// محاضرات تم إرسال إشعار لها في هذه الجلسة (لتجنب إرسال مرتين)
-  final Set<String> _delaySentFor = {};
-  final Set<String> _cancelSentFor = {};
+  // اختيار: التاريخ -> المقرر -> الشعبة
+  DateTime? _selectedDate;
+  String? _selectedCourseCode;
+  final Set<String> _selectedLectureKeys = <String>{};
+  Map<String, LectureActionStatus> _lectureActionStatuses = const {};
 
   @override
   void initState() {
     super.initState();
-    _calendarService = CalendarService(_calendarRepository);
-    _selectedDayOfWeek = DateTime.now().weekday;
     _calendarSyncSub = CalendarSyncService.instance.watchChanges().listen(
       (_) => _handleRealtimeCalendarChange(),
     );
@@ -75,30 +64,14 @@ class _LecturerManageLecturesScreenState
     });
     try {
       await _calendarRepository.refreshAcademicCalendar();
-      final now = _calendarRepository.currentDateTime;
       final list = await LecturerSectionsService.instance
           .getLecturesForCurrentLecturer();
       if (!mounted) return;
-      final courseOptions =
-          list
-              .map((l) => l.courseName.trim())
-              .where((n) => n.isNotEmpty)
-              .toSet()
-              .toList()
-            ..sort();
       setState(() {
         _allLectures = list;
-        _selectedDate = DateTime(now.year, now.month, now.day);
-        _selectedDayOfWeek = _selectedDate.weekday;
-        _currentCalendarMonth = DateTime(now.year, now.month, 1);
-        if (_selectedCourse == null && courseOptions.isNotEmpty) {
-          _selectedCourse = courseOptions.first;
-        } else if (_selectedCourse != null &&
-            !courseOptions.contains(_selectedCourse)) {
-          _selectedCourse = courseOptions.isNotEmpty
-              ? courseOptions.first
-              : null;
-        }
+        _selectedDate = null;
+        _selectedCourseCode = null;
+        _selectedLectureKeys.clear();
         _isLoadingLectures = false;
         _loadError = null;
         _applyFilters();
@@ -119,16 +92,6 @@ class _LecturerManageLecturesScreenState
       await _calendarRepository.refreshAcademicCalendar();
       if (!mounted) return;
       setState(() {
-        final now = _calendarRepository.currentDateTime;
-        final previous = _selectedDate;
-        final today = DateTime(now.year, now.month, now.day);
-        if (previous.year == today.year &&
-            previous.month == today.month &&
-            previous.day == today.day) {
-          _selectedDate = today;
-          _selectedDayOfWeek = today.weekday;
-          _currentCalendarMonth = DateTime(today.year, today.month, 1);
-        }
         _applyFilters();
       });
     } catch (_) {
@@ -140,9 +103,9 @@ class _LecturerManageLecturesScreenState
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
-  int _getTargetWeekday() => _selectedDayOfWeek;
+  int? _getTargetWeekday() => _selectedDate?.weekday;
 
-  DateTime _getReferenceDate() => _selectedDate;
+  DateTime _getReferenceDate() => _selectedDate ?? _calendarRepository.currentDateTime;
 
   /// تحقق من انتهاء المحاضرة باستخدام تاريخ فقط ثم وقت النهاية عند الحاجة.
   bool _isLectureEnded(LectureItem lecture) {
@@ -163,142 +126,140 @@ class _LecturerManageLecturesScreenState
     return now.isAfter(endDt) || now.isAtSameMomentAs(endDt);
   }
 
-  List<LectureItem> _computeFilteredLectures() {
-    if (_selectedCourse == null || _selectedCourse!.trim().isEmpty) {
+  List<LectureItem> _computeLecturesForDateAndCourse() {
+    final selectedCourseCode = _selectedCourseCode?.trim();
+    final target = _getTargetWeekday();
+    if (selectedCourseCode == null || selectedCourseCode.isEmpty || target == null) {
       return <LectureItem>[];
     }
-    final target = _getTargetWeekday();
     var list = _allLectures
         .where(
           (l) =>
               l.dayOfWeek == target &&
-              l.courseName.trim() == _selectedCourse!.trim(),
+              l.crn.trim() == selectedCourseCode,
         )
         .toList();
     return TimeUtils.sortLecturesByTime(list, (l) => l.startTime);
   }
 
-  List<String> get _uniqueCourseNames {
-    final names =
-        _allLectures
-            .map((l) => l.courseName.trim())
-            .where((n) => n.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort();
-    return names;
+  List<({String code, String name})> get _courseOptionsForDate {
+    final target = _getTargetWeekday();
+    if (target == null) return const [];
+    final map = <String, String>{};
+    for (final lecture in _allLectures.where((l) => l.dayOfWeek == target)) {
+      final code = lecture.crn.trim();
+      if (code.isEmpty) continue;
+      map.putIfAbsent(code, () => lecture.courseName.trim());
+    }
+    final options = map.entries
+        .map((e) => (code: e.key, name: e.value))
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+    return options;
   }
 
-  void _applyFilters() {}
-
-  Future<void> _openLectureActionsForLecture(LectureItem lecture) async {
-    await _openLectureActionScreen(
-      lecture,
-      initialAction: _ManageActionType.delay,
-    );
+  void _applyFilters() {
+    unawaited(_refreshLectureActionStatuses());
   }
 
-  Future<void> _openDayActionsPopup() async {
-    if (_selectedCourse == null || _selectedCourse!.trim().isEmpty) return;
+  String _actionStatusKey(LectureItem lecture) {
+    final sectionKey = (lecture.sectionId ?? '').trim().isNotEmpty
+        ? (lecture.sectionId ?? '').trim()
+        : lecture.section.trim();
+    return '$sectionKey|${lecture.startTime}';
+  }
 
-    if (_calendarRepository.isHoliday(_selectedDate)) {
-      _showActionSnack(
-        _tr(
-          'اليوم المختار إجازة، لا يمكن تنفيذ تأخير أو إلغاء',
-          'Selected day is a holiday, no delay/cancellation actions',
-        ),
-      );
+  LectureActionStatus _statusForLecture(LectureItem lecture) {
+    return _lectureActionStatuses[_actionStatusKey(lecture)] ??
+        const LectureActionStatus.normal();
+  }
+
+  Future<void> _refreshLectureActionStatuses() async {
+    final selectedDate = _selectedDate;
+    final selectedCourse = _selectedCourseCode?.trim() ?? '';
+    if (selectedDate == null || selectedCourse.isEmpty) {
+      if (mounted && _lectureActionStatuses.isNotEmpty) {
+        setState(() {
+          _lectureActionStatuses = const {};
+        });
+      }
       return;
     }
-
-    final lectures = _computeFilteredLectures();
+    final lectures = _computeLecturesForDateAndCourse();
     if (lectures.isEmpty) {
-      _showActionSnack(
-        _tr(
-          'لا توجد محاضرات في هذا اليوم للمادة المختارة',
-          'No lectures on this day for selected course',
-        ),
-      );
+      if (mounted && _lectureActionStatuses.isNotEmpty) {
+        setState(() {
+          _lectureActionStatuses = const {};
+        });
+      }
       return;
     }
-
-    LectureItem? selectedLecture;
-    if (lectures.length == 1) {
-      selectedLecture = lectures.first;
-    } else {
-      selectedLecture = await _pickLectureFromDayDialog(lectures);
+    try {
+      final statuses = await _notificationService.loadLectureActionStatuses(
+        lectures: lectures,
+        lectureDate: selectedDate,
+      );
+      if (!mounted) return;
+      setState(() {
+        _lectureActionStatuses = statuses;
+      });
+    } catch (_) {
+      // Keep UI usable even if status sync fails temporarily.
     }
-    if (!mounted || selectedLecture == null) return;
-    await _openLectureActionsForLecture(selectedLecture);
   }
 
-  Future<LectureItem?> _pickLectureFromDayDialog(
-    List<LectureItem> lectures,
-  ) async {
-    return showDialog<LectureItem>(
-      context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) {
-        return Directionality(
-          textDirection: LecturerLanguageController.direction(),
-          child: AlertDialog(
-            title: Text(_tr('اختاري المحاضرة', 'Choose lecture')),
-            content: SizedBox(
-              width: 420,
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: lectures.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final lecture = lectures[index];
-                  final timeRange = TimeUtils.formatTimeRange(
-                    lecture.startTime,
-                    lecture.endTime,
-                  );
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    onTap: () => Navigator.of(dialogContext).pop(lecture),
-                    title: Text(
-                      lecture.courseName,
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1F2E33),
-                      ),
-                    ),
-                    subtitle: Text(
-                      '${_tr('الشعبة', 'Section')} ${lecture.section} • $timeRange',
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 12,
-                        color: Color(0xFF5A6F76),
-                      ),
-                    ),
-                    trailing: const Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 14,
-                    ),
-                  );
-                },
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: Text(_tr('إغلاق', 'Close')),
-              ),
-            ],
-          ),
-        );
-      },
+  bool get _hasDateAndCourseSelection {
+    return _selectedDate != null &&
+        _selectedCourseCode != null &&
+        _selectedCourseCode!.trim().isNotEmpty;
+  }
+
+  String _lectureSelectionKey(LectureItem lecture) {
+    final sectionKey = (lecture.sectionId ?? '').trim().isNotEmpty
+        ? (lecture.sectionId ?? '').trim()
+        : lecture.section.trim();
+    return '$sectionKey|${lecture.startTime}|${lecture.endTime}|${lecture.activity}|${lecture.hall}';
+  }
+
+  List<LectureItem> get _selectedLectures {
+    final all = _computeLecturesForDateAndCourse();
+    return all
+        .where((lecture) => _selectedLectureKeys.contains(_lectureSelectionKey(lecture)))
+        .toList();
+  }
+
+  bool get _isPastSelectedDate {
+    if (_selectedDate == null) return false;
+    final now = _calendarRepository.currentDateTime;
+    final selected = DateTime(
+      _selectedDate!.year,
+      _selectedDate!.month,
+      _selectedDate!.day,
     );
+    final today = DateTime(now.year, now.month, now.day);
+    return selected.isBefore(today);
   }
 
-  Future<void> _openLectureActionScreen(
-    LectureItem lecture, {
-    required _ManageActionType initialAction,
-  }) async {
+  bool get _isFutureSelectedDate {
+    if (_selectedDate == null) return false;
+    final now = _calendarRepository.currentDateTime;
+    final selected = DateTime(
+      _selectedDate!.year,
+      _selectedDate!.month,
+      _selectedDate!.day,
+    );
+    final today = DateTime(now.year, now.month, now.day);
+    return selected.isAfter(today);
+  }
+
+  Future<void> _openLectureActionsForSelection() async {
+    final selected = _selectedLectures;
+    if (selected.isEmpty || _selectedDate == null) return;
+
+    final multi = selected.length > 1;
+    final primary = selected.first;
+    final primaryStatus = _statusForLecture(primary);
+
     final result = await showDialog<_ManageLectureActionResult>(
       context: context,
       barrierDismissible: true,
@@ -316,14 +277,15 @@ class _LecturerManageLecturesScreenState
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 560, maxHeight: 620),
               child: _LectureActionDialog(
-                lecture: lecture,
-                selectedDate: _selectedDate,
+                lecture: primary,
+                multiSelection: multi ? selected : null,
+                selectedDate: _selectedDate ?? _calendarRepository.currentDateTime,
                 delayYellow: _delayYellow,
                 cancelRed: _cancelRed,
-                isEnded: _isLectureEnded(lecture),
-                delaySent: _delaySentFor.contains(lecture.crn),
-                cancelSent: _cancelSentFor.contains(lecture.crn),
-                initialAction: initialAction,
+                isEnded: multi ? false : _isLectureEnded(primary),
+                delaySent: multi ? false : (primaryStatus.isDelayed || primaryStatus.isCanceled),
+                cancelSent: multi ? false : primaryStatus.isCanceled,
+                initialAction: _ManageActionType.delay,
                 tr: _tr,
               ),
             ),
@@ -333,6 +295,31 @@ class _LecturerManageLecturesScreenState
     );
     if (!mounted || result == null) return;
 
+    if (multi) {
+      if (result.action == _ManageActionType.delay) {
+        final delayMinutes = result.delayMinutes;
+        if (delayMinutes == null || delayMinutes <= 0) {
+          _showActionSnack(
+            _tr('مدة التأخير غير صحيحة', 'Invalid delay duration'),
+            error: true,
+          );
+          return;
+        }
+        await _applyDelayForSelectedLectures(presetMinutes: delayMinutes);
+        return;
+      }
+      await _applyCancelForSelectedLectures();
+      return;
+    }
+
+    await _handleSingleLectureActionResult(primary, result);
+  }
+
+  Future<void> _handleSingleLectureActionResult(
+    LectureItem lecture,
+    _ManageLectureActionResult result,
+  ) async {
+    final status = _statusForLecture(lecture);
     if (result.action == _ManageActionType.delay) {
       final delayMinutes = result.delayMinutes;
       if (delayMinutes == null || delayMinutes <= 0) {
@@ -349,11 +336,21 @@ class _LecturerManageLecturesScreenState
         );
         return;
       }
-      if (_delaySentFor.contains(lecture.crn)) {
+      if (status.isCanceled) {
         _showActionSnack(
           _tr(
-            'تم إرسال إشعار التأخير لهذه المحاضرة مسبقاً',
-            'Delay notification was already sent for this lecture',
+            'هذه المحاضرة ملغية بالفعل',
+            'This lecture is already canceled',
+          ),
+          error: true,
+        );
+        return;
+      }
+      if (status.isDelayed) {
+        _showActionSnack(
+          _tr(
+            'تم إرسال هذا الإجراء مسبقًا',
+            'This action was already sent',
           ),
         );
         return;
@@ -369,11 +366,11 @@ class _LecturerManageLecturesScreenState
       );
       return;
     }
-    if (_cancelSentFor.contains(lecture.crn)) {
+    if (status.isCanceled) {
       _showActionSnack(
         _tr(
-          'تم إرسال إشعار الإلغاء لهذه المحاضرة مسبقاً',
-          'Cancellation notification was already sent for this lecture',
+          'هذه المحاضرة ملغية بالفعل',
+          'This lecture is already canceled',
         ),
       );
       return;
@@ -394,17 +391,26 @@ class _LecturerManageLecturesScreenState
     LectureItem lecture,
     int delayMinutes,
   ) async {
+    final targetWeekday = _getTargetWeekday();
+    if (targetWeekday == null || _selectedDate == null) {
+      _showActionSnack(
+        _tr(
+          'يرجى اختيار تاريخ صالح أولاً',
+          'Please select a valid date first',
+        ),
+        error: true,
+      );
+      return;
+    }
     try {
       final result = await _notificationService.sendDelayNotification(
         lecture: lecture,
         delayMinutes: delayMinutes,
-        lectureDayOfWeek: _getTargetWeekday(),
-        lectureDate: _selectedDate,
+        lectureDayOfWeek: targetWeekday,
+        lectureDate: _selectedDate!,
       );
       if (!mounted) return;
-      setState(() {
-        _delaySentFor.add(lecture.crn);
-      });
+      await _refreshLectureActionStatuses();
       _showDelaySuccessScreen(
         lecture,
         delayMinutes,
@@ -413,8 +419,22 @@ class _LecturerManageLecturesScreenState
           result.lecturerMessageEn,
         ),
       );
+    } on LectureActionBlockedException catch (e) {
+      if (!mounted) return;
+      _showActionSnack(_mapBlockedActionMessage(e.reason), error: true);
+    } on LectureActionPartialFailureException {
+      if (!mounted) return;
+      await _refreshLectureActionStatuses();
+      _showActionSnack(
+        _tr(
+          'تم تسجيل تأخير المحاضرة، لكن حدثت مشكلة في بعض الإشعارات',
+          'Delay action recorded, but some notifications failed',
+        ),
+        error: true,
+      );
     } catch (e) {
       if (!mounted) return;
+      debugPrint('[ManageLectures] delay send failed: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -430,16 +450,25 @@ class _LecturerManageLecturesScreenState
   }
 
   Future<void> _sendCancellationNotification(LectureItem lecture) async {
+    final targetWeekday = _getTargetWeekday();
+    if (targetWeekday == null || _selectedDate == null) {
+      _showActionSnack(
+        _tr(
+          'يرجى اختيار تاريخ صالح أولاً',
+          'Please select a valid date first',
+        ),
+        error: true,
+      );
+      return;
+    }
     try {
       final result = await _notificationService.sendCancellationNotification(
         lecture: lecture,
-        lectureDayOfWeek: _getTargetWeekday(),
-        lectureDate: _selectedDate,
+        lectureDayOfWeek: targetWeekday,
+        lectureDate: _selectedDate!,
       );
       if (!mounted) return;
-      setState(() {
-        _cancelSentFor.add(lecture.crn);
-      });
+      await _refreshLectureActionStatuses();
       _showCancelSuccessScreen(
         lecture,
         dispatchMessage: _tr(
@@ -447,8 +476,22 @@ class _LecturerManageLecturesScreenState
           result.lecturerMessageEn,
         ),
       );
+    } on LectureActionBlockedException catch (e) {
+      if (!mounted) return;
+      _showActionSnack(_mapBlockedActionMessage(e.reason), error: true);
+    } on LectureActionPartialFailureException {
+      if (!mounted) return;
+      await _refreshLectureActionStatuses();
+      _showActionSnack(
+        _tr(
+          'تم تسجيل إلغاء المحاضرة، لكن حدثت مشكلة في بعض الإشعارات',
+          'Cancellation action recorded, but some notifications failed',
+        ),
+        error: true,
+      );
     } catch (e) {
       if (!mounted) return;
+      debugPrint('[ManageLectures] cancel send failed: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -460,6 +503,158 @@ class _LecturerManageLecturesScreenState
           backgroundColor: _cancelRed,
         ),
       );
+    }
+  }
+
+  Future<int?> _pickDelayMinutesDialog() async {
+    final controller = TextEditingController(text: '10');
+    final result = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(_tr('مدة التأخير', 'Delay duration')),
+          content: TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: InputDecoration(
+              hintText: _tr('عدد الدقائق', 'Minutes'),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(_tr('إلغاء', 'Cancel')),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext)
+                    .pop(int.tryParse(controller.text.trim()));
+              },
+              child: Text(_tr('تأكيد', 'Confirm')),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+    return result;
+  }
+
+  Future<void> _applyDelayForSelectedLectures({int? presetMinutes}) async {
+    final lectures = _selectedLectures;
+    if (lectures.isEmpty || _selectedDate == null || _getTargetWeekday() == null) {
+      return;
+    }
+    final minutes =
+        presetMinutes ?? await _pickDelayMinutesDialog();
+    if (!mounted || minutes == null || minutes <= 0) return;
+
+    int success = 0;
+    int skipped = 0;
+    int failed = 0;
+    for (final lecture in lectures) {
+      final status = _statusForLecture(lecture);
+      if (_isLectureEnded(lecture) || status.isCanceled || status.isDelayed) {
+        skipped += 1;
+        continue;
+      }
+      try {
+        await _notificationService.sendDelayNotification(
+          lecture: lecture,
+          delayMinutes: minutes,
+          lectureDayOfWeek: _getTargetWeekday()!,
+          lectureDate: _selectedDate!,
+        );
+        success += 1;
+      } on LectureActionBlockedException {
+        skipped += 1;
+      } on LectureActionPartialFailureException {
+        success += 1;
+        failed += 1;
+      } catch (_) {
+        failed += 1;
+      }
+    }
+    if (!mounted) return;
+    await _refreshLectureActionStatuses();
+    _showActionSnack(
+      failed == 0
+          ? _tr(
+              'تم التنفيذ لـ $success وتم تخطي $skipped',
+              'Applied to $success and skipped $skipped',
+            )
+          : _tr(
+              'تم التنفيذ لـ $success وتخطي $skipped وفشل $failed',
+              'Applied $success, skipped $skipped, failed $failed',
+            ),
+      error: failed > 0,
+    );
+  }
+
+  Future<void> _applyCancelForSelectedLectures() async {
+    final lectures = _selectedLectures;
+    if (lectures.isEmpty || _selectedDate == null || _getTargetWeekday() == null) {
+      return;
+    }
+    int success = 0;
+    int skipped = 0;
+    int failed = 0;
+    for (final lecture in lectures) {
+      final status = _statusForLecture(lecture);
+      if (_isLectureEnded(lecture) || status.isCanceled) {
+        skipped += 1;
+        continue;
+      }
+      try {
+        await _notificationService.sendCancellationNotification(
+          lecture: lecture,
+          lectureDayOfWeek: _getTargetWeekday()!,
+          lectureDate: _selectedDate!,
+        );
+        success += 1;
+      } on LectureActionBlockedException {
+        skipped += 1;
+      } on LectureActionPartialFailureException {
+        success += 1;
+        failed += 1;
+      } catch (_) {
+        failed += 1;
+      }
+    }
+    if (!mounted) return;
+    await _refreshLectureActionStatuses();
+    _showActionSnack(
+      failed == 0
+          ? _tr(
+              'تم التنفيذ لـ $success وتم تخطي $skipped',
+              'Applied to $success and skipped $skipped',
+            )
+          : _tr(
+              'تم التنفيذ لـ $success وتخطي $skipped وفشل $failed',
+              'Applied $success, skipped $skipped, failed $failed',
+            ),
+      error: failed > 0,
+    );
+  }
+
+  String _mapBlockedActionMessage(LectureActionBlockReason reason) {
+    switch (reason) {
+      case LectureActionBlockReason.alreadyDelayed:
+        return _tr(
+          'تم إرسال هذا الإجراء مسبقًا',
+          'This action was already sent',
+        );
+      case LectureActionBlockReason.alreadyCanceled:
+        return _tr(
+          'هذه المحاضرة ملغية بالفعل',
+          'This lecture is already canceled',
+        );
+      case LectureActionBlockReason.canceledCannotDelay:
+        return _tr(
+          'لا يمكن تأخير محاضرة ملغية',
+          'Cannot delay a canceled lecture',
+        );
     }
   }
 
@@ -681,14 +876,7 @@ class _LecturerManageLecturesScreenState
                 ),
               ),
               centerTitle: true,
-              actions: [
-                IconButton(
-                  tooltip: _tr('جلسة NFC', 'NFC session'),
-                  onPressed: () =>
-                      LecturerNavigation.goToNfcSessionManagement(context),
-                  icon: const Icon(Icons.nfc_rounded, color: _primary),
-                ),
-              ],
+              actions: const [],
             ),
             body: SafeArea(
               child: _isLoadingLectures
@@ -748,249 +936,195 @@ class _LecturerManageLecturesScreenState
 
   Widget _buildSelectionPanel() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 470),
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                _tr('1) اختاري المادة', '1) Select course'),
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF1F2E33),
-                  fontFamily: 'Cairo',
-                ),
-              ),
-              const SizedBox(height: 10),
-              _buildCourseCards(),
-              const SizedBox(height: 14),
-              Text(
-                _tr(
-                  '2) اختاري اليوم من التقويم',
-                  '2) Select day from calendar',
-                ),
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF1F2E33),
-                  fontFamily: 'Cairo',
-                ),
-              ),
-              const SizedBox(height: 10),
-              _buildCalendarPicker(),
-            ],
-          ),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE2ECEF)),
         ),
-      ),
-    );
-  }
-
-  Widget _buildCourseCards() {
-    final options = _uniqueCourseNames;
-    if (options.isEmpty) {
-      return _compactInfoCard(
-        icon: Icons.menu_book_outlined,
-        message: _tr(
-          'لا توجد مواد مرتبطة بحسابك حالياً',
-          'No courses linked to your account yet',
-        ),
-      );
-    }
-
-    return SizedBox(
-      height: 116,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: options.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 10),
-        itemBuilder: (context, index) {
-          final course = options[index];
-          final selected = _selectedCourse == course;
-          final count = _allLectures
-              .where((l) => l.courseName.trim() == course)
-              .length;
-          return GestureDetector(
-            onTap: () {
-              setState(() {
-                _selectedCourse = course;
-                _applyFilters();
-              });
-            },
-            child: Container(
-              width: 210,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: selected ? const Color(0xFFE6F3F5) : Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: selected ? _primary : const Color(0xFFE2E8EA),
-                  width: selected ? 1.4 : 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.auto_stories_outlined,
-                        size: 18,
-                        color: selected ? _primary : const Color(0xFF607D85),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          course,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: selected
-                                ? const Color(0xFF0A5A63)
-                                : const Color(0xFF243238),
-                            fontFamily: 'Cairo',
-                            height: 1.3,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? const Color(0xFFD3E9EC)
-                          : const Color(0xFFF2F6F7),
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                    child: Text(
-                      _tr('$count شعبة/موعد', '$count lecture slots'),
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Color(0xFF45616A),
-                        fontWeight: FontWeight.w600,
-                        fontFamily: 'Cairo',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildCalendarPicker() {
-    final selectedCourse = _selectedCourse;
-    if (selectedCourse == null || selectedCourse.trim().isEmpty) {
-      return _compactInfoCard(
-        icon: Icons.touch_app_outlined,
-        message: _tr(
-          'اختاري مادة أولاً حتى يظهر التقويم الخاص بها',
-          'Select a course first to show its calendar',
-        ),
-      );
-    }
-
-    final courseLectures = _allLectures
-        .where((l) => l.courseName.trim() == selectedCourse.trim())
-        .toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        MonthlyCalendar(
-          currentMonth: _currentCalendarMonth,
-          calendarDays: _calendarService.buildCalendarDays(
-            _currentCalendarMonth,
-            courseLectures,
-          ),
-          onDayTap: (CalendarDay day) {
-            setState(() {
-              _selectedDate = DateTime(
-                day.date.year,
-                day.date.month,
-                day.date.day,
-              );
-              _selectedDayOfWeek = day.date.weekday;
-              _applyFilters();
-            });
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (!mounted) return;
-              _openDayActionsPopup();
-            });
-          },
-          onMonthChanged: (DateTime month) {
-            setState(() {
-              _currentCalendarMonth = month;
-            });
-          },
-        ),
-        const SizedBox(height: 10),
-        Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Icon(
-              Icons.event_available_rounded,
-              size: 17,
-              color: _primary,
+            Row(
+              children: [
+                const Icon(Icons.tune_rounded, color: _primary, size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  _tr('اختيار المحاضرة', 'Lecture Selection'),
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF2F4449),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 6),
-            Text(
-              _tr(
-                'اليوم المختار: ${LecturerLanguageController.dayNameFromWeekday(_selectedDate.weekday)} ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
-                'Selected day: ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
-              ),
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF52646A),
-                fontFamily: 'Cairo',
-                fontWeight: FontWeight.w600,
-              ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(child: _buildDatePicker()),
+                const SizedBox(width: 8),
+                Expanded(child: _buildCourseSelector()),
+              ],
             ),
+            const SizedBox(height: 8),
+            _buildSelectionStateBanner(),
           ],
         ),
-      ],
+      ),
     );
   }
 
-  Widget _compactInfoCard({required IconData icon, required String message}) {
+  Widget _buildDatePicker() {
+    final selectedDate = _selectedDate;
+    return _ManageFilterCard(
+      title: _tr('التاريخ', 'Date'),
+      value: selectedDate == null
+          ? _tr('غير محدد', 'Not selected')
+          : _tr(
+              '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+              '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+            ),
+      subtitle: _tr('اضغط لاختيار التاريخ', 'Tap to choose date'),
+      icon: Icons.calendar_month_rounded,
+      onPressed: () async {
+        final now = _calendarRepository.currentDateTime;
+        final firstDate = DateTime(now.year - 1, 1, 1);
+        final lastDate = DateTime(now.year + 1, 12, 31);
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: selectedDate ?? DateTime(now.year, now.month, now.day),
+          firstDate: firstDate,
+          lastDate: lastDate,
+          locale: LecturerLanguageController.isArabic
+              ? const Locale('ar')
+              : const Locale('en'),
+          builder: (dialogContext, child) {
+            final base = Theme.of(dialogContext);
+            return Theme(
+              data: base.copyWith(
+                colorScheme: base.colorScheme.copyWith(
+                  primary: _primary,
+                  onPrimary: Colors.white,
+                  surface: const Color(0xFFF8FBFB),
+                  onSurface: const Color(0xFF23363B),
+                ),
+                dialogTheme: const DialogThemeData(
+                  backgroundColor: Color(0xFFF8FBFB),
+                ),
+                textButtonTheme: TextButtonThemeData(
+                  style: TextButton.styleFrom(
+                    foregroundColor: _primary,
+                    textStyle: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+              child: Directionality(
+                textDirection: LecturerLanguageController.direction(),
+                child: Localizations.override(
+                  context: dialogContext,
+                  locale: LecturerLanguageController.isArabic
+                      ? const Locale('ar')
+                      : const Locale('en'),
+                  child: child!,
+                ),
+              ),
+            );
+          },
+        );
+        if (!mounted || picked == null) return;
+        setState(() {
+          _selectedDate = DateTime(picked.year, picked.month, picked.day);
+          _selectedCourseCode = null;
+          _selectedLectureKeys.clear();
+          _applyFilters();
+        });
+      },
+    );
+  }
+
+  Widget _buildCourseSelector() {
+    final options = _courseOptionsForDate;
+    String value;
+    String? subtitle;
+    if (_selectedDate == null) {
+      value = _tr('غير محدد', 'Not selected');
+      subtitle = _tr('اختاري التاريخ أولاً', 'Select date first');
+    } else if (_selectedCourseCode == null || _selectedCourseCode!.trim().isEmpty) {
+      value = _tr('غير محدد', 'Not selected');
+      subtitle = _tr('اضغط لاختيار المقرر', 'Tap to choose course');
+    } else {
+      final selected = options
+          .where((o) => o.code == _selectedCourseCode)
+          .cast<({String code, String name})?>()
+          .firstWhere((o) => o != null, orElse: () => null);
+      value = selected == null
+          ? _selectedCourseCode!
+          : '${selected.name} (${selected.code})';
+      subtitle = null;
+    }
+
+    return _ManageFilterCard(
+      title: _tr('المقرر', 'Course'),
+      value: value,
+      subtitle: subtitle,
+      icon: Icons.menu_book_rounded,
+      onPressed: () {
+        if (_selectedDate == null) {
+          _showActionSnack(
+            _tr('اختر التاريخ أولاً ثم المقرر.', 'Select date first, then choose course.'),
+          );
+          return;
+        }
+        _pickCourseForDate(options);
+      },
+    );
+  }
+
+  Widget _buildSelectionStateBanner() {
+    String message;
+    Color bg = const Color(0xFFF3F7F8);
+    Color border = const Color(0xFFD8E4E7);
+    Color text = const Color(0xFF455D63);
+    IconData icon = Icons.info_outline_rounded;
+
+    if (_selectedDate == null) {
+      message = _tr(
+        'لم يتم اختيار التاريخ بعد. يرجى اختيار التاريخ من التقويم.',
+        'Date is not selected yet. Please choose a date from the calendar.',
+      );
+    } else if (_selectedCourseCode == null || _selectedCourseCode!.trim().isEmpty) {
+      message = _tr('لم يتم اختيار المقرر بعد.', 'Course is not selected yet.');
+    } else {
+      return const SizedBox.shrink();
+    }
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FBFB),
+        color: bg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2ECEF)),
+        border: Border.all(color: border),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: const Color(0xFF648087)),
+          Icon(icon, size: 18, color: text),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF5A6F76),
+              style: TextStyle(
                 fontFamily: 'Cairo',
-                fontWeight: FontWeight.w600,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: text,
               ),
             ),
           ),
@@ -999,67 +1133,449 @@ class _LecturerManageLecturesScreenState
     );
   }
 
-  Widget _buildContent() {
-    if (_selectedCourse == null || _selectedCourse!.trim().isEmpty) {
-      return _buildEmptyState(
+  Future<void> _pickCourseForDate(List<({String code, String name})> options) async {
+    if (options.isEmpty) {
+      _showActionSnack(
         _tr(
-          'اختاري مادة من الكروت بالأعلى ثم اختاري اليوم من التقويم',
-          'Select a course card then pick a day from calendar',
+          'لا توجد مقررات متاحة في التاريخ المحدد',
+          'No courses are available for selected date',
         ),
       );
+      return;
     }
-    return _buildEmptyState(
-      _tr(
-        'اختاري اليوم من التقويم، وستظهر نافذة منبثقة للتأخير أو الإلغاء',
-        'Pick a day from calendar and a popup will open for delay/cancellation',
+
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFFF8FBFB),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return Directionality(
+          textDirection: LecturerLanguageController.direction(),
+          child: SafeArea(
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: options.length,
+              separatorBuilder: (_, _) =>
+                  const Divider(height: 1, color: Color(0xFFE2ECEF)),
+              itemBuilder: (context, index) {
+                final course = options[index];
+                return ListTile(
+                  tileColor: const Color(0xFFF8FBFB),
+                  leading: const Icon(
+                    Icons.menu_book_rounded,
+                    color: Color(0xFF006571),
+                    size: 18,
+                  ),
+                  title: Text(
+                    course.name,
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1F3338),
+                    ),
+                  ),
+                  subtitle: Text(
+                    course.code,
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      color: Color(0xFF6A838A),
+                    ),
+                  ),
+                  trailing: const Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    size: 14,
+                    color: Color(0xFF006571),
+                  ),
+                  onTap: () => Navigator.of(sheetContext).pop(course.code),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted || selected == null) return;
+    setState(() {
+      _selectedCourseCode = selected;
+      _selectedLectureKeys.clear();
+      _applyFilters();
+    });
+  }
+
+  Widget _buildContent() {
+    if (!_hasDateAndCourseSelection) {
+      final guidance = _selectedDate == null
+          ? _tr(
+              'يرجى اختيار التاريخ من التقويم.',
+              'Please choose date from the calendar.',
+            )
+          : _tr(
+              'يرجى اختيار المقرر بعد تحديد التاريخ.',
+              'Choose course after selecting date.',
+            );
+      return _buildEmptyState(guidance, showSecondaryHint: false);
+    }
+    final lectures = _computeLecturesForDateAndCourse();
+    if (lectures.isEmpty) {
+      return _buildEmptyState(
+        _tr(
+          'لا توجد محاضرات لهذا المقرر في التاريخ المحدد',
+          'No lectures for this course on selected date',
+        ),
+        showSecondaryHint: false,
+      );
+    }
+
+    final allSelected = lectures.isNotEmpty &&
+        lectures.every((l) => _selectedLectureKeys.contains(_lectureSelectionKey(l)));
+    final canManage = !_isPastSelectedDate;
+    final selectedLectures = _selectedLectures;
+    final allSelectedCanceled = selectedLectures.isNotEmpty &&
+        selectedLectures.every((l) => _statusForLecture(l).isCanceled);
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                setState(() {
+                  if (allSelected) {
+                    _selectedLectureKeys.clear();
+                  } else {
+                    _selectedLectureKeys
+                      ..clear()
+                      ..addAll(lectures.map(_lectureSelectionKey));
+                  }
+                });
+              },
+              icon: Icon(
+                allSelected ? Icons.deselect_rounded : Icons.select_all_rounded,
+                size: 18,
+                color: const Color(0xFF3F565D),
+              ),
+              label: Text(
+                allSelected
+                    ? _tr('إلغاء تحديد الكل', 'Deselect all')
+                    : _tr('تحديد الكل', 'Select all'),
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  color: Color(0xFF1F2E33),
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF1F2E33),
+                backgroundColor: Colors.white,
+                side: const BorderSide(color: Color(0xFFD7E4E8)),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+        ),
+        ...lectures.map(
+          (lecture) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _buildLectureSelectionCard(lecture: lecture),
+          ),
+        ),
+        const SizedBox(height: 6),
+        if (_selectedLectureKeys.isEmpty)
+          Text(
+            _tr(
+              'اختر شعبة واحدة على الأقل',
+              'Select at least one section',
+            ),
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 12,
+              color: Color(0xFF6E848B),
+            ),
+          ),
+        if (!canManage)
+          Text(
+            _tr(
+              'لا يمكن إدارة محاضرة سابقة',
+              'Cannot manage a past lecture',
+            ),
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 12,
+              color: Color(0xFF8A5A00),
+            ),
+          ),
+        if (allSelectedCanceled && canManage)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              _tr(
+                'هذه المحاضرة ملغية بالفعل',
+                'This lecture is already canceled',
+              ),
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 12,
+                color: Color(0xFFB71C1C),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        if (_selectedLectureKeys.isNotEmpty && canManage) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: allSelectedCanceled ? null : _openLectureActionsForSelection,
+              style: FilledButton.styleFrom(
+                backgroundColor: _primary,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.grey.shade300,
+                disabledForegroundColor: Colors.grey.shade600,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(Icons.assignment_turned_in_rounded),
+              label: Text(
+                _selectedLectureKeys.length > 1
+                    ? _tr(
+                        'إجراء على الشعب المحددة',
+                        'Apply action to selected sections',
+                      )
+                    : _tr(
+                        'إدارة المحاضرة المحددة',
+                        'Manage selected lecture',
+                      ),
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildLectureSelectionCard({
+    required LectureItem lecture,
+  }) {
+    final key = _lectureSelectionKey(lecture);
+    final isSelected = _selectedLectureKeys.contains(key);
+    final timeRange = TimeUtils.formatTimeRange(lecture.startTime, lecture.endTime);
+    final locationText = lecture.location?.trim().isNotEmpty == true
+        ? lecture.location!.trim()
+        : lecture.hall.trim();
+    final status = _isPastSelectedDate
+        ? _tr('ماضي', 'Past')
+        : (_isFutureSelectedDate ? _tr('مستقبل', 'Future') : _tr('اليوم', 'Today'));
+    final date = _selectedDate!;
+    final dateLabel = '${date.day}/${date.month}/${date.year}';
+    final dayLabel = LecturerLanguageController.dayNameFromWeekday(date.weekday);
+    final actionStatus = _statusForLecture(lecture);
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          if (isSelected) {
+            _selectedLectureKeys.remove(key);
+          } else {
+            _selectedLectureKeys.add(key);
+          }
+        });
+      },
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFEAF7F8) : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? _primary : const Color(0xFFE2ECEF),
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(
+                isSelected
+                    ? Icons.check_circle_rounded
+                    : Icons.radio_button_unchecked_rounded,
+                size: 26,
+                color: isSelected ? _primary : const Color(0xFF8EA3A9),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    lecture.courseName.trim().isEmpty
+                        ? '${_tr('الشعبة', 'Section')} ${lecture.section}'
+                        : lecture.courseName,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1F2E33),
+                      fontFamily: 'Cairo',
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '$dayLabel - $dateLabel',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF5A6F76),
+                      fontFamily: 'Cairo',
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${_tr('الوقت', 'Time')}: $timeRange',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF5A6F76),
+                      fontFamily: 'Cairo',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _buildSectionSelectionMetaChip(
+                        '${_tr('الشعبة', 'Section')} ${lecture.section}',
+                      ),
+                      _buildSectionSelectionMetaChip(
+                        '${_tr('القاعة', 'Hall')}: ${locationText.isEmpty ? '—' : locationText}',
+                      ),
+                      if (lecture.activity.trim().isNotEmpty)
+                        _buildSectionSelectionMetaChip(
+                          '${_tr('النشاط', 'Activity')}: ${lecture.activity.trim()}',
+                        ),
+                      _buildSectionSelectionStatusChip(status),
+                      if (actionStatus.isCanceled)
+                        _buildSectionSelectionStatusChip(
+                          _tr('ملغية بالفعل', 'Already canceled'),
+                          color: const Color(0xFFB71C1C),
+                        ),
+                      if (actionStatus.isDelayed)
+                        _buildSectionSelectionStatusChip(
+                          _tr(
+                            'مؤجلة ${actionStatus.delayMinutes ?? 0} دقيقة',
+                            'Delayed ${actionStatus.delayMinutes ?? 0} min',
+                          ),
+                          color: const Color(0xFF8A5A00),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildEmptyState(String title) {
+  /// شارة صغيرة للقاعة/الشعبة/النشاط — ألوان ثابتة فوق خلفية فاتحة (بما يتوافق مع ثيم إجراء المحاضرة).
+  Widget _buildSectionSelectionMetaChip(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7FAFB),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFDCE7EA)),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontFamily: 'Cairo',
+          fontSize: 11.5,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF586E75),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionSelectionStatusChip(String status, {Color? color}) {
+    final base = color ?? const Color(0xFF5A7279);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: base.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: base.withValues(alpha: 0.30)),
+      ),
+      child: Text(
+        status,
+        style: const TextStyle(
+          fontFamily: 'Cairo',
+          fontSize: 11.5,
+          fontWeight: FontWeight.w600,
+        ).copyWith(color: base),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(String title, {bool showSecondaryHint = true}) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 48),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: _primary.withValues(alpha: 0.08),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.calendar_today_rounded,
-                size: 48,
-                color: _primary.withValues(alpha: 0.8),
-              ),
+            Icon(
+              Icons.calendar_today_rounded,
+              size: 40,
+              color: _primary.withValues(alpha: 0.55),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
             Text(
               title,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                fontSize: 17,
+                fontSize: 15,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF516166),
                 fontFamily: 'Cairo',
-                height: 1.4,
+                height: 1.35,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              _tr(
-                'يمكنك اختيار مادة أو يوم آخر للمتابعة',
-                'You can choose another course or day',
+            if (showSecondaryHint) ...[
+              const SizedBox(height: 6),
+              Text(
+                _tr(
+                  'يمكنك تغيير التاريخ أو المقرر أو الشعبة.',
+                  'Try another date, course, or section.',
+                ),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: Colors.grey.shade600,
+                  fontFamily: 'Cairo',
+                ),
               ),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade600,
-                fontFamily: 'Cairo',
-              ),
-            ),
+            ],
           ],
         ),
       ),
@@ -1084,6 +1600,7 @@ class _ManageLectureActionResult {
 class _LectureActionDialog extends StatefulWidget {
   const _LectureActionDialog({
     required this.lecture,
+    this.multiSelection,
     required this.selectedDate,
     required this.delayYellow,
     required this.cancelRed,
@@ -1095,6 +1612,8 @@ class _LectureActionDialog extends StatefulWidget {
   });
 
   final LectureItem lecture;
+  /// عند تحديد أكثر من شعبة: نفس القائمة المحددة (يشمل [lecture] كأول عنصر).
+  final List<LectureItem>? multiSelection;
   final DateTime selectedDate;
   final Color delayYellow;
   final Color cancelRed;
@@ -1113,6 +1632,9 @@ class _LectureActionDialogState extends State<_LectureActionDialog> {
   int? _selectedMinutes = 10;
   bool _otherSelected = false;
   final TextEditingController _otherController = TextEditingController();
+
+  bool get _isMulti =>
+      widget.multiSelection != null && widget.multiSelection!.length > 1;
 
   @override
   void initState() {
@@ -1150,6 +1672,7 @@ class _LectureActionDialogState extends State<_LectureActionDialog> {
       widget.lecture.startTime,
       widget.lecture.endTime,
     );
+    final multiList = widget.multiSelection ?? const <LectureItem>[];
 
     return Scaffold(
       body: ColoredBox(
@@ -1185,47 +1708,91 @@ class _LectureActionDialogState extends State<_LectureActionDialog> {
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: const Color(0xFFE2ECEF)),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.lecture.courseName,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF1F2E33),
-                      fontFamily: 'Cairo',
+              child: _isMulti
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.tr(
+                            'سيطبق الإجراء على جميع الشعب المحددة',
+                            'The action will apply to all selected sections',
+                          ),
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1F2E33),
+                            fontFamily: 'Cairo',
+                            height: 1.3,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${widget.tr('عدد الشعب', 'Sections')}: ${multiList.length}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF5A6F76),
+                            fontFamily: 'Cairo',
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '$dayLabel - $dateLabel',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF5A6F76),
+                            fontFamily: 'Cairo',
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        ..._buildMultiSelectionPreviewRows(multiList),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.lecture.courseName,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1F2E33),
+                            fontFamily: 'Cairo',
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '$dayLabel - $dateLabel',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF5A6F76),
+                            fontFamily: 'Cairo',
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${widget.tr('الوقت', 'Time')}: $timeRange',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF5A6F76),
+                            fontFamily: 'Cairo',
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '$dayLabel - $dateLabel',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF5A6F76),
-                      fontFamily: 'Cairo',
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${widget.tr('الوقت', 'Time')}: $timeRange',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF5A6F76),
-                      fontFamily: 'Cairo',
-                    ),
-                  ),
-                ],
-              ),
             ),
             if (widget.isEnded) ...[
               const SizedBox(height: 12),
               _ActionInfoBanner(
                 icon: Icons.info_outline_rounded,
-                text: widget.tr(
-                  'المحاضرة منتهية، لا يمكن تنفيذ تأخير أو إلغاء',
-                  'Lecture ended, delay and cancellation are unavailable',
-                ),
+                text: _isMulti
+                    ? widget.tr(
+                        'إحدى المحاضرات ضمن التحديد منتهية، لا يمكن تنفيذ تأخير أو إلغاء',
+                        'One or more selected lectures have ended; delay and cancel are unavailable',
+                      )
+                    : widget.tr(
+                        'المحاضرة منتهية، لا يمكن تنفيذ تأخير أو إلغاء',
+                        'Lecture ended, delay and cancellation are unavailable',
+                      ),
                 color: const Color(0xFFB71C1C),
               ),
             ],
@@ -1265,6 +1832,41 @@ class _LectureActionDialogState extends State<_LectureActionDialog> {
         ),
       ),
     );
+  }
+
+  List<Widget> _buildMultiSelectionPreviewRows(List<LectureItem> list) {
+    const maxLines = 5;
+    final rows = <Widget>[];
+    for (var i = 0; i < list.length && i < maxLines; i++) {
+      final l = list[i];
+      final range = TimeUtils.formatTimeRange(l.startTime, l.endTime);
+      rows.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Text(
+            '• ${widget.tr('الشعبة', 'Section')} ${l.section} · ${widget.tr('الوقت', 'Time')}: $range',
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF5A6F76),
+              fontFamily: 'Cairo',
+            ),
+          ),
+        ),
+      );
+    }
+    if (list.length > maxLines) {
+      rows.add(
+        Text(
+          widget.tr('وغيرها...', 'And more…'),
+          style: TextStyle(
+            fontSize: 11.5,
+            color: Colors.grey.shade600,
+            fontFamily: 'Cairo',
+          ),
+        ),
+      );
+    }
+    return rows;
   }
 
   Widget _buildDelayPanel() {
@@ -1327,12 +1929,31 @@ class _LectureActionDialogState extends State<_LectureActionDialog> {
             TextField(
               controller: _otherController,
               keyboardType: TextInputType.number,
+              cursorColor: const Color(0xFF006571),
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 hintText: widget.tr('أدخل عدد الدقائق', 'Enter minutes'),
+                hintStyle: const TextStyle(
+                  color: Color(0xFF7D9095),
+                  fontFamily: 'Cairo',
+                ),
+                filled: true,
+                fillColor: const Color(0xFFF8FBFB),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFDCE7EA)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFDCE7EA)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF006571),
+                    width: 1.4,
+                  ),
                 ),
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(
@@ -1340,7 +1961,10 @@ class _LectureActionDialogState extends State<_LectureActionDialog> {
                   vertical: 12,
                 ),
               ),
-              style: const TextStyle(fontFamily: 'Cairo'),
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                color: Color(0xFF1F2E33),
+              ),
             ),
           ],
           const SizedBox(height: 14),
@@ -1588,6 +2212,92 @@ class _ActionInfoBanner extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ManageFilterCard extends StatelessWidget {
+  const _ManageFilterCard({
+    required this.title,
+    required this.value,
+    required this.icon,
+    required this.onPressed,
+    this.subtitle,
+  });
+
+  final String title;
+  final String value;
+  final String? subtitle;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FBFB),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE3ECEE)),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 16, color: const Color(0xFF006571)),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 10.5,
+                        color: Color(0xFF688085),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 12,
+                        color: Color(0xFF1F3338),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (subtitle != null)
+                      Text(
+                        subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 10,
+                          color: Color(0xFF7D9095),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 18,
+                color: Color(0xFF006571),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
