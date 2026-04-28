@@ -1,11 +1,17 @@
-import 'dart:typed_data';
+import 'dart:convert';
+import 'dart:io' show Platform;
 
+// ignore: depend_on_referenced_packages
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nfc_manager/nfc_manager.dart';
+import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 
 import '../../features/translation/translation_controller.dart';
 import '../../features/translation/widgets/t_text.dart';
 import '../../services/attendance/nfc_attendance_service.dart';
+import '../../services/attendance/qr_attendance_service.dart';
 import '../../services/student_auth_service.dart';
 import '../../shared/widgets/chat_fab.dart';
 import 'components/custom_nav_bar_icons.dart';
@@ -25,29 +31,56 @@ class NfcAttendanceScreen extends StatefulWidget {
 class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     with SingleTickerProviderStateMixin {
   final NfcAttendanceService _nfcAttendance = NfcAttendanceService.instance;
+  final QrAttendanceService _qrAttendance = QrAttendanceService.instance;
+  final GlobalKey _qrViewKey = GlobalKey(debugLabel: 'student-qr-scanner');
 
   bool _isNfc = true;
   int selectedIndex = 2;
   AnimationController? _pulseController;
+  QRViewController? _qrScannerController;
 
   bool _nfcAvailable = false;
   bool _checkingNfcAvailability = true;
   bool _isScanning = false;
+  bool _isStartingQrScanner = false;
+  bool _isProcessingQrScan = false;
+  bool _isQrScanPaused = false;
+  bool _qrPermissionDenied = false;
+  bool _qrCameraUnavailable = false;
+  bool _checkingQrAvailability = false;
+  bool _qrScannerInitialized = false;
 
   String _statusMessage =
       'اضغطي "ابدئي التحضير" ثم مرري الجوال على بطاقة المحاضر.';
   bool _statusError = false;
+  String _qrStatusMessage = 'وجهي الكاميرا نحو رمز التحضير المعروض لدى المحاضر.';
+  bool _qrStatusError = false;
 
   void _toggleMode(bool nfc) {
     setState(() {
       _isNfc = nfc;
       _statusError = false;
       if (!nfc) {
-        _statusMessage = 'ميزة QR قيد التطوير حالياً. استخدمي NFC للتحضير.';
+        _qrStatusError = false;
+        _qrCameraUnavailable = false;
+        _qrPermissionDenied = false;
+        _qrScannerInitialized = false;
+        _qrStatusMessage =
+            'وجهي الكاميرا نحو رمز التحضير المعروض لدى المحاضر.';
       } else {
         _statusMessage =
             'اضغطي "ابدئي التحضير" ثم مرري الجوال على بطاقة المحاضر.';
       }
+    });
+
+    if (nfc) {
+      _stopQrScanner();
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _isNfc) return;
+      _prepareQrScanner();
     });
   }
 
@@ -284,6 +317,256 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         .toUpperCase();
   }
 
+  Future<void> _startQrScanner() async {
+    if (_isNfc || _isStartingQrScanner || _isProcessingQrScan) return;
+    if (_qrCameraUnavailable || _qrPermissionDenied || !_qrScannerInitialized) {
+      return;
+    }
+
+    setState(() {
+      _isStartingQrScanner = true;
+      _qrPermissionDenied = false;
+      _qrCameraUnavailable = false;
+      _isQrScanPaused = false;
+    });
+
+    try {
+      await _qrScannerController?.resumeCamera();
+      if (!mounted) return;
+      setState(() {
+        if (!_qrStatusError) {
+          _qrStatusMessage =
+              'وجهي الكاميرا نحو رمز التحضير المعروض لدى المحاضر.';
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _qrStatusError = true;
+        _isQrScanPaused = true;
+        _qrCameraUnavailable = true;
+        _qrStatusMessage = 'الكاميرا غير متاحة حالياً على هذا الجهاز.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isStartingQrScanner = false);
+      }
+    }
+  }
+
+  Future<void> _stopQrScanner() async {
+    try {
+      await _qrScannerController?.pauseCamera();
+    } catch (_) {
+      // no-op
+    }
+  }
+
+  Future<void> _retryQrScan() async {
+    if (!mounted) return;
+    setState(() {
+      _qrStatusError = false;
+      _isProcessingQrScan = false;
+      _isQrScanPaused = false;
+    });
+    await _prepareQrScanner();
+  }
+
+  Future<void> _prepareQrScanner() async {
+    if (!mounted || _isNfc || _checkingQrAvailability) return;
+
+    setState(() {
+      _checkingQrAvailability = true;
+      _qrStatusError = false;
+      _qrPermissionDenied = false;
+      _qrCameraUnavailable = false;
+      _qrStatusMessage = 'جاري تجهيز ماسح QR...';
+    });
+
+    final availability = await _resolveQrCameraAvailability();
+    if (!mounted || _isNfc) return;
+
+    setState(() {
+      _checkingQrAvailability = false;
+      _qrCameraUnavailable = !availability.available;
+      _qrScannerInitialized = availability.available;
+      _isQrScanPaused = !availability.available;
+      _qrStatusError = !availability.available;
+      _qrStatusMessage = availability.message ??
+          'وجهي الكاميرا نحو رمز التحضير المعروض لدى المحاضر.';
+    });
+
+    if (availability.available) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _isNfc) return;
+        _startQrScanner();
+      });
+    }
+  }
+
+  Future<_QrCameraAvailability> _resolveQrCameraAvailability() async {
+    if (!Platform.isIOS) {
+      return const _QrCameraAvailability.available();
+    }
+
+    try {
+      final iosInfo = await DeviceInfoPlugin().iosInfo;
+      if (!iosInfo.isPhysicalDevice) {
+        return const _QrCameraAvailability.unavailable(
+          'الكاميرا غير متاحة على المحاكي. الرجاء التجربة على جهاز حقيقي أو استخدام جهاز يدعم الكاميرا.',
+        );
+      }
+    } catch (_) {
+      // If simulator detection fails, fall back to trying the real scanner.
+    }
+
+    return const _QrCameraAvailability.available();
+  }
+
+  Future<void> _handleQrDetect(Barcode scanData) async {
+    if (_isProcessingQrScan || _isNfc) return;
+
+    final rawValue = scanData.code?.trim() ?? '';
+    if (rawValue.isEmpty) {
+      await _stopQrScanner();
+      if (!mounted) return;
+      setState(() {
+        _isQrScanPaused = true;
+        _qrStatusError = true;
+        _qrStatusMessage =
+            'رمز QR غير صالح. الرجاء مسح رمز التحضير من شاشة المحاضر.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isProcessingQrScan = true;
+      _isQrScanPaused = true;
+    });
+
+    await _stopQrScanner();
+
+    final payload = _tryParseQrPayload(rawValue);
+    if (!mounted) return;
+
+    if (payload == null) {
+      setState(() {
+        _isProcessingQrScan = false;
+        _qrStatusError = true;
+        _qrStatusMessage =
+            'رمز QR غير صالح. الرجاء مسح رمز التحضير من شاشة المحاضر.';
+      });
+      return;
+    }
+
+    if (kDebugMode) {
+      debugPrint(
+        'QR scan read successfully for session ${payload['sessionId']} / section ${payload['sectionId']}',
+      );
+    }
+
+    try {
+      final result = await _qrAttendance.submitAttendanceFromQrPayload(
+        payload,
+        currentTime: DateTime.now(),
+      );
+      if (!mounted) return;
+      setState(() {
+        _isProcessingQrScan = false;
+        _qrStatusError = false;
+        _qrStatusMessage = result.message;
+      });
+    } on QrAttendanceException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isProcessingQrScan = false;
+        _qrStatusError = true;
+        _qrStatusMessage = e.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isProcessingQrScan = false;
+        _qrStatusError = true;
+        _qrStatusMessage = 'تعذر تسجيل الحضور حالياً. حاولي مرة أخرى.';
+      });
+    }
+  }
+
+  void _onQrViewCreated(QRViewController controller) {
+    _qrScannerController = controller;
+
+    controller.scannedDataStream.listen(
+      (scanData) {
+        _handleQrDetect(scanData);
+      },
+      onError: (_) {
+        if (!mounted || _isNfc) return;
+        setState(() {
+          _isProcessingQrScan = false;
+          _isQrScanPaused = true;
+          _qrCameraUnavailable = true;
+          _qrStatusError = true;
+          _qrStatusMessage = 'الكاميرا غير متاحة حالياً على هذا الجهاز.';
+        });
+      },
+    );
+
+    if (!_isNfc && !_qrCameraUnavailable) {
+      _startQrScanner();
+    }
+  }
+
+  void _onQrPermissionSet(QRViewController controller, bool hasPermission) {
+    if (!mounted || _isNfc) return;
+
+    if (hasPermission) {
+      setState(() {
+        _qrPermissionDenied = false;
+        _qrCameraUnavailable = false;
+        _qrStatusError = false;
+        if (!_isProcessingQrScan) {
+          _qrStatusMessage =
+              'وجهي الكاميرا نحو رمز التحضير المعروض لدى المحاضر.';
+        }
+      });
+      return;
+    }
+
+    setState(() {
+      _qrPermissionDenied = true;
+      _qrStatusError = true;
+      _isQrScanPaused = true;
+      _qrStatusMessage =
+          'لم يتم السماح باستخدام الكاميرا. الرجاء تفعيل صلاحية الكاميرا لمسح رمز QR.';
+    });
+  }
+
+  Map<String, dynamic>? _tryParseQrPayload(String rawValue) {
+    try {
+      final decoded = jsonDecode(rawValue);
+      if (decoded is! Map) return null;
+      final payload = Map<String, dynamic>.from(decoded);
+
+      final sessionId = (payload['sessionId'] ?? '').toString().trim();
+      final sectionId = (payload['sectionId'] ?? '').toString().trim();
+      final tokenId = (payload['tokenId'] ?? '').toString().trim();
+      final tokenVersion = payload['tokenVersion'];
+      final expiresAt = (payload['expiresAt'] ?? '').toString().trim();
+
+      final hasRequiredValues = sessionId.isNotEmpty &&
+          sectionId.isNotEmpty &&
+          tokenId.isNotEmpty &&
+          expiresAt.isNotEmpty &&
+          (tokenVersion is int || tokenVersion is num);
+
+      if (!hasRequiredValues) return null;
+      return payload;
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   void dispose() {
     _pulseController?.dispose();
@@ -292,6 +575,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     } catch (_) {
       // no-op
     }
+    _qrScannerController = null;
     super.dispose();
   }
 
@@ -532,20 +816,125 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                         Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            SizedBox(
-                              width: 280,
-                              height: 280,
-                              child: Image.asset(
-                                'assets/images/QR.png',
-                                fit: BoxFit.contain,
+                            Container(
+                              width: 290,
+                              height: 290,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(28),
+                                border: Border.all(
+                                  color: const Color(0xFF006571),
+                                  width: 2,
+                                ),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  if (_qrScannerInitialized)
+                                    QRView(
+                                      key: _qrViewKey,
+                                      onQRViewCreated: _onQrViewCreated,
+                                      onPermissionSet: _onQrPermissionSet,
+                                      overlay: QrScannerOverlayShape(
+                                        borderColor: Colors.transparent,
+                                        overlayColor: Colors.transparent,
+                                        borderWidth: 0,
+                                        cutOutSize: 190,
+                                      ),
+                                    ),
+                                  if (!_qrScannerInitialized ||
+                                      _qrPermissionDenied ||
+                                      _qrCameraUnavailable)
+                                    _QrScannerFallback(
+                                      message: _checkingQrAvailability
+                                          ? 'جاري تجهيز الكاميرا...'
+                                          : _qrPermissionDenied
+                                          ? 'لم يتم السماح باستخدام الكاميرا. الرجاء تفعيل صلاحية الكاميرا لمسح رمز QR.'
+                                          : _qrStatusMessage,
+                                      showRetry:
+                                          !_checkingQrAvailability &&
+                                          !_qrPermissionDenied,
+                                      onRetry: _retryQrScan,
+                                    ),
+                                  IgnorePointer(
+                                    child: Container(
+                                      width: 190,
+                                      height: 190,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(22),
+                                        border: Border.all(
+                                          color: Colors.white,
+                                          width: 3,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  if (_isStartingQrScanner)
+                                    Container(
+                                      color: Colors.black.withValues(alpha: 0.22),
+                                      alignment: Alignment.center,
+                                      child: const CircularProgressIndicator(
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
                             const SizedBox(height: 16),
-                            const TText(
-                              'ميزة QR ستتوفر قريباً',
-                              style: TextStyle(
-                                color: Color(0xFF35565E),
-                                fontWeight: FontWeight.w700,
+                            Container(
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _qrStatusError
+                                    ? const Color(0xFFFFEBEE)
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _qrStatusError
+                                      ? const Color(0xFFE57373)
+                                      : const Color(0xFFCCE8EA),
+                                ),
+                              ),
+                              child: Text(
+                                _qrStatusMessage,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: _qrStatusError
+                                      ? const Color(0xFFB71C1C)
+                                      : const Color(0xFF35565E),
+                                  fontSize: 13,
+                                  fontFamily: 'Cairo',
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            SizedBox(
+                              width: 210,
+                              height: 44,
+                              child: FilledButton(
+                                onPressed: (_isStartingQrScanner || _isProcessingQrScan)
+                                    ? null
+                                    : _retryQrScan,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFF006571),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
+                                ),
+                                child: Text(
+                                  _isQrScanPaused ? 'إعادة المسح' : 'بدء المسح',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontFamily: 'Cairo',
+                                  ),
+                                ),
                               ),
                             ),
                           ],
@@ -561,6 +950,82 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       ),
     );
   }
+}
+
+class _QrScannerFallback extends StatelessWidget {
+  const _QrScannerFallback({
+    required this.message,
+    required this.showRetry,
+    required this.onRetry,
+  });
+
+  final String message;
+  final bool showRetry;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: const Color(0xFFDBF2F2),
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.qr_code_scanner_rounded,
+              size: 48,
+              color: Color(0xFF006571),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFF35565E),
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+            if (showRetry) ...[
+              const SizedBox(height: 14),
+              OutlinedButton(
+                onPressed: onRetry,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF006571),
+                  side: const BorderSide(color: Color(0xFF006571)),
+                ),
+                child: const Text(
+                  'إعادة المحاولة',
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QrCameraAvailability {
+  const _QrCameraAvailability._({
+    required this.available,
+    this.message,
+  });
+
+  const _QrCameraAvailability.available()
+    : this._(available: true);
+
+  const _QrCameraAvailability.unavailable(String message)
+    : this._(available: false, message: message);
+
+  final bool available;
+  final String? message;
 }
 
 class _ModeChip extends StatelessWidget {
