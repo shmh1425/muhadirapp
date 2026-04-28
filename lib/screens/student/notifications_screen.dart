@@ -1,11 +1,18 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../models/notifications/student_notification.dart';
 import '../../services/student_auth_service.dart';
 import '../../services/student_notifications_service.dart';
 import '../../shared/widgets/chat_fab.dart';
 import '../../features/translation/translation_controller.dart';
 import '../../features/translation/widgets/t_text.dart';
+import '../../services/excuse/excuse_attendance_merge.dart';
+import 'excuse_screen.dart';
+import 'pending_detail_screen.dart';
+import 'rejection_detail_screen.dart';
+import 'schedule_screen.dart';
+import 'submit_excuse_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -17,10 +24,57 @@ class NotificationsScreen extends StatefulWidget {
 class _NotificationsScreenState extends State<NotificationsScreen> {
   final StudentNotificationsService _notificationsService =
       StudentNotificationsService.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   int get _studentId =>
       StudentAuthService.instance.currentStudent?.studentId ?? 0;
+
+  String _selectedCategory = 'الكل';
+  final ValueNotifier<Set<String>> _optimisticHiddenIds =
+      ValueNotifier<Set<String>>(<String>{});
+
+  String _tr(TranslationController t, String ar, String en) =>
+      t.translateToEnglish ? en : ar;
+
+  @override
+  void dispose() {
+    _optimisticHiddenIds.dispose();
+    super.dispose();
+  }
+
+  String _deleteFailureMessage(TranslationController t, Object error) {
+    final en = t.translateToEnglish;
+    if (error is FirebaseException) {
+      final code = error.code.trim().toLowerCase();
+      switch (code) {
+        case 'permission-denied':
+          return en
+              ? 'Delete failed (permission denied). Possible causes: you are not signed in as the correct student, Firestore rules block this action, or the record belongs to another student.'
+              : 'فشل الحذف (ليس لديك صلاحية). أسباب محتملة: لم تسجّل دخولك كطالب صحيح، أو قواعد Firestore تمنع العملية، أو أن السجل لا يخص هذا الطالب.';
+        case 'not-found':
+          return en
+              ? 'Delete failed (not found). The notification may have already been deleted or the data is out of sync.'
+              : 'فشل الحذف (غير موجود). ربما تم حذف الإشعار مسبقًا أو البيانات غير متزامنة.';
+        case 'unavailable':
+        case 'deadline-exceeded':
+          return en
+              ? 'Delete failed (network/service unavailable). Check your internet connection and try again.'
+              : 'فشل الحذف (مشكلة شبكة/الخدمة غير متاحة). تأكد من الاتصال بالإنترنت ثم حاول مرة أخرى.';
+        case 'failed-precondition':
+        case 'aborted':
+          return en
+              ? 'Delete failed due to a temporary conflict. Try again in a moment.'
+              : 'فشل الحذف بسبب تعارض مؤقت. حاول مرة أخرى بعد قليل.';
+        default:
+          final msg = (error.message ?? '').trim();
+          return en
+              ? 'Delete failed ($code). ${msg.isEmpty ? 'Please try again.' : msg}'
+              : 'فشل الحذف ($code). ${msg.isEmpty ? 'حاول مرة أخرى.' : msg}';
+      }
+    }
+    return en
+        ? 'Delete failed. Please try again.'
+        : 'تعذر حذف الإشعار. حاول مرة أخرى.';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,37 +96,36 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       IconButton(
                         onPressed: () => Navigator.of(context).maybePop(),
                         icon: Icon(
-                          translation.translateToEnglish
+                          translation.textDirection == TextDirection.ltr
                               ? Icons.arrow_back_ios_new
                               : Icons.arrow_forward_ios,
                           color: const Color(0xFF006571),
                         ),
                       ),
                       const SizedBox(width: 6),
-                      const Expanded(
-                        child: TText(
-                          'التنبيهات',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF006571),
-                          ),
+                      const TText(
+                        'التنبيهات',
+                        textAlign: TextAlign.start,
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF006571),
                         ),
                       ),
-                      const SizedBox(width: 40),
+                      const Spacer(),
                     ],
                   ),
                   const SizedBox(height: 8),
+                  if (_studentId > 0) _buildCategoryChips(translation),
                   Align(
                     alignment: translation.textDirection == TextDirection.ltr
                         ? Alignment.centerRight
                         : Alignment.centerLeft,
                     child: TextButton(
-                      onPressed: _studentId <= 0 ? null : _hideAllNotifications,
-                      child: const TText(
-                        'حذف الكل',
-                        style: TextStyle(color: Color(0xFFE53935)),
+                      onPressed: _studentId <= 0 ? null : _confirmDeleteAll,
+                      child: TText(
+                        _tr(translation, 'حذف الكل', 'Delete all'),
+                        style: const TextStyle(color: Color(0xFFE53935)),
                       ),
                     ),
                   ),
@@ -95,107 +148,51 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
 
     return <Widget>[
-      StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _firestore
-            .collection('manual_attendance_records')
-            .where('studentId', isEqualTo: _studentId)
-            .where('status', whereIn: const <String>['absent', 'excused'])
-            .snapshots(),
-        builder: (context, attendanceSnapshot) {
-          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: _firestore
-                .collection('student_notifications')
-                .where('studentId', isEqualTo: _studentId)
-                .snapshots(),
-            builder: (context, lectureActionSnapshot) {
-              if (attendanceSnapshot.connectionState ==
-                      ConnectionState.waiting ||
-                  lectureActionSnapshot.connectionState ==
-                      ConnectionState.waiting) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              if (attendanceSnapshot.hasError ||
-                  lectureActionSnapshot.hasError) {
-                return const _EmptyNotificationsMessage(
-                  message: 'تعذر تحميل التنبيهات حالياً.',
-                );
+      StreamBuilder<List<StudentNotification>>(
+        stream: _notificationsService.watchCurrentStudentNotifications(_studentId),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          if (snapshot.hasError) {
+            return const _EmptyNotificationsMessage(
+              message: 'تعذر تحميل التنبيهات حالياً.',
+            );
+          }
+
+          final all = snapshot.data ?? const <StudentNotification>[];
+          return ValueListenableBuilder<Set<String>>(
+            valueListenable: _optimisticHiddenIds,
+            builder: (context, optimisticHidden, _) {
+              final filtered = _filteredNotifications(all)
+                  .where(
+                    (n) =>
+                        !optimisticHidden.contains(n.id) &&
+                        !optimisticHidden.contains(n.rawId),
+                  )
+                  .toList();
+
+              if (filtered.isEmpty) {
+                return const _EmptyNotificationsMessage(message: 'لا يوجد تنبيهات');
               }
 
-              return FutureBuilder<Set<String>>(
-                future: _notificationsService.getHiddenNotificationIds(
-                  _studentId,
+              return AnimatedSwitcher(
+                duration: const Duration(milliseconds: 150),
+                switchInCurve: Curves.easeOut,
+                switchOutCurve: Curves.easeIn,
+                child: Column(
+                  key: ValueKey<int>(filtered.length),
+                  children: filtered
+                      .map((n) => _NotificationRow(
+                            notification: n,
+                            onOpen: () => _openDetails(n),
+                            onDelete: () => _confirmDelete(n),
+                          ))
+                      .toList(),
                 ),
-                builder: (context, hiddenSnapshot) {
-                  if (hiddenSnapshot.connectionState ==
-                      ConnectionState.waiting) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                  final hiddenIds = hiddenSnapshot.data ?? <String>{};
-                  final attendanceDocs =
-                      attendanceSnapshot.data?.docs ??
-                      <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-                  final lectureActionDocs =
-                      lectureActionSnapshot.data?.docs ??
-                      <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-                  final items =
-                      <_NotificationItem>[
-                            ...attendanceDocs.map(
-                              (doc) => _NotificationItem.fromAttendanceDoc(doc),
-                            ),
-                            ...lectureActionDocs.map(
-                              (doc) =>
-                                  _NotificationItem.fromLectureActionDoc(doc),
-                            ),
-                          ]
-                          .where(
-                            (item) =>
-                                !hiddenIds.contains(item.id) &&
-                                !hiddenIds.contains(item.rawId),
-                          )
-                          .toList()
-                        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
-                  if (items.isEmpty) {
-                    return const _EmptyNotificationsMessage(
-                      message: 'لا يوجد إشعارات',
-                    );
-                  }
-
-                  return Column(
-                    children: items
-                        .map(
-                          (item) => Dismissible(
-                            key: ValueKey(item.id),
-                            direction: DismissDirection.endToStart,
-                            background: Container(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                              ),
-                              alignment: Alignment.centerLeft,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFE53935),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Icon(
-                                Icons.delete,
-                                color: Colors.white,
-                              ),
-                            ),
-                            onDismissed: (_) =>
-                                _hideSingleNotification(item.id),
-                            child: _NotificationCard(item: item),
-                          ),
-                        )
-                        .toList(),
-                  );
-                },
               );
             },
           );
@@ -204,289 +201,440 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     ];
   }
 
-  Future<void> _hideSingleNotification(String id) async {
-    await _notificationsService.hideNotification(_studentId, id);
+  Widget _buildCategoryChips(TranslationController t) {
+    // Match "إدارة الأعذار" tabs style (same background + gradient active chip).
+    const tabBackground = Color(0xFFF5F5F5);
+
+    Widget tab(String value, String ar, String en) {
+      final isActive = _selectedCategory == value;
+      return Expanded(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: _GradientTabChip(
+            label: _tr(t, ar, en),
+            isActive: isActive,
+            onTap: () => setState(() => _selectedCategory = value),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Align(
+        alignment: Alignment.center,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Container(
+            height: 38,
+            decoration: BoxDecoration(
+              color: tabBackground,
+              borderRadius: BorderRadius.circular(22),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+            child: Row(
+              children: [
+                tab('الكل', 'الكل', 'All'),
+                tab('الحضور', 'الحضور', 'Attendance'),
+                tab('المحاضرات', 'المحاضرات', 'Classes'),
+                tab('الأعذار', 'الأعذار', 'Excuses'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
-  Future<void> _hideAllNotifications() async {
-    if (_studentId <= 0) return;
-    final attendanceQuery = await _firestore
-        .collection('manual_attendance_records')
-        .where('studentId', isEqualTo: _studentId)
-        .where('status', whereIn: const <String>['absent', 'excused'])
-        .get();
-    final lectureActionQuery = await _firestore
-        .collection('student_notifications')
-        .where('studentId', isEqualTo: _studentId)
-        .get();
-    final ids = <String>[
-      ...attendanceQuery.docs.map(
-        (doc) => _NotificationItem.attendanceNotificationId(doc.id),
+  List<StudentNotification> _filteredNotifications(List<StudentNotification> all) {
+    if (_selectedCategory == 'الكل') return all;
+    return all.where((n) {
+      switch (_selectedCategory) {
+        case 'الحضور':
+          return n.category == StudentNotificationCategory.attendance;
+        case 'المحاضرات':
+          return n.category == StudentNotificationCategory.lectures;
+        case 'الأعذار':
+          return n.category == StudentNotificationCategory.excuses;
+        default:
+          return true;
+      }
+    }).toList();
+  }
+
+  Future<void> _openDetails(StudentNotification notification) async {
+    try {
+      await _notificationsService.markAsRead(
+        studentId: _studentId,
+        notification: notification,
+      );
+    } on FirebaseException catch (_) {
+      // keep silent like lecturer flow; UI remains responsive
+    } catch (_) {}
+
+    if (!mounted) return;
+    await _navigateForNotification(notification);
+  }
+
+  String _timeRangeFor(StudentNotification n) {
+    final start = n.lectureStartTime.trim();
+    final end = n.lectureEndTime.trim();
+    if (start.isNotEmpty && end.isNotEmpty) return '$start-$end';
+    return '—';
+  }
+
+  String _dateTextFor(StudentNotification n) {
+    final t = TranslationController.instance;
+    final d = n.lectureDate ?? n.createdAt;
+    return t.translateToEnglish
+        ? ExcuseAttendanceMerge.formatEnglishLectureDate(d)
+        : ExcuseAttendanceMerge.formatArabicLectureDate(d);
+  }
+
+  Future<void> _navigateForNotification(StudentNotification n) async {
+    if (!mounted) return;
+    final t = TranslationController.instance;
+
+    if (n.category == StudentNotificationCategory.attendance) {
+      final sectionId = n.sectionId.trim();
+      final sessionId = n.sessionId.trim();
+      final lectureDate = n.lectureDate;
+      if (sectionId.isNotEmpty && sessionId.isNotEmpty && lectureDate != null) {
+        Navigator.push<void>(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => SubmitExcuseScreen(
+              course: n.courseName.isEmpty ? null : n.courseName,
+              dateText: _dateTextFor(n),
+              timeRange: _timeRangeFor(n),
+              sectionId: sectionId,
+              lectureDate: lectureDate,
+              sessionId: sessionId,
+              attendanceRecordId: n.attendanceRecordId.isNotEmpty
+                  ? n.attendanceRecordId
+                  : n.rawId,
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    if (n.category == StudentNotificationCategory.lectures) {
+      Navigator.push<void>(
+        context,
+        MaterialPageRoute<void>(builder: (_) => const ScheduleScreen()),
+      );
+      return;
+    }
+
+    // Excuse notifications.
+    final status = n.excuseStatus.trim().toLowerCase();
+    if (status == 'pending') {
+      Navigator.push<void>(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => PendingDetailScreen(
+            studentId: _studentId,
+            attendanceRecordId: n.attendanceRecordId,
+            course: n.courseName.isEmpty ? (t.translateToEnglish ? 'Course' : 'المقرر') : n.courseName,
+            dateText: _dateTextFor(n),
+            timeRange: _timeRangeFor(n),
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (status == 'rejected') {
+      final sectionId = n.sectionId.trim();
+      final sessionId = n.sessionId.trim();
+      final lectureDate = n.lectureDate;
+      if (sectionId.isNotEmpty && sessionId.isNotEmpty && lectureDate != null) {
+        Navigator.push<void>(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => RejectionDetailScreen(
+              course: n.courseName.isEmpty ? (t.translateToEnglish ? 'Course' : 'المادة') : n.courseName,
+              dateText: _dateTextFor(n),
+              timeRange: _timeRangeFor(n),
+              reason: n.rejectionReason.isNotEmpty
+                  ? n.rejectionReason
+                  : (t.translateToEnglish ? 'Your excuse was not accepted.' : 'تم رفض العذر.'),
+              sectionId: sectionId,
+              lectureDate: lectureDate,
+              sessionId: sessionId,
+              attendanceRecordId: n.attendanceRecordId,
+              attachmentUrl: n.attachmentUrl,
+              attachmentName: n.attachmentName,
+            ),
+          ),
+        );
+      } else {
+        Navigator.push<void>(
+          context,
+          MaterialPageRoute<void>(builder: (_) => const ExcuseScreen()),
+        );
+      }
+      return;
+    }
+
+    // accepted or unknown -> open excuse list.
+    Navigator.push<void>(
+      context,
+      MaterialPageRoute<void>(builder: (_) => const ExcuseScreen()),
+    );
+  }
+
+  Future<void> _deleteNotification(StudentNotification notification) async {
+    final t = TranslationController.instance;
+    try {
+      await _notificationsService.deleteNotification(
+        studentId: _studentId,
+        notification: notification,
+      );
+      if (!mounted) return;
+      // Optimistic hide: attendance rows are UI-derived, so we hide immediately
+      // while prefs stream catches up.
+      final next = Set<String>.of(_optimisticHiddenIds.value)
+        ..add(notification.id)
+        ..add(notification.rawId);
+      _optimisticHiddenIds.value = next;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_tr(t, 'تم حذف الإشعار.', 'Notification deleted.')),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_deleteFailureMessage(t, e)),
+        ),
+      );
+    }
+  }
+
+  void _confirmDelete(StudentNotification notification) {
+    final t = TranslationController.instance;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: t.textDirection,
+        child: AlertDialog(
+          title: Text(_tr(t, 'حذف الإشعار', 'Delete Notification')),
+          content: Text(_tr(t, 'هل أنت متأكد من حذف هذا الإشعار؟', 'Are you sure you want to delete this notification?')),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(_tr(t, 'إلغاء', 'Cancel')),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFE53935)),
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                _deleteNotification(notification);
+              },
+              child: Text(_tr(t, 'حذف', 'Delete')),
+            ),
+          ],
+        ),
       ),
-      ...lectureActionQuery.docs.map(
-        (doc) => _NotificationItem.lectureActionNotificationId(doc.id),
+    );
+  }
+
+  void _confirmDeleteAll() {
+    final t = TranslationController.instance;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: t.textDirection,
+        child: AlertDialog(
+          title: Text(_tr(t, 'حذف كل الإشعارات', 'Delete all notifications')),
+          content: Text(_tr(t, 'سيتم حذف جميع الإشعارات من القائمة. هل تريد المتابعة؟', 'This will remove all notifications from the list. Continue?')),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(_tr(t, 'إلغاء', 'Cancel')),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFE53935)),
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                _deleteAll();
+              },
+              child: Text(_tr(t, 'حذف الكل', 'Delete all')),
+            ),
+          ],
+        ),
       ),
-    ];
-    await _notificationsService.hideNotifications(_studentId, ids);
+    );
+  }
+
+  Future<void> _deleteAll() async {
+    final t = TranslationController.instance;
+    try {
+      final all = await _notificationsService
+          .watchCurrentStudentNotifications(_studentId)
+          .first;
+      final filtered = _filteredNotifications(all);
+      await _notificationsService.deleteAllForStudent(
+        studentId: _studentId,
+        visibleNotifications: filtered,
+      );
+      if (!mounted) return;
+      final next = Set<String>.of(_optimisticHiddenIds.value);
+      for (final n in filtered) {
+        next.add(n.id);
+        next.add(n.rawId);
+      }
+      _optimisticHiddenIds.value = next;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_tr(t, 'تم حذف جميع الإشعارات.', 'All notifications have been deleted.')),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_deleteFailureMessage(t, e)),
+        ),
+      );
+    }
   }
 }
 
-class _NotificationCard extends StatelessWidget {
-  const _NotificationCard({required this.item});
+class _NotificationRow extends StatelessWidget {
+  const _NotificationRow({
+    required this.notification,
+    required this.onOpen,
+    required this.onDelete,
+  });
 
-  final _NotificationItem item;
+  final StudentNotification notification;
+  final VoidCallback onOpen;
+  final VoidCallback onDelete;
+
+  static const Color _appGreen = Color(0xFF006571);
+
+  String _excuseStatusTag(TranslationController t) {
+    if (notification.category != StudentNotificationCategory.excuses) return '';
+    final s = notification.excuseStatus.toLowerCase().trim();
+    if (s.isEmpty) return '';
+    if (t.translateToEnglish) {
+      switch (s) {
+        case 'pending':
+          return ' (Pending)';
+        case 'accepted':
+          return ' (Accepted)';
+        case 'rejected':
+          return ' (Rejected)';
+        default:
+          return '';
+      }
+    }
+    switch (s) {
+      case 'pending':
+        return ' (معلق)';
+      case 'accepted':
+        return ' (مقبول)';
+      case 'rejected':
+        return ' (مرفوض)';
+      default:
+        return '';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final style = _styles[item.type]!;
-    return Container(
+    final t = TranslationController.instance;
+    final title = (t.translateToEnglish ? notification.titleEn : notification.titleAr) +
+        _excuseStatusTag(t);
+    final message =
+        t.translateToEnglish ? notification.messageEn : notification.messageAr;
+
+    final unread = !notification.isRead;
+    final bg = unread ? Colors.white : Colors.white;
+    final border = unread ? const Color(0xFF006571) : Colors.grey.shade200;
+    const iconColor = _appGreen;
+
+    final card = Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: style.background,
+        color: bg,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: style.border, width: 1.4),
+        border: Border.all(color: border, width: unread ? 2 : 1),
       ),
       child: Row(
         children: [
-          Icon(style.icon, color: style.iconColor, size: 24),
+          Icon(
+            notification.category == StudentNotificationCategory.attendance
+                ? Icons.warning_amber_rounded
+                : (notification.category == StudentNotificationCategory.excuses
+                    ? Icons.info_outline
+                    : Icons.notifications),
+            color: iconColor,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TText(
-                  item.title,
+                  title,
                   style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: style.text,
+                    fontWeight: unread ? FontWeight.w800 : FontWeight.w600,
+                    color: const Color(0xFF006571),
                   ),
                 ),
                 const SizedBox(height: 4),
                 TText(
-                  item.message,
+                  message,
                   style: const TextStyle(fontSize: 12, color: Colors.black87),
-                ),
-                const SizedBox(height: 4),
-                TText(
-                  item.date,
-                  style: const TextStyle(fontSize: 11, color: Colors.black45),
                 ),
               ],
             ),
           ),
+          IconButton(
+            onPressed: onDelete,
+            icon: const Icon(Icons.delete_outline),
+            color: _appGreen,
+            tooltip: t.translateToEnglish ? 'Delete' : 'حذف',
+          ),
         ],
       ),
     );
-  }
-}
 
-enum _NotificationType { success, error, warning, info }
-
-class _NotificationStyle {
-  const _NotificationStyle({
-    required this.border,
-    required this.background,
-    required this.icon,
-    required this.iconColor,
-    required this.text,
-  });
-
-  final Color border;
-  final Color background;
-  final IconData icon;
-  final Color iconColor;
-  final Color text;
-}
-
-const Map<_NotificationType, _NotificationStyle> _styles = {
-  _NotificationType.success: _NotificationStyle(
-    border: Color(0xFF00B894),
-    background: Color(0xFFE8F8F2),
-    icon: Icons.check,
-    iconColor: Color(0xFF00B894),
-    text: Color(0xFF006571),
-  ),
-  _NotificationType.error: _NotificationStyle(
-    border: Color(0xFFE53935),
-    background: Color(0xFFFDECEC),
-    icon: Icons.close,
-    iconColor: Color(0xFFE53935),
-    text: Color(0xFF006571),
-  ),
-  _NotificationType.warning: _NotificationStyle(
-    border: Color(0xFFF9A825),
-    background: Color(0xFFFFF8E1),
-    icon: Icons.warning_amber_rounded,
-    iconColor: Color(0xFFF9A825),
-    text: Color(0xFF006571),
-  ),
-  _NotificationType.info: _NotificationStyle(
-    border: Color(0xFF5C6BC0),
-    background: Color(0xFFE8EAF6),
-    icon: Icons.info_outline,
-    iconColor: Color(0xFF5C6BC0),
-    text: Color(0xFF006571),
-  ),
-};
-
-class _NotificationItem {
-  const _NotificationItem({
-    required this.id,
-    required this.rawId,
-    required this.title,
-    required this.message,
-    required this.date,
-    required this.type,
-    required this.timestamp,
-  });
-
-  final String id;
-  final String rawId;
-  final String title;
-  final String message;
-  final String date;
-  final _NotificationType type;
-  final DateTime timestamp;
-
-  static const String _attendancePrefix = 'attendance::';
-  static const String _lectureActionPrefix = 'lecture_action::';
-
-  static String attendanceNotificationId(String rawId) =>
-      '$_attendancePrefix$rawId';
-
-  static String lectureActionNotificationId(String rawId) =>
-      '$_lectureActionPrefix$rawId';
-
-  factory _NotificationItem.fromAttendanceDoc(
-    QueryDocumentSnapshot<Map<String, dynamic>> doc,
-  ) {
-    final data = doc.data();
-    final rawStatus = (data['status'] ?? '').toString().trim().toLowerCase();
-    final courseName = (data['courseName'] ?? data['courseTitle'] ?? 'المقرر')
-        .toString()
-        .trim();
-    final section = (data['section'] ?? '').toString().trim();
-    final date = _extractDate(data);
-    final statusLabel = rawStatus == 'excused' ? 'بعذر' : 'بدون عذر';
-    final title = rawStatus == 'excused' ? 'إشعار غياب بعذر' : 'إشعار غياب';
-    final sectionLabel = section.isEmpty ? '' : ' - الشعبة $section';
-
-    return _NotificationItem(
-      id: attendanceNotificationId(doc.id),
-      rawId: doc.id,
-      title: title,
-      message: 'تم تسجيل غيابك ($statusLabel) في "$courseName"$sectionLabel.',
-      date: _formatArabicDate(date),
-      type: rawStatus == 'excused'
-          ? _NotificationType.info
-          : _NotificationType.warning,
-      timestamp: date,
+    return Dismissible(
+      key: ValueKey(notification.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        alignment: Alignment.centerLeft,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE53935),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      confirmDismiss: (_) async {
+        onDelete();
+        return false;
+      },
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: onOpen,
+          child: card,
+        ),
+      ),
     );
-  }
-
-  factory _NotificationItem.fromLectureActionDoc(
-    QueryDocumentSnapshot<Map<String, dynamic>> doc,
-  ) {
-    final data = doc.data();
-    final actionType = (data['actionType'] ?? '').toString().trim();
-    final courseName = (data['courseName'] ?? 'المقرر').toString().trim();
-    final section = (data['section'] ?? '').toString().trim();
-    final lectureDate = _extractDate(data);
-    final title = (data['titleAr'] ?? '').toString().trim().isNotEmpty
-        ? (data['titleAr'] ?? '').toString().trim()
-        : actionType == 'delay'
-        ? 'تنبيه تأخير محاضرة'
-        : 'تنبيه إلغاء محاضرة';
-    final message = (data['messageAr'] ?? '').toString().trim().isNotEmpty
-        ? (data['messageAr'] ?? '').toString().trim()
-        : actionType == 'delay'
-        ? 'تم تأخير محاضرة "$courseName"${section.isEmpty ? '' : ' - الشعبة $section'}.'
-        : 'تم إلغاء محاضرة "$courseName"${section.isEmpty ? '' : ' - الشعبة $section'}.';
-
-    return _NotificationItem(
-      id: lectureActionNotificationId(doc.id),
-      rawId: doc.id,
-      title: title,
-      message: message,
-      date: _formatArabicDate(lectureDate),
-      type: actionType == 'delay'
-          ? _NotificationType.info
-          : _NotificationType.error,
-      timestamp: _extractCreatedAt(data, fallback: lectureDate),
-    );
-  }
-
-  static DateTime _extractDate(Map<String, dynamic> data) {
-    final lectureDate = data['lectureDate'];
-    if (lectureDate is Timestamp) {
-      return lectureDate.toDate();
-    }
-
-    final year = _safeInt(data['lectureYear']);
-    final month = _safeInt(data['lectureMonth']);
-    final day = _safeInt(data['lectureDay']);
-    if (year > 0 && month > 0 && day > 0) {
-      return DateTime(year, month, day);
-    }
-
-    final dateKey = (data['dateKey'] ?? '').toString().trim();
-    if (dateKey.length == 8) {
-      final y = int.tryParse(dateKey.substring(0, 4));
-      final m = int.tryParse(dateKey.substring(4, 6));
-      final d = int.tryParse(dateKey.substring(6, 8));
-      if (y != null && m != null && d != null) {
-        return DateTime(y, m, d);
-      }
-    }
-
-    return DateTime.now();
-  }
-
-  static DateTime _extractCreatedAt(
-    Map<String, dynamic> data, {
-    required DateTime fallback,
-  }) {
-    final createdAt = data['createdAt'];
-    if (createdAt is Timestamp) {
-      return createdAt.toDate();
-    }
-    return fallback;
-  }
-
-  static int _safeInt(dynamic value) {
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    return int.tryParse((value ?? '').toString()) ?? 0;
-  }
-
-  static String _formatArabicDate(DateTime date) {
-    const days = <String>[
-      'الاثنين',
-      'الثلاثاء',
-      'الأربعاء',
-      'الخميس',
-      'الجمعة',
-      'السبت',
-      'الأحد',
-    ];
-    const months = <String>[
-      'يناير',
-      'فبراير',
-      'مارس',
-      'أبريل',
-      'مايو',
-      'يونيو',
-      'يوليو',
-      'أغسطس',
-      'سبتمبر',
-      'أكتوبر',
-      'نوفمبر',
-      'ديسمبر',
-    ];
-    final dayName = days[(date.weekday - 1).clamp(0, 6)];
-    final monthName = months[(date.month - 1).clamp(0, 11)];
-    return '$dayName ${date.day} $monthName ${date.year}';
   }
 }
 
@@ -497,17 +645,69 @@ class _EmptyNotificationsMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 48),
+    final h = MediaQuery.of(context).size.height;
+    return SizedBox(
+      height: (h * 0.55).clamp(260.0, 520.0),
       child: Center(
         child: TText(
           message,
+          textAlign: TextAlign.center,
           style: const TextStyle(
             fontSize: 16,
             color: Colors.black54,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _GradientTabChip extends StatelessWidget {
+  const _GradientTabChip({
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        height: 30,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(22),
+          gradient: isActive
+              ? const LinearGradient(
+                  colors: <Color>[
+                    Color(0xFF27A2A9),
+                    Color(0xFF006571),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                )
+              : null,
+          color: isActive ? null : Colors.white,
+        ),
+        alignment: Alignment.center,
+        child: label.isEmpty
+            ? const SizedBox.shrink()
+            : TText(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isActive ? Colors.white : const Color(0xFF444444),
+                ),
+              ),
       ),
     );
   }

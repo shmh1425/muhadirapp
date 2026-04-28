@@ -269,6 +269,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Student notification UI state (read/hidden/lastSeen) stored per auth user.
+    // This avoids writing to external_students (admin-only).
+    match /student_notification_prefs/{uid} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+
     // Security gate metadata used to scope scans to assigned gates.
     match /campus_gates/{gateId} {
       allow read: if isActiveSecurityStaff();
