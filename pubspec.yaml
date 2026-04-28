@@ -50,6 +50,7 @@ dependencies:
   url_launcher: ^6.3.2
   file_picker: ^11.0.2
   image_picker: ^1.2.1
+  qr_code_scanner_plus: ^2.1.1
   nfc_manager: ^3.5.0
   syncfusion_flutter_pdfviewer: ^33.2.3
 
