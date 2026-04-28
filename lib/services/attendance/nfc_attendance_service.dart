@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../models/attendance/manual_attendance_record.dart';
 import '../../models/attendance/nfc_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../lecturer_auth_service.dart';
 import '../student_auth_service.dart';
+import 'attendance_status_policy.dart';
 import 'manual_attendance_service.dart';
 
 enum NfcAttendanceErrorCode {
@@ -207,6 +209,7 @@ class NfcAttendanceService {
       'closedAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+    await ManualAttendanceService.instance.finalizeSessionPendingAsAbsent(id);
   }
 
   Future<NfcAttendanceSubmissionResult> submitAttendanceFromCard({
@@ -311,6 +314,24 @@ class NfcAttendanceService {
     final studentEmail = studentProfile.email.isNotEmpty
         ? studentProfile.email
         : (enrollmentData['studentEmail'] ?? '').toString().trim();
+    final studentDocId = (enrollmentData['studentDocId'] ?? '')
+        .toString()
+        .trim();
+    final sessionOpenedAt =
+        activeSession.openedAt ??
+        AttendanceStatusPolicy.combineDateAndTime(
+          activeSession.lectureDate,
+          activeSession.lectureStartTime,
+        );
+    final status = ManualAttendanceRecord.statusToString(
+      AttendanceStatusPolicy.calculateCheckInStatus(
+        sessionOpenedAt: sessionOpenedAt,
+        lectureStartTime: activeSession.lectureStartTime,
+        lectureEndTime: activeSession.lectureEndTime,
+        lectureDate: activeSession.lectureDate,
+        checkInTime: now,
+      ),
+    );
 
     final nowTimeText = _hhmm(now);
     final nfcRecordPayload = <String, dynamic>{
@@ -318,6 +339,7 @@ class NfcAttendanceService {
       'sessionId': activeSession.sessionId,
       'sectionId': activeSession.sectionId,
       'studentId': studentId,
+      'studentDocId': studentDocId,
       'studentName': studentName,
       'studentEmail': studentEmail,
       'courseName': activeSession.courseName,
@@ -330,8 +352,9 @@ class NfcAttendanceService {
       'dateKey': _dateKey(activeSession.lectureDate),
       'lectureStartTime': activeSession.lectureStartTime,
       'lectureEndTime': activeSession.lectureEndTime,
+      'sessionOpenedAt': Timestamp.fromDate(sessionOpenedAt),
       'attendanceTime': nowTimeText,
-      'status': 'present',
+      'status': status,
       'attendanceMethod': 'nfc',
       'lecturerId': activeSession.lecturerId,
       'lecturerCardId': activeSession.lecturerCardId,
@@ -348,6 +371,7 @@ class NfcAttendanceService {
       'sessionId': activeSession.sessionId,
       'sectionId': activeSession.sectionId,
       'studentId': studentId,
+      'studentDocId': studentDocId,
       'studentName': studentName,
       'studentEmail': studentEmail,
       'courseName': activeSession.courseName,
@@ -360,8 +384,9 @@ class NfcAttendanceService {
       'dateKey': _dateKey(activeSession.lectureDate),
       'lectureStartTime': activeSession.lectureStartTime,
       'lectureEndTime': activeSession.lectureEndTime,
+      'sessionOpenedAt': Timestamp.fromDate(sessionOpenedAt),
       'attendanceTime': nowTimeText,
-      'status': 'present',
+      'status': status,
       'attendanceMethod': 'nfc',
       'updatedAt': FieldValue.serverTimestamp(),
     };
@@ -380,6 +405,7 @@ class NfcAttendanceService {
         .doc(activeSession.sessionId);
     final manualSessionPatch = <String, dynamic>{
       'attendanceMethod': 'nfc',
+      'sessionOpenedAt': Timestamp.fromDate(sessionOpenedAt),
       'updatedAt': FieldValue.serverTimestamp(),
     };
 
@@ -391,6 +417,20 @@ class NfcAttendanceService {
             code: NfcAttendanceErrorCode.alreadyMarked,
             message: 'تم تسجيل حضورك مسبقاً لهذه المحاضرة.',
           );
+        }
+        final existingManualRecord = await transaction.get(manualRecordRef);
+        if (existingManualRecord.exists) {
+          final existingData = existingManualRecord.data() ?? <String, dynamic>{};
+          final existingStatus = (existingData['status'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
+          if (existingStatus == 'present' || existingStatus == 'late') {
+            throw NfcAttendanceException(
+              code: NfcAttendanceErrorCode.alreadyMarked,
+              message: 'تم تسجيل حضورك مسبقاً لهذه المحاضرة.',
+            );
+          }
         }
 
         transaction.set(recordRef, nfcRecordPayload, SetOptions(merge: true));
@@ -439,28 +479,16 @@ class NfcAttendanceService {
   }
 
   bool _isSessionActive(NfcAttendanceSession session, DateTime now) {
-    final start = _combineDateAndTime(
-      session.lectureDate,
-      session.lectureStartTime,
+    return AttendanceStatusPolicy.isSessionWithinAttendanceWindow(
+      lectureDate: session.lectureDate,
+      lectureStartTime: session.lectureStartTime,
+      lectureEndTime: session.lectureEndTime,
+      currentTime: now,
     );
-    final end = _combineDateAndTime(
-      session.lectureDate,
-      session.lectureEndTime,
-    );
-
-    final openWindowStart = start.subtract(const Duration(minutes: 20));
-    final openWindowEnd = end.add(const Duration(minutes: 30));
-
-    return (now.isAfter(openWindowStart) ||
-            now.isAtSameMomentAs(openWindowStart)) &&
-        (now.isBefore(openWindowEnd) || now.isAtSameMomentAs(openWindowEnd));
   }
 
   DateTime _combineDateAndTime(DateTime date, String hhmm) {
-    final parts = hhmm.split(':');
-    final hour = parts.isNotEmpty ? int.tryParse(parts[0].trim()) ?? 0 : 0;
-    final minute = parts.length > 1 ? int.tryParse(parts[1].trim()) ?? 0 : 0;
-    return DateTime(date.year, date.month, date.day, hour, minute);
+    return AttendanceStatusPolicy.combineDateAndTime(date, hhmm);
   }
 
   DateTime _normalizedDate(DateTime value) =>

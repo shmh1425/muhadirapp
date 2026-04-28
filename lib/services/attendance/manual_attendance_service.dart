@@ -6,6 +6,7 @@ import '../../models/lecturer/lecture_item.dart';
 import '../../models/term_week.dart';
 import '../../repositories/academic_term_repository.dart';
 import '../lecturer_auth_service.dart';
+import 'attendance_status_policy.dart';
 
 class ManualAttendanceService {
   ManualAttendanceService._();
@@ -50,7 +51,7 @@ class ManualAttendanceService {
       lecture: lecture,
       date: date,
     );
-    await _ensureDefaultPresentRecords(
+    await _ensureDefaultPendingRecords(
       sessionId: sessionId,
       sectionId: sectionId,
       lecture: lecture,
@@ -132,6 +133,10 @@ class ManualAttendanceService {
     }
     final ids = sessionIds.where((s) => s.trim().isNotEmpty).toList();
     if (ids.isEmpty) return const <String, List<ManualAttendanceRecord>>{};
+
+    for (final id in ids) {
+      await finalizeSessionPendingAsAbsent(id);
+    }
 
     final records = <ManualAttendanceRecord>[];
     for (final chunk in _chunk(ids, 10)) {
@@ -220,15 +225,99 @@ class ManualAttendanceService {
     return true;
   }
 
+  Future<bool> finalizeSessionPendingAsAbsent(
+    String sessionId, {
+    DateTime? currentTime,
+  }) async {
+    final id = sessionId.trim();
+    if (id.isEmpty) return false;
+
+    final sessionRef = _firestore.collection(_sessionsCollection).doc(id);
+    final sessionSnap = await sessionRef.get();
+    if (!sessionSnap.exists || sessionSnap.data() == null) {
+      return false;
+    }
+
+    final session = ManualAttendanceSession.fromDocumentSnapshot(sessionSnap);
+    if (session.attendanceFinalized) {
+      return false;
+    }
+
+    final openedAt =
+        session.sessionOpenedAt ??
+        AttendanceStatusPolicy.combineDateAndTime(
+          session.lectureDate,
+          session.lectureStartTime,
+        );
+    final now = currentTime ?? DateTime.now();
+    final shouldFinalize = AttendanceStatusPolicy.shouldFinalizePendingToAbsent(
+      sessionOpenedAt: openedAt,
+      lectureStartTime: session.lectureStartTime,
+      lectureEndTime: session.lectureEndTime,
+      lectureDate: session.lectureDate,
+      currentTime: now,
+    );
+    if (!shouldFinalize) {
+      return false;
+    }
+
+    final pendingSnapshot = await _firestore
+        .collection(_recordsCollection)
+        .where('sessionId', isEqualTo: id)
+        .where(
+          'status',
+          isEqualTo: ManualAttendanceRecord.statusToString(
+            ManualAttendanceStatus.pending,
+          ),
+        )
+        .get();
+
+    final batch = _firestore.batch();
+    for (final doc in pendingSnapshot.docs) {
+      batch.set(
+        doc.reference,
+        {
+          'status': ManualAttendanceRecord.statusToString(
+            ManualAttendanceStatus.absent,
+          ),
+          'attendanceTime': _attendanceTimeForStatus(
+            ManualAttendanceStatus.absent,
+          ),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'updatedByRole': 'system',
+        },
+        SetOptions(merge: true),
+      );
+    }
+
+    batch.set(
+      sessionRef,
+      {
+        'attendanceFinalized': true,
+        'updatedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+    await batch.commit();
+    return true;
+  }
+
   Future<void> _upsertSessionDoc({
     required String sessionId,
     required String sectionId,
     required LectureItem lecture,
     required DateTime date,
   }) async {
+    final sessionRef = _firestore.collection(_sessionsCollection).doc(sessionId);
+    final existingSessionSnap = await sessionRef.get();
+    final existingSessionData = existingSessionSnap.data() ?? <String, dynamic>{};
     final sectionRef = _firestore.collection('sections').doc(sectionId);
     final sectionSnap = await sectionRef.get();
     final sectionData = sectionSnap.data() ?? <String, dynamic>{};
+    final now = DateTime.now();
+    final existingOpenedAt = existingSessionData['sessionOpenedAt'];
+    final sessionOpenedAt =
+        existingOpenedAt is Timestamp ? existingOpenedAt.toDate() : now;
 
     final termLabel = (sectionData['term'] ?? '').toString();
     final termId = (sectionData['termId'] ?? '').toString().trim();
@@ -248,10 +337,15 @@ class ManualAttendanceService {
       'dateKey': _dateKey(date),
       'attendanceMethod': 'manual',
       'lecturerId': LecturerAuthService.instance.currentLecturer?.lecturerId ?? '',
+      'sessionOpenedAt': Timestamp.fromDate(sessionOpenedAt),
       'term': termLabel,
-      'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
+      'attendanceFinalized': false,
     };
+
+    if (!existingSessionSnap.exists) {
+      payload['createdAt'] = FieldValue.serverTimestamp();
+    }
 
     if (termId.isNotEmpty) {
       final term = await AcademicTermRepository.instance.getTerm(termId);
@@ -277,11 +371,10 @@ class ManualAttendanceService {
           if (dateExcluded) countInAttendance = false;
         }
         payload['countInAttendance'] = countInAttendance;
-        payload['attendanceFinalized'] = true;
       }
     }
 
-    await _firestore.collection(_sessionsCollection).doc(sessionId).set(payload, SetOptions(merge: true));
+    await sessionRef.set(payload, SetOptions(merge: true));
   }
 
   /// Compute 1-based official week number from term start and session date.
@@ -295,12 +388,15 @@ class ManualAttendanceService {
     return week;
   }
 
-  Future<void> _ensureDefaultPresentRecords({
+  Future<void> _ensureDefaultPendingRecords({
     required String sessionId,
     required String sectionId,
     required LectureItem lecture,
     required DateTime date,
   }) async {
+    final session = await getSessionById(sessionId);
+    final sessionOpenedAt =
+        session?.sessionOpenedAt ?? DateTime.now();
     final existingSnapshot = await _firestore
         .collection(_recordsCollection)
         .where('sessionId', isEqualTo: sessionId)
@@ -363,11 +459,15 @@ class ManualAttendanceService {
           'dateKey': _dateKey(date),
           'lectureStartTime': lecture.startTime,
           'lectureEndTime': lecture.endTime,
-          'attendanceTime': lecture.startTime,
+          'sessionOpenedAt': Timestamp.fromDate(sessionOpenedAt),
+          'attendanceTime': _attendanceTimeForStatus(
+            ManualAttendanceStatus.pending,
+          ),
           'status': ManualAttendanceRecord.statusToString(
-            ManualAttendanceStatus.present,
+            ManualAttendanceStatus.pending,
           ),
           'attendanceMethod': 'manual',
+          'updatedByRole': 'lecturer',
           'createdBy': updater,
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
@@ -399,6 +499,8 @@ class ManualAttendanceService {
 
   String _attendanceTimeForStatus(ManualAttendanceStatus status) {
     switch (status) {
+      case ManualAttendanceStatus.pending:
+        return '--';
       case ManualAttendanceStatus.present:
       case ManualAttendanceStatus.late:
         return '';
@@ -434,6 +536,9 @@ class ManualAttendanceService {
       q = q.where('termId', isEqualTo: termId.trim());
     }
     final snapshot = await q.get();
+    for (final doc in snapshot.docs) {
+      await finalizeSessionPendingAsAbsent(doc.id);
+    }
     final sessions = snapshot.docs
         .map(ManualAttendanceSession.fromDoc)
         .where((s) => s.countInAttendance && s.attendanceFinalized)

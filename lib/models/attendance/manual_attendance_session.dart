@@ -17,6 +17,7 @@ class ManualAttendanceSession {
     this.attendanceFinalized = true,
     this.courseCode,
     this.lecturerId,
+    this.sessionOpenedAt,
   });
 
   final String sessionId;
@@ -27,6 +28,7 @@ class ManualAttendanceSession {
   final String? courseCode;
   /// From session doc when present.
   final String? lecturerId;
+  final DateTime? sessionOpenedAt;
   final String lectureStartTime;
   final String lectureEndTime;
   final DateTime lectureDate;
@@ -86,6 +88,7 @@ class ManualAttendanceSession {
     final effectiveWeek = _optionalInt(data['effectiveWeekNumber']);
     final cc = (data['courseCode'] ?? '').toString().trim();
     final lid = (data['lecturerId'] ?? '').toString().trim();
+    final sessionOpenedAt = _toDateTime(data['sessionOpenedAt'] ?? data['openedAt']);
     return ManualAttendanceSession(
       sessionId: (data['sessionId'] ?? docId).toString(),
       sectionId: (data['sectionId'] ?? '').toString(),
@@ -104,7 +107,14 @@ class ManualAttendanceSession {
       attendanceFinalized: data['attendanceFinalized'] != false,
       courseCode: cc.isEmpty ? null : cc,
       lecturerId: lid.isEmpty ? null : lid,
+      sessionOpenedAt: sessionOpenedAt,
     );
+  }
+
+  static DateTime? _toDateTime(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return null;
   }
 
   static int? _optionalInt(dynamic value) {

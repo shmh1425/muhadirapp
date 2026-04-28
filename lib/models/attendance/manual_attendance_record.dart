@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum ManualAttendanceStatus { present, absent, excused, late }
+enum ManualAttendanceStatus { pending, present, absent, excused, late }
 
 class ManualAttendanceRecord {
   const ManualAttendanceRecord({
@@ -41,6 +41,8 @@ class ManualAttendanceRecord {
 
   static ManualAttendanceStatus statusFromString(String raw) {
     switch (raw.trim().toLowerCase()) {
+      case 'pending':
+        return ManualAttendanceStatus.pending;
       case 'absent':
         return ManualAttendanceStatus.absent;
       case 'excused':
@@ -55,6 +57,8 @@ class ManualAttendanceRecord {
 
   static String statusToString(ManualAttendanceStatus status) {
     switch (status) {
+      case ManualAttendanceStatus.pending:
+        return 'pending';
       case ManualAttendanceStatus.present:
         return 'present';
       case ManualAttendanceStatus.absent:
