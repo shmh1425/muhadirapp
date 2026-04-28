@@ -87,6 +87,39 @@ class AttendancePlannedSummary {
     return 0;
   }
 
+  /// Weekly contact minutes computed from `sections/<id>.schedule` entries.
+  /// Each entry is expected to include `startTime` and `endTime` in "HH:mm".
+  /// Returns 0 if schedule is missing or invalid.
+  static int weeklyMinutesFromSectionSchedule(List<dynamic>? schedule) {
+    if (schedule == null || schedule.isEmpty) return 0;
+
+    int? hmToMinutes(dynamic v) {
+      final raw = (v ?? '').toString().trim();
+      if (raw.isEmpty) return null;
+      final parts = raw.split(':');
+      if (parts.length < 2) return null;
+      final h = int.tryParse(parts[0].trim());
+      final m = int.tryParse(parts[1].trim());
+      if (h == null || m == null) return null;
+      if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+      return h * 60 + m;
+    }
+
+    var total = 0;
+    for (final row in schedule) {
+      if (row is! Map) continue;
+      final start = hmToMinutes(row['startTime'] ?? row['start_time'] ?? row['from'] ?? row['start']);
+      final end = hmToMinutes(row['endTime'] ?? row['end_time'] ?? row['to'] ?? row['end']);
+      if (start == null || end == null) continue;
+      final diff = end - start;
+      final minutes = diff >= 0 ? diff : (diff + 24 * 60);
+      // Sanity clamp: ignore absurd single-slot durations.
+      if (minutes <= 0 || minutes > 12 * 60) continue;
+      total += minutes;
+    }
+    return total.clamp(0, 7 * 24 * 60);
+  }
+
   /// Same week index as [_AttendanceTrackingScreenState._semesterWeekKey].
   static String weekKeyForDate(
     DateTime date,
@@ -137,12 +170,14 @@ class AttendancePlannedSummary {
   /// One section / course: same math as [_CourseSummaryCard] with all weeks selected.
   static AttendancePlannedSummary forSectionRecords({
     required String courseCode,
+    int? weeklyMinutesFromSection,
     required Map<String, int> codeToWeeklyMinutes,
     required List<Map<String, dynamic>> dedupedRecords,
     required int semesterWeeksCount,
     required DateTime? semesterStartDate,
   }) {
     final code = courseCode.trim();
+    final weeklyFromSection = (weeklyMinutesFromSection ?? 0) > 0 ? weeklyMinutesFromSection! : 0;
     final weeklyFromDb =
         code.isNotEmpty && (codeToWeeklyMinutes[code] ?? 0) > 0 ? codeToWeeklyMinutes[code]! : 0;
     final weeklyFallback = weeklyMinutesFallback(
@@ -150,7 +185,9 @@ class AttendancePlannedSummary {
       semesterWeeksCount,
       semesterStartDate,
     );
-    final weekly = weeklyFromDb > 0 ? weeklyFromDb : weeklyFallback;
+    final weekly = weeklyFromSection > 0
+        ? weeklyFromSection
+        : (weeklyFromDb > 0 ? weeklyFromDb : weeklyFallback);
     final filteredWeeksCount = semesterWeeksCount.clamp(1, 60);
     var planned = weekly * filteredWeeksCount;
     if (planned <= 0) {
@@ -167,7 +204,7 @@ class AttendancePlannedSummary {
       final m = minutesFromTimeRange(timeRangeFromRecord(d));
       if (st == 'excused') {
         excusedMinutes += m;
-      } else if (st == 'absent') {
+      } else if (st == 'absent' || st == 'unexcused') {
         unexcusedMinutes += m;
       }
     }
@@ -271,16 +308,20 @@ class AttendanceSemesterContext {
       }
     } catch (_) {}
 
+    // Prefer the active term when available, to match in-app attendance tracking.
+    // This avoids picking an older term by date ordering when data is inconsistent.
+    QueryDocumentSnapshot<Map<String, dynamic>>? activeTermDoc;
     try {
-      final now = DateTime.now();
-      final snapshot = await firestore
+      final activeSnap = await firestore
           .collection('academic_terms')
-          .orderBy('startDate', descending: true)
-          .limit(25)
+          .where('isActive', isEqualTo: true)
+          .limit(5)
           .get();
-      if (snapshot.docs.isNotEmpty) {
-        QueryDocumentSnapshot<Map<String, dynamic>> preferred = snapshot.docs.first;
-        for (final doc in snapshot.docs) {
+      if (activeSnap.docs.isNotEmpty) {
+        // Pick the one that contains "now" if possible; otherwise take the most recent startDate.
+        final now = DateTime.now();
+        QueryDocumentSnapshot<Map<String, dynamic>> picked = activeSnap.docs.first;
+        for (final doc in activeSnap.docs) {
           final data = doc.data();
           final start = _readDate(data['startDate']);
           final end = _readDate(data['endDate']);
@@ -289,21 +330,62 @@ class AttendanceSemesterContext {
               (now.isAfter(start) || now.isAtSameMomentAs(start)) &&
               (now.isBefore(end) || now.isAtSameMomentAs(end));
           if (inRange) {
-            preferred = doc;
+            picked = doc;
             break;
           }
         }
-
-        if (preferred == snapshot.docs.first) {
-          final sorted = [...snapshot.docs];
+        if (picked == activeSnap.docs.first) {
+          final sorted = [...activeSnap.docs];
           sorted.sort((a, b) {
             final aStart = _readDate(a.data()['startDate']) ?? DateTime(1970);
             final bStart = _readDate(b.data()['startDate']) ?? DateTime(1970);
             return bStart.compareTo(aStart);
           });
-          preferred = sorted.first;
+          picked = sorted.first;
         }
+        activeTermDoc = picked;
+      }
+    } catch (_) {}
 
+    try {
+      final now = DateTime.now();
+      QueryDocumentSnapshot<Map<String, dynamic>>? preferred = activeTermDoc;
+      if (preferred == null) {
+        final snapshot = await firestore
+            .collection('academic_terms')
+            .orderBy('startDate', descending: true)
+            .limit(25)
+            .get();
+        if (snapshot.docs.isNotEmpty) {
+          QueryDocumentSnapshot<Map<String, dynamic>> picked = snapshot.docs.first;
+          for (final doc in snapshot.docs) {
+            final data = doc.data();
+            final start = _readDate(data['startDate']);
+            final end = _readDate(data['endDate']);
+            if (start == null || end == null) continue;
+            final inRange =
+                (now.isAfter(start) || now.isAtSameMomentAs(start)) &&
+                (now.isBefore(end) || now.isAtSameMomentAs(end));
+            if (inRange) {
+              picked = doc;
+              break;
+            }
+          }
+
+          if (picked == snapshot.docs.first) {
+            final sorted = [...snapshot.docs];
+            sorted.sort((a, b) {
+              final aStart = _readDate(a.data()['startDate']) ?? DateTime(1970);
+              final bStart = _readDate(b.data()['startDate']) ?? DateTime(1970);
+              return bStart.compareTo(aStart);
+            });
+            picked = sorted.first;
+          }
+          preferred = picked;
+        }
+      }
+
+      if (preferred != null) {
         final data = preferred.data();
         final termId = (data['termId'] ?? '').toString().trim().isNotEmpty
             ? (data['termId'] ?? '').toString().trim()

@@ -34,12 +34,58 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
 
   List<_AttendanceRecord> _records = <_AttendanceRecord>[];
   Map<String, int> _codeToWeeklyMinutes = <String, int>{};
+  Map<String, int> _sectionIdToWeeklyMinutes = <String, int>{};
   String? _selectedCourse;
   final Set<String> _selectedWeeks = <String>{};
+  bool _allWeeksMode = true; // "الكل" toggle state
+  bool _weekFilterTouchedByUser = false;
   bool _isLoading = true;
   String? _loadError;
   int _semesterWeeksCount = 15;
   DateTime? _semesterStartDate;
+
+  int _statusPriority(String status) {
+    switch (status) {
+      case 'present':
+        return 4;
+      case 'late':
+        return 3;
+      case 'excused':
+        return 2;
+      case 'unexcused':
+      case 'absent':
+        return 1;
+      case 'pending':
+      default:
+        return 0;
+    }
+  }
+
+  List<_AttendanceRecord> _dedupeAttendanceRecords(List<_AttendanceRecord> input) {
+    // Collapse duplicates that represent the same session (same section/date/time).
+    // If duplicates exist, keep the "best" status to avoid showing حاضر+غائب لنفس الجلسة.
+    final map = <String, _AttendanceRecord>{};
+    for (final r in input) {
+      final sid = (r.sectionId ?? '').trim();
+      final key = [
+        sid.isEmpty ? r.courseKey : sid,
+        r.lectureDate.toIso8601String(),
+        r.timeRange.trim(),
+      ].join('|');
+
+      final prev = map[key];
+      if (prev == null) {
+        map[key] = r;
+        continue;
+      }
+      if (_statusPriority(r.status) >= _statusPriority(prev.status)) {
+        map[key] = r;
+      }
+    }
+    final out = map.values.toList();
+    out.sort((a, b) => b.lectureDate.compareTo(a.lectureDate));
+    return out;
+  }
 
   @override
   void initState() {
@@ -61,80 +107,6 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
   Future<void> _loadAcademicTermContext() async {
     try {
       final now = DateTime.now();
-      int? calendarWeeksCandidate;
-      DateTime? calendarStartCandidate;
-
-      bool hasAnyKey(Map<String, dynamic> m, List<String> keys) {
-        for (final k in keys) {
-          if (m.containsKey(k)) return true;
-        }
-        return false;
-      }
-
-      int? readWeeksFromKeys(Map<String, dynamic> m, List<String> keys) {
-        for (final k in keys) {
-          final v = _readPositiveInt(m[k]);
-          if (v != null && v > 0) return v;
-        }
-        return null;
-      }
-
-      // Prefer the centralized academic calendar if present.
-      try {
-        final calendarDoc = await FirebaseFirestore.instance
-            .collection('academic_calendar')
-            .doc('current')
-            .get();
-        if (!calendarDoc.exists) {
-          if (kDebugMode) {
-            debugPrint('[AttendanceTracking] academic_calendar/current: MISSING');
-          }
-        } else {
-          final cal = calendarDoc.data() ?? <String, dynamic>{};
-          const effectiveKeys = <String>[
-            'effectiveTeachingWeeks',
-            'effective_teaching_weeks',
-            'effectiveWeeks',
-          ];
-          const officialKeys = <String>[
-            'officialWeeksCount',
-            'official_weeks_count',
-            'semesterWeeks',
-            'semester_weeks',
-          ];
-
-          final effectiveWeeks = readWeeksFromKeys(cal, effectiveKeys);
-          if (effectiveWeeks != null && effectiveWeeks > 0) {
-            calendarWeeksCandidate = effectiveWeeks;
-            if (kDebugMode) {
-              debugPrint(
-                '[AttendanceTracking] academic_calendar/current: effectiveWeeks=$effectiveWeeks cal=$cal',
-              );
-            }
-          } else {
-            final officialWeeks = readWeeksFromKeys(cal, officialKeys);
-            if (officialWeeks != null && officialWeeks > 0) {
-              calendarWeeksCandidate = officialWeeks;
-              if (kDebugMode) {
-                debugPrint(
-                  '[AttendanceTracking] academic_calendar/current: officialWeeks=$officialWeeks cal=$cal',
-                );
-              }
-            } else if (kDebugMode) {
-              debugPrint(
-                '[AttendanceTracking] academic_calendar/current: no valid weeks keys. cal=$cal',
-              );
-            }
-          }
-
-          calendarStartCandidate =
-              _readDate(cal['semesterStartDate']) ?? _readDate(cal['startDate']);
-        }
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('[AttendanceTracking] academic_calendar/current READ FAILED: $e');
-        }
-      }
 
       final snapshot = await FirebaseFirestore.instance
           .collection('academic_terms')
@@ -182,48 +154,28 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
         );
       }
 
-      // 1) Source of truth: term.effectiveTeachingWeeks (admin maintained).
-      // 2) Next: term weeks subcollection (countInAttendance == true).
-      // 3) Next: academic_calendar/current.
-      // 4) Fallback: term official fields.
+      // Single source of truth for effective teaching weeks:
+      // Must come directly from admin-maintained `effectiveTeachingWeeks`.
       final termEffectiveWeeks = _readPositiveInt(data['effectiveTeachingWeeks']);
-      final termOfficialWeeks =
-          _readPositiveInt(data['officialWeeksCount']) ?? _readPositiveInt(data['semesterWeeks']);
-
-      int? weeksFromWeeksSubcollection;
-      try {
-        final weeksSnap = await FirebaseFirestore.instance
-            .collection('academic_terms')
-            .doc(termId)
-            .collection('weeks')
-            .get();
-        if (weeksSnap.docs.isNotEmpty) {
-          final countInAttendance = weeksSnap.docs
-              .where((d) => (d.data()['countInAttendance'] == true))
-              .length;
-          if (countInAttendance > 0) weeksFromWeeksSubcollection = countInAttendance;
-        }
-      } catch (e) {
+      if (termEffectiveWeeks != null && termEffectiveWeeks > 0) {
+        _semesterWeeksCount = termEffectiveWeeks.clamp(1, 40);
+      } else {
+        // Keep default if unavailable; do not override from any other sources.
+        _semesterWeeksCount = _semesterWeeksCount.clamp(1, 40);
         if (kDebugMode) {
-          debugPrint('[AttendanceTracking] academic_terms/$termId/weeks READ FAILED: $e');
+          debugPrint(
+            '[AttendanceTracking] effectiveTeachingWeeks MISSING/INVALID; keeping weeks=$_semesterWeeksCount',
+          );
         }
       }
 
-      final chosenWeeks = termEffectiveWeeks ??
-          weeksFromWeeksSubcollection ??
-          calendarWeeksCandidate ??
-          termOfficialWeeks ??
-          15;
-      _semesterWeeksCount = chosenWeeks.clamp(1, 40);
-
-      // Start date: term startDate first, otherwise calendar, otherwise keep existing/default.
-      _semesterStartDate = _readDate(data['startDate']) ?? calendarStartCandidate ?? _semesterStartDate;
+      // Start date: use term startDate only; do not derive from other sources.
+      _semesterStartDate = _readDate(data['startDate']) ?? _semesterStartDate;
 
       if (kDebugMode) {
         debugPrint(
           '[AttendanceTracking] weeks chosen=$_semesterWeeksCount '
-          '(termEffective=$termEffectiveWeeks weeksSub=$weeksFromWeeksSubcollection calendar=$calendarWeeksCandidate termOfficial=$termOfficialWeeks) '
-          'startDate=$_semesterStartDate',
+          '(effectiveTeachingWeeks=$termEffectiveWeeks) startDate=$_semesterStartDate',
         );
       }
     } catch (e) {
@@ -265,15 +217,18 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
                     metaMaps.codeToType,
                     metaMaps.sectionIdToType,
                     metaMaps.codeToNameAr,
+                    metaMaps.sectionIdToScheduleSlots,
                     semesterStart,
                   ),
                 )
                 .toList();
             mapped.sort((a, b) => b.lectureDate.compareTo(a.lectureDate));
+            final deduped = _dedupeAttendanceRecords(mapped);
             if (!mounted) return;
             setState(() {
-              _records = mapped;
+              _records = deduped;
               _codeToWeeklyMinutes = metaMaps.codeToWeeklyMinutes;
+              _sectionIdToWeeklyMinutes = metaMaps.sectionIdToWeeklyMinutes;
               _isLoading = false;
               _loadError = null;
               _syncSelectedWeeksWithAvailable();
@@ -316,6 +271,8 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
       Map<String, String> sectionIdToType,
       Map<String, String> codeToNameAr,
       Map<String, int> codeToWeeklyMinutes,
+      Map<String, int> sectionIdToWeeklyMinutes,
+      Map<String, List<_ScheduleSlot>> sectionIdToScheduleSlots,
     })
   >
   _fetchCourseMetaForRecords(List<ManualAttendanceRecord> records) async {
@@ -326,19 +283,29 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
         .toSet()
         .toList();
 
-    final needSectionType = records
-        .where((r) => (r.courseType ?? '').trim().isEmpty)
-        .where((r) => r.sectionId.trim().isNotEmpty)
+    // We always need section schedules (weekly minutes) for any record that has sectionId.
+    final sectionIds = records
         .map((r) => r.sectionId.trim())
+        .where((id) => id.isNotEmpty)
         .toSet()
         .toList();
 
-    if (codes.isEmpty && needSectionType.isEmpty) {
+    // We only need section type when courseType is missing in the record.
+    final needSectionType = records
+        .where((r) => (r.courseType ?? '').trim().isEmpty)
+        .map((r) => r.sectionId.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+
+    if (codes.isEmpty && sectionIds.isEmpty) {
       return (
         codeToType: <String, String>{},
         sectionIdToType: <String, String>{},
         codeToNameAr: <String, String>{},
         codeToWeeklyMinutes: <String, int>{},
+        sectionIdToWeeklyMinutes: <String, int>{},
+        sectionIdToScheduleSlots: <String, List<_ScheduleSlot>>{},
       );
     }
 
@@ -347,6 +314,68 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
     final sectionIdToType = <String, String>{};
     final codeToNameAr = <String, String>{};
     final codeToWeeklyMinutes = <String, int>{};
+    final sectionIdToWeeklyMinutes = <String, int>{};
+    final sectionIdToScheduleSlots = <String, List<_ScheduleSlot>>{};
+
+    int? hmToMinutes(String? s) {
+      final raw = (s ?? '').trim();
+      if (raw.isEmpty) return null;
+      final parts = raw.split(':');
+      if (parts.length < 2) return null;
+      final h = int.tryParse(parts[0].trim());
+      final m = int.tryParse(parts[1].trim());
+      if (h == null || m == null) return null;
+      return (h.clamp(0, 23) * 60) + m.clamp(0, 59);
+    }
+
+    int scheduleMinutes(dynamic schedule) {
+      if (schedule is! List || schedule.isEmpty) return 0;
+      var total = 0;
+      for (final row in schedule) {
+        if (row is! Map) continue;
+        final start = hmToMinutes(
+          (row['startTime'] ?? row['start_time'] ?? row['from'] ?? row['start'])
+              ?.toString(),
+        );
+        final end = hmToMinutes(
+          (row['endTime'] ?? row['end_time'] ?? row['to'] ?? row['end'])
+              ?.toString(),
+        );
+        if (start == null || end == null) continue;
+        final diff = end - start;
+        final minutes = diff >= 0 ? diff : (diff + 24 * 60);
+        if (minutes > 0 && minutes <= 12 * 60) total += minutes;
+      }
+      return total;
+    }
+
+    List<_ScheduleSlot> scheduleSlots(dynamic schedule) {
+      if (schedule is! List || schedule.isEmpty) return const <_ScheduleSlot>[];
+      final out = <_ScheduleSlot>[];
+      for (final row in schedule) {
+        if (row is! Map) continue;
+        final dayRaw = row['dayOfWeek'] ?? row['day_of_week'] ?? row['day'];
+        final day = (dayRaw is int)
+            ? dayRaw
+            : (dayRaw is num)
+                ? dayRaw.toInt()
+                : int.tryParse((dayRaw ?? '').toString().trim());
+        final start = (row['startTime'] ??
+                row['start_time'] ??
+                row['from'] ??
+                row['start'])
+            ?.toString()
+            .trim();
+        final end =
+            (row['endTime'] ?? row['end_time'] ?? row['to'] ?? row['end'])
+                ?.toString()
+                .trim();
+        if (day == null || day <= 0) continue;
+        if ((start ?? '').isEmpty || (end ?? '').isEmpty) continue;
+        out.add(_ScheduleSlot(dayOfWeek: day, startTime: start!, endTime: end!));
+      }
+      return out;
+    }
 
     String typeFromMap(Map<String, dynamic>? d) {
       if (d == null) return '';
@@ -360,18 +389,62 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
     }
     int weeklyMinutesFromMap(Map<String, dynamic>? d) {
       if (d == null) return 0;
+      int? hmToMinutes(String? s) {
+        final raw = (s ?? '').trim();
+        if (raw.isEmpty) return null;
+        final parts = raw.split(':');
+        if (parts.length < 2) return null;
+        final h = int.tryParse(parts[0].trim());
+        final m = int.tryParse(parts[1].trim());
+        if (h == null || m == null) return null;
+        return (h.clamp(0, 23) * 60) + m.clamp(0, 59);
+      }
+
       int readHours(dynamic raw) {
         if (raw is int) return raw;
         if (raw is num) return raw.toInt();
-        return int.tryParse((raw ?? '').toString()) ?? 0;
+        final s = (raw ?? '').toString().trim();
+        if (s.isEmpty) return 0;
+        final direct = int.tryParse(s);
+        if (direct != null) return direct;
+        final m = RegExp(r'(\\d{1,3})').firstMatch(s);
+        if (m == null) return 0;
+        return int.tryParse(m.group(1)!) ?? 0;
       }
 
       // Absence must be based on actual scheduled weekly contact hours.
       // Prefer explicit weekly fields; do NOT use creditHours (academic credits)
       // because it can differ from real weekly contact hours.
+      // In production data, `weeklyHours` is sometimes filled with a broader
+      // definition (e.g. combined lecture+lab). We prefer `hoursPerWeek` when
+      // present because it matches the “hours per week” used by the academic rules.
       final weeklyHours =
-          readHours(d['weeklyHours'] ?? d['hoursPerWeek'] ?? d['contactHours']);
+          readHours(d['hoursPerWeek'] ?? d['weeklyHours'] ?? d['contactHours']);
       if (weeklyHours > 0) return weeklyHours * 60;
+
+      // Fallback (only if weekly hours fields are missing): derive from schedule.
+      final schedule = d['schedule'];
+      if (schedule is List && schedule.isNotEmpty) {
+        int total = 0;
+        for (final row in schedule) {
+          if (row is! Map) continue;
+          final start = hmToMinutes(
+            (row['startTime'] ?? row['start_time'] ?? row['from'] ?? row['start'])
+                ?.toString(),
+          );
+          final end = hmToMinutes(
+            (row['endTime'] ?? row['end_time'] ?? row['to'] ?? row['end'])
+                ?.toString(),
+          );
+          if (start == null || end == null) continue;
+          final diff = end - start;
+          final minutes = diff >= 0 ? diff : (diff + 24 * 60);
+          if (minutes > 0 && minutes <= 12 * 60) {
+            total += minutes;
+          }
+        }
+        if (total > 0) return total;
+      }
 
       return 0;
     }
@@ -383,18 +456,41 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
         if (type.isNotEmpty) codeToType[code] = type;
         final nameAr = nameArFromMap(doc.data());
         if (nameAr.isNotEmpty) codeToNameAr[code] = nameAr;
-        final weekly = weeklyMinutesFromMap(doc.data());
-        if (weekly > 0) codeToWeeklyMinutes[code] = weekly;
+        // Priority: course.schedule, then explicit weekly hours fields.
+        final fromCourseSchedule = scheduleMinutes(doc.data()?['schedule']);
+        if (fromCourseSchedule > 0) {
+          codeToWeeklyMinutes[code] = fromCourseSchedule;
+        } else {
+          final weekly = weeklyMinutesFromMap(doc.data());
+          if (weekly > 0) codeToWeeklyMinutes[code] = weekly;
+        }
       }
     }
 
-    for (final sectionId in needSectionType) {
-      if (sectionIdToType.containsKey(sectionId)) continue;
+    // Read section schedules for ALL sectionIds (priority source for weekly minutes).
+    for (final sectionId in sectionIds) {
       final doc = await firestore.collection('sections').doc(sectionId).get();
       if (doc.exists) {
-        final type = typeFromMap(doc.data());
-        if (type.isNotEmpty) sectionIdToType[sectionId] = type;
+        // Priority source for weekly minutes: section.schedule
+        final fromSectionSchedule = scheduleMinutes(doc.data()?['schedule']);
+        if (fromSectionSchedule > 0) {
+          sectionIdToWeeklyMinutes[sectionId] = fromSectionSchedule;
+        }
+        final slots = scheduleSlots(doc.data()?['schedule']);
+        if (slots.isNotEmpty) sectionIdToScheduleSlots[sectionId] = slots;
+        // Only fill section type when needed.
+        if (!sectionIdToType.containsKey(sectionId) &&
+            needSectionType.contains(sectionId)) {
+          final type = typeFromMap(doc.data());
+          if (type.isNotEmpty) sectionIdToType[sectionId] = type;
+        }
       }
+    }
+
+    if (kDebugMode) {
+      debugPrint(
+        '[AttendanceTracking] sectionIdToWeeklyMinutes=$sectionIdToWeeklyMinutes',
+      );
     }
 
     return (
@@ -402,6 +498,8 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
       sectionIdToType: sectionIdToType,
       codeToNameAr: codeToNameAr,
       codeToWeeklyMinutes: codeToWeeklyMinutes,
+      sectionIdToWeeklyMinutes: sectionIdToWeeklyMinutes,
+      sectionIdToScheduleSlots: sectionIdToScheduleSlots,
     );
   }
 
@@ -410,6 +508,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
     Map<String, String> codeToType,
     Map<String, String> sectionIdToType,
     Map<String, String> codeToNameAr,
+    Map<String, List<_ScheduleSlot>> sectionIdToScheduleSlots,
     DateTime? semesterStart,
   ) {
     final status = switch (record.status) {
@@ -441,10 +540,32 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
       record.lectureDate.month,
       record.lectureDate.day,
     );
+    final weekday = lectureDate.weekday; // Dart: Mon=1..Sun=7
+    String startTime = record.lectureStartTime;
+    String endTime = record.lectureEndTime;
+    final slots = sectionIdToScheduleSlots[record.sectionId.trim()] ?? const <_ScheduleSlot>[];
+    if (slots.isNotEmpty) {
+      final daySlots = slots.where((s) => s.dayOfWeek == weekday).toList();
+      if (daySlots.isNotEmpty) {
+        final matchesAny = daySlots.any(
+          (s) => s.startTime == startTime.trim() && s.endTime == endTime.trim(),
+        );
+        // If time doesn't match schedule:
+        // - if exactly 1 slot that day, force it (fixes wrong stored times)
+        // - if multiple slots, keep original unless it matches
+        if (!matchesAny) {
+          if (daySlots.length == 1) {
+            startTime = daySlots.first.startTime;
+            endTime = daySlots.first.endTime;
+          }
+        }
+      }
+    }
     final weekKey = _semesterWeekKey(lectureDate, semesterStart);
     final day = lectureDate.day.toString().padLeft(2, '0');
     return _AttendanceRecord(
       courseCode: record.courseCode,
+      sectionId: record.sectionId.trim().isEmpty ? null : record.sectionId,
       courseKey: '$courseName • شعبة $sectionText',
       courseName: courseName,
       sectionLabel: sectionText,
@@ -454,7 +575,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
       weekKey: weekKey,
       day: day,
       lectureDate: lectureDate,
-      timeRange: '${record.lectureStartTime}-${record.lectureEndTime}',
+      timeRange: '$startTime-$endTime',
       dayName: _arabicDayName(record.lectureDate.weekday),
       status: status,
     );
@@ -497,14 +618,10 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
 
   void _syncSelectedWeeksWithAvailable() {
     final weeks = _weeks;
-    if (_selectedWeeks.isEmpty) {
-      _selectedWeeks.addAll(weeks);
-      return;
-    }
+    // When "All" mode is on, we don't need explicit selections.
+    if (_allWeeksMode) return;
+    if (_selectedWeeks.isEmpty) return;
     _selectedWeeks.removeWhere((week) => !weeks.contains(week));
-    if (_selectedWeeks.isEmpty) {
-      _selectedWeeks.addAll(weeks);
-    }
   }
 
   /// قائمة أسابيع الفصل (15 أسبوع) للفلتر
@@ -562,7 +679,13 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
   int? _readPositiveInt(dynamic value) {
     if (value is int && value > 0) return value;
     if (value is num && value > 0) return value.toInt();
-    final parsed = int.tryParse((value ?? '').toString());
+    final raw = (value ?? '').toString().trim();
+    if (raw.isEmpty) return null;
+    final direct = int.tryParse(raw);
+    if (direct != null && direct > 0) return direct;
+    final m = RegExp(r'(\\d{1,3})').firstMatch(raw);
+    if (m == null) return null;
+    final parsed = int.tryParse(m.group(1)!);
     if (parsed == null || parsed <= 0) return null;
     return parsed;
   }
@@ -570,8 +693,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
   List<_AttendanceRecord> get _filteredRecordsForSummary {
     final weekKeyToDisplay = _weekKeyToDisplay;
     final weeks = _weeks;
-    final allWeeksSelected = _selectedWeeks.length == weeks.length;
-    final noWeekFilter = allWeeksSelected;
+    final noWeekFilter = _allWeeksMode;
     final filtered = _records.where((record) {
       final type =
           (record.courseType.trim().isEmpty || record.courseType == '—')
@@ -591,8 +713,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
   int get _filteredWeeksCount {
     final weeks = _weeks;
     if (weeks.isEmpty) return _semesterWeeksCount;
-    final allWeeksSelected = _selectedWeeks.length == weeks.length;
-    if (allWeeksSelected) return _semesterWeeksCount;
+    if (_allWeeksMode) return _semesterWeeksCount;
     return _selectedWeeks.length.clamp(0, _semesterWeeksCount);
   }
 
@@ -710,106 +831,117 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
       builder: (context, _) => Directionality(
         textDirection: translation.textDirection,
         child: Scaffold(
-        backgroundColor: Colors.white,
-        floatingActionButton: const ChatFAB(),
-        bottomNavigationBar: NavBarSettingsArabic(
-          selectedIndex: 1,
-          onItemTapped: (index) {
-            if (index == 0) {
-              Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
-            } else if (index == 2) {
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const HomeScreen()),
-                (route) => false,
-              );
-            } else if (index == 1) {
-              Navigator.of(context).popUntil((route) => route.isFirst);
-            }
-          },
-        ),
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            child: _isLoading
-                ? Column(
-                    children: <Widget>[
-                      _buildHeader(context),
-                      const Expanded(
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            color: _primaryColor,
+          backgroundColor: Colors.white,
+          floatingActionButton: const ChatFAB(),
+          bottomNavigationBar: NavBarSettingsArabic(
+            selectedIndex: 1,
+            onItemTapped: (index) {
+              if (index == 0) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                );
+              } else if (index == 2) {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const HomeScreen()),
+                  (route) => false,
+                );
+              } else if (index == 1) {
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              }
+            },
+          ),
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: _isLoading
+                  ? Column(
+                      children: <Widget>[
+                        _buildHeader(context),
+                        const Expanded(
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: _primaryColor,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  )
-                : _loadError != null
-                ? Column(
-                    children: <Widget>[
-                      _buildHeader(context),
-                      Expanded(
-                        child: Center(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                TText(
-                                  _loadError!,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: Color(0xFF666666),
-                                    fontSize: 14,
+                      ],
+                    )
+                  : _loadError != null
+                      ? Column(
+                          children: <Widget>[
+                            _buildHeader(context),
+                            Expanded(
+                              child: Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      TText(
+                                        _loadError!,
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                          color: Color(0xFF666666),
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      TextButton.icon(
+                                        onPressed: _bootstrapAttendance,
+                                        icon: const Icon(Icons.refresh_rounded),
+                                        label: const TText('إعادة المحاولة'),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(height: 12),
-                                TextButton.icon(
-                                  onPressed: _bootstrapAttendance,
-                                  icon: const Icon(Icons.refresh_rounded),
-                                  label: const TText('إعادة المحاولة'),
+                              ),
+                            ),
+                          ],
+                        )
+                      : _records.isEmpty
+                          ? Column(
+                              children: <Widget>[
+                                _buildHeader(context),
+                                Expanded(
+                                  child: Center(
+                                    child: TText(
+                                      'لا توجد سجلات تحضير حتى الآن',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: Color(0xFF9E9E9E),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Column(
+                              children: <Widget>[
+                                _buildHeader(context),
+                                const SizedBox(height: 16),
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    physics: const BouncingScrollPhysics(),
+                                    child: Column(
+                                      children: <Widget>[
+                                        _buildCourseTabs(),
+                                        const SizedBox(height: 16),
+                                        _buildAttendanceSummaryPerCourse(),
+                                        const SizedBox(height: 24),
+                                        _buildWeekFilterBar(),
+                                        const SizedBox(height: 24),
+                                        _buildAttendanceLog(),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-                : _records.isEmpty
-                ? Column(
-                    children: <Widget>[
-                      _buildHeader(context),
-                      Expanded(
-                        child: Center(
-                          child: TText(
-                            'لا توجد سجلات تحضير حتى الآن',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Color(0xFF9E9E9E),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-                : Column(
-                    children: <Widget>[
-                      _buildHeader(context),
-                      const SizedBox(height: 16),
-                      _buildCourseTabs(),
-                      const SizedBox(height: 16),
-                      _buildAttendanceSummaryPerCourse(),
-                      const SizedBox(height: 24),
-                      _buildWeekFilterBar(),
-                      const SizedBox(height: 24),
-                      Expanded(child: _buildAttendanceLog()),
-                    ],
-                  ),
+            ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -873,6 +1005,8 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
       allWeeks: _weeks,
       weeksCountForTerm: _semesterWeeksCount,
       codeToWeeklyMinutes: _codeToWeeklyMinutes,
+      sectionIdToWeeklyMinutes: _sectionIdToWeeklyMinutes,
+      allWeeksMode: _allWeeksMode,
     );
   }
 
@@ -997,7 +1131,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
   Widget _buildWeekFilterBar() {
     final weeks = _weeks;
     if (weeks.isEmpty) return const SizedBox.shrink();
-    final allSelected = _selectedWeeks.length == weeks.length;
+    final allSelected = _allWeeksMode;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
       decoration: BoxDecoration(
@@ -1020,10 +1154,18 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 3),
               child: InkWell(
                 onTap: () {
+                  if (weeks.isEmpty) return;
                   setState(() {
-                    _selectedWeeks
-                      ..clear()
-                      ..addAll(weeks);
+                    _weekFilterTouchedByUser = true;
+                    if (_allWeeksMode) {
+                      // Toggle OFF: show nothing until user selects weeks
+                      _allWeeksMode = false;
+                      _selectedWeeks.clear();
+                      return;
+                    }
+                    // Toggle ON: All mode
+                    _allWeeksMode = true;
+                    _selectedWeeks.clear();
                   });
                 },
                 borderRadius: BorderRadius.circular(10),
@@ -1056,13 +1198,16 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
               ),
             ),
             ...weeks.map((String week) {
-              final bool isSelected = _selectedWeeks.contains(week);
+              final bool isSelected =
+                  _allWeeksMode || _selectedWeeks.contains(week);
               final String displayText = week.replaceFirst(' ', '\n');
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 3),
                 child: InkWell(
                   onTap: () {
                     setState(() {
+                      _weekFilterTouchedByUser = true;
+                      if (_allWeeksMode) _allWeeksMode = false;
                       if (isSelected) {
                         _selectedWeeks.remove(week);
                       } else {
@@ -1111,13 +1256,12 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
   Widget _buildAttendanceLog() {
     final weekKeyToDisplay = _weekKeyToDisplay;
     final weeks = _weeks;
-    final allWeeksSelected = _selectedWeeks.length == weeks.length;
-    final noWeekFilter = allWeeksSelected;
+    final noWeekFilter = _allWeeksMode;
     final filteredRecords = _records.where((record) {
       final type =
           (record.courseType.trim().isEmpty || record.courseType == '—')
-          ? 'نظري'
-          : record.courseType;
+              ? 'نظري'
+              : record.courseType;
       final courseMatch = _selectedCourse == null
           ? true
           : ('${record.course} $type'.trim() == _selectedCourse);
@@ -1152,17 +1296,17 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        Expanded(
-          child: ListView.builder(
-            itemCount: filteredRecords.length,
-            itemBuilder: (BuildContext context, int index) {
-              final record = filteredRecords[index];
-              final weekLabel =
-                  weekKeyToDisplay[record.weekKey] ?? record.weekKey;
-              return _AttendanceCard(record: record, weekLabel: weekLabel);
-            },
-          ),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: filteredRecords.length,
+          itemBuilder: (BuildContext context, int index) {
+            final record = filteredRecords[index];
+            final weekLabel = weekKeyToDisplay[record.weekKey] ?? record.weekKey;
+            return _AttendanceCard(record: record, weekLabel: weekLabel);
+          },
         ),
+        const SizedBox(height: 16),
       ],
     );
   }
@@ -1234,6 +1378,7 @@ class _DonutChartPainter extends CustomPainter {
 class _AttendanceRecord {
   _AttendanceRecord({
     this.courseCode,
+    this.sectionId,
     required this.courseKey,
     required this.courseName,
     required this.sectionLabel,
@@ -1249,6 +1394,7 @@ class _AttendanceRecord {
   });
 
   final String? courseCode;
+  final String? sectionId;
   final String courseKey;
   final String courseName;
   final String sectionLabel;
@@ -1279,8 +1425,6 @@ class _AttendanceCard extends StatelessWidget {
         return const Color(0xFF2196F3);
       case 'unexcused':
         return const Color(0xFFE57373);
-      case 'pending':
-        return const Color(0xFF9AA6AB);
       default:
         return const Color(0xFF006571);
     }
@@ -1440,6 +1584,8 @@ class _CourseSummaryCard extends StatelessWidget {
     required this.allWeeks,
     required this.weeksCountForTerm,
     required this.codeToWeeklyMinutes,
+    required this.sectionIdToWeeklyMinutes,
+    required this.allWeeksMode,
   });
 
   final String courseLabel;
@@ -1449,11 +1595,13 @@ class _CourseSummaryCard extends StatelessWidget {
   final List<String> allWeeks;
   final int weeksCountForTerm;
   final Map<String, int> codeToWeeklyMinutes;
+  final Map<String, int> sectionIdToWeeklyMinutes;
+  final bool allWeeksMode;
 
   /// عرض النسبة كعدد صحيح (تقريب أقرب) ليتوافق مع فهم المستخدم والوسط في الدائرة.
   int _truncatePct(double v) {
     if (!v.isFinite || v <= 0) return 0;
-    return v.round().clamp(0, 100);
+    return v.floor().clamp(0, 100);
   }
 
   int _minutesFromTimeRange(String timeRange) {
@@ -1483,8 +1631,7 @@ class _CourseSummaryCard extends StatelessWidget {
   }
 
   List<_AttendanceRecord> _filteredCourseRecords() {
-    final allWeeksSelected = selectedWeeks.length == allWeeks.length;
-    final noWeekFilter = allWeeksSelected;
+    final noWeekFilter = allWeeksMode;
     final filtered = allRecords.where((r) {
       if (!_matchesCourse(r)) return false;
       final weekLabel = weekKeyToDisplay[r.weekKey] ?? r.weekKey;
@@ -1497,23 +1644,36 @@ class _CourseSummaryCard extends StatelessWidget {
 
   int _filteredWeeksCount() {
     if (allWeeks.isEmpty) return weeksCountForTerm;
-    final allWeeksSelected = selectedWeeks.length == allWeeks.length;
-    if (allWeeksSelected) return weeksCountForTerm;
-    return selectedWeeks.length.clamp(0, weeksCountForTerm);
+    if (allWeeksMode) return weeksCountForTerm;
+    return selectedWeeks.length.clamp(1, weeksCountForTerm);
   }
 
   int _weeklyMinutesFromDb(List<_AttendanceRecord> records) {
     int weekly = 0;
-    final codes = records
-        .map((r) => r.courseCode)
-        .whereType<String>()
-        .map((c) => c.trim())
-        .where((c) => c.isNotEmpty)
+    // Priority: section schedule-derived weekly minutes
+    final sectionIds = records
+        .map((r) => (r.sectionId ?? '').trim())
+        .where((s) => s.isNotEmpty)
         .toSet()
         .toList();
-    for (final code in codes) {
-      final v = codeToWeeklyMinutes[code];
+    for (final sid in sectionIds) {
+      final v = sectionIdToWeeklyMinutes[sid];
       if (v != null && v > weekly) weekly = v;
+    }
+
+    // Fallback: course schedule-derived weekly minutes (or explicit weekly hours if present)
+    if (weekly <= 0) {
+      final codes = records
+          .map((r) => r.courseCode)
+          .whereType<String>()
+          .map((c) => c.trim())
+          .where((c) => c.isNotEmpty)
+          .toSet()
+          .toList();
+      for (final code in codes) {
+        final v = codeToWeeklyMinutes[code];
+        if (v != null && v > weekly) weekly = v;
+      }
     }
     return weekly;
   }
@@ -1540,27 +1700,49 @@ class _CourseSummaryCard extends StatelessWidget {
     final records = _filteredCourseRecords();
     if (records.isEmpty) return const SizedBox.shrink();
 
-    final presentMinutes = records
-        .where((r) => r.status == 'present')
-        .fold<int>(0, (s, r) => s + _minutesFromTimeRange(r.timeRange));
-    final excusedMinutes = records
-        .where((r) => r.status == 'excused')
-        .fold<int>(0, (s, r) => s + _minutesFromTimeRange(r.timeRange));
-    final unexcusedMinutes = records
-        .where((r) => r.status == 'unexcused' || r.status == 'absent')
-        .fold<int>(0, (s, r) => s + _minutesFromTimeRange(r.timeRange));
-    final lateMinutes = records
-        .where((r) => r.status == 'late')
-        .fold<int>(0, (s, r) => s + _minutesFromTimeRange(r.timeRange));
-
     final weeklyFromDb = _weeklyMinutesFromDb(records);
     final weeklyFallback = _weeklyMinutesFallback(records);
     final weekly = weeklyFromDb > 0 ? weeklyFromDb : weeklyFallback;
-    final filteredWeeksCount = _filteredWeeksCount();
-    final planned = weekly * filteredWeeksCount;
-    final totalPlannedMinutes = planned > 0
-        ? planned
-        : records.fold<int>(0, (s, r) => s + _minutesFromTimeRange(r.timeRange));
+    // Denominator weeks are ALWAYS the full effective teaching weeks for term.
+    // Week filter affects the numerator (which records are included), not the denominator.
+    final denomWeeks = weeksCountForTerm;
+
+    // Compute minutes per status from the actual lecture time range so that:
+    // - Excused % = (excusedHours / totalTermHours) * 100
+    // - Unexcused % = (unexcusedHours / totalTermHours) * 100
+    // - Total absence % = sum of both
+    //
+    // If timeRange can't be parsed, fall back to an estimated session duration.
+    int sessionsPerWeek = 0;
+    final byWeek = <String, Set<String>>{};
+    for (final r in records) {
+      final key = '${r.courseKey}|${r.lectureDate.toIso8601String()}|${r.timeRange}';
+      byWeek.putIfAbsent(r.weekKey, () => <String>{}).add(key);
+    }
+    for (final s in byWeek.values) {
+      if (s.length > sessionsPerWeek) sessionsPerWeek = s.length;
+    }
+    final estimatedSessionMinutes =
+        (weekly > 0 && sessionsPerWeek > 0) ? (weekly / sessionsPerWeek) : 120.0;
+
+    int minutesFor(_AttendanceRecord r) {
+      final m = _minutesFromTimeRange(r.timeRange);
+      if (m > 0) return m;
+      return estimatedSessionMinutes.round();
+    }
+
+    int sumWhere(bool Function(_AttendanceRecord) p) => records
+        .where(p)
+        .fold<int>(0, (s, r) => s + minutesFor(r));
+
+    final presentMinutes = sumWhere((r) => r.status == 'present');
+    final excusedMinutes = sumWhere((r) => r.status == 'excused');
+    final unexcusedMinutes =
+        sumWhere((r) => r.status == 'unexcused' || r.status == 'absent');
+    final lateMinutes = sumWhere((r) => r.status == 'late');
+
+    final totalPlannedMinutes =
+        (weekly > 0 && denomWeeks > 0) ? (weekly * denomWeeks) : 0;
 
     if (kDebugMode) {
       final courseCodes = records
@@ -1583,14 +1765,16 @@ class _CourseSummaryCard extends StatelessWidget {
         'weeklyFromDb=$weeklyFromDb '
         'weeklyFallback=$weeklyFallback '
         'weeklyUsed=$weekly '
-        'filteredWeeksCount=$filteredWeeksCount '
-        'planned=$planned '
+        'sessionsPerWeek=$sessionsPerWeek '
+        'estimatedSessionMinutes=$estimatedSessionMinutes '
+        'weeksForDenominator=$denomWeeks '
         'totalPlannedMinutes=$totalPlannedMinutes',
       );
     }
 
-    double pct(int minutes) =>
-        totalPlannedMinutes == 0 ? 0 : (minutes / totalPlannedMinutes) * 100;
+    double pct(int minutes) => totalPlannedMinutes <= 0
+        ? 0
+        : (minutes / totalPlannedMinutes) * 100;
 
     final excusedPct = pct(excusedMinutes);
     final unexcusedPct = pct(unexcusedMinutes);
@@ -1637,10 +1821,23 @@ class _CourseSummaryCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 _LegendRow(
+                  color: const Color(0xFFFF9800),
+                  label: 'الغياب بدون عذر',
+                  percentage: unexcusedPct,
+                  isOverLimit: unexcusedOverLimit,
+                ),
+                const SizedBox(height: 8),
+                _LegendRow(
                   color: const Color(0xFF2196F3),
-                  label: 'بعذر',
+                  label: 'الغياب بعذر',
                   percentage: excusedPct,
                   isOverLimit: excusedOverLimit,
+                ),
+                const SizedBox(height: 8),
+                _LegendRow(
+                  color: const Color(0xFFFFC107),
+                  label: 'تأخير',
+                  percentage: pct(lateMinutes),
                 ),
                 const SizedBox(height: 8),
                 _LegendRow(
@@ -1649,19 +1846,7 @@ class _CourseSummaryCard extends StatelessWidget {
                   percentage: totalAbsencePct,
                   isOverLimit: totalOverLimit,
                 ),
-                const SizedBox(height: 8),
-                _LegendRow(
-                  color: const Color(0xFFFF9800),
-                  label: 'بدون عذر فقط',
-                  percentage: unexcusedPct,
-                  isOverLimit: unexcusedOverLimit,
-                ),
-                const SizedBox(height: 8),
-                _LegendRow(
-                  color: const Color(0xFFFFC107),
-                  label: 'تأخير',
-                  percentage: pct(lateMinutes),
-                ),
+                
               ],
             ),
           ),
@@ -1737,7 +1922,7 @@ class _LegendRow extends StatelessWidget {
 
   int _truncatePct(double v) {
     if (!v.isFinite || v <= 0) return 0;
-    return v.round().clamp(0, 100);
+    return v.floor().clamp(0, 100);
   }
 
   @override
@@ -1770,4 +1955,16 @@ class _LegendRow extends StatelessWidget {
       ],
     );
   }
+}
+
+class _ScheduleSlot {
+  const _ScheduleSlot({
+    required this.dayOfWeek,
+    required this.startTime,
+    required this.endTime,
+  });
+
+  final int dayOfWeek;
+  final String startTime;
+  final String endTime;
 }
