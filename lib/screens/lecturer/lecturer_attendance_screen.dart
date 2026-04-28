@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -711,7 +712,6 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       _qrAutoRefreshSecondsLeft = _qrAutoRefreshSecondsLeft - 1;
       if (_qrAutoRefreshSecondsLeft > 0) {
         onTick?.call(_qrAutoRefreshSecondsLeft);
-        debugPrint('QR_AUTO_REFRESH_COUNTDOWN: $_qrAutoRefreshSecondsLeft');
         return;
       }
       if (_isRefreshingQrToken) {
@@ -720,14 +720,18 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         return;
       }
 
-      debugPrint('QR_AUTO_REFRESH_TRIGGERED');
+      if (kDebugMode) {
+        debugPrint('QR_AUTO_REFRESH_TRIGGERED');
+      }
       onRefreshStateChanged?.call(true);
       final ok = await _refreshQrSessionToken(showErrorSnack: false);
       onRefreshStateChanged?.call(false);
       _qrAutoRefreshSecondsLeft = _qrAutoRefreshIntervalSeconds;
       onTick?.call(_qrAutoRefreshSecondsLeft);
       if (!ok && onError != null) {
-        debugPrint('QR_AUTO_REFRESH_FAILED error=refresh_failed');
+        if (kDebugMode) {
+          debugPrint('QR_AUTO_REFRESH_FAILED error=refresh_failed');
+        }
         onError(
           _tr(
             'تعذر التحديث التلقائي لرمز QR. استخدمي زر التحديث يدوياً.',
@@ -735,9 +739,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           ),
         );
       } else if (ok) {
-        debugPrint(
-          'QR_AUTO_REFRESH_SUCCESS tokenVersion=${_qrSession?.tokenVersion ?? -1}',
-        );
+        if (kDebugMode) {
+          debugPrint('QR_AUTO_REFRESH_SUCCESS');
+        }
       }
     });
   }
@@ -868,6 +872,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
   AttendanceStatus _uiStatusFromManual(ManualAttendanceStatus status) {
     switch (status) {
+      case ManualAttendanceStatus.pending:
+        return AttendanceStatus.pending;
       case ManualAttendanceStatus.present:
         return AttendanceStatus.present;
       case ManualAttendanceStatus.absent:
@@ -881,6 +887,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
   ManualAttendanceStatus _manualStatusFromUi(AttendanceStatus status) {
     switch (status) {
+      case AttendanceStatus.pending:
+        return ManualAttendanceStatus.pending;
       case AttendanceStatus.present:
         return ManualAttendanceStatus.present;
       case AttendanceStatus.absent:
@@ -894,6 +902,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
   int _percentageForStatus(AttendanceStatus status) {
     switch (status) {
+      case AttendanceStatus.pending:
+        return 0;
       case AttendanceStatus.present:
         return 100;
       case AttendanceStatus.late:
@@ -906,6 +916,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
   String _timeTextForStatus(AttendanceStatus status) {
     switch (status) {
+      case AttendanceStatus.pending:
+        return '--';
       case AttendanceStatus.present:
       case AttendanceStatus.late:
         return _lecture.startTime;
@@ -2136,6 +2148,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
   AttendanceStatusFilter _statusToFilter(AttendanceStatus status) {
     switch (status) {
+      case AttendanceStatus.pending:
+        return AttendanceStatusFilter.all;
       case AttendanceStatus.present:
         return AttendanceStatusFilter.present;
       case AttendanceStatus.absent:
@@ -2149,6 +2163,14 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
   _StatusStyle _statusStyle(AttendanceStatus status) {
     switch (status) {
+      case AttendanceStatus.pending:
+        return _StatusStyle(
+          label: _tr('بانتظار التحضير', 'Pending attendance'),
+          chipLabel: _tr('بانتظار', 'Pending'),
+          bg: const Color(0xFFECEFF0),
+          fg: const Color(0xFF6F7D82),
+          activeBg: const Color(0xFF6F7D82),
+        );
       case AttendanceStatus.present:
         return _StatusStyle(
           label: _tr('حاضر', 'Present'),
@@ -2215,7 +2237,7 @@ const TextStyle _tableHeaderStyle = TextStyle(
 
 enum AttendanceStatusFilter { all, present, excused, absent, late }
 
-enum AttendanceStatus { present, absent, excused, late }
+enum AttendanceStatus { pending, present, absent, excused, late }
 enum AttendanceMethod { nfc, qr, manual }
 
 class _StudentRow {
