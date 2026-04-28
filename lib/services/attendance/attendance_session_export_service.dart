@@ -140,9 +140,12 @@ class AttendanceSessionExportService {
       meta('sessionLecturerId', session.lecturerId!);
     }
 
-    int p = 0, a = 0, e = 0, l = 0;
+    int pending = 0, p = 0, a = 0, e = 0, l = 0;
     for (final r in records) {
       switch (r.status) {
+        case ManualAttendanceStatus.pending:
+          pending++;
+          break;
         case ManualAttendanceStatus.present:
           p++;
           break;
@@ -162,6 +165,7 @@ class AttendanceSessionExportService {
     buf.writeln();
     buf.writeln('${_escapeCsv('SECTION')},${_escapeCsv('SUMMARY')}');
     meta('totalStudents', '$total');
+    meta('pendingCount', '$pending');
     meta('presentCount', '$p');
     meta('absentCount', '$a');
     meta('excusedCount', '$e');

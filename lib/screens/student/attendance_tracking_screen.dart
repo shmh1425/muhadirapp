@@ -413,6 +413,7 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
     DateTime? semesterStart,
   ) {
     final status = switch (record.status) {
+      ManualAttendanceStatus.pending => 'pending',
       ManualAttendanceStatus.present => 'present',
       ManualAttendanceStatus.late => 'late',
       ManualAttendanceStatus.excused => 'excused',
@@ -1278,6 +1279,8 @@ class _AttendanceCard extends StatelessWidget {
         return const Color(0xFF2196F3);
       case 'unexcused':
         return const Color(0xFFE57373);
+      case 'pending':
+        return const Color(0xFF9AA6AB);
       default:
         return const Color(0xFF006571);
     }

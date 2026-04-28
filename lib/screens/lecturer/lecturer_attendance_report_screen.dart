@@ -445,6 +445,8 @@ class _LecturerAttendanceReportScreenState
 
   _AttendanceStatus _statusFromManual(ManualAttendanceStatus status) {
     switch (status) {
+      case ManualAttendanceStatus.pending:
+        return _AttendanceStatus.pending;
       case ManualAttendanceStatus.present:
         return _AttendanceStatus.present;
       case ManualAttendanceStatus.absent:
@@ -458,6 +460,8 @@ class _LecturerAttendanceReportScreenState
 
   ManualAttendanceStatus _manualFromStatus(_AttendanceStatus status) {
     switch (status) {
+      case _AttendanceStatus.pending:
+        return ManualAttendanceStatus.pending;
       case _AttendanceStatus.present:
         return ManualAttendanceStatus.present;
       case _AttendanceStatus.absent:
@@ -1523,6 +1527,8 @@ class _LecturerAttendanceReportScreenState
     int late = 0;
     for (final student in students) {
       switch (_effectiveStatus(student)) {
+        case _AttendanceStatus.pending:
+          break;
         case _AttendanceStatus.present:
           present++;
           break;
@@ -1547,6 +1553,8 @@ class _LecturerAttendanceReportScreenState
 
   _StatusFilter _statusToFilter(_AttendanceStatus status) {
     switch (status) {
+      case _AttendanceStatus.pending:
+        return _StatusFilter.all;
       case _AttendanceStatus.present:
         return _StatusFilter.present;
       case _AttendanceStatus.absent:
@@ -1560,6 +1568,13 @@ class _LecturerAttendanceReportScreenState
 
   _StatusStyle _statusStyle(_AttendanceStatus status) {
     switch (status) {
+      case _AttendanceStatus.pending:
+        return _StatusStyle(
+          label: _tr('بانتظار التحضير', 'Pending attendance'),
+          bg: const Color(0xFFECEFF0),
+          fg: const Color(0xFF6F7D82),
+          color: const Color(0xFF6F7D82),
+        );
       case _AttendanceStatus.present:
         return _StatusStyle(
           label: _tr('حاضر', 'Present'),
@@ -3598,7 +3613,7 @@ enum _AttendanceCalendarAction { attend, editPrevious, preview, exportCsv }
 
 enum _StatusFilter { all, present, absent, excused, late }
 
-enum _AttendanceStatus { present, absent, excused, late }
+enum _AttendanceStatus { pending, present, absent, excused, late }
 
 class _LectureAttendanceGroup {
   _LectureAttendanceGroup({
