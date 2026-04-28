@@ -69,7 +69,8 @@ String _absenceSessionsLine(int sessions, double hours) {
 }
 
 String _remainingLineCompact(String label, double remHours, double avgH) {
-  final h = remHours.toStringAsFixed(1);
+  final intHours = (!remHours.isFinite || remHours <= 0) ? 0 : remHours.floor();
+  final h = intHours.toString();
   if (!avgH.isFinite || avgH <= 0) {
     return '• $label: $h س (—)';
   }
@@ -106,9 +107,9 @@ String _hourNounArForForecast(double hoursAmount) {
 }
 
 String _forecastUnexcusedHoursSentence(double remUnex) {
-  final amt = _hoursAmountDisplay(remUnex);
-  final noun = _hourNounArForForecast(remUnex);
-  return 'يمكنك غياب $amt $noun بدون عذر تقريبًا';
+  final n = (!remUnex.isFinite || remUnex <= 0) ? 0 : remUnex.floor();
+  final noun = n == 1 ? 'ساعة' : 'ساعات';
+  return 'يمكنك الغياب بدون عذر حتى: $n $noun';
 }
 
 class ChatbotProvider extends ChangeNotifier {
@@ -178,7 +179,6 @@ class ChatbotProvider extends ChangeNotifier {
       final unexPct = c.unexcusedAbsenceRate.isFinite ? c.unexcusedAbsenceRate : 0.0;
 
       final util = _maxRiskUtilization(c, maxU, dep);
-      final rEmoji = _riskEmoji(util);
       final rLabel = english ? _riskLabelEn(util) : _riskLabelAr(util);
 
       final absH = c.absenceHours.isFinite ? c.absenceHours : 0.0;
@@ -204,35 +204,17 @@ class ChatbotProvider extends ChangeNotifier {
       /// يطابق منطق الحرمان في التطبيق؛ عندها لا نكرر تنبيه «أي غياب إضافي».
       final inDeprivation = c.isDeprivation || util >= 1.0;
 
-      final String forecastTail;
-      if (inDeprivation) {
-        forecastTail = '';
-      } else if (strictWarn) {
-        forecastTail = '\n\n⚠️ أي غياب بدون عذر = تجاوز الحد مباشرة';
-      } else if (avgH <= 0) {
-        forecastTail =
-            '\n\n📍 لا يمكن تقدير الجلسات المتبقية بدون معرفة متوسط طول الجلسة.';
-      } else {
-        final can = canUnexFloor;
-        if (can <= 0) {
-          forecastTail = '\n\n📍 يمكنك غياب أقل من ساعة بدون عذر تقريبًا';
-        } else {
-          forecastTail = '\n\n📍 ${_forecastUnexcusedHoursSentence(remUnex)}';
-        }
-      }
+      // Intentionally omit "remaining" and forecast lines (UI parity request).
 
       if (!english) {
+        final canUnexHours = (!remUnex.isFinite || remUnex <= 0) ? 0 : remUnex.floor();
+        final canLine = inDeprivation ? '' : '\nتقدر تغيب $canUnexHours ساعات تقريباً';
         return '${courseEmojiFor(c)} ${c.displayName}\n\n'
             '• بدون عذر: ${unexPct.toStringAsFixed(1)}% من أصل $maxU%\n'
             '• بعذر: ${excPct.toStringAsFixed(1)}% من أصل $dep%\n'
             '• الإجمالي: ${totalPct.toStringAsFixed(1)}% من أصل $dep%\n'
             '${_absenceSessionsLine(absenceSessions, absH)}\n\n'
-            '$rEmoji $rLabel${inDeprivation ? '\n🚫 حرمان أكاديمي' : ''}\n'
-            'المتبقي:\n'
-            '${_remainingLineCompact('بدون عذر', remUnex, avgH)}\n'
-            '${_remainingLineCompact('بعذر', remExc, avgH)}\n'
-            '${_remainingLineCompact('حتى الحد الإجمالي', remTotal, avgH)}'
-            '$forecastTail';
+            'الحالة: $rLabel${inDeprivation ? '\n🚫 حرمان أكاديمي' : ''}$canLine';
       }
 
       final absSessionsLine = absenceSessions <= 0
@@ -243,11 +225,7 @@ class ChatbotProvider extends ChangeNotifier {
           '• Excused: ${excPct.toStringAsFixed(1)}% (cap $dep%)\n'
           '• Total: ${totalPct.toStringAsFixed(1)}% (cap $dep%)\n'
           '$absSessionsLine\n\n'
-          '$rEmoji $rLabel${inDeprivation ? '\n🚫 Academic deprivation' : ''}\n'
-          'Remaining:\n'
-          '• Unexcused: ${remUnex.toStringAsFixed(1)} h\n'
-          '• Excused: ${remExc.toStringAsFixed(1)} h\n'
-          '• Total cap: ${remTotal.toStringAsFixed(1)} h';
+          'Status: $rLabel${inDeprivation ? '\n🚫 Academic deprivation' : ''}';
     }
 
     if (courses.isEmpty) {
@@ -283,7 +261,7 @@ class ChatbotProvider extends ChangeNotifier {
     final parts = <String>[...header];
     for (var i = 0; i < courses.length; i++) {
       if (i > 0) {
-        parts.add('');
+        parts.add('-------------------------------------------------');
       }
       parts.add(oneCourse(courses[i]));
     }

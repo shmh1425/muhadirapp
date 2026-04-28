@@ -166,6 +166,7 @@ class ChatbotRepository {
       final int todayDayOfWeek = DateTime.now().weekday;
       int totalCreditHours = 0;
       final Map<String, int> codeToWeeklyMinutesCache = <String, int>{};
+      final Map<String, int> sectionIdToWeeklyMinutesCache = <String, int>{};
 
       for (final enrollDoc in enrollmentDocs) {
         final sectionId =
@@ -236,6 +237,12 @@ class ChatbotRepository {
         // - current: schedule: [{dayOfWeek,startTime,endTime,location,hall...}, ...]
         final List<dynamic> scheduleEntries =
             (sectionData['schedule'] as List?) ?? const <dynamic>[];
+        if (!sectionIdToWeeklyMinutesCache.containsKey(sectionId)) {
+          final wms = AttendancePlannedSummary.weeklyMinutesFromSectionSchedule(
+            scheduleEntries,
+          );
+          if (wms > 0) sectionIdToWeeklyMinutesCache[sectionId] = wms;
+        }
 
         final scheduleDaysFromEntries = scheduleEntries
             .map((e) {
@@ -333,7 +340,55 @@ class ChatbotRepository {
           }
         }
 
-        // STEP 1: Fetch from all attendance collections and deduplicate by date
+        int statusPriority(String raw) {
+          final st = raw.trim().toLowerCase();
+          switch (st) {
+            case 'present':
+              return 4;
+            case 'late':
+              return 3;
+            case 'excused':
+              return 2;
+            case 'absent':
+            case 'unexcused':
+              return 1;
+            case 'pending':
+            default:
+              return 0;
+          }
+        }
+
+        String normalizeTime(String raw) {
+          final s = raw.trim();
+          if (s.isEmpty) return '';
+          final parts = s.split(':');
+          if (parts.isEmpty) return '';
+          final h = int.tryParse(parts[0].trim());
+          final m = parts.length > 1 ? int.tryParse(parts[1].trim()) : 0;
+          if (h == null || m == null) return s;
+          return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+        }
+
+        // Pre-parse section schedule into slots by weekday (1..7) using HH:mm times.
+        final Map<int, List<(String, String)>> scheduleSlotsByDow = <int, List<(String, String)>>{};
+        if (scheduleEntries.isNotEmpty) {
+          for (final e in scheduleEntries) {
+            final m = Map<String, dynamic>.from(e is Map ? e as Map : <String, dynamic>{});
+            final dow = m['dayOfWeek'] is int
+                ? m['dayOfWeek'] as int
+                : int.tryParse((m['dayOfWeek'] ?? '').toString()) ?? 0;
+            if (dow < 1 || dow > 7) continue;
+            final start = normalizeTime((m['startTime'] ?? '').toString());
+            final end = normalizeTime((m['endTime'] ?? '').toString());
+            if (start.isEmpty || end.isEmpty) continue;
+            scheduleSlotsByDow.putIfAbsent(dow, () => <(String, String)>[]).add((start, end));
+          }
+        }
+
+        // STEP 1: Fetch from all attendance collections and deduplicate by session
+        // (sectionId + lectureDate + start/end) AFTER normalizing time using section.schedule.
+        // If duplicates exist for the same session, keep the best status:
+        // present > late > excused > absent/unexcused > pending.
         final Map<String, Map<String, dynamic>> uniqueRecords = {};
 
         for (final collection in _attendanceCollections) {
@@ -346,15 +401,44 @@ class ChatbotRepository {
 
             for (final doc in snap.docs) {
               final data = doc.data() as Map<String, dynamic>;
-              final date = data['lectureDate'] is Timestamp
-                  ? (data['lectureDate'] as Timestamp)
-                      .toDate()
-                      .toIso8601String()
-                      .substring(0, 10) // YYYY-MM-DD
-                  : data['lectureDate']?.toString() ?? doc.id;
 
-              // First record for this date wins — no duplicates
-              uniqueRecords.putIfAbsent(date, () => data);
+              final normalized = Map<String, dynamic>.from(data);
+
+              final lectureDay = AttendancePlannedSummary.lectureDayFromRecord(normalized);
+              final dateKey = lectureDay != null
+                  ? lectureDay.toIso8601String()
+                  : (normalized['lectureDate']?.toString() ?? doc.id);
+
+              var start = normalizeTime((normalized['lectureStartTime'] ?? '').toString());
+              var end = normalizeTime((normalized['lectureEndTime'] ?? '').toString());
+
+              // Match AttendanceTracking: if record time doesn't match schedule and there's
+              // exactly one slot for that weekday, override the time from the schedule.
+              if (lectureDay != null && scheduleSlotsByDow.isNotEmpty) {
+                final daySlots = scheduleSlotsByDow[lectureDay.weekday] ?? const <(String, String)>[];
+                if (daySlots.isNotEmpty) {
+                  final matchesAny = daySlots.any((s) => s.$1 == start && s.$2 == end);
+                  if (!matchesAny && daySlots.length == 1) {
+                    start = daySlots.first.$1;
+                    end = daySlots.first.$2;
+                  }
+                }
+              }
+
+              normalized['lectureStartTime'] = start;
+              normalized['lectureEndTime'] = end;
+
+              final key = '$sectionId|$dateKey|$start-$end';
+              final prev = uniqueRecords[key];
+              if (prev == null) {
+                uniqueRecords[key] = normalized;
+              } else {
+                final p0 = statusPriority((prev['status'] ?? '').toString());
+                final p1 = statusPriority((normalized['status'] ?? '').toString());
+                if (p1 >= p0) {
+                  uniqueRecords[key] = normalized;
+                }
+              }
             }
           } catch (_) {
             // collection doesn't exist yet → skip silently
@@ -391,6 +475,7 @@ class ChatbotRepository {
 
         final planned = AttendancePlannedSummary.forSectionRecords(
           courseCode: courseCode,
+          weeklyMinutesFromSection: sectionIdToWeeklyMinutesCache[sectionId],
           codeToWeeklyMinutes: codeToWeeklyMinutesCache,
           dedupedRecords: allRecords,
           semesterWeeksCount: semesterWeeksForPlan,
@@ -427,10 +512,9 @@ class ChatbotRepository {
             ? remainingHours.clamp(0.0, totalPlannedHours)
             : 0.0;
 
-        // Unexcused / excused: reaching the configured % = deprivation (≥).
-        // Total: deprivation only when strictly above max total % (>).
-        final isDeprivation = unexcusedAbsenceRate >= maxUnexcusedPercent ||
-            excusedAbsenceRate >= deprivationPercent ||
+        // Match AttendanceTracking: "over limit" is strict '>' for all three.
+        final isDeprivation = unexcusedAbsenceRate > maxUnexcusedPercent ||
+            excusedAbsenceRate > deprivationPercent ||
             absenceRate > deprivationPercent;
 
         final unexcusedWarnLo = (maxUnexcusedPercent - 5).clamp(0, 100);

@@ -11,6 +11,7 @@ import '../services/admin/admin_auth_service.dart';
 import '../services/female_security_auth_service.dart';
 import '../services/student_auth_service.dart';
 import '../services/lecturer_auth_service.dart';
+import '../features/chatbot/providers/chatbot_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -76,6 +77,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (student == null) {
           await FirebaseAuth.instance.signOut();
+          ChatbotProvider.instance.clearChat();
           if (!mounted) return;
           setState(() {
             _isLoading = false;
@@ -84,6 +86,8 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
 
+        // Ensure chatbot messages never leak across accounts.
+        ChatbotProvider.instance.clearChat();
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const HomeScreen()),
         );
