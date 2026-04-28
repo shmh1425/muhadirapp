@@ -22,6 +22,7 @@ class QrAttendanceSession {
     required this.expiresAt,
     required this.tokenVersion,
     required this.currentTokenId,
+    this.sessionOpenedAt,
     this.createdAt,
     this.updatedAt,
   });
@@ -46,6 +47,7 @@ class QrAttendanceSession {
   final DateTime expiresAt;
   final int tokenVersion;
   final String currentTokenId;
+  final DateTime? sessionOpenedAt;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -85,6 +87,7 @@ class QrAttendanceSession {
     DateTime? expiresAt,
     int? tokenVersion,
     String? currentTokenId,
+    DateTime? sessionOpenedAt,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -109,6 +112,7 @@ class QrAttendanceSession {
       expiresAt: expiresAt ?? this.expiresAt,
       tokenVersion: tokenVersion ?? this.tokenVersion,
       currentTokenId: currentTokenId ?? this.currentTokenId,
+      sessionOpenedAt: sessionOpenedAt ?? this.sessionOpenedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -136,6 +140,8 @@ class QrAttendanceSession {
       'expiresAt': Timestamp.fromDate(expiresAt),
       'tokenVersion': tokenVersion,
       'currentTokenId': currentTokenId,
+      if (sessionOpenedAt != null)
+        'sessionOpenedAt': Timestamp.fromDate(sessionOpenedAt!),
       if (createdAt != null) 'createdAt': Timestamp.fromDate(createdAt!),
       if (updatedAt != null) 'updatedAt': Timestamp.fromDate(updatedAt!),
     };
@@ -171,6 +177,7 @@ class QrAttendanceSession {
       expiresAt: expiresAt,
       tokenVersion: _safeInt(data['tokenVersion'], fallback: 1),
       currentTokenId: (data['currentTokenId'] ?? '').toString().trim(),
+      sessionOpenedAt: _toDateTime(data['sessionOpenedAt']),
       createdAt: _toDateTime(data['createdAt']),
       updatedAt: _toDateTime(data['updatedAt']),
     );
