@@ -161,6 +161,63 @@ service cloud.firestore {
           );
     }
 
+    function hasQrStudentProfileProof(data) {
+      return data.studentDocId is string &&
+          data.studentDocId.size() > 0 &&
+          exists(
+            /databases/$(database)/documents/external_students/$(data.studentDocId)
+          ) &&
+          (
+            !(get(
+                /databases/$(database)/documents/external_students/$(data.studentDocId)
+              ).data.studentId is number) ||
+            get(
+              /databases/$(database)/documents/external_students/$(data.studentDocId)
+            ).data.studentId == data.studentId
+          );
+    }
+
+    function hasQrEnrollmentProof(data) {
+      return data.studentDocId is string &&
+          data.sectionId is string &&
+          exists(
+            /databases/$(database)/documents/student_section_enrollments/$(data.studentDocId + '_' + data.sectionId)
+          ) &&
+          get(
+            /databases/$(database)/documents/student_section_enrollments/$(data.studentDocId + '_' + data.sectionId)
+          ).data.sectionId == data.sectionId &&
+          get(
+            /databases/$(database)/documents/student_section_enrollments/$(data.studentDocId + '_' + data.sectionId)
+          ).data.studentDocId == data.studentDocId &&
+          (
+            !(get(
+                /databases/$(database)/documents/student_section_enrollments/$(data.studentDocId + '_' + data.sectionId)
+              ).data.studentId is number) ||
+            get(
+              /databases/$(database)/documents/student_section_enrollments/$(data.studentDocId + '_' + data.sectionId)
+            ).data.studentId == data.studentId
+          ) &&
+          get(
+            /databases/$(database)/documents/student_section_enrollments/$(data.studentDocId + '_' + data.sectionId)
+          ).data.isActive != false;
+    }
+
+    function hasValidQrSessionProof(data) {
+      return data.sessionId is string &&
+          exists(
+            /databases/$(database)/documents/qr_attendance_sessions/$(data.sessionId)
+          ) &&
+          get(
+            /databases/$(database)/documents/qr_attendance_sessions/$(data.sessionId)
+          ).data.sectionId == data.sectionId &&
+          get(
+            /databases/$(database)/documents/qr_attendance_sessions/$(data.sessionId)
+          ).data.isOpen == true &&
+          get(
+            /databases/$(database)/documents/qr_attendance_sessions/$(data.sessionId)
+          ).data.attendanceMethod == 'qr';
+    }
+
     function isValidQrRecordCreate(recordId) {
       let data = request.resource.data;
       return hasQrRecordRequiredFields(data) &&
@@ -168,25 +225,25 @@ service cloud.firestore {
           data.recordId is string &&
           data.sessionId is string &&
           data.sectionId is string &&
-          data.studentDocId == currentStudentId() &&
+          data.studentId is number &&
+          data.studentDocId is string &&
+          data.studentName is string &&
+          data.studentEmail is string &&
+          data.courseCode is string &&
+          data.courseName is string &&
+          data.lectureDate is timestamp &&
+          data.lectureStartTime is string &&
+          data.lectureEndTime is string &&
           data.attendanceMethod == 'qr' &&
           (data.status == 'present' || data.status == 'late') &&
-          data.recordId.matches('^' + data.sessionId + '_.*$');
+          data.recordId.matches('^' + data.sessionId + '_[0-9]+$') &&
+          hasValidQrSessionProof(data) &&
+          hasQrStudentProfileProof(data) &&
+          hasQrEnrollmentProof(data);
     }
 
     function canReadQrRecord() {
-      return isAdmin() ||
-          (isStudent() && resource.data.studentDocId == currentStudentId()) ||
-          (
-            exists(
-              /databases/$(database)/documents/qr_attendance_sessions/$(resource.data.sessionId)
-            ) &&
-            isActiveLecturerById(
-              get(
-                /databases/$(database)/documents/qr_attendance_sessions/$(resource.data.sessionId)
-              ).data.lecturerId
-            )
-          );
+      return isSignedIn();
     }
 
     match /admins/{uid} {
@@ -309,8 +366,9 @@ service cloud.firestore {
     // QR attendance records: students can create only their own record.
     // No deletes to preserve audit integrity.
     match /qr_attendance_records/{recordId} {
-      allow read: if canReadQrRecord();
-      allow create: if isStudent() && isValidQrRecordCreate(recordId);
+      allow get: if canReadQrRecord() && recordId.matches('^.+_[0-9]+$');
+      allow list: if false;
+      allow create: if isSignedIn() && isValidQrRecordCreate(recordId);
       allow update, delete: if false;
     }
 
