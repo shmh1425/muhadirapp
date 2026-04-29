@@ -15,21 +15,13 @@ class LecturerMyLecturesScreen extends StatefulWidget {
 
 class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
   static const Color _primaryColor = Color(0xFF006571);
-  static const Color _headerBg = Color(0xFF0A6E79);
-  static const Color _rowBorder = Color(0xFFE8E8E8);
-  static const double _tableRadius = 18;
-  static const double _timeColWidth = 56;
+  static const double _tableRadius = 22;
 
   List<LectureItem> _allLectures = [];
   bool _isLoadingLectures = true;
   String? _loadError;
 
-  String _selectedTab = 'الكل';
-
   final List<int> _dayOrder = const [7, 1, 2, 3, 4];
-
-  /// ساعات العمل من 8 صباحاً إلى 6 مساءً
-  final List<int> _timeSlots = const [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
 
   @override
   void initState() {
@@ -59,11 +51,6 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
       });
     }
   }
-
-  List<_DayTabItem> get _tabs => [
-    const _DayTabItem(label: 'الكل'),
-    ..._dayOrder.map((day) => _DayTabItem(label: _dayName(day), weekday: day)),
-  ];
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
@@ -142,27 +129,10 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
                             alignment: AlignmentDirectional.centerStart,
                             child: ProfileBackButton(onTap: _goBack),
                           ),
-                          const SizedBox(height: 10),
-                          _buildTabsSection(),
                           const SizedBox(height: 12),
-                          Expanded(
-                            child: SingleChildScrollView(
-                              physics: const BouncingScrollPhysics(),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _selectedTab == 'الكل'
-                                      ? _buildAllScheduleTable()
-                                      : _buildSingleDayTable(
-                                          _tabs.firstWhere(
-                                            (tab) => tab.label == _selectedTab,
-                                          ),
-                                        ),
-                                  _scheduleTableBottomHint(),
-                                ],
-                              ),
-                            ),
-                          ),
+                          _buildModernHeaderCard(),
+                          const SizedBox(height: 12),
+                          Expanded(child: _buildLectureCardsList()),
                         ],
                       ),
                     ),
@@ -173,332 +143,320 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
     );
   }
 
-  Widget _buildTabsSection() {
+  Widget _buildModernHeaderCard() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(_tableRadius),
-        border: Border.all(color: const Color(0xFFD6E6E8)),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0B8793), Color(0xFF005B66)],
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+        ),
+        borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 5),
+            color: _primaryColor.withValues(alpha: 0.24),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
-      ),
-      child: _buildTabs(),
-    );
-  }
-
-  Widget _buildTabs() {
-    const double tabWidth = 78;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      physics: const BouncingScrollPhysics(),
-      child: Row(
-        children: _tabs.map((tab) {
-          final bool isActive = _selectedTab == tab.label;
-          return Padding(
-            padding: const EdgeInsets.only(left: 6),
-            child: GestureDetector(
-              onTap: () => setState(() => _selectedTab = tab.label),
-              child: SizedBox(
-                width: tabWidth,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isActive ? _primaryColor : Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isActive ? _primaryColor : const Color(0xFFD9D9D9),
-                    ),
-                  ),
-                  child: Text(
-                    _displayDayNameFromArabic(tab.label),
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: isActive ? Colors.white : const Color(0xFF444444),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildAllScheduleTable() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(_tableRadius),
-        border: Border.all(color: const Color(0xFFD6E5E8)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(_tableRadius),
-        child: Column(
-          children: [
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF27A2A9), _headerBg],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: _timeColWidth,
-                    child: Text(
-                      _tr('الوقت', 'Time'),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontFamily: 'Cairo',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  ..._dayOrder.map(
-                    (day) => Expanded(
-                      child: Text(
-                        _displayDayName(day),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontFamily: 'Cairo',
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            ..._timeSlots.asMap().entries.map((entry) {
-              final rowIndex = entry.key;
-              final hour = entry.value;
-              return Container(
-                decoration: BoxDecoration(
-                  color: rowIndex.isEven
-                      ? const Color(0xFFFCFEFE)
-                      : Colors.white,
-                  border: Border(bottom: BorderSide(color: _rowBorder)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: _timeColWidth,
-                      height: 40,
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(
-                        border: Border(left: BorderSide(color: _rowBorder)),
-                      ),
-                      child: Text(
-                        _displayHour(hour),
-                        textDirection: TextDirection.ltr,
-                        style: const TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 11,
-                          color: Color(0xFF6B6B6B),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    ..._dayOrder.map(
-                      (day) => Expanded(
-                        child: _buildCell(
-                          lecture: _lectureAt(day, hour),
-                          showInfo: true,
-                          height: 40,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-          ],
-        ),
-      ),
-    );
-  }
-
-  static Widget _scheduleTableBottomHint() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 12, bottom: 24),
-      child: Text(
-        '٨ ص – ٦ م',
-        style: TextStyle(
-          fontFamily: 'Cairo',
-          fontSize: 11,
-          color: Colors.grey.shade600,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSingleDayTable(_DayTabItem tab) {
-    final day = tab.weekday;
-    if (day == null) return const SizedBox.shrink();
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(_tableRadius),
-        border: Border.all(color: const Color(0xFFD6E5E8)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(_tableRadius),
-        child: Column(
-          children: [
-            Container(
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF27A2A9), _headerBg],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-              ),
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                _displayDayNameFromArabic(tab.label),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontFamily: 'Cairo',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            ..._timeSlots.asMap().entries.map((entry) {
-              final rowIndex = entry.key;
-              final hour = entry.value;
-              return Container(
-                decoration: BoxDecoration(
-                  color: rowIndex.isEven
-                      ? const Color(0xFFFCFEFE)
-                      : Colors.white,
-                  border: Border(bottom: BorderSide(color: _rowBorder)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: _timeColWidth,
-                      height: 42,
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(
-                        border: Border(left: BorderSide(color: _rowBorder)),
-                      ),
-                      child: Text(
-                        _displayHour(hour),
-                        textDirection: TextDirection.ltr,
-                        style: const TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 11,
-                          color: Color(0xFF6B6B6B),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildCell(
-                        lecture: _lectureAt(day, hour),
-                        showInfo: false,
-                        height: 42,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCell({
-    required LectureItem? lecture,
-    required bool showInfo,
-    required double height,
-  }) {
-    if (lecture == null) return SizedBox(height: height);
-
-    final Color fill = lecture.activity == 'عملي'
-        ? const Color(0xFFDDF1F5)
-        : const Color(0xFFF3EFE4);
-
-    return Container(
-      height: height,
-      margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: const Color(0xFFD6E5E8), width: 0.8),
       ),
       child: Row(
         children: [
+          const Icon(
+            Icons.calendar_month_rounded,
+            color: Colors.white,
+            size: 24,
+          ),
+          const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              lecture.courseName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 10.5,
-                color: Color(0xFF2E2E2E),
-                fontWeight: FontWeight.w700,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _tr('محاضراتي', 'My Lectures'),
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _tr(
+                    'عرض بطاقات حديث ومنظّم حسب الأيام',
+                    'Modern card-based view organized by day',
+                  ),
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 12,
+                    color: Colors.white.withValues(alpha: 0.88),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ),
-          if (showInfo)
-            InkWell(
-              onTap: () => _showLectureDialog(lecture),
-              borderRadius: BorderRadius.circular(12),
-              child: const Padding(
-                padding: EdgeInsets.all(2),
-                child: Icon(
-                  Icons.info_outline_rounded,
-                  size: 13,
-                  color: Color(0xFF006571),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLectureCardsList() {
+    final sorted = [..._allLectures]
+      ..sort((a, b) {
+        final dayCompare = _dayOrder
+            .indexOf(a.dayOfWeek)
+            .compareTo(_dayOrder.indexOf(b.dayOfWeek));
+        if (dayCompare != 0) return dayCompare;
+        return _normalizeHour(
+          a.startTime,
+        ).compareTo(_normalizeHour(b.startTime));
+      });
+
+    if (sorted.isEmpty) {
+      return Center(
+        child: Text(
+          _tr('لا توجد محاضرات حالياً', 'No lectures available'),
+          style: const TextStyle(
+            fontFamily: 'Cairo',
+            fontSize: 16,
+            color: Color(0xFF607278),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
+    }
+
+    final grouped = <int, List<LectureItem>>{
+      for (final day in _dayOrder) day: <LectureItem>[],
+    };
+    for (final lecture in sorted) {
+      if (grouped.containsKey(lecture.dayOfWeek)) {
+        grouped[lecture.dayOfWeek]!.add(lecture);
+      }
+    }
+
+    return RefreshIndicator(
+      color: _primaryColor,
+      onRefresh: _loadLectures,
+      child: ListView(
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
+        children: [
+          for (final day in _dayOrder)
+            if ((grouped[day] ?? []).isNotEmpty)
+              _buildDayCardsSection(day: day, lectures: grouped[day]!),
+          const SizedBox(height: 18),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDayCardsSection({
+    required int day,
+    required List<LectureItem> lectures,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 5,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: _primaryColor,
+                  borderRadius: BorderRadius.circular(20),
                 ),
               ),
+              const SizedBox(width: 8),
+              Text(
+                _displayDayName(day),
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF12343B),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F4F5),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '${lectures.length}',
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: _primaryColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...lectures.map(_buildLectureCard),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLectureCard(LectureItem lecture) {
+    final isPractical = lecture.activity.trim() == 'عملي';
+    final accentStart = isPractical ? const Color(0xFF2A9DA7) : _primaryColor;
+    final accentEnd = isPractical
+        ? const Color(0xFF167B83)
+        : const Color(0xFF0D5C66);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(_tableRadius),
+          onTap: () => _showLectureDialog(lecture),
+          child: Ink(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(_tableRadius),
+              border: Border.all(color: const Color(0xFFD7E8EB)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
+            child: Row(
+              children: [
+                Container(
+                  width: 7,
+                  height: 118,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [accentStart, accentEnd],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                    borderRadius: const BorderRadiusDirectional.only(
+                      topStart: Radius.circular(_tableRadius),
+                      bottomStart: Radius.circular(_tableRadius),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                lecture.courseName,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontSize: 15,
+                                  color: Color(0xFF17363D),
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              size: 14,
+                              color: _primaryColor.withValues(alpha: 0.7),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _buildInfoPill(
+                              icon: Icons.access_time_rounded,
+                              label:
+                                  '${_displayHour(_normalizeHour(lecture.startTime))} - ${_displayHour(_normalizeHour(lecture.endTime))}',
+                            ),
+                            _buildInfoPill(
+                              icon: Icons.account_tree_outlined,
+                              label:
+                                  '${_tr('الشعبة', 'Section')} ${lecture.section}',
+                            ),
+                            _buildInfoPill(
+                              icon: Icons.meeting_room_outlined,
+                              label: lecture.hall,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          lecture.location?.trim().isNotEmpty == true
+                              ? lecture.location!.trim()
+                              : _tr(
+                                  'الموقع غير محدد',
+                                  'Location not specified',
+                                ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 12,
+                            color: Color(0xFF61797F),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoPill({required IconData icon, required String label}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F8F9),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFE2EEF0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: _primaryColor),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 11,
+              color: Color(0xFF24484F),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ],
       ),
     );
@@ -631,17 +589,6 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
     );
   }
 
-  LectureItem? _lectureAt(int day, int hour) {
-    final dayLectures = _allLectures.where((item) => item.dayOfWeek == day);
-    for (final lecture in dayLectures) {
-      final start = _normalizeHour(lecture.startTime);
-      if (start == hour || (lecture.isDouble && start + 1 == hour)) {
-        return lecture;
-      }
-    }
-    return null;
-  }
-
   int _normalizeHour(String time) {
     final int raw = int.tryParse(time.split(':').first) ?? 0;
     if (raw < 8) return raw + 12;
@@ -674,11 +621,4 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
         return 'غير محدد';
     }
   }
-}
-
-class _DayTabItem {
-  const _DayTabItem({required this.label, this.weekday});
-
-  final String label;
-  final int? weekday;
 }

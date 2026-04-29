@@ -55,9 +55,7 @@ class _LecturerAttendanceReportScreenState
   final bool _showLegacyReportPanel = true;
   int? _selectedWeekNumber;
   late int _selectedDayOfWeek;
-  bool _hasExplicitDateSelection = false;
   String? _selectedCourseCode;
-  String? _selectedSectionId;
   String? _selectedSessionId;
   _StatusFilter _statusFilter = _StatusFilter.all;
   Map<String, _AttendanceStatus> _draftStatuses = <String, _AttendanceStatus>{};
@@ -81,7 +79,9 @@ class _LecturerAttendanceReportScreenState
   }
 
   int get _currentWeekNumber => _calendarRepository.getWeekNumber(_calendarNow);
-  int get _maxSelectableWeeks => _calendarRepository.semesterWeeks.clamp(1, 60);
+  int get _effectiveWeekNumber => _weekIsAuto
+      ? _currentWeekNumber
+      : (_selectedWeekNumber ?? _currentWeekNumber);
   bool _isDateWithinEditWindow(DateTime date) {
     final normalized = DateTime(date.year, date.month, date.day);
     final today = DateTime(
@@ -99,52 +99,17 @@ class _LecturerAttendanceReportScreenState
     return _allWeekdayOrder.where(days.contains).toList();
   }
 
-  bool get _isDateSelected => _hasExplicitDateSelection;
-  bool get _isSelectedDateInFuture {
-    if (!_isDateSelected) return false;
-    final today = DateTime(
-      _calendarNow.year,
-      _calendarNow.month,
-      _calendarNow.day,
-    );
-    return _normalizedSelectedDate.isAfter(today);
-  }
-
   bool get _isCourseSelected =>
       _selectedCourseCode != null && _selectedCourseCode!.trim().isNotEmpty;
-  bool get _isSectionSelected =>
-      _selectedSectionId != null && _selectedSectionId!.trim().isNotEmpty;
+  bool get _isWeekSelected => _selectedWeekNumber != null;
+  bool get _hasSelectedSession =>
+      _selectedSessionId != null && _selectedSessionId!.trim().isNotEmpty;
   bool get _hasCompleteRequiredSelection =>
-      _isDateSelected &&
-      !_isSelectedDateInFuture &&
-      _isCourseSelected &&
-      _isSectionSelected;
-
-  DateTime get _normalizedSelectedDate => DateTime(
-    _calendarSelectedDate.year,
-    _calendarSelectedDate.month,
-    _calendarSelectedDate.day,
-  );
-
-  List<_LectureAttendanceGroup> get _groupsForSelectedDate {
-    if (!_isDateSelected) return const <_LectureAttendanceGroup>[];
-    final selectedDate = _normalizedSelectedDate;
-    return _groups.where((group) {
-      final groupDate = DateTime(
-        group.lectureDate.year,
-        group.lectureDate.month,
-        group.lectureDate.day,
-      );
-      return groupDate == selectedDate;
-    }).toList();
-  }
+      _isCourseSelected && _isWeekSelected && _hasSelectedSession;
 
   List<_CourseOption> get _courseOptions {
-    if (!_isDateSelected || _isSelectedDateInFuture) {
-      return const <_CourseOption>[];
-    }
     final map = <String, _CourseOption>{};
-    for (final group in _groupsForSelectedDate) {
+    for (final group in _groups) {
       final key = group.courseCode.trim().isNotEmpty
           ? group.courseCode.trim()
           : group.courseName.trim();
@@ -158,52 +123,37 @@ class _LecturerAttendanceReportScreenState
     return options;
   }
 
-  List<_SectionOption> get _sectionOptions {
-    if (!_isDateSelected || _isSelectedDateInFuture || !_isCourseSelected) {
-      return const <_SectionOption>[];
-    }
-    final map = <String, _SectionOption>{};
-    for (final group in _groupsForSelectedDate) {
-      final courseKey = group.courseCode.trim().isNotEmpty
-          ? group.courseCode.trim()
-          : group.courseName.trim();
-      if (courseKey != _selectedCourseCode) continue;
-      final sectionKey = group.sectionId.trim().isNotEmpty
-          ? group.sectionId.trim()
-          : group.section.trim();
-      map.putIfAbsent(
-        sectionKey,
-        () => _SectionOption(id: sectionKey, label: group.section.trim()),
-      );
-    }
-    final options = map.values.toList()
-      ..sort((a, b) => a.label.compareTo(b.label));
-    return options;
+  List<int> get _weekOptionsForSelectedCourse {
+    if (!_isCourseSelected) return const <int>[];
+    final weeks =
+        _groups
+            .where((group) {
+              final key = group.courseCode.trim().isNotEmpty
+                  ? group.courseCode.trim()
+                  : group.courseName.trim();
+              return key == _selectedCourseCode;
+            })
+            .map((group) => group.weekNumber)
+            .toSet()
+            .toList()
+          ..sort();
+    return weeks;
   }
 
   List<_LectureAttendanceGroup> get _filteredGroups {
-    if (_isSelectedDateInFuture) {
+    if (!_isCourseSelected || !_isWeekSelected) {
       return const <_LectureAttendanceGroup>[];
     }
-    if (!_hasCompleteRequiredSelection) {
-      return const <_LectureAttendanceGroup>[];
-    }
-    final selectedDate = _normalizedSelectedDate;
     var list = _groups.where((group) {
-      final groupDate = DateTime(
-        group.lectureDate.year,
-        group.lectureDate.month,
-        group.lectureDate.day,
-      );
       final courseKey = group.courseCode.trim().isNotEmpty
           ? group.courseCode.trim()
           : group.courseName.trim();
-      final sectionKey = group.sectionId.trim().isNotEmpty
-          ? group.sectionId.trim()
-          : group.section.trim();
-      return groupDate == selectedDate &&
-          courseKey == _selectedCourseCode &&
-          sectionKey == _selectedSectionId;
+      if (courseKey != _selectedCourseCode) return false;
+      if (group.weekNumber != _selectedWeekNumber) return false;
+      if (_selectedSessionId != null && _selectedSessionId!.trim().isNotEmpty) {
+        return group.sessionId == _selectedSessionId;
+      }
+      return true;
     }).toList();
     list.sort((a, b) {
       final byDate = b.lectureDate.compareTo(a.lectureDate);
@@ -235,17 +185,6 @@ class _LecturerAttendanceReportScreenState
     }
     for (final option in _courseOptions) {
       if (option.code == key) return option.label;
-    }
-    return key;
-  }
-
-  String get _selectedSectionLabel {
-    final key = _selectedSectionId;
-    if (key == null || key.trim().isEmpty) {
-      return _tr('غير محدد', 'Not selected');
-    }
-    for (final option in _sectionOptions) {
-      if (option.id == key) return option.label;
     }
     return key;
   }
@@ -308,16 +247,11 @@ class _LecturerAttendanceReportScreenState
           _calendarNow.month,
           _calendarNow.day,
         );
-        if (groups.isNotEmpty) {
-          final latest = groups.first;
-          _selectedDayOfWeek = latest.dayOfWeek;
-          _weekIsAuto = false;
-          _selectedWeekNumber = latest.weekNumber;
-        }
+        _weekIsAuto = false;
+        _selectedWeekNumber = null;
         _groups = groups;
-        _hasExplicitDateSelection = false;
         _selectedCourseCode = null;
-        _selectedSectionId = null;
+        _selectedSessionId = null;
         _statusFilter = _StatusFilter.all;
         _normalizeLinkedSelections();
         _normalizeSelectedSession();
@@ -482,20 +416,20 @@ class _LecturerAttendanceReportScreenState
     if (selectedCourseCode != null &&
         !_courseOptions.any((option) => option.code == selectedCourseCode)) {
       _selectedCourseCode = null;
+      _selectedWeekNumber = null;
+      _selectedSessionId = null;
     }
-    final selectedSectionId = _selectedSectionId;
-    if (selectedSectionId != null &&
-        !_sectionOptions.any((option) => option.id == selectedSectionId)) {
-      _selectedSectionId = null;
+    if (_selectedWeekNumber != null &&
+        !_weekOptionsForSelectedCourse.contains(_selectedWeekNumber)) {
+      _selectedWeekNumber = null;
+      _selectedSessionId = null;
     }
   }
 
   void _normalizeSelectedSession() {
     final activeIds = _filteredGroups.map((e) => e.sessionId).toSet();
-    if (_selectedSessionId == null || !activeIds.contains(_selectedSessionId)) {
-      _selectedSessionId = _filteredGroups.isEmpty
-          ? null
-          : _filteredGroups.first.sessionId;
+    if (_selectedSessionId != null && !activeIds.contains(_selectedSessionId)) {
+      _selectedSessionId = null;
     }
   }
 
@@ -508,10 +442,25 @@ class _LecturerAttendanceReportScreenState
   void _onDayChanged(int day) {
     setState(() {
       _selectedDayOfWeek = day;
+      _applyWeekAndDaySelectionToDate(resetLinkedSelection: true);
       _normalizeLinkedSelections();
       _normalizeSelectedSession();
       _resetEditState();
     });
+  }
+
+  void _applyWeekAndDaySelectionToDate({required bool resetLinkedSelection}) {
+    final target = _calendarRepository.dateForWeekAndWeekday(
+      _effectiveWeekNumber,
+      _selectedDayOfWeek,
+    );
+    if (target == null) return;
+    _calendarSelectedDate = DateTime(target.year, target.month, target.day);
+    if (resetLinkedSelection) {
+      _selectedCourseCode = null;
+      _selectedSessionId = null;
+      _statusFilter = _StatusFilter.all;
+    }
   }
 
   Future<void> _exportActiveSessionCsv(_LectureAttendanceGroup group) async {
@@ -546,75 +495,6 @@ class _LecturerAttendanceReportScreenState
     } finally {
       if (mounted) setState(() => _isExporting = false);
     }
-  }
-
-  Future<void> _pickReportDate() async {
-    final initial = _isDateSelected ? _normalizedSelectedDate : DateTime.now();
-    final today = DateTime(
-      _calendarNow.year,
-      _calendarNow.month,
-      _calendarNow.day,
-    );
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-      selectableDayPredicate: (day) {
-        final normalizedDay = DateTime(day.year, day.month, day.day);
-        return !normalizedDay.isAfter(today);
-      },
-      locale: LecturerLanguageController.isArabic
-          ? const Locale('ar')
-          : const Locale('en'),
-      builder: (dialogContext, child) {
-        final base = Theme.of(dialogContext);
-        return Theme(
-          data: base.copyWith(
-            colorScheme: base.colorScheme.copyWith(
-              primary: _primary,
-              onPrimary: Colors.white,
-              surface: const Color(0xFFF8FBFB),
-              onSurface: const Color(0xFF23363B),
-            ),
-            dialogTheme: const DialogThemeData(
-              backgroundColor: Color(0xFFF8FBFB),
-            ),
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(
-                foregroundColor: _primary,
-                textStyle: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-          child: Directionality(
-            textDirection: LecturerLanguageController.direction(),
-            child: Localizations.override(
-              context: dialogContext,
-              locale: LecturerLanguageController.isArabic
-                  ? const Locale('ar')
-                  : const Locale('en'),
-              child: child!,
-            ),
-          ),
-        );
-      },
-    );
-    if (!mounted || picked == null) return;
-
-    setState(() {
-      _hasExplicitDateSelection = true;
-      _calendarSelectedDate = DateTime(picked.year, picked.month, picked.day);
-      _selectedCourseCode = null;
-      _selectedSectionId = null;
-      _selectedSessionId = null;
-      _selectedDayOfWeek = _calendarSelectedDate.weekday;
-      _statusFilter = _StatusFilter.all;
-      _resetEditState();
-    });
   }
 
   // ignore: unused_element
@@ -977,49 +857,11 @@ class _LecturerAttendanceReportScreenState
     return null;
   }
 
-  void _onSectionChanged(String? sectionId) {
-    setState(() {
-      _selectedSectionId = sectionId;
-      final selectedCourseCode = _selectedCourseCode;
-      final selectedId = _selectedSectionId;
-      if (selectedCourseCode != null &&
-          selectedId != null &&
-          !_groupsForSelectedDate.any((group) {
-            final courseKey = group.courseCode.trim().isNotEmpty
-                ? group.courseCode.trim()
-                : group.courseName.trim();
-            final sectionKey = group.sectionId.trim().isNotEmpty
-                ? group.sectionId.trim()
-                : group.section.trim();
-            return courseKey == selectedCourseCode && sectionKey == selectedId;
-          })) {
-        _selectedCourseCode = null;
-      }
-      _statusFilter = _StatusFilter.all;
-      _normalizeLinkedSelections();
-      _normalizeSelectedSession();
-      _resetEditState();
-    });
-  }
-
   void _onCourseChanged(String? courseCode) {
     setState(() {
       _selectedCourseCode = courseCode;
-      final selectedCourseCode = _selectedCourseCode;
-      final selectedId = _selectedSectionId;
-      if (selectedCourseCode != null &&
-          selectedId != null &&
-          !_groupsForSelectedDate.any((group) {
-            final courseKey = group.courseCode.trim().isNotEmpty
-                ? group.courseCode.trim()
-                : group.courseName.trim();
-            final sectionKey = group.sectionId.trim().isNotEmpty
-                ? group.sectionId.trim()
-                : group.section.trim();
-            return courseKey == selectedCourseCode && sectionKey == selectedId;
-          })) {
-        _selectedSectionId = null;
-      }
+      _selectedWeekNumber = null;
+      _selectedSessionId = null;
       _statusFilter = _StatusFilter.all;
       _normalizeLinkedSelections();
       _normalizeSelectedSession();
@@ -1030,7 +872,8 @@ class _LecturerAttendanceReportScreenState
   void _onWeekChanged({required bool auto, int? week}) {
     setState(() {
       _weekIsAuto = auto;
-      _selectedWeekNumber = auto ? null : week;
+      _selectedWeekNumber = auto ? _currentWeekNumber : week;
+      _selectedSessionId = null;
       _normalizeLinkedSelections();
       _normalizeSelectedSession();
       _resetEditState();
@@ -1040,6 +883,21 @@ class _LecturerAttendanceReportScreenState
   void _onSessionChanged(String? sessionId) {
     setState(() {
       _selectedSessionId = sessionId;
+      if (sessionId != null && _groups.isNotEmpty) {
+        final found = _groups.firstWhere(
+          (g) => g.sessionId == sessionId,
+          orElse: () => _groups.first,
+        );
+        _selectedCourseCode = found.courseCode.trim().isNotEmpty
+            ? found.courseCode.trim()
+            : found.courseName.trim();
+        _selectedWeekNumber = found.weekNumber;
+        _calendarSelectedDate = DateTime(
+          found.lectureDate.year,
+          found.lectureDate.month,
+          found.lectureDate.day,
+        );
+      }
       _statusFilter = _StatusFilter.all;
       _resetEditState();
     });
@@ -1717,12 +1575,12 @@ class _LecturerAttendanceReportScreenState
                               if (_showLegacyReportPanel) ...[
                                 _buildFilters(),
                                 const SizedBox(height: 10),
+                                _buildWeekLectureCards(),
+                                const SizedBox(height: 10),
                                 _buildSelectionStateBanner(),
                                 const SizedBox(height: 10),
                                 if (_hasCompleteRequiredSelection &&
                                     group != null) ...[
-                                  _buildSessionSelector(),
-                                  const SizedBox(height: 10),
                                   _buildReportSummaryCard(group),
                                   const SizedBox(height: 10),
                                   _buildReportActionButtons(group),
@@ -1748,12 +1606,22 @@ class _LecturerAttendanceReportScreenState
   }
 
   Widget _buildFilters() {
+    final selectedWeekLabel = _selectedWeekNumber == null
+        ? _tr('غير محدد', 'Not selected')
+        : '${_tr('أسبوع', 'Week')} $_selectedWeekNumber';
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE3ECEE)),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFDDE9EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -1777,91 +1645,221 @@ class _LecturerAttendanceReportScreenState
             children: [
               Expanded(
                 child: _FilterCard(
-                  title: _tr('التاريخ', 'Date'),
-                  value: _isDateSelected
-                      ? _formatDate(_normalizedSelectedDate)
-                      : _tr('غير محدد', 'Not selected'),
-                  subtitle: _tr('اضغط لاختيار التاريخ', 'Tap to choose date'),
-                  icon: Icons.calendar_month_rounded,
-                  onTap: _pickReportDate,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _FilterCard(
                   title: _tr('المقرر', 'Course'),
                   value: _selectedCourseLabel,
+                  subtitle: _tr('الخطوة الأولى', 'Step 1'),
                   icon: Icons.menu_book_rounded,
-                  onTap: _isDateSelected
-                      ? (_isSelectedDateInFuture
-                            ? () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      _tr(
-                                        'لا يمكن عرض تقرير لتاريخ مستقبلي.',
-                                        'Cannot open report for a future date.',
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }
-                            : _showCoursePickerSheet)
-                      : () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                _tr(
-                                  'اختر التاريخ أولاً ثم المقرر.',
-                                  'Select date first, then choose course.',
-                                ),
-                              ),
-                            ),
-                          );
-                        },
+                  onTap: _showCoursePickerSheet,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: _FilterCard(
-                  title: _tr('الشعبة', 'Section'),
-                  value: _selectedSectionLabel,
-                  icon: Icons.groups_rounded,
-                  onTap: (_isDateSelected && _isCourseSelected)
-                      ? (_isSelectedDateInFuture
-                            ? () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      _tr(
-                                        'لا يمكن عرض تقرير لتاريخ مستقبلي.',
-                                        'Cannot open report for a future date.',
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }
-                            : _showSectionPickerSheet)
-                      : () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                _tr(
-                                  'اختر التاريخ والمقرر أولاً ثم الشعبة.',
-                                  'Select date and course first, then section.',
-                                ),
-                              ),
-                            ),
-                          );
-                        },
+          _FilterCard(
+            title: _tr('الأسبوع الدراسي', 'Academic Week'),
+            value: selectedWeekLabel,
+            subtitle: _tr('الخطوة الثانية', 'Step 2'),
+            icon: Icons.view_week_rounded,
+            onTap: _isCourseSelected
+                ? _showWeekPickerSheet
+                : () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          _tr(
+                            'اختاري المقرر أولاً.',
+                            'Please select course first.',
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+          ),
+          _buildFilterProgressCards(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterProgressCards() {
+    final items = <({String label, bool done, IconData icon})>[
+      (
+        label: _tr('المقرر', 'Course'),
+        done: _isCourseSelected,
+        icon: Icons.menu_book_rounded,
+      ),
+      (
+        label: _tr('الأسبوع', 'Week'),
+        done: _isWeekSelected,
+        icon: Icons.view_week_rounded,
+      ),
+      (
+        label: _tr('المحاضرة', 'Lecture'),
+        done: _hasSelectedSession,
+        icon: Icons.library_books_rounded,
+      ),
+    ];
+    return Row(
+      children: [
+        for (int i = 0; i < items.length; i++) ...[
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              decoration: BoxDecoration(
+                color: items[i].done
+                    ? const Color(0xFFEAF7EF)
+                    : const Color(0xFFF3F7F8),
+                borderRadius: BorderRadius.circular(11),
+                border: Border.all(
+                  color: items[i].done
+                      ? const Color(0xFFC8E6D0)
+                      : const Color(0xFFDCE7E9),
                 ),
               ),
-            ],
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    items[i].done ? Icons.check_circle_rounded : items[i].icon,
+                    size: 14,
+                    color: items[i].done
+                        ? const Color(0xFF1B8E3E)
+                        : const Color(0xFF678086),
+                  ),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      items[i].label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: items[i].done
+                            ? const Color(0xFF1B8E3E)
+                            : const Color(0xFF5B7379),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
+          if (i != items.length - 1) const SizedBox(width: 6),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildWeekLectureCards() {
+    if (!_isCourseSelected || !_isWeekSelected) return const SizedBox.shrink();
+
+    final sessions = _filteredGroups;
+    if (sessions.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFDDE9EB)),
+        ),
+        child: Text(
+          _tr(
+            'لا توجد محاضرات لهذا المقرر في الأسبوع المختار.',
+            'No lectures for this course in the selected week.',
+          ),
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontFamily: 'Cairo',
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF5F747A),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFDDE9EB)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _tr('محاضرات الأسبوع', 'Week Lectures'),
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF32484D),
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...sessions.map((session) {
+            final selected = _selectedSessionId == session.sessionId;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _onSessionChanged(session.sessionId),
+                  borderRadius: BorderRadius.circular(13),
+                  child: Ink(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? const Color(0xFFEAF7F8)
+                          : const Color(0xFFF7FAFB),
+                      borderRadius: BorderRadius.circular(13),
+                      border: Border.all(
+                        color: selected
+                            ? const Color(0xFF006571)
+                            : const Color(0xFFDCE7E9),
+                        width: selected ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          selected
+                              ? Icons.check_circle_rounded
+                              : Icons.radio_button_unchecked_rounded,
+                          size: 18,
+                          color: selected
+                              ? const Color(0xFF006571)
+                              : const Color(0xFF8AA0A6),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${_dayName(session.dayOfWeek)} • ${_formatDate(session.lectureDate)} • ${session.timeRange} • ${_tr('الشعبة', 'Section')} ${session.section}',
+                            style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: selected
+                                  ? const Color(0xFF15414A)
+                                  : const Color(0xFF4F6267),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
         ],
       ),
     );
@@ -1874,33 +1872,26 @@ class _LecturerAttendanceReportScreenState
     Color text = const Color(0xFF455D63);
     IconData icon = Icons.info_outline_rounded;
 
-    if (!_isDateSelected) {
+    if (!_isCourseSelected) {
+      message = _tr('اختاري المقرر أولاً.', 'Select the course first.');
+    } else if (!_isWeekSelected) {
       message = _tr(
-        'لم يتم اختيار التاريخ بعد. يرجى اختيار التاريخ من التقويم.',
-        'Date is not selected yet. Please choose a date from the calendar.',
+        'اختاري الأسبوع الدراسي بعد اختيار المقرر.',
+        'Select the academic week after choosing the course.',
       );
-    } else if (_isSelectedDateInFuture) {
+      icon = Icons.view_week_rounded;
+    } else if (!_hasSelectedSession) {
       message = _tr(
-        'هذا تاريخ مستقبلي. لا يمكن عرض تقرير لتاريخ مستقبلي.',
-        'This is a future date. Reports are not available yet.',
+        'اختاري محاضرة من كروت الأسبوع لبدء التقرير.',
+        'Select a lecture card from the week to start the report.',
       );
-      bg = const Color(0xFFFFF4E5);
-      border = const Color(0xFFF3D6A8);
-      text = const Color(0xFF8A5A00);
-      icon = Icons.schedule_rounded;
-    } else if (!_isCourseSelected) {
-      message = _tr('لم يتم اختيار المقرر بعد.', 'Course is not selected yet.');
-    } else if (!_isSectionSelected) {
-      message = _tr(
-        'لم يتم اختيار الشعبة بعد.',
-        'Section is not selected yet.',
-      );
+      icon = Icons.library_books_rounded;
     } else {
       final group = _activeGroup;
       if (group == null) {
         message = _tr(
-          'لا توجد محاضرة/تقرير مطابق للاختيارات المحددة.',
-          'No lecture/report matches the selected date, course, and section.',
+          'لا توجد بيانات تقرير للمحاضرة المختارة.',
+          'No report data for the selected lecture.',
         );
         icon = Icons.event_busy_rounded;
       } else if (_isDateWithinEditWindow(group.lectureDate)) {
@@ -1991,6 +1982,33 @@ class _LecturerAttendanceReportScreenState
     );
   }
 
+  Future<void> _openExcuseManagementForGroup(
+    _LectureAttendanceGroup group,
+  ) async {
+    final lecture = group.lecture;
+    if (lecture == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _tr(
+              'لا يمكن فتح إدارة الأعذار لأن بيانات المحاضرة غير مكتملة.',
+              'Cannot open excuse management because lecture data is incomplete.',
+            ),
+          ),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
+      return;
+    }
+    await LecturerNavigation.goToExcuseManagement(
+      context,
+      lecture,
+      sessionId: group.sessionId,
+      sessionDate: group.lectureDate,
+    );
+  }
+
   Widget _buildReportSummaryCard(_LectureAttendanceGroup group) {
     final canEditInWindow = _isDateWithinEditWindow(group.lectureDate);
     final statusLabel = canEditInWindow
@@ -2077,66 +2095,91 @@ class _LecturerAttendanceReportScreenState
 
   Widget _buildReportActionButtons(_LectureAttendanceGroup group) {
     final canEditInWindow = _isDateWithinEditWindow(group.lectureDate);
-    return Row(
+    return Column(
       children: [
-        Expanded(
-          child: FilledButton.icon(
-            onPressed: () => _openAttendanceForGroup(group, viewOnly: true),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF006571),
-              minimumSize: const Size.fromHeight(44),
-            ),
-            icon: const Icon(Icons.visibility_rounded, size: 18),
-            label: Text(
-              _tr('معاينة التقرير', 'Preview report'),
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        if (canEditInWindow) ...[
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => _openAttendanceForGroup(group, viewOnly: false),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(44),
-                side: const BorderSide(color: Color(0xFF006571)),
-                foregroundColor: const Color(0xFF006571),
-              ),
-              icon: const Icon(Icons.edit_rounded, size: 18),
-              label: Text(
-                _tr('تعديل التقرير', 'Edit report'),
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontWeight: FontWeight.w800,
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: () => _openAttendanceForGroup(group, viewOnly: true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF006571),
+                  minimumSize: const Size.fromHeight(44),
+                ),
+                icon: const Icon(Icons.visibility_rounded, size: 18),
+                label: Text(
+                  _tr('معاينة التقرير', 'Preview report'),
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-        ],
-        Expanded(
+            const SizedBox(width: 8),
+            if (canEditInWindow) ...[
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () =>
+                      _openAttendanceForGroup(group, viewOnly: false),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(44),
+                    side: const BorderSide(color: Color(0xFF006571)),
+                    foregroundColor: const Color(0xFF006571),
+                  ),
+                  icon: const Icon(Icons.edit_rounded, size: 18),
+                  label: Text(
+                    _tr('تعديل التقرير', 'Edit report'),
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _isExporting
+                    ? null
+                    : () => _exportActiveSessionCsv(group),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(44),
+                  side: const BorderSide(color: Color(0xFF006571)),
+                  foregroundColor: const Color(0xFF006571),
+                ),
+                icon: _isExporting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.share_rounded, size: 18),
+                label: Text(
+                  _tr('تصدير CSV', 'Export CSV'),
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
           child: OutlinedButton.icon(
-            onPressed: _isExporting
-                ? null
-                : () => _exportActiveSessionCsv(group),
+            onPressed: () => _openExcuseManagementForGroup(group),
             style: OutlinedButton.styleFrom(
               minimumSize: const Size.fromHeight(44),
               side: const BorderSide(color: Color(0xFF006571)),
               foregroundColor: const Color(0xFF006571),
             ),
-            icon: _isExporting
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.share_rounded, size: 18),
+            icon: const Icon(Icons.fact_check_rounded, size: 18),
             label: Text(
-              _tr('تصدير CSV', 'Export CSV'),
+              _tr('إدارة الأعذار', 'Excuse management'),
               style: const TextStyle(
                 fontFamily: 'Cairo',
                 fontWeight: FontWeight.w800,
@@ -2145,60 +2188,6 @@ class _LecturerAttendanceReportScreenState
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildSessionSelector() {
-    final sessions = _filteredGroups;
-    if (sessions.length <= 1) return const SizedBox.shrink();
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFDCE7E9)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            _tr('اختيار الجلسة', 'Select Session'),
-            style: const TextStyle(
-              fontFamily: 'Cairo',
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF32484D),
-            ),
-          ),
-          const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: sessions.map((session) {
-                final selected = _selectedSessionId == session.sessionId;
-                return Padding(
-                  padding: const EdgeInsetsDirectional.only(end: 8),
-                  child: ChoiceChip(
-                    selected: selected,
-                    onSelected: (_) => _onSessionChanged(session.sessionId),
-                    selectedColor: const Color(0xFF006571),
-                    labelStyle: TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                      color: selected ? Colors.white : const Color(0xFF4F6267),
-                    ),
-                    label: Text(
-                      '${session.courseName} • ${_formatDate(session.lectureDate)} • ${session.timeRange}',
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -2760,112 +2749,93 @@ class _LecturerAttendanceReportScreenState
 
   // ignore: unused_element
   void _showWeekPickerSheet() {
+    final options = _weekOptionsForSelectedCourse;
+    if (options.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _tr(
+              'لا توجد أسابيع متاحة لهذا المقرر.',
+              'No weeks available for this course.',
+            ),
+          ),
+        ),
+      );
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.5,
-        minChildSize: 0.35,
-        maxChildSize: 0.85,
-        expand: false,
-        builder: (_, scrollController) => Container(
-          padding: EdgeInsets.only(
-            left: 24,
-            right: 24,
-            top: 12,
-            bottom: 24 + MediaQuery.paddingOf(ctx).bottom,
-          ),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFD8D8D8),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+      builder: (ctx) => Container(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 12,
+          bottom: 24 + MediaQuery.paddingOf(ctx).bottom,
+        ),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD8D8D8),
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              const SizedBox(height: 12),
-              Text(
-                _tr('اختيار الأسبوع', 'Week picker'),
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'Cairo',
-                  color: Color(0xFF222222),
-                ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _tr('اختيار الأسبوع', 'Week picker'),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'Cairo',
+                color: Color(0xFF222222),
               ),
-              const SizedBox(height: 8),
-              ListTile(
-                title: Text(
-                  '${_tr('الأسبوع الحالي', 'Current week')} (${_tr('تلقائي', 'Auto')})',
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontWeight: _weekIsAuto
-                        ? FontWeight.w700
-                        : FontWeight.normal,
-                    color: _weekIsAuto ? _primary : const Color(0xFF222222),
-                  ),
-                ),
-                subtitle: Text(
-                  '${_tr('رقم الأسبوع', 'Week')} $_currentWeekNumber',
-                  style: const TextStyle(fontFamily: 'Cairo'),
-                ),
-                trailing: _weekIsAuto
-                    ? const Icon(Icons.check_rounded, color: _primary, size: 22)
-                    : null,
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _onWeekChanged(auto: true);
+            ),
+            const SizedBox(height: 8),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: options.length,
+                itemBuilder: (_, index) {
+                  final week = options[index];
+                  final selected = _selectedWeekNumber == week;
+                  return ListTile(
+                    title: Text(
+                      '${_tr('أسبوع', 'Week')} $week',
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontWeight: selected
+                            ? FontWeight.w700
+                            : FontWeight.normal,
+                        color: selected ? _primary : const Color(0xFF222222),
+                      ),
+                    ),
+                    trailing: selected
+                        ? const Icon(
+                            Icons.check_rounded,
+                            color: _primary,
+                            size: 22,
+                          )
+                        : null,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _onWeekChanged(auto: false, week: week);
+                    },
+                  );
                 },
               ),
-              const Divider(height: 1),
-              Flexible(
-                child: ListView.builder(
-                  controller: scrollController,
-                  shrinkWrap: true,
-                  itemCount: _maxSelectableWeeks,
-                  itemBuilder: (_, index) {
-                    final week = index + 1;
-                    final selected =
-                        !_weekIsAuto && _selectedWeekNumber == week;
-                    return ListTile(
-                      title: Text(
-                        '${_tr('أسبوع', 'Week')} $week',
-                        style: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontWeight: selected
-                              ? FontWeight.w700
-                              : FontWeight.normal,
-                          color: selected ? _primary : const Color(0xFF222222),
-                        ),
-                      ),
-                      trailing: selected
-                          ? const Icon(
-                              Icons.check_rounded,
-                              color: _primary,
-                              size: 22,
-                            )
-                          : null,
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _onWeekChanged(auto: false, week: week);
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -2932,86 +2902,6 @@ class _LecturerAttendanceReportScreenState
                 onTap: () {
                   Navigator.pop(ctx);
                   _onDayChanged(w);
-                },
-              );
-            }),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showSectionPickerSheet() {
-    final options = _sectionOptions;
-    if (options.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _tr(
-              'لا توجد شعب متاحة لهذا المقرر في التاريخ المختار.',
-              'No sections available for this course on selected date.',
-            ),
-          ),
-        ),
-      );
-      return;
-    }
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: EdgeInsets.only(
-          left: 24,
-          right: 24,
-          top: 12,
-          bottom: 24 + MediaQuery.paddingOf(ctx).bottom,
-        ),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD8D8D8),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              _tr('الشعبة', 'Section'),
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                fontFamily: 'Cairo',
-                color: Color(0xFF222222),
-              ),
-            ),
-            const SizedBox(height: 8),
-            ...options.map((section) {
-              final selected = _selectedSectionId == section.id;
-              return ListTile(
-                title: Text(
-                  section.label,
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
-                    color: selected ? _primary : const Color(0xFF222222),
-                  ),
-                ),
-                trailing: selected
-                    ? const Icon(Icons.check_rounded, color: _primary, size: 22)
-                    : null,
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _onSectionChanged(section.id);
                 },
               );
             }),
@@ -3124,18 +3014,26 @@ class _FilterCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
           decoration: BoxDecoration(
-            color: const Color(0xFFF8FBFB),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE3ECEE)),
+            color: const Color(0xFFF7FBFB),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFDCE9EB)),
           ),
           child: Row(
             children: [
-              Icon(icon, size: 16, color: const Color(0xFF006571)),
-              const SizedBox(width: 7),
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F4F5),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(icon, size: 16, color: const Color(0xFF006571)),
+              ),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -3146,18 +3044,19 @@ class _FilterCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 10.5,
+                        fontSize: 10.8,
                         color: Color(0xFF688085),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
+                    const SizedBox(height: 1),
                     Text(
                       value,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 12,
+                        fontSize: 12.5,
                         color: Color(0xFF1F3338),
                         fontWeight: FontWeight.w800,
                       ),
@@ -3176,10 +3075,18 @@ class _FilterCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 18,
-                color: Color(0xFF006571),
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF4F5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 18,
+                  color: Color(0xFF006571),
+                ),
               ),
             ],
           ),
@@ -3649,13 +3556,6 @@ class _CourseOption {
   const _CourseOption({required this.code, required this.label});
 
   final String code;
-  final String label;
-}
-
-class _SectionOption {
-  const _SectionOption({required this.id, required this.label});
-
-  final String id;
   final String label;
 }
 

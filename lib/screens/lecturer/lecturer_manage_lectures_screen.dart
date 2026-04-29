@@ -36,7 +36,10 @@ class _LecturerManageLecturesScreenState
   StreamSubscription<void>? _calendarSyncSub;
   bool _isSyncRefreshing = false;
 
-  // اختيار: التاريخ -> المقرر -> الشعبة
+  // اختيار: الأسبوع + اليوم -> التاريخ -> المقرر
+  bool _weekIsAuto = true;
+  int? _selectedWeekNumber;
+  final List<int> _dayOrder = const [7, 1, 2, 3, 4];
   DateTime? _selectedDate;
   String? _selectedCourseCode;
   final Set<String> _selectedLectureKeys = <String>{};
@@ -69,6 +72,8 @@ class _LecturerManageLecturesScreenState
       if (!mounted) return;
       setState(() {
         _allLectures = list;
+        _weekIsAuto = true;
+        _selectedWeekNumber = _currentWeekNumber;
         _selectedDate = null;
         _selectedCourseCode = null;
         _selectedLectureKeys.clear();
@@ -101,11 +106,38 @@ class _LecturerManageLecturesScreenState
     }
   }
 
+  void _onManageWeekChanged({required bool auto, int? week}) {
+    setState(() {
+      _weekIsAuto = auto;
+      _selectedWeekNumber = auto ? _currentWeekNumber : week;
+      _selectedDate = null;
+      _selectedLectureKeys.clear();
+      _applyFilters();
+    });
+  }
+
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
-  int? _getTargetWeekday() => _selectedDate?.weekday;
+  int get _currentWeekNumber =>
+      _calendarRepository.getWeekNumber(_calendarRepository.currentDateTime);
+  int get _maxSelectableWeeks => _calendarRepository.semesterWeeks.clamp(1, 60);
 
-  DateTime _getReferenceDate() => _selectedDate ?? _calendarRepository.currentDateTime;
+  int? _getTargetWeekday() {
+    final selected = _selectedLectures;
+    if (selected.isNotEmpty) return selected.first.dayOfWeek;
+    return _selectedDate?.weekday;
+  }
+
+  DateTime _getReferenceDate() =>
+      _selectedDate ?? _calendarRepository.currentDateTime;
+
+  DateTime? _dateForLectureInSelectedWeek(LectureItem lecture) {
+    if (_selectedWeekNumber == null) return null;
+    return _calendarRepository.dateForWeekAndWeekday(
+      _selectedWeekNumber!,
+      lecture.dayOfWeek,
+    );
+  }
 
   /// تحقق من انتهاء المحاضرة باستخدام تاريخ فقط ثم وقت النهاية عند الحاجة.
   bool _isLectureEnded(LectureItem lecture) {
@@ -128,33 +160,42 @@ class _LecturerManageLecturesScreenState
 
   List<LectureItem> _computeLecturesForDateAndCourse() {
     final selectedCourseCode = _selectedCourseCode?.trim();
-    final target = _getTargetWeekday();
-    if (selectedCourseCode == null || selectedCourseCode.isEmpty || target == null) {
+    if (selectedCourseCode == null ||
+        selectedCourseCode.isEmpty ||
+        _selectedWeekNumber == null) {
       return <LectureItem>[];
     }
     var list = _allLectures
         .where(
           (l) =>
-              l.dayOfWeek == target &&
+              _dayOrder.contains(l.dayOfWeek) &&
               l.crn.trim() == selectedCourseCode,
         )
         .toList();
-    return TimeUtils.sortLecturesByTime(list, (l) => l.startTime);
+    list.sort((a, b) {
+      final dayCompare = _dayOrder
+          .indexOf(a.dayOfWeek)
+          .compareTo(_dayOrder.indexOf(b.dayOfWeek));
+      if (dayCompare != 0) return dayCompare;
+      final at = TimeUtils.parseTimeString(a.startTime);
+      final bt = TimeUtils.parseTimeString(b.startTime);
+      return (at.$1 * 60 + at.$2).compareTo(bt.$1 * 60 + bt.$2);
+    });
+    return list;
   }
 
   List<({String code, String name})> get _courseOptionsForDate {
-    final target = _getTargetWeekday();
-    if (target == null) return const [];
     final map = <String, String>{};
-    for (final lecture in _allLectures.where((l) => l.dayOfWeek == target)) {
+    for (final lecture in _allLectures.where(
+      (l) => _dayOrder.contains(l.dayOfWeek),
+    )) {
       final code = lecture.crn.trim();
       if (code.isEmpty) continue;
       map.putIfAbsent(code, () => lecture.courseName.trim());
     }
-    final options = map.entries
-        .map((e) => (code: e.key, name: e.value))
-        .toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
+    final options =
+        map.entries.map((e) => (code: e.key, name: e.value)).toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
     return options;
   }
 
@@ -176,8 +217,7 @@ class _LecturerManageLecturesScreenState
 
   Future<void> _refreshLectureActionStatuses() async {
     final selectedDate = _selectedDate;
-    final selectedCourse = _selectedCourseCode?.trim() ?? '';
-    if (selectedDate == null || selectedCourse.isEmpty) {
+    if (selectedDate == null) {
       if (mounted && _lectureActionStatuses.isNotEmpty) {
         setState(() {
           _lectureActionStatuses = const {};
@@ -209,9 +249,9 @@ class _LecturerManageLecturesScreenState
   }
 
   bool get _hasDateAndCourseSelection {
-    return _selectedDate != null &&
-        _selectedCourseCode != null &&
-        _selectedCourseCode!.trim().isNotEmpty;
+    return _selectedCourseCode != null &&
+        _selectedCourseCode!.trim().isNotEmpty &&
+        _selectedWeekNumber != null;
   }
 
   String _lectureSelectionKey(LectureItem lecture) {
@@ -224,7 +264,10 @@ class _LecturerManageLecturesScreenState
   List<LectureItem> get _selectedLectures {
     final all = _computeLecturesForDateAndCourse();
     return all
-        .where((lecture) => _selectedLectureKeys.contains(_lectureSelectionKey(lecture)))
+        .where(
+          (lecture) =>
+              _selectedLectureKeys.contains(_lectureSelectionKey(lecture)),
+        )
         .toList();
   }
 
@@ -238,18 +281,6 @@ class _LecturerManageLecturesScreenState
     );
     final today = DateTime(now.year, now.month, now.day);
     return selected.isBefore(today);
-  }
-
-  bool get _isFutureSelectedDate {
-    if (_selectedDate == null) return false;
-    final now = _calendarRepository.currentDateTime;
-    final selected = DateTime(
-      _selectedDate!.year,
-      _selectedDate!.month,
-      _selectedDate!.day,
-    );
-    final today = DateTime(now.year, now.month, now.day);
-    return selected.isAfter(today);
   }
 
   Future<void> _openLectureActionsForSelection() async {
@@ -279,11 +310,14 @@ class _LecturerManageLecturesScreenState
               child: _LectureActionDialog(
                 lecture: primary,
                 multiSelection: multi ? selected : null,
-                selectedDate: _selectedDate ?? _calendarRepository.currentDateTime,
+                selectedDate:
+                    _selectedDate ?? _calendarRepository.currentDateTime,
                 delayYellow: _delayYellow,
                 cancelRed: _cancelRed,
                 isEnded: multi ? false : _isLectureEnded(primary),
-                delaySent: multi ? false : (primaryStatus.isDelayed || primaryStatus.isCanceled),
+                delaySent: multi
+                    ? false
+                    : (primaryStatus.isDelayed || primaryStatus.isCanceled),
                 cancelSent: multi ? false : primaryStatus.isCanceled,
                 initialAction: _ManageActionType.delay,
                 tr: _tr,
@@ -338,20 +372,14 @@ class _LecturerManageLecturesScreenState
       }
       if (status.isCanceled) {
         _showActionSnack(
-          _tr(
-            'هذه المحاضرة ملغية بالفعل',
-            'This lecture is already canceled',
-          ),
+          _tr('هذه المحاضرة ملغية بالفعل', 'This lecture is already canceled'),
           error: true,
         );
         return;
       }
       if (status.isDelayed) {
         _showActionSnack(
-          _tr(
-            'تم إرسال هذا الإجراء مسبقًا',
-            'This action was already sent',
-          ),
+          _tr('تم إرسال هذا الإجراء مسبقًا', 'This action was already sent'),
         );
         return;
       }
@@ -368,10 +396,7 @@ class _LecturerManageLecturesScreenState
     }
     if (status.isCanceled) {
       _showActionSnack(
-        _tr(
-          'هذه المحاضرة ملغية بالفعل',
-          'This lecture is already canceled',
-        ),
+        _tr('هذه المحاضرة ملغية بالفعل', 'This lecture is already canceled'),
       );
       return;
     }
@@ -394,10 +419,7 @@ class _LecturerManageLecturesScreenState
     final targetWeekday = _getTargetWeekday();
     if (targetWeekday == null || _selectedDate == null) {
       _showActionSnack(
-        _tr(
-          'يرجى اختيار تاريخ صالح أولاً',
-          'Please select a valid date first',
-        ),
+        _tr('يرجى اختيار تاريخ صالح أولاً', 'Please select a valid date first'),
         error: true,
       );
       return;
@@ -453,10 +475,7 @@ class _LecturerManageLecturesScreenState
     final targetWeekday = _getTargetWeekday();
     if (targetWeekday == null || _selectedDate == null) {
       _showActionSnack(
-        _tr(
-          'يرجى اختيار تاريخ صالح أولاً',
-          'Please select a valid date first',
-        ),
+        _tr('يرجى اختيار تاريخ صالح أولاً', 'Please select a valid date first'),
         error: true,
       );
       return;
@@ -528,8 +547,9 @@ class _LecturerManageLecturesScreenState
             ),
             FilledButton(
               onPressed: () {
-                Navigator.of(dialogContext)
-                    .pop(int.tryParse(controller.text.trim()));
+                Navigator.of(
+                  dialogContext,
+                ).pop(int.tryParse(controller.text.trim()));
               },
               child: Text(_tr('تأكيد', 'Confirm')),
             ),
@@ -543,11 +563,12 @@ class _LecturerManageLecturesScreenState
 
   Future<void> _applyDelayForSelectedLectures({int? presetMinutes}) async {
     final lectures = _selectedLectures;
-    if (lectures.isEmpty || _selectedDate == null || _getTargetWeekday() == null) {
+    if (lectures.isEmpty ||
+        _selectedDate == null ||
+        _getTargetWeekday() == null) {
       return;
     }
-    final minutes =
-        presetMinutes ?? await _pickDelayMinutesDialog();
+    final minutes = presetMinutes ?? await _pickDelayMinutesDialog();
     if (!mounted || minutes == null || minutes <= 0) return;
 
     int success = 0;
@@ -594,7 +615,9 @@ class _LecturerManageLecturesScreenState
 
   Future<void> _applyCancelForSelectedLectures() async {
     final lectures = _selectedLectures;
-    if (lectures.isEmpty || _selectedDate == null || _getTargetWeekday() == null) {
+    if (lectures.isEmpty ||
+        _selectedDate == null ||
+        _getTargetWeekday() == null) {
       return;
     }
     int success = 0;
@@ -923,8 +946,8 @@ class _LecturerManageLecturesScreenState
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _buildSelectionPanel(),
                         Expanded(child: _buildContent()),
+                        _buildSelectionPanel(),
                       ],
                     ),
             ),
@@ -935,14 +958,24 @@ class _LecturerManageLecturesScreenState
   }
 
   Widget _buildSelectionPanel() {
+    final weekLabel = _selectedWeekNumber == null
+        ? _tr('غير محدد', 'Not selected')
+        : '${_tr('أسبوع', 'Week')} $_selectedWeekNumber';
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE2ECEF)),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFDDE9EB)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -952,7 +985,7 @@ class _LecturerManageLecturesScreenState
                 const Icon(Icons.tune_rounded, color: _primary, size: 18),
                 const SizedBox(width: 6),
                 Text(
-                  _tr('اختيار المحاضرة', 'Lecture Selection'),
+                  _tr('فلترة سريعة', 'Quick Filter'),
                   style: const TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 13,
@@ -965,10 +998,35 @@ class _LecturerManageLecturesScreenState
             const SizedBox(height: 8),
             Row(
               children: [
-                Expanded(child: _buildDatePicker()),
-                const SizedBox(width: 8),
-                Expanded(child: _buildCourseSelector()),
+                Expanded(
+                  child: _ManageFilterCard(
+                    title: _tr('المقرر', 'Course'),
+                    value:
+                        _selectedCourseCode == null ||
+                            _selectedCourseCode!.trim().isEmpty
+                        ? _tr('غير محدد', 'Not selected')
+                        : _buildCourseSelectorValue(),
+                    subtitle: _tr('الخطوة الأولى', 'Step 1'),
+                    icon: Icons.menu_book_rounded,
+                    onPressed: () => _pickCourseForDate(_courseOptionsForDate),
+                  ),
+                ),
               ],
+            ),
+            const SizedBox(height: 8),
+            _ManageFilterCard(
+              title: _tr('الأسبوع الدراسي', 'Academic Week'),
+              value: weekLabel,
+              subtitle: _tr('الخطوة الثانية', 'Step 2'),
+              icon: Icons.view_week_rounded,
+              onPressed: _isCourseSelectedForManage
+                  ? _showManageWeekPickerSheet
+                  : () {
+                      _showActionSnack(
+                        _tr('اختاري المقرر أولاً', 'Select course first'),
+                        error: true,
+                      );
+                    },
             ),
             const SizedBox(height: 8),
             _buildSelectionStateBanner(),
@@ -978,112 +1036,114 @@ class _LecturerManageLecturesScreenState
     );
   }
 
-  Widget _buildDatePicker() {
-    final selectedDate = _selectedDate;
-    return _ManageFilterCard(
-      title: _tr('التاريخ', 'Date'),
-      value: selectedDate == null
-          ? _tr('غير محدد', 'Not selected')
-          : _tr(
-              '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
-              '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
-            ),
-      subtitle: _tr('اضغط لاختيار التاريخ', 'Tap to choose date'),
-      icon: Icons.calendar_month_rounded,
-      onPressed: () async {
-        final now = _calendarRepository.currentDateTime;
-        final firstDate = DateTime(now.year - 1, 1, 1);
-        final lastDate = DateTime(now.year + 1, 12, 31);
-        final picked = await showDatePicker(
-          context: context,
-          initialDate: selectedDate ?? DateTime(now.year, now.month, now.day),
-          firstDate: firstDate,
-          lastDate: lastDate,
-          locale: LecturerLanguageController.isArabic
-              ? const Locale('ar')
-              : const Locale('en'),
-          builder: (dialogContext, child) {
-            final base = Theme.of(dialogContext);
-            return Theme(
-              data: base.copyWith(
-                colorScheme: base.colorScheme.copyWith(
-                  primary: _primary,
-                  onPrimary: Colors.white,
-                  surface: const Color(0xFFF8FBFB),
-                  onSurface: const Color(0xFF23363B),
-                ),
-                dialogTheme: const DialogThemeData(
-                  backgroundColor: Color(0xFFF8FBFB),
-                ),
-                textButtonTheme: TextButtonThemeData(
-                  style: TextButton.styleFrom(
-                    foregroundColor: _primary,
-                    textStyle: const TextStyle(
-                      fontFamily: 'Cairo',
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-              child: Directionality(
-                textDirection: LecturerLanguageController.direction(),
-                child: Localizations.override(
-                  context: dialogContext,
-                  locale: LecturerLanguageController.isArabic
-                      ? const Locale('ar')
-                      : const Locale('en'),
-                  child: child!,
-                ),
-              ),
-            );
-          },
-        );
-        if (!mounted || picked == null) return;
-        setState(() {
-          _selectedDate = DateTime(picked.year, picked.month, picked.day);
-          _selectedCourseCode = null;
-          _selectedLectureKeys.clear();
-          _applyFilters();
-        });
-      },
-    );
+  bool get _isCourseSelectedForManage =>
+      _selectedCourseCode != null && _selectedCourseCode!.trim().isNotEmpty;
+
+  String _buildCourseSelectorValue() {
+    final options = _courseOptionsForDate;
+    final selected = options
+        .where((o) => o.code == _selectedCourseCode)
+        .cast<({String code, String name})?>()
+        .firstWhere((o) => o != null, orElse: () => null);
+    return selected == null
+        ? (_selectedCourseCode ?? _tr('غير محدد', 'Not selected'))
+        : '${selected.name} (${selected.code})';
   }
 
-  Widget _buildCourseSelector() {
-    final options = _courseOptionsForDate;
-    String value;
-    String? subtitle;
-    if (_selectedDate == null) {
-      value = _tr('غير محدد', 'Not selected');
-      subtitle = _tr('اختاري التاريخ أولاً', 'Select date first');
-    } else if (_selectedCourseCode == null || _selectedCourseCode!.trim().isEmpty) {
-      value = _tr('غير محدد', 'Not selected');
-      subtitle = _tr('اضغط لاختيار المقرر', 'Tap to choose course');
-    } else {
-      final selected = options
-          .where((o) => o.code == _selectedCourseCode)
-          .cast<({String code, String name})?>()
-          .firstWhere((o) => o != null, orElse: () => null);
-      value = selected == null
-          ? _selectedCourseCode!
-          : '${selected.name} (${selected.code})';
-      subtitle = null;
-    }
-
-    return _ManageFilterCard(
-      title: _tr('المقرر', 'Course'),
-      value: value,
-      subtitle: subtitle,
-      icon: Icons.menu_book_rounded,
-      onPressed: () {
-        if (_selectedDate == null) {
-          _showActionSnack(
-            _tr('اختر التاريخ أولاً ثم المقرر.', 'Select date first, then choose course.'),
-          );
-          return;
-        }
-        _pickCourseForDate(options);
-      },
+  void _showManageWeekPickerSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 12,
+          bottom: 24 + MediaQuery.paddingOf(ctx).bottom,
+        ),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD8D8D8),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _tr('اختيار الأسبوع', 'Week picker'),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'Cairo',
+                color: Color(0xFF222222),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              title: Text(
+                '${_tr('الأسبوع الحالي', 'Current week')} (${_tr('تلقائي', 'Auto')})',
+                style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontWeight: _weekIsAuto ? FontWeight.w700 : FontWeight.normal,
+                  color: _weekIsAuto ? _primary : const Color(0xFF222222),
+                ),
+              ),
+              trailing: _weekIsAuto
+                  ? const Icon(Icons.check_rounded, color: _primary, size: 22)
+                  : null,
+              onTap: () {
+                Navigator.pop(ctx);
+                _onManageWeekChanged(auto: true);
+              },
+            ),
+            const Divider(height: 1),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _maxSelectableWeeks,
+                itemBuilder: (_, index) {
+                  final week = index + 1;
+                  final selected = !_weekIsAuto && _selectedWeekNumber == week;
+                  return ListTile(
+                    title: Text(
+                      '${_tr('أسبوع', 'Week')} $week',
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontWeight: selected
+                            ? FontWeight.w700
+                            : FontWeight.normal,
+                        color: selected ? _primary : const Color(0xFF222222),
+                      ),
+                    ),
+                    trailing: selected
+                        ? const Icon(
+                            Icons.check_rounded,
+                            color: _primary,
+                            size: 22,
+                          )
+                        : null,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _onManageWeekChanged(auto: false, week: week);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1094,15 +1154,20 @@ class _LecturerManageLecturesScreenState
     Color text = const Color(0xFF455D63);
     IconData icon = Icons.info_outline_rounded;
 
-    if (_selectedDate == null) {
-      message = _tr(
-        'لم يتم اختيار التاريخ بعد. يرجى اختيار التاريخ من التقويم.',
-        'Date is not selected yet. Please choose a date from the calendar.',
-      );
-    } else if (_selectedCourseCode == null || _selectedCourseCode!.trim().isEmpty) {
-      message = _tr('لم يتم اختيار المقرر بعد.', 'Course is not selected yet.');
+    if (!_isCourseSelectedForManage) {
+      message = _tr('اختاري المقرر أولاً.', 'Select the course first.');
+    } else if (_selectedWeekNumber == null) {
+      message = _tr('اختاري الأسبوع الدراسي.', 'Select the academic week.');
+      icon = Icons.view_week_rounded;
     } else {
-      return const SizedBox.shrink();
+      message = _tr(
+        'تم اختيار المقرر والأسبوع، اختاري محاضرة من الكروت.',
+        'Course and week selected, choose a lecture card.',
+      );
+      bg = const Color(0xFFEAF7EF);
+      border = const Color(0xFFCBE8D2);
+      text = const Color(0xFF24643A);
+      icon = Icons.check_circle_outline_rounded;
     }
 
     return Container(
@@ -1133,18 +1198,20 @@ class _LecturerManageLecturesScreenState
     );
   }
 
-  Future<void> _pickCourseForDate(List<({String code, String name})> options) async {
+  Future<void> _pickCourseForDate(
+    List<({String code, String name})> options,
+  ) async {
     if (options.isEmpty) {
       _showActionSnack(
         _tr(
-          'لا توجد مقررات متاحة في التاريخ المحدد',
-          'No courses are available for selected date',
+          'لا توجد مقررات متاحة حالياً',
+          'No courses are currently available',
         ),
       );
       return;
     }
 
-    final selected = await showModalBottomSheet<String>(
+    final selected = await showModalBottomSheet<String?>(
       context: context,
       showDragHandle: true,
       backgroundColor: const Color(0xFFF8FBFB),
@@ -1157,11 +1224,35 @@ class _LecturerManageLecturesScreenState
           child: SafeArea(
             child: ListView.separated(
               shrinkWrap: true,
-              itemCount: options.length,
+              itemCount: options.length + 1,
               separatorBuilder: (_, _) =>
                   const Divider(height: 1, color: Color(0xFFE2ECEF)),
               itemBuilder: (context, index) {
-                final course = options[index];
+                if (index == 0) {
+                  return ListTile(
+                    tileColor: const Color(0xFFF8FBFB),
+                    leading: const Icon(
+                      Icons.apps_rounded,
+                      color: Color(0xFF006571),
+                      size: 18,
+                    ),
+                    title: Text(
+                      _tr('كل المقررات', 'All courses'),
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1F3338),
+                      ),
+                    ),
+                    trailing: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 14,
+                      color: Color(0xFF006571),
+                    ),
+                    onTap: () => Navigator.of(sheetContext).pop(null),
+                  );
+                }
+                final course = options[index - 1];
                 return ListTile(
                   tileColor: const Color(0xFFF8FBFB),
                   leading: const Icon(
@@ -1198,9 +1289,11 @@ class _LecturerManageLecturesScreenState
       },
     );
 
-    if (!mounted || selected == null) return;
+    if (!mounted) return;
     setState(() {
       _selectedCourseCode = selected;
+      _selectedWeekNumber = null;
+      _selectedDate = null;
       _selectedLectureKeys.clear();
       _applyFilters();
     });
@@ -1208,82 +1301,42 @@ class _LecturerManageLecturesScreenState
 
   Widget _buildContent() {
     if (!_hasDateAndCourseSelection) {
-      final guidance = _selectedDate == null
-          ? _tr(
-              'يرجى اختيار التاريخ من التقويم.',
-              'Please choose date from the calendar.',
-            )
-          : _tr(
-              'يرجى اختيار المقرر بعد تحديد التاريخ.',
-              'Choose course after selecting date.',
-            );
+      final guidance = _tr(
+        'يرجى اختيار الأسبوع واليوم لعرض المحاضرات.',
+        'Choose week and day to view lectures.',
+      );
       return _buildEmptyState(guidance, showSecondaryHint: false);
     }
     final lectures = _computeLecturesForDateAndCourse();
     if (lectures.isEmpty) {
       return _buildEmptyState(
         _tr(
-          'لا توجد محاضرات لهذا المقرر في التاريخ المحدد',
-          'No lectures for this course on selected date',
+          'لا توجد محاضرات لهذا المقرر في الأسبوع المحدد',
+          'No lectures for this course in the selected week',
         ),
         showSecondaryHint: false,
       );
     }
 
-    final allSelected = lectures.isNotEmpty &&
-        lectures.every((l) => _selectedLectureKeys.contains(_lectureSelectionKey(l)));
-    final canManage = !_isPastSelectedDate;
     final selectedLectures = _selectedLectures;
-    final allSelectedCanceled = selectedLectures.isNotEmpty &&
+    final canManage = !_isPastSelectedDate;
+    final selectedCanceled =
+        selectedLectures.isNotEmpty &&
         selectedLectures.every((l) => _statusForLecture(l).isCanceled);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: OutlinedButton.icon(
-              onPressed: () {
-                setState(() {
-                  if (allSelected) {
-                    _selectedLectureKeys.clear();
-                  } else {
-                    _selectedLectureKeys
-                      ..clear()
-                      ..addAll(lectures.map(_lectureSelectionKey));
-                  }
-                });
-              },
-              icon: Icon(
-                allSelected ? Icons.deselect_rounded : Icons.select_all_rounded,
-                size: 18,
-                color: const Color(0xFF3F565D),
-              ),
-              label: Text(
-                allSelected
-                    ? _tr('إلغاء تحديد الكل', 'Deselect all')
-                    : _tr('تحديد الكل', 'Select all'),
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                  color: Color(0xFF1F2E33),
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF1F2E33),
-                backgroundColor: Colors.white,
-                side: const BorderSide(color: Color(0xFFD7E4E8)),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
+        Text(
+          _tr('المحاضرات', 'Lectures'),
+          style: const TextStyle(
+            fontFamily: 'Cairo',
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF1F2E33),
           ),
         ),
+        const SizedBox(height: 6),
         ...lectures.map(
           (lecture) => Padding(
             padding: const EdgeInsets.only(bottom: 10),
@@ -1293,10 +1346,7 @@ class _LecturerManageLecturesScreenState
         const SizedBox(height: 6),
         if (_selectedLectureKeys.isEmpty)
           Text(
-            _tr(
-              'اختر شعبة واحدة على الأقل',
-              'Select at least one section',
-            ),
+            _tr('اختر محاضرة واحدة للمتابعة', 'Select one lecture to continue'),
             style: const TextStyle(
               fontFamily: 'Cairo',
               fontSize: 12,
@@ -1305,17 +1355,14 @@ class _LecturerManageLecturesScreenState
           ),
         if (!canManage)
           Text(
-            _tr(
-              'لا يمكن إدارة محاضرة سابقة',
-              'Cannot manage a past lecture',
-            ),
+            _tr('لا يمكن إدارة محاضرة سابقة', 'Cannot manage a past lecture'),
             style: const TextStyle(
               fontFamily: 'Cairo',
               fontSize: 12,
               color: Color(0xFF8A5A00),
             ),
           ),
-        if (allSelectedCanceled && canManage)
+        if (selectedCanceled && canManage)
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
@@ -1331,12 +1378,14 @@ class _LecturerManageLecturesScreenState
               ),
             ),
           ),
-        if (_selectedLectureKeys.isNotEmpty && canManage) ...[
+        if (selectedLectures.isNotEmpty && canManage) ...[
           const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: allSelectedCanceled ? null : _openLectureActionsForSelection,
+              onPressed: selectedCanceled
+                  ? null
+                  : _openLectureActionsForSelection,
               style: FilledButton.styleFrom(
                 backgroundColor: _primary,
                 foregroundColor: Colors.white,
@@ -1349,15 +1398,7 @@ class _LecturerManageLecturesScreenState
               ),
               icon: const Icon(Icons.assignment_turned_in_rounded),
               label: Text(
-                _selectedLectureKeys.length > 1
-                    ? _tr(
-                        'إجراء على الشعب المحددة',
-                        'Apply action to selected sections',
-                      )
-                    : _tr(
-                        'إدارة المحاضرة المحددة',
-                        'Manage selected lecture',
-                      ),
+                _tr('إدارة المحاضرة المحددة', 'Manage selected lecture'),
                 style: const TextStyle(
                   fontFamily: 'Cairo',
                   fontWeight: FontWeight.w600,
@@ -1371,30 +1412,62 @@ class _LecturerManageLecturesScreenState
     );
   }
 
-  Widget _buildLectureSelectionCard({
-    required LectureItem lecture,
-  }) {
+  Widget _buildLectureSelectionCard({required LectureItem lecture}) {
     final key = _lectureSelectionKey(lecture);
     final isSelected = _selectedLectureKeys.contains(key);
-    final timeRange = TimeUtils.formatTimeRange(lecture.startTime, lecture.endTime);
+    final timeRange = TimeUtils.formatTimeRange(
+      lecture.startTime,
+      lecture.endTime,
+    );
     final locationText = lecture.location?.trim().isNotEmpty == true
         ? lecture.location!.trim()
         : lecture.hall.trim();
-    final status = _isPastSelectedDate
+    final date = _dateForLectureInSelectedWeek(lecture) ?? _getReferenceDate();
+    final now = _calendarRepository.currentDateTime;
+    final todayOnly = DateTime(now.year, now.month, now.day);
+    final lectureDateOnly = DateTime(date.year, date.month, date.day);
+    final status = lectureDateOnly.isBefore(todayOnly)
         ? _tr('ماضي', 'Past')
-        : (_isFutureSelectedDate ? _tr('مستقبل', 'Future') : _tr('اليوم', 'Today'));
-    final date = _selectedDate!;
+        : (lectureDateOnly.isAfter(todayOnly)
+              ? _tr('مستقبل', 'Future')
+              : _tr('اليوم', 'Today'));
     final dateLabel = '${date.day}/${date.month}/${date.year}';
-    final dayLabel = LecturerLanguageController.dayNameFromWeekday(date.weekday);
+    final dayLabel = LecturerLanguageController.dayNameFromWeekday(
+      date.weekday,
+    );
     final actionStatus = _statusForLecture(lecture);
+    final Color actionAccent = actionStatus.isCanceled
+        ? _cancelRed
+        : (actionStatus.isDelayed ? _delayYellow : _primary);
+    final Color actionSoftBg = actionStatus.isCanceled
+        ? const Color(0xFFFFEBEE)
+        : (actionStatus.isDelayed
+              ? const Color(0xFFFFF8E1)
+              : const Color(0xFFEAF7F8));
+    final actionBannerText = actionStatus.isCanceled
+        ? _tr('هذه المحاضرة ملغية بالفعل', 'This lecture is already canceled')
+        : actionStatus.isDelayed
+        ? _tr(
+            'تم إرسال تأخير ${actionStatus.delayMinutes ?? 0} دقيقة',
+            'Delay sent: ${actionStatus.delayMinutes ?? 0} min',
+          )
+        : null;
+    final actionBannerIcon = actionStatus.isCanceled
+        ? Icons.cancel_rounded
+        : Icons.schedule_rounded;
 
     return InkWell(
       onTap: () {
         setState(() {
           if (isSelected) {
             _selectedLectureKeys.remove(key);
+            _selectedDate = null;
           } else {
-            _selectedLectureKeys.add(key);
+            _selectedLectureKeys
+              ..clear()
+              ..add(key);
+            _selectedDate = date;
+            _applyFilters();
           }
         });
       },
@@ -1402,10 +1475,10 @@ class _LecturerManageLecturesScreenState
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFEAF7F8) : Colors.white,
+          color: isSelected ? const Color(0xFFEAF7F8) : actionSoftBg,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isSelected ? _primary : const Color(0xFFE2ECEF),
+            color: isSelected ? _primary : actionAccent.withValues(alpha: 0.35),
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -1456,6 +1529,40 @@ class _LecturerManageLecturesScreenState
                       fontFamily: 'Cairo',
                     ),
                   ),
+                  if (actionBannerText != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: actionAccent.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: actionAccent.withValues(alpha: 0.34),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(actionBannerIcon, size: 16, color: actionAccent),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              actionBannerText,
+                              style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: actionAccent,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 6,
@@ -1475,7 +1582,7 @@ class _LecturerManageLecturesScreenState
                       if (actionStatus.isCanceled)
                         _buildSectionSelectionStatusChip(
                           _tr('ملغية بالفعل', 'Already canceled'),
-                          color: const Color(0xFFB71C1C),
+                          color: _cancelRed,
                         ),
                       if (actionStatus.isDelayed)
                         _buildSectionSelectionStatusChip(
@@ -1483,7 +1590,7 @@ class _LecturerManageLecturesScreenState
                             'مؤجلة ${actionStatus.delayMinutes ?? 0} دقيقة',
                             'Delayed ${actionStatus.delayMinutes ?? 0} min',
                           ),
-                          color: const Color(0xFF8A5A00),
+                          color: _delayYellow,
                         ),
                     ],
                   ),
@@ -1612,6 +1719,7 @@ class _LectureActionDialog extends StatefulWidget {
   });
 
   final LectureItem lecture;
+
   /// عند تحديد أكثر من شعبة: نفس القائمة المحددة (يشمل [lecture] كأول عنصر).
   final List<LectureItem>? multiSelection;
   final DateTime selectedDate;
@@ -2238,18 +2346,26 @@ class _ManageFilterCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onPressed,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
           decoration: BoxDecoration(
-            color: const Color(0xFFF8FBFB),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE3ECEE)),
+            color: const Color(0xFFF7FBFB),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFDCE9EB)),
           ),
           child: Row(
             children: [
-              Icon(icon, size: 16, color: const Color(0xFF006571)),
-              const SizedBox(width: 7),
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F4F5),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(icon, size: 16, color: const Color(0xFF006571)),
+              ),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2260,18 +2376,19 @@ class _ManageFilterCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 10.5,
+                        fontSize: 10.8,
                         color: Color(0xFF688085),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
+                    const SizedBox(height: 1),
                     Text(
                       value,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontFamily: 'Cairo',
-                        fontSize: 12,
+                        fontSize: 12.5,
                         color: Color(0xFF1F3338),
                         fontWeight: FontWeight.w800,
                       ),
@@ -2290,10 +2407,18 @@ class _ManageFilterCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 18,
-                color: Color(0xFF006571),
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF4F5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 18,
+                  color: Color(0xFF006571),
+                ),
               ),
             ],
           ),
