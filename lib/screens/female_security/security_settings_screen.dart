@@ -4,6 +4,7 @@ import 'female_security_nav_bar.dart';
 import 'accepted_screen.dart';
 import 'rejected_students_screen.dart';
 import 'general_settings_screen.dart';
+import 'security_localization.dart';
 import '../login_screen.dart';
 import '../../services/female_security_auth_service.dart';
 
@@ -39,124 +40,137 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-            child: Column(
-              children: [
-                const Text(
-                  'الإعدادات',
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    color: _kTealLight,
-                    fontFamily: 'Cairo',
+    return AnimatedBuilder(
+      animation: SecurityLocalization.controller,
+      builder: (context, _) => Directionality(
+        textDirection: SecurityLocalization.direction,
+        child: Scaffold(
+          backgroundColor: Colors.white,
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+              child: Column(
+                children: [
+                  Text(
+                    SecurityLocalization.settings,
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: _kTealLight,
+                      fontFamily: 'Cairo',
+                    ),
                   ),
-                ),
-                const SizedBox(height: 24),
-                _buildProfileSection(),
-                const SizedBox(height: 28),
+                  const SizedBox(height: 24),
+                  _buildProfileSection(),
+                  const SizedBox(height: 28),
 
-                _buildOptionCard(
-                  icon: Icons.language_rounded,
-                  label: 'English | عربي',
-                  onTap: () {},
-                ),
+                  _buildOptionCard(
+                    icon: Icons.language_rounded,
+                    label: SecurityLocalization.language,
+                    trailing: Text(
+                      SecurityLocalization.isEnglish
+                          ? SecurityLocalization.english
+                          : SecurityLocalization.arabic,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: _kTextMuted,
+                        fontFamily: 'Cairo',
+                      ),
+                    ),
+                    onTap: SecurityLocalization.controller.toggle,
+                  ),
 
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
 
-                _buildNotificationsCard(),
+                  _buildNotificationsCard(),
 
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
 
-                _buildOptionCard(
-                  icon: Icons.star_rounded,
-                  label: 'قيم تجربتك',
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: List.generate(5, (i) {
-                      final filled = (i + 1) <= _rating;
-                      return GestureDetector(
-                        onTap: () => setState(() => _rating = i + 1),
-                        behavior: HitTestBehavior.opaque,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 2),
-                          child: Icon(
-                            filled
-                                ? Icons.star_rounded
-                                : Icons.star_border_rounded,
-                            size: 20,
-                            color: filled ? _kTealLight : _kTextMuted,
+                  _buildOptionCard(
+                    icon: Icons.star_rounded,
+                    label: SecurityLocalization.rateExperience,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: List.generate(5, (i) {
+                        final filled = (i + 1) <= _rating;
+                        return GestureDetector(
+                          onTap: () => setState(() => _rating = i + 1),
+                          behavior: HitTestBehavior.opaque,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 2),
+                            child: Icon(
+                              filled
+                                  ? Icons.star_rounded
+                                  : Icons.star_border_rounded,
+                              size: 20,
+                              color: filled ? _kTealLight : _kTextMuted,
+                            ),
                           ),
+                        );
+                      }),
+                    ),
+                    onTap: () {},
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  _buildOptionCard(
+                    icon: Icons.settings_rounded,
+                    label: SecurityLocalization.generalSettings,
+                    trailing: const Icon(
+                      Icons.chevron_left,
+                      color: _kTextMuted,
+                      size: 24,
+                      textDirection: TextDirection.ltr,
+                    ),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const GeneralSettingsScreen(),
                         ),
                       );
-                    }),
+                    },
                   ),
-                  onTap: () {},
-                ),
 
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
 
-                _buildOptionCard(
-                  icon: Icons.settings_rounded,
-                  label: 'الإعدادات العامة',
-                  trailing: const Icon(
-                    Icons.chevron_left,
-                    color: _kTextMuted,
-                    size: 24,
-                    textDirection: TextDirection.ltr,
+                  _buildOptionCard(
+                    icon: Icons.logout_rounded,
+                    label: SecurityLocalization.logout,
+                    labelColor: _kLogoutRed,
+                    trailing: const Icon(
+                      Icons.chevron_left,
+                      color: _kLogoutRed,
+                      size: 24,
+                      textDirection: TextDirection.ltr,
+                    ),
+                    onTap: _showLogoutDialog,
                   ),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const GeneralSettingsScreen(),
-                      ),
-                    );
-                  },
-                ),
 
-                const SizedBox(height: 12),
-
-                _buildOptionCard(
-                  icon: Icons.logout_rounded,
-                  label: 'تسجيل خروج',
-                  labelColor: _kLogoutRed,
-                  trailing: const Icon(
-                    Icons.chevron_left,
-                    color: _kLogoutRed,
-                    size: 24,
-                    textDirection: TextDirection.ltr,
-                  ),
-                  onTap: _showLogoutDialog,
-                ),
-
-                const SizedBox(height: 20),
-              ],
+                  const SizedBox(height: 20),
+                ],
+              ),
             ),
           ),
-        ),
-        bottomNavigationBar: FemaleSecurityNavBar(
-          selectedIndex: 3,
-          onItemTapped: (index) {
-            if (index == 0) {
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const AcceptedScreen()),
-                (route) => false,
-              );
-            } else if (index == 1) {
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(
-                  builder: (_) => const RejectedStudentsScreen(),
-                ),
-              );
-            } else if (index == 3) {
-              // already on settings
-            }
-          },
+          bottomNavigationBar: FemaleSecurityNavBar(
+            selectedIndex: 3,
+            onItemTapped: (index) {
+              if (index == 0) {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const AcceptedScreen()),
+                  (route) => false,
+                );
+              } else if (index == 1) {
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (_) => const RejectedStudentsScreen(),
+                  ),
+                );
+              } else if (index == 3) {
+                // already on settings
+              }
+            },
+          ),
         ),
       ),
     );
@@ -174,8 +188,11 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
             : photoVersion.isEmpty
             ? rawPhotoUrl
             : '$rawPhotoUrl${rawPhotoUrl.contains('?') ? '&' : '?'}v=$photoVersion';
-        final fullName = (data['fullName'] ?? data['name'] ?? 'حساب الأمن')
-            .toString();
+        final fullName =
+            (data['fullName'] ??
+                    data['name'] ??
+                    SecurityLocalization.securityAccount)
+                .toString();
         final email = _authService.currentUserEmail ?? 'username@example.com';
 
         return Column(
@@ -246,7 +263,9 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
             ),
             const SizedBox(height: 14),
             Text(
-              fullName.isEmpty ? 'حساب الأمن' : fullName,
+              fullName.isEmpty
+                  ? SecurityLocalization.securityAccount
+                  : fullName,
               style: const TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.bold,
@@ -282,14 +301,12 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم تحديث الصورة الشخصية بنجاح')),
+        SnackBar(content: Text(SecurityLocalization.photoUpdated)),
       );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تعذر رفع الصورة، يرجى المحاولة مرة أخرى'),
-        ),
+        SnackBar(content: Text(SecurityLocalization.photoUploadFailed)),
       );
     } finally {
       if (mounted) {
@@ -304,7 +321,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
       barrierDismissible: true,
       barrierColor: Colors.black54,
       builder: (ctx) => Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: SecurityLocalization.direction,
         child: Dialog(
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: 28),
@@ -327,7 +344,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                 Icon(Icons.logout_rounded, size: 52, color: _kLogoutRed),
                 const SizedBox(height: 20),
                 Text(
-                  'هل أنت متأكد أنك تريد تسجيل الخروج؟',
+                  SecurityLocalization.confirmLogout,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 16,
@@ -358,8 +375,8 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    child: const Text(
-                      'تسجيل الخروج',
+                    child: Text(
+                      SecurityLocalization.logout,
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -381,8 +398,8 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    child: const Text(
-                      'إلغاء',
+                    child: Text(
+                      SecurityLocalization.cancel,
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -402,7 +419,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
   Widget _buildNotificationsCard() {
     return _OptionCard(
       icon: Icons.notifications_outlined,
-      label: 'الإشعارات',
+      label: SecurityLocalization.notifications,
       trailing: Switch(
         value: _notificationsEnabled,
         onChanged: (v) => setState(() => _notificationsEnabled = v),
@@ -452,14 +469,16 @@ class _OptionCard extends StatelessWidget {
     final content = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       child: Row(
-        textDirection: TextDirection.rtl,
+        textDirection: SecurityLocalization.direction,
         children: [
           Icon(icon, size: 24, color: labelColor ?? _kTextDark),
           const SizedBox(width: 14),
           Expanded(
             child: Text(
               label,
-              textAlign: TextAlign.right,
+              textAlign: SecurityLocalization.isEnglish
+                  ? TextAlign.left
+                  : TextAlign.right,
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w500,

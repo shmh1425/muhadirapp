@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'models/student_card_info.dart';
+import 'security_localization.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Colors (aligned with accepted_screen.dart)
@@ -28,21 +29,24 @@ class SecurityCardPreviewScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Column(
-              children: [
-                _buildAppBar(context),
-                const SizedBox(height: 12),
-                _buildStatusPill(),
-                const SizedBox(height: 28),
-                _buildCard(context),
-              ],
+    return AnimatedBuilder(
+      animation: SecurityLocalization.controller,
+      builder: (context, _) => Directionality(
+        textDirection: SecurityLocalization.direction,
+        child: Scaffold(
+          backgroundColor: Colors.white,
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                children: [
+                  _buildAppBar(context),
+                  const SizedBox(height: 12),
+                  _buildStatusPill(),
+                  const SizedBox(height: 28),
+                  _buildCard(context),
+                ],
+              ),
             ),
           ),
         ),
@@ -56,13 +60,17 @@ class SecurityCardPreviewScreen extends StatelessWidget {
       children: [
         IconButton(
           onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.arrow_forward_ios, size: 20, color: _kTextDark),
+          icon: const Icon(
+            Icons.arrow_forward_ios,
+            size: 20,
+            color: _kTextDark,
+          ),
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
         ),
-        const Expanded(
+        Expanded(
           child: Text(
-            'معاينة البطاقة',
+            SecurityLocalization.previewCard,
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 20,
@@ -81,9 +89,11 @@ class SecurityCardPreviewScreen extends StatelessWidget {
     final isAcceptedStyle = isAccepted;
     final borderColor = isAcceptedStyle ? _kTealLight : _kRejectRed;
     final fillColor = isAcceptedStyle
-        ? _kTealLight.withOpacity(0.08)
-        : _kRejectRed.withOpacity(0.08);
-    final label = isAcceptedStyle ? 'تم الدخول' : 'مرفوض';
+        ? _kTealLight.withValues(alpha: 0.08)
+        : _kRejectRed.withValues(alpha: 0.08);
+    final label = isAcceptedStyle
+        ? SecurityLocalization.acceptedStatus
+        : SecurityLocalization.rejectedStatus;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -136,14 +146,14 @@ class SecurityCardPreviewScreen extends StatelessWidget {
             errorBuilder: (_, __, ___) => _avatarPlaceholder(size),
           )
         : (student.photoAsset != null && student.photoAsset!.isNotEmpty
-            ? Image.asset(
-                student.photoAsset!,
-                width: size,
-                height: size,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _avatarPlaceholder(size),
-              )
-            : _avatarPlaceholder(size));
+              ? Image.asset(
+                  student.photoAsset!,
+                  width: size,
+                  height: size,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => _avatarPlaceholder(size),
+                )
+              : _avatarPlaceholder(size));
 
     return Container(
       width: size,
@@ -153,7 +163,7 @@ class SecurityCardPreviewScreen extends StatelessWidget {
         border: Border.all(color: _kTealLight, width: 3),
         boxShadow: [
           BoxShadow(
-            color: _kTealLight.withOpacity(0.2),
+            color: _kTealLight.withValues(alpha: 0.2),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -166,7 +176,7 @@ class SecurityCardPreviewScreen extends StatelessWidget {
 
   Widget _avatarPlaceholder(double size) {
     return Container(
-      color: _kTextMuted.withOpacity(0.15),
+      color: _kTextMuted.withValues(alpha: 0.15),
       child: Center(
         child: Text(
           student.fullName.isNotEmpty ? student.fullName[0] : '?',
@@ -202,11 +212,7 @@ class SecurityCardPreviewScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(
-          student.fullName,
-          textAlign: TextAlign.center,
-          style: boldStyle,
-        ),
+        Text(student.fullName, textAlign: TextAlign.center, style: boldStyle),
         const SizedBox(height: 6),
         Text(
           student.universityId,
@@ -215,7 +221,7 @@ class SecurityCardPreviewScreen extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Text(
-          'وقت الدخول: ${student.entryTime}',
+          '${SecurityLocalization.entryTime}: ${student.entryTime}',
           style: regularStyle,
         ),
         const SizedBox(height: 4),
@@ -252,11 +258,7 @@ class SecurityCardPreviewScreen extends StatelessWidget {
         const SizedBox(height: 16),
         Divider(height: 1, color: _kGreyBorder),
         const SizedBox(height: 12),
-        Text(
-          student.gateLabel,
-          textAlign: TextAlign.center,
-          style: mutedStyle,
-        ),
+        Text(student.gateLabel, textAlign: TextAlign.center, style: mutedStyle),
       ],
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/female_security/security_gate_scan_service.dart';
 import 'security_prefs.dart';
 import '../../theme/app_theme_controller.dart';
+import 'security_localization.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -35,33 +36,36 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-            child: Column(
-              children: [
-                _buildAppBar(context),
-                const SizedBox(height: 28),
-                _buildOptionCard(
-                  icon: Icons.sync_rounded,
-                  iconColor: _kTealLight,
-                  label: 'التحديثات التلقائية',
-                  trailing: Switch(
-                    value: _autoUpdatesEnabled,
-                    onChanged: (v) => setState(() => _autoUpdatesEnabled = v),
-                    activeThumbColor: _kTealLight,
+    return AnimatedBuilder(
+      animation: SecurityLocalization.controller,
+      builder: (context, _) => Directionality(
+        textDirection: SecurityLocalization.direction,
+        child: Scaffold(
+          backgroundColor: Colors.white,
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              child: Column(
+                children: [
+                  _buildAppBar(context),
+                  const SizedBox(height: 28),
+                  _buildOptionCard(
+                    icon: Icons.sync_rounded,
+                    iconColor: _kTealLight,
+                    label: SecurityLocalization.automaticUpdates,
+                    trailing: Switch(
+                      value: _autoUpdatesEnabled,
+                      onChanged: (v) => setState(() => _autoUpdatesEnabled = v),
+                      activeThumbColor: _kTealLight,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                _buildThemeModeCard(),
-                const SizedBox(height: 12),
-                _buildGateCard(),
-                const SizedBox(height: 20),
-              ],
+                  const SizedBox(height: 12),
+                  _buildThemeModeCard(),
+                  const SizedBox(height: 12),
+                  _buildGateCard(),
+                  const SizedBox(height: 20),
+                ],
+              ),
             ),
           ),
         ),
@@ -83,9 +87,9 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
         ),
-        const Expanded(
+        Expanded(
           child: Text(
-            'الإعدادات العامة',
+            SecurityLocalization.generalSettings,
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 26,
@@ -114,11 +118,13 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
     );
   }
 
-  static const Map<ThemeMode, String> _themeModeLabels = {
-    ThemeMode.system: 'تلقائي',
-    ThemeMode.dark: 'مفعل',
-    ThemeMode.light: 'مغلق',
-  };
+  String _themeModeLabel(ThemeMode mode) {
+    return switch (mode) {
+      ThemeMode.system => SecurityLocalization.automatic,
+      ThemeMode.dark => SecurityLocalization.enabled,
+      ThemeMode.light => SecurityLocalization.disabled,
+    };
+  }
 
   Widget _buildThemeModeCard() {
     return ValueListenableBuilder<ThemeMode>(
@@ -127,7 +133,7 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
         return _GenOptionCard(
           icon: Icons.dark_mode_rounded,
           iconColor: _kTealLight,
-          label: 'الوضع الليلي',
+          label: SecurityLocalization.darkMode,
           trailing: DropdownButtonHideUnderline(
             child: DropdownButton<ThemeMode>(
               value: mode,
@@ -141,7 +147,7 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
                     (m) => DropdownMenuItem<ThemeMode>(
                       value: m,
                       child: Text(
-                        _themeModeLabels[m]!,
+                        _themeModeLabel(m),
                         style: const TextStyle(
                           fontFamily: 'Cairo',
                           color: _kTextDark,
@@ -175,7 +181,7 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
         return _GenOptionCard(
           icon: Icons.door_front_door_rounded,
           iconColor: _kTealLight,
-          label: 'البوابة: ${current.gateNumber}',
+          label: SecurityLocalization.gateLabel(current.gateNumber),
           trailing: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: current.gateId,
@@ -189,7 +195,10 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
                     (gate) => DropdownMenuItem<String>(
                       value: gate.gateId,
                       child: Text(
-                        '${gate.gateNumber} - ${gate.campusName}',
+                        SecurityLocalization.gateOptionLabel(
+                          gateNumber: gate.gateNumber,
+                          campusName: gate.campusName,
+                        ),
                         style: const TextStyle(
                           fontFamily: 'Cairo',
                           color: _kTextDark,
@@ -235,14 +244,16 @@ class _GenOptionCard extends StatelessWidget {
     final content = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       child: Row(
-        textDirection: TextDirection.rtl,
+        textDirection: SecurityLocalization.direction,
         children: [
           Icon(icon, size: 24, color: iconColor ?? _kTextDark),
           const SizedBox(width: 14),
           Expanded(
             child: Text(
               label,
-              textAlign: TextAlign.right,
+              textAlign: SecurityLocalization.isEnglish
+                  ? TextAlign.left
+                  : TextAlign.right,
               style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w500,

@@ -4,6 +4,7 @@ import '../../services/female_security/security_gate_scan_service.dart';
 import 'female_security_nav_bar.dart';
 import 'rejected_students_screen.dart';
 import 'security_card_preview_screen.dart';
+import 'security_localization.dart';
 import 'security_prefs.dart';
 import 'security_settings_screen.dart';
 import 'widgets/security_date_picker_dialog.dart';
@@ -47,20 +48,7 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
   }
 
   String _getFormattedDate(DateTime date) {
-    const days = [
-      'الأحد',
-      'الإثنين',
-      'الثلاثاء',
-      'الأربعاء',
-      'الخميس',
-      'الجمعة',
-      'السبت',
-    ];
-    final dayName = days[date.weekday % 7];
-    final d = date.day.toString().padLeft(2, '0');
-    final m = date.month.toString().padLeft(2, '0');
-    final y = date.year;
-    return '$dayName $d-$m-$y';
+    return SecurityLocalization.formattedDate(date);
   }
 
   void _onRefresh() {
@@ -157,103 +145,115 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final formattedDate = _getFormattedDate(_selectedDate);
+    return AnimatedBuilder(
+      animation: SecurityLocalization.controller,
+      builder: (context, _) {
+        final formattedDate = _getFormattedDate(_selectedDate);
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        body: SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                child: ValueListenableBuilder<String>(
-                  valueListenable: selectedGateId,
-                  builder: (context, gateId, _) {
-                    _logAcceptedQueryValues(gateId);
-                    return StreamBuilder<List<SecurityGateScanRecord>>(
-                      stream: _service.getAcceptedScans(
-                        gateId: gateId,
-                        date: _selectedDate,
-                      ),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasError && snapshot.error != null) {
-                          _logAcceptedQueryError(
-                            error: snapshot.error!,
-                            stackTrace: snapshot.stackTrace,
+        return Directionality(
+          textDirection: SecurityLocalization.direction,
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            body: SafeArea(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: ValueListenableBuilder<String>(
+                      valueListenable: selectedGateId,
+                      builder: (context, gateId, _) {
+                        _logAcceptedQueryValues(gateId);
+                        return StreamBuilder<List<SecurityGateScanRecord>>(
+                          stream: _service.getAcceptedScans(
                             gateId: gateId,
-                          );
-                        }
-                        final scans = _filterScans(
-                          snapshot.data ?? const <SecurityGateScanRecord>[],
-                        );
-                        return ListView(
-                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                          children: [
-                            HeaderSection(
-                              onRefresh: _onRefresh,
-                              onPickDate: _openDatePicker,
-                              formattedDate: formattedDate,
-                              isDateActive: _dateUpdated,
-                            ),
-                            const SizedBox(height: 20),
-                            SearchBar(
-                              controller: _searchController,
-                              onChanged: (_) => setState(() {}),
-                            ),
-                            const SizedBox(height: 16),
-                            if (snapshot.hasError)
-                              const _SecurityStateMessage(
-                                message:
-                                    'تعذر تحميل سجلات المقبولين من student_gate_scans',
-                              )
-                            else if (snapshot.connectionState ==
-                                    ConnectionState.waiting &&
-                                !snapshot.hasData)
-                              const Center(
-                                child: Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 24),
-                                  child: CircularProgressIndicator(),
+                            date: _selectedDate,
+                          ),
+                          builder: (context, snapshot) {
+                            if (snapshot.hasError && snapshot.error != null) {
+                              _logAcceptedQueryError(
+                                error: snapshot.error!,
+                                stackTrace: snapshot.stackTrace,
+                                gateId: gateId,
+                              );
+                            }
+                            final scans = _filterScans(
+                              snapshot.data ?? const <SecurityGateScanRecord>[],
+                            );
+                            return ListView(
+                              padding: const EdgeInsets.fromLTRB(
+                                20,
+                                16,
+                                20,
+                                12,
+                              ),
+                              children: [
+                                HeaderSection(
+                                  onRefresh: _onRefresh,
+                                  onPickDate: _openDatePicker,
+                                  formattedDate: formattedDate,
+                                  isDateActive: _dateUpdated,
                                 ),
-                              )
-                            else if (scans.isEmpty)
-                              const _SecurityStateMessage(
-                                message:
-                                    'لا توجد سجلات مقبولة لهذا اليوم والبوابة',
-                              )
-                            else
-                              _AcceptedDataTable(scans: scans),
-                          ],
+                                const SizedBox(height: 20),
+                                SearchBar(
+                                  controller: _searchController,
+                                  onChanged: (_) => setState(() {}),
+                                ),
+                                const SizedBox(height: 16),
+                                if (snapshot.hasError)
+                                  _SecurityStateMessage(
+                                    message:
+                                        SecurityLocalization.acceptedLoadError,
+                                  )
+                                else if (snapshot.connectionState ==
+                                        ConnectionState.waiting &&
+                                    !snapshot.hasData)
+                                  const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 24,
+                                      ),
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  )
+                                else if (scans.isEmpty)
+                                  _SecurityStateMessage(
+                                    message:
+                                        SecurityLocalization.noAcceptedStudents,
+                                  )
+                                else
+                                  _AcceptedDataTable(scans: scans),
+                              ],
+                            );
+                          },
                         );
                       },
-                    );
-                  },
-                ),
-              ),
-              FemaleSecurityNavBar(
-                selectedIndex: _selectedNavIndex,
-                onItemTapped: (index) {
-                  setState(() => _selectedNavIndex = index);
+                    ),
+                  ),
+                  FemaleSecurityNavBar(
+                    selectedIndex: _selectedNavIndex,
+                    onItemTapped: (index) {
+                      setState(() => _selectedNavIndex = index);
 
-                  if (index == 1) {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(
-                        builder: (_) => const RejectedStudentsScreen(),
-                      ),
-                    );
-                  } else if (index == 3) {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const SecuritySettingsScreen(),
-                      ),
-                    );
-                  }
-                },
+                      if (index == 1) {
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (_) => const RejectedStudentsScreen(),
+                          ),
+                        );
+                      } else if (index == 3) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const SecuritySettingsScreen(),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -288,8 +288,8 @@ class HeaderSection extends StatelessWidget {
               constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               style: IconButton.styleFrom(foregroundColor: _kTealLight),
             ),
-            const Text(
-              'المقبولين',
+            Text(
+              SecurityLocalization.acceptedStudents,
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
@@ -306,7 +306,7 @@ class HeaderSection extends StatelessWidget {
             ValueListenableBuilder<String>(
               valueListenable: selectedCampusName,
               builder: (context, campus, _) => Text(
-                'الموقع: $campus',
+                '${SecurityLocalization.location}: $campus',
                 style: const TextStyle(
                   fontSize: 14,
                   color: _kTealLight,
@@ -326,7 +326,7 @@ class HeaderSection extends StatelessWidget {
                     fontFamily: 'Cairo',
                   ),
                   children: [
-                    const TextSpan(text: 'بوابة رقم '),
+                    TextSpan(text: '${SecurityLocalization.gate} '),
                     TextSpan(
                       text: '$gate',
                       style: const TextStyle(
@@ -393,7 +393,7 @@ class DateRow extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              'التاريخ: $formattedDate',
+              '${SecurityLocalization.date}: $formattedDate',
               style: const TextStyle(
                 fontSize: 14,
                 color: _kTextDark,
@@ -432,9 +432,12 @@ class SearchBar extends StatelessWidget {
       child: TextField(
         controller: controller,
         onChanged: onChanged,
-        textDirection: TextDirection.rtl,
+        textDirection: SecurityLocalization.direction,
+        textAlign: SecurityLocalization.isEnglish
+            ? TextAlign.left
+            : TextAlign.right,
         decoration: InputDecoration(
-          hintText: 'بحث بالإسم أو الرقم الجامعي',
+          hintText: SecurityLocalization.searchHint,
           hintStyle: const TextStyle(
             color: Color(0xFF9E9E9E),
             fontSize: 14,
@@ -487,11 +490,11 @@ class _AcceptedDataTable extends StatelessWidget {
           ),
           columnSpacing: 12,
           horizontalMargin: 16,
-          columns: const [
-            DataColumn(label: Text('اسم الطالب/ة')),
-            DataColumn(label: Text('الرقم الجامعي')),
-            DataColumn(label: Text('الوقت')),
-            DataColumn(label: Text('معاينة البطاقة')),
+          columns: [
+            DataColumn(label: Text(SecurityLocalization.studentName)),
+            DataColumn(label: Text(SecurityLocalization.universityId)),
+            DataColumn(label: Text(SecurityLocalization.scanTime)),
+            DataColumn(label: Text(SecurityLocalization.previewCard)),
           ],
           rows: scans.asMap().entries.map((entry) {
             final index = entry.key;

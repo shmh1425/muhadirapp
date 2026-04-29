@@ -4,6 +4,7 @@ import '../../services/female_security/security_gate_scan_service.dart';
 import 'accepted_screen.dart';
 import 'female_security_nav_bar.dart';
 import 'security_card_preview_screen.dart';
+import 'security_localization.dart';
 import 'security_prefs.dart';
 import 'security_settings_screen.dart';
 import 'widgets/security_date_picker_dialog.dart';
@@ -48,20 +49,7 @@ class _RejectedStudentsScreenState extends State<RejectedStudentsScreen> {
   }
 
   String _getFormattedDate(DateTime date) {
-    const days = [
-      'الأحد',
-      'الإثنين',
-      'الثلاثاء',
-      'الأربعاء',
-      'الخميس',
-      'الجمعة',
-      'السبت',
-    ];
-    final dayName = days[date.weekday % 7];
-    final d = date.day.toString().padLeft(2, '0');
-    final m = date.month.toString().padLeft(2, '0');
-    final y = date.year;
-    return '$dayName $d-$m-$y';
+    return SecurityLocalization.formattedDate(date);
   }
 
   void _onRefresh() {
@@ -149,91 +137,96 @@ class _RejectedStudentsScreenState extends State<RejectedStudentsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        body: SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                child: ValueListenableBuilder<String>(
-                  valueListenable: selectedGateId,
-                  builder: (context, gateId, _) {
-                    return StreamBuilder<List<SecurityGateScanRecord>>(
-                      stream: _service.getRejectedScans(
-                        gateId: gateId,
-                        date: _selectedDate,
-                      ),
-                      builder: (context, snapshot) {
-                        final scans = _filterScans(snapshot.data ?? const []);
-                        return ListView(
-                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                          children: [
-                            _RejectedHeader(
-                              onRefresh: _onRefresh,
-                              onPickDate: _openDatePicker,
-                              formattedDate: _getFormattedDate(_selectedDate),
-                              isDateActive: _dateUpdated,
-                            ),
-                            const SizedBox(height: 20),
-                            const _StatusBadge(),
-                            const SizedBox(height: 18),
-                            _RejectedSearchBar(
-                              controller: _searchController,
-                              onChanged: (_) => setState(() {}),
-                            ),
-                            const SizedBox(height: 16),
-                            if (snapshot.hasError)
-                              const _StateMessage(
-                                message:
-                                    'تعذر تحميل سجلات المرفوضين من student_gate_scans',
-                              )
-                            else if (snapshot.connectionState ==
-                                    ConnectionState.waiting &&
-                                !snapshot.hasData)
-                              const Center(
-                                child: Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 24),
-                                  child: CircularProgressIndicator(),
-                                ),
-                              )
-                            else if (scans.isEmpty)
-                              const _StateMessage(
-                                message:
-                                    'لا توجد سجلات مرفوضة لهذا اليوم والبوابة',
-                              )
-                            else
-                              _RejectedList(
-                                scans: scans,
-                                onInfoTap: _showReasonPopup,
+    return AnimatedBuilder(
+      animation: SecurityLocalization.controller,
+      builder: (context, _) => Directionality(
+        textDirection: SecurityLocalization.direction,
+        child: Scaffold(
+          backgroundColor: Colors.white,
+          body: SafeArea(
+            child: Column(
+              children: [
+                Expanded(
+                  child: ValueListenableBuilder<String>(
+                    valueListenable: selectedGateId,
+                    builder: (context, gateId, _) {
+                      return StreamBuilder<List<SecurityGateScanRecord>>(
+                        stream: _service.getRejectedScans(
+                          gateId: gateId,
+                          date: _selectedDate,
+                        ),
+                        builder: (context, snapshot) {
+                          final scans = _filterScans(snapshot.data ?? const []);
+                          return ListView(
+                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                            children: [
+                              _RejectedHeader(
+                                onRefresh: _onRefresh,
+                                onPickDate: _openDatePicker,
+                                formattedDate: _getFormattedDate(_selectedDate),
+                                isDateActive: _dateUpdated,
                               ),
-                          ],
-                        );
-                      },
-                    );
+                              const SizedBox(height: 20),
+                              const _StatusBadge(),
+                              const SizedBox(height: 18),
+                              _RejectedSearchBar(
+                                controller: _searchController,
+                                onChanged: (_) => setState(() {}),
+                              ),
+                              const SizedBox(height: 16),
+                              if (snapshot.hasError)
+                                _StateMessage(
+                                  message:
+                                      SecurityLocalization.rejectedLoadError,
+                                )
+                              else if (snapshot.connectionState ==
+                                      ConnectionState.waiting &&
+                                  !snapshot.hasData)
+                                const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 24),
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                )
+                              else if (scans.isEmpty)
+                                _StateMessage(
+                                  message:
+                                      SecurityLocalization.noRejectedStudents,
+                                )
+                              else
+                                _RejectedList(
+                                  scans: scans,
+                                  onInfoTap: _showReasonPopup,
+                                ),
+                            ],
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+                FemaleSecurityNavBar(
+                  selectedIndex: _selectedNavIndex,
+                  onItemTapped: (index) {
+                    setState(() => _selectedNavIndex = index);
+
+                    if (index == 0) {
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(
+                          builder: (_) => const AcceptedScreen(),
+                        ),
+                      );
+                    } else if (index == 3) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const SecuritySettingsScreen(),
+                        ),
+                      );
+                    }
                   },
                 ),
-              ),
-              FemaleSecurityNavBar(
-                selectedIndex: _selectedNavIndex,
-                onItemTapped: (index) {
-                  setState(() => _selectedNavIndex = index);
-
-                  if (index == 0) {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const AcceptedScreen()),
-                    );
-                  } else if (index == 3) {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const SecuritySettingsScreen(),
-                      ),
-                    );
-                  }
-                },
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -271,8 +264,8 @@ class _RejectedHeader extends StatelessWidget {
                 constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               ),
             ),
-            const Text(
-              'المرفوضين',
+            Text(
+              SecurityLocalization.rejectedStudents,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 28,
@@ -292,7 +285,7 @@ class _RejectedHeader extends StatelessWidget {
               ValueListenableBuilder<String>(
                 valueListenable: selectedCampusName,
                 builder: (context, campus, _) => Text(
-                  'الموقع: $campus',
+                  '${SecurityLocalization.location}: $campus',
                   textAlign: TextAlign.right,
                   style: const TextStyle(
                     fontSize: 14,
@@ -314,7 +307,7 @@ class _RejectedHeader extends StatelessWidget {
                       fontFamily: 'Cairo',
                     ),
                     children: [
-                      const TextSpan(text: 'بوابة رقم '),
+                      TextSpan(text: '${SecurityLocalization.gate} '),
                       TextSpan(
                         text: '$gate',
                         style: const TextStyle(
@@ -360,7 +353,7 @@ class _DateRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Text(
-          'التاريخ: $formattedDate',
+          '${SecurityLocalization.date}: $formattedDate',
           style: const TextStyle(
             fontSize: 14,
             color: _kTextDark,
@@ -404,9 +397,9 @@ class _StatusBadge extends StatelessWidget {
         color: _kRed,
         borderRadius: BorderRadius.circular(14),
       ),
-      child: const Center(
+      child: Center(
         child: Text(
-          'مرفوض',
+          SecurityLocalization.rejectedStatus,
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.bold,
@@ -440,9 +433,12 @@ class _RejectedSearchBar extends StatelessWidget {
       child: TextField(
         controller: controller,
         onChanged: onChanged,
-        textDirection: TextDirection.rtl,
+        textDirection: SecurityLocalization.direction,
+        textAlign: SecurityLocalization.isEnglish
+            ? TextAlign.left
+            : TextAlign.right,
         decoration: InputDecoration(
-          hintText: 'بحث بالإسم أو الرقم الجامعي',
+          hintText: SecurityLocalization.searchHint,
           hintStyle: const TextStyle(
             color: Color(0xFF9E9E9E),
             fontSize: 14,
@@ -525,18 +521,28 @@ class _RejectedTableHeader extends StatelessWidget {
             flex: 4,
             child: Align(
               alignment: Alignment.centerRight,
-              child: headerText('اسم الطالب/ة'),
+              child: headerText(SecurityLocalization.studentName),
             ),
           ),
-          Expanded(flex: 3, child: Center(child: headerText('الرقم الجامعي'))),
-          Expanded(flex: 2, child: Center(child: headerText('الوقت'))),
-          SizedBox(
-            width: iconColW,
-            child: Center(child: headerText('معاينة', size: 10)),
+          Expanded(
+            flex: 3,
+            child: Center(child: headerText(SecurityLocalization.universityId)),
+          ),
+          Expanded(
+            flex: 2,
+            child: Center(child: headerText(SecurityLocalization.scanTime)),
           ),
           SizedBox(
             width: iconColW,
-            child: Center(child: headerText('السبب', size: 10)),
+            child: Center(
+              child: headerText(SecurityLocalization.preview, size: 10),
+            ),
+          ),
+          SizedBox(
+            width: iconColW,
+            child: Center(
+              child: headerText(SecurityLocalization.reason, size: 10),
+            ),
           ),
         ],
       ),
@@ -669,7 +675,7 @@ class _RejectedRowState extends State<_RejectedRow> {
                         box,
                         widget.entry.rejectionReasonText.isNotEmpty
                             ? widget.entry.rejectionReasonText
-                            : 'لا يوجد سبب مسجل',
+                            : SecurityLocalization.noReasonRecorded,
                       );
                     }
                   },

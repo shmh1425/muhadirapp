@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../security_localization.dart';
 import '../../../services/female_security/security_gate_scan_service.dart';
 
 const _kTealLight = Color(0xFF27A2A9);
@@ -42,7 +43,7 @@ class SecurityVerifyStudentDialog extends StatelessWidget {
       context: context,
       barrierDismissible: false,
       builder: (context) => Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: SecurityLocalization.direction,
         child: _SecurityVerifyDialogBody(
           result: result,
           rejectionReasons: rejectionReasons,
@@ -80,27 +81,33 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildHeader(context),
-              const SizedBox(height: 16),
-              _buildAvatar(),
-              const SizedBox(height: 20),
-              _buildStudentInfo(),
-              const SizedBox(height: 16),
-              _buildRejectionReasonField(),
-              const SizedBox(height: 24),
-              _buildButtons(),
-            ],
+    return AnimatedBuilder(
+      animation: SecurityLocalization.controller,
+      builder: (context, _) => Directionality(
+        textDirection: SecurityLocalization.direction,
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildHeader(context),
+                  const SizedBox(height: 16),
+                  _buildAvatar(),
+                  const SizedBox(height: 20),
+                  _buildStudentInfo(),
+                  const SizedBox(height: 16),
+                  _buildRejectionReasonField(),
+                  const SizedBox(height: 24),
+                  _buildButtons(),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -224,28 +231,28 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _infoRow(
-          'اسم الطالبة:',
+          '${SecurityLocalization.studentNameFemale}:',
           widget.result.fullName,
           valueStyle: nameValueStyle,
           labelStyle: labelStyle,
         ),
         const SizedBox(height: 10),
         _infoRow(
-          'رقمها الجامعي:',
+          '${SecurityLocalization.universityId}:',
           widget.result.universityId,
           valueStyle: valueStyle,
           labelStyle: labelStyle,
         ),
         const SizedBox(height: 10),
         _infoRow(
-          'التخصص:',
+          '${SecurityLocalization.major}:',
           widget.result.major,
           valueStyle: valueStyle,
           labelStyle: labelStyle,
         ),
         const SizedBox(height: 10),
         _infoRow(
-          'الوقت:',
+          '${SecurityLocalization.scanTime}:',
           widget.result.scanTime,
           valueStyle: valueStyle,
           labelStyle: labelStyle,
@@ -259,7 +266,7 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
       initialValue: _selectedReason,
       isExpanded: true,
       decoration: InputDecoration(
-        labelText: 'سبب الرفض عند الحاجة',
+        labelText: SecurityLocalization.rejectionReasonWhenNeeded,
         labelStyle: const TextStyle(color: _kTextMuted, fontFamily: 'Cairo'),
         filled: true,
         fillColor: Colors.white,
@@ -274,7 +281,9 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
             (reason) => DropdownMenuItem<SecurityRejectionReason>(
               value: reason,
               child: Text(
-                reason.titleAr,
+                SecurityLocalization.isEnglish && reason.titleEn.isNotEmpty
+                    ? reason.titleEn
+                    : reason.titleAr,
                 style: const TextStyle(color: _kTextDark, fontFamily: 'Cairo'),
               ),
             ),
@@ -293,7 +302,7 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.start,
-      textDirection: TextDirection.rtl,
+      textDirection: SecurityLocalization.direction,
       children: [
         Expanded(
           child: Text(value, textAlign: TextAlign.left, style: valueStyle),
@@ -320,8 +329,8 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
                 borderRadius: BorderRadius.circular(14),
               ),
             ),
-            child: const Text(
-              'تأكيد',
+            child: Text(
+              SecurityLocalization.confirm,
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.bold,
@@ -337,7 +346,9 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
             onPressed: () {
               if (_selectedReason == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('اختاري سبب الرفض أولاً')),
+                  SnackBar(
+                    content: Text(SecurityLocalization.selectRejectionReason),
+                  ),
                 );
                 return;
               }
@@ -353,8 +364,8 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
                 borderRadius: BorderRadius.circular(14),
               ),
             ),
-            child: const Text(
-              'رفض',
+            child: Text(
+              SecurityLocalization.reject,
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.bold,
@@ -375,7 +386,7 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تعذر حفظ سجل الدخول: $error')),
+        SnackBar(content: Text(SecurityLocalization.saveEntryError(error))),
       );
       setState(() => _isSavingAcceptedScan = false);
     }
