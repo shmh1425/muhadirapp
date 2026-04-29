@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/female_security/security_gate_scan_service.dart';
@@ -8,10 +7,8 @@ import 'security_card_preview_screen.dart';
 import 'security_prefs.dart';
 import 'security_settings_screen.dart';
 import 'widgets/security_date_picker_dialog.dart';
-import 'widgets/security_verify_student_dialog.dart';
 
 const _kTealLight = Color(0xFF27A2A9);
-const _kTealDark = Color(0xFF006571);
 const _kTextDark = Color(0xFF2D2D2D);
 const _kTextMuted = Color(0xFF757575);
 const _kGreyFill = Color(0xFFF0F0F0);
@@ -33,7 +30,6 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
 
   int _selectedNavIndex = 0;
   bool _dateUpdated = true;
-  bool _isSubmittingScan = false;
   DateTime _selectedDate = DateTime.now();
   String? _lastAcceptedErrorLog;
   String? _lastAcceptedQueryLog;
@@ -79,9 +75,7 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
     try {
       await loadSecurityGatePreferences();
     } catch (error, stackTrace) {
-      debugPrint(
-        '[AcceptedScreen] loadSecurityGatePreferences failed: $error',
-      );
+      debugPrint('[AcceptedScreen] loadSecurityGatePreferences failed: $error');
       debugPrintStack(
         label: '[AcceptedScreen] loadSecurityGatePreferences stackTrace',
         stackTrace: stackTrace,
@@ -105,135 +99,20 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
     }
   }
 
-  Future<void> _startScanFlow() async {
-    final universityId = await _openStudentLookupDialog();
-    if (!mounted || universityId == null || universityId.trim().isEmpty) {
-      return;
-    }
-
-    setState(() => _isSubmittingScan = true);
-    try {
-      await loadSecurityGatePreferences();
-      final student = await _service.findStudentByUniversityId(universityId);
-      if (!mounted) return;
-      if (student == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('لم يتم العثور على الطالبة في external_students'),
-          ),
-        );
-        return;
-      }
-
-      final reasons = await _service.getActiveRejectionReasons();
-      if (!mounted) return;
-
-      final now = DateTime.now();
-      final decision = await SecurityVerifyStudentDialog.show(
-        context,
-        result: StudentGateScanResult(
-          fullName: student.fullName,
-          universityId: student.universityId,
-          major: student.major,
-          scanTime: now.toString().split(' ').last.split('.').first,
-          photoUrl: student.photoUrl,
-        ),
-        rejectionReasons: reasons,
-      );
-
-      if (!mounted || decision == null) return;
-
-      await _service.recordGateScanDecision(
-        student: student,
-        gate: currentSecurityGateOption,
-        decision: decision,
-      );
-      if (!mounted) return;
-
-      final message = decision.isApproved
-          ? 'تم تسجيل الدخول في قائمة المقبولين'
-          : 'تم تسجيل الرفض في قائمة المرفوضين';
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('تعذر إكمال عملية التحقق: $e')));
-    } finally {
-      if (mounted) {
-        setState(() => _isSubmittingScan = false);
-      }
-    }
-  }
-
-  Future<void> _openDebugVerifyDialog() async {
-    final now = DateTime.now();
-    final decision = await SecurityVerifyStudentDialog.show(
-      context,
-      result: StudentGateScanResult(
-        fullName: 'طالبة تجريبية',
-        universityId: '444000018',
-        major: 'هندسة برمجيات',
-        scanTime: now.toString().split(' ').last.split('.').first,
-        photoUrl: null,
-      ),
-      rejectionReasons: const [
-        SecurityRejectionReason(
-          reasonId: 'temporary_debug_reason',
-          titleAr: 'سبب تجريبي للاختبار فقط',
-        ),
-      ],
-    );
-
-    if (!mounted || decision == null) return;
-
-    final message = decision.isApproved
-        ? 'تم تنفيذ اختبار الحفظ للمقبولين'
-        : 'تم إغلاق الاختبار بدون حفظ رفض';
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  Future<String?> _openStudentLookupDialog() {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text(
-          'إدخال الرقم الجامعي',
-          style: TextStyle(fontFamily: 'Cairo'),
-        ),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            hintText: 'مثال: 444000018',
-            hintStyle: TextStyle(fontFamily: 'Cairo'),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo')),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-            child: const Text('متابعة', style: TextStyle(fontFamily: 'Cairo')),
-          ),
-        ],
-      ),
-    );
-  }
-
   List<SecurityGateScanRecord> _filterScans(
     List<SecurityGateScanRecord> scans,
   ) {
+    final uniqueAcceptedScans = <SecurityGateScanRecord>[];
+    final seenStudentIds = <int>{};
+    for (final scan in scans) {
+      if (seenStudentIds.add(scan.studentId)) {
+        uniqueAcceptedScans.add(scan);
+      }
+    }
+
     final query = _searchController.text.trim().toLowerCase();
-    if (query.isEmpty) return scans;
-    return scans
+    if (query.isEmpty) return uniqueAcceptedScans;
+    return uniqueAcceptedScans
         .where(
           (scan) =>
               scan.studentName.toLowerCase().contains(query) ||
@@ -318,27 +197,6 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
                               isDateActive: _dateUpdated,
                             ),
                             const SizedBox(height: 20),
-                            ActionButton(
-                              isLoading: _isSubmittingScan,
-                              onTap: _startScanFlow,
-                            ),
-                            if (kDebugMode) ...[
-                              const SizedBox(height: 10),
-                              Align(
-                                alignment: Alignment.center,
-                                child: TextButton(
-                                  onPressed: _openDebugVerifyDialog,
-                                  child: const Text(
-                                    'اختبار مؤقت لفتح نافذة التحقق',
-                                    style: TextStyle(
-                                      fontFamily: 'Cairo',
-                                      color: _kTextMuted,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 18),
                             SearchBar(
                               controller: _searchController,
                               onChanged: (_) => setState(() {}),
@@ -543,66 +401,6 @@ class DateRow extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class ActionButton extends StatelessWidget {
-  const ActionButton({super.key, required this.onTap, this.isLoading = false});
-
-  final VoidCallback onTap;
-  final bool isLoading;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 50,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [_kTealLight, _kTealDark],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
-        borderRadius: BorderRadius.circular(25),
-        border: Border.all(
-          color: _kTealLight.withValues(alpha: 0.3),
-          width: 0.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: _kTealLight.withValues(alpha: 0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: isLoading ? null : onTap,
-          borderRadius: BorderRadius.circular(25),
-          child: Center(
-            child: isLoading
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Text(
-                    'جاهز للمسح',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      fontFamily: 'Cairo',
-                    ),
-                  ),
-          ),
         ),
       ),
     );
