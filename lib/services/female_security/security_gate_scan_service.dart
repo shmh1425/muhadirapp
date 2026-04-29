@@ -262,14 +262,31 @@ class SecurityVerificationDecision {
     : isApproved = true,
       rejectionReason = null;
 
-  const SecurityVerificationDecision.rejected(
-    this.rejectionReason,
-  ) : isApproved = false,
+  const SecurityVerificationDecision.rejected(this.rejectionReason)
+    : isApproved = false,
       persistedScanId = null;
 
   final bool isApproved;
   final SecurityRejectionReason? rejectionReason;
   final String? persistedScanId;
+}
+
+class DuplicateAcceptedGateScanException implements Exception {
+  const DuplicateAcceptedGateScanException({
+    required this.studentId,
+    required this.gateId,
+    required this.scanDateKey,
+  });
+
+  final int studentId;
+  final String gateId;
+  final String scanDateKey;
+
+  @override
+  String toString() {
+    return 'Duplicate accepted gate scan for studentId=$studentId, '
+        'gateId=$gateId, scanDateKey=$scanDateKey';
+  }
 }
 
 class FemaleSecurityGateScanService {
@@ -534,12 +551,36 @@ class FemaleSecurityGateScanService {
     }, SetOptions(merge: true));
   }
 
+  Future<bool> hasAcceptedScanForToday({
+    required String studentId,
+    required String gateId,
+    required String scanDateKey,
+  }) async {
+    final parsedStudentId = _safeInt(studentId);
+    final normalizedStudentId = parsedStudentId ?? studentId.trim();
+    if (normalizedStudentId.toString().isEmpty || gateId.trim().isEmpty) {
+      return false;
+    }
+
+    final snapshot = await _firestore
+        .collection('student_gate_scans')
+        .where('studentId', isEqualTo: normalizedStudentId)
+        .where('gateId', isEqualTo: gateId)
+        .where('scanDateKey', isEqualTo: scanDateKey)
+        .where('status', isEqualTo: 'accepted')
+        .limit(1)
+        .get();
+
+    return snapshot.docs.isNotEmpty;
+  }
+
   Future<void> recordGateScanDecision({
     required SecurityStudentProfile student,
     required SecurityGateOption gate,
     required SecurityVerificationDecision decision,
   }) async {
-    if (decision.isApproved && (decision.persistedScanId?.isNotEmpty ?? false)) {
+    if (decision.isApproved &&
+        (decision.persistedScanId?.isNotEmpty ?? false)) {
       return;
     }
 
@@ -551,6 +592,23 @@ class FemaleSecurityGateScanService {
     final staffData = staffDoc?.data() ?? <String, dynamic>{};
     final staffName = (staffData['fullName'] ?? email).toString();
     final now = DateTime.now();
+    final scanDateKey = formatScanDateKey(now);
+
+    if (decision.isApproved) {
+      final hasDuplicate = await hasAcceptedScanForToday(
+        studentId: student.studentId.toString(),
+        gateId: gate.gateId,
+        scanDateKey: scanDateKey,
+      );
+      if (hasDuplicate) {
+        throw DuplicateAcceptedGateScanException(
+          studentId: student.studentId,
+          gateId: gate.gateId,
+          scanDateKey: scanDateKey,
+        );
+      }
+    }
+
     final scanRef = _firestore.collection('student_gate_scans').doc();
 
     final rejectionReason = decision.rejectionReason;
@@ -569,9 +627,9 @@ class FemaleSecurityGateScanService {
       'gateNumber': gate.gateNumber,
       'campusId': gate.campusId,
       'campusName': gate.campusName,
-      'scanSource': 'security_manual_review',
+      'scanSource': 'security_gate_verification',
       'scanTime': Timestamp.fromDate(now),
-      'scanDateKey': formatScanDateKey(now),
+      'scanDateKey': scanDateKey,
       'dayLabelAr': _arabicDayName(now),
       'status': decision.isApproved ? 'accepted' : 'rejected',
       'decisionStatus': decision.isApproved ? 'approved' : 'rejected',
