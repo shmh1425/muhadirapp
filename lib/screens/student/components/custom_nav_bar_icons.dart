@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../features/translation/translation_controller.dart';
 
 class CustomNavBarIcons extends StatelessWidget {
   const CustomNavBarIcons({
@@ -17,6 +18,7 @@ class CustomNavBarIcons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mirrorForEnglish = TranslationController.instance.translateToEnglish;
     return SizedBox(
       height: _barHeight + (_circleSize / 2) + 12,
       child: Stack(
@@ -37,7 +39,8 @@ class CustomNavBarIcons extends StatelessWidget {
               ],
             ),
             child: Directionality(
-              textDirection: TextDirection.ltr,
+              textDirection:
+                  mirrorForEnglish ? TextDirection.rtl : TextDirection.ltr,
               child: Row(
                 children: [
                   _NavItem(
@@ -62,7 +65,10 @@ class CustomNavBarIcons extends StatelessWidget {
           AnimatedAlign(
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
-            alignment: _alignmentForIndex(selectedIndex),
+            alignment: _alignmentForIndex(
+              selectedIndex,
+              mirrorForEnglish: mirrorForEnglish,
+            ),
             child: Container(
               width: _circleSize,
               height: _circleSize,
@@ -93,14 +99,17 @@ class CustomNavBarIcons extends StatelessWidget {
     );
   }
 
-  Alignment _alignmentForIndex(int index) {
+  Alignment _alignmentForIndex(
+    int index, {
+    required bool mirrorForEnglish,
+  }) {
     switch (index) {
       case 0:
-        return const Alignment(-0.8, 0.55);
+        return Alignment(mirrorForEnglish ? 0.8 : -0.8, 0.55);
       case 1:
         return const Alignment(0.0, 0.55);
       case 2:
-        return const Alignment(0.8, 0.55);
+        return Alignment(mirrorForEnglish ? -0.8 : 0.8, 0.55);
       default:
         return const Alignment(0.0, 0.55);
     }
