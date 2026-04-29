@@ -833,6 +833,11 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           'فشل تفعيل NFC بسبب نقص بيانات المحاضرة.',
           'Failed to enable NFC because lecture data is incomplete.',
         );
+      case NfcAttendanceErrorCode.outsideLectureWindow:
+        return _tr(
+          'لا يمكن تفعيل NFC الآن. التفعيل متاح فقط أثناء نافذة وقت المحاضرة.',
+          'NFC can only be enabled during the lecture attendance window.',
+        );
       default:
         return _tr(
           'تعذر تفعيل NFC لهذه المحاضرة.',

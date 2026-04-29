@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../models/calendar_day.dart';
 import '../../models/attendance/nfc_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
+import '../../services/attendance/attendance_status_policy.dart';
 import '../../services/attendance/manual_attendance_service.dart';
 import '../../services/attendance/nfc_attendance_service.dart';
 import '../../services/lecturer/calendar_service.dart';
@@ -176,6 +177,19 @@ class _LecturerNfcSessionManagementScreenState
     return selected == today;
   }
 
+  bool _isLectureWithinAttendanceWindow(LectureItem lecture) {
+    return AttendanceStatusPolicy.isSessionWithinAttendanceWindow(
+      lectureDate: DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day,
+      ),
+      lectureStartTime: lecture.startTime,
+      lectureEndTime: lecture.endTime,
+      currentTime: DateTime.now(),
+    );
+  }
+
   Future<void> _openNfcSession(LectureItem lecture) async {
     final sessionId = _sessionIdForLecture(lecture);
     if (sessionId.isEmpty) {
@@ -253,6 +267,11 @@ class _LecturerNfcSessionManagementScreenState
         return _tr(
           'البيانات غير مكتملة لفتح الجلسة.',
           'Session data is incomplete.',
+        );
+      case NfcAttendanceErrorCode.outsideLectureWindow:
+        return _tr(
+          'لا يمكن فتح جلسة NFC الآن. متاح فقط أثناء نافذة وقت المحاضرة.',
+          'NFC session can only be opened during the lecture time window.',
         );
       default:
         return error.message;
@@ -622,7 +641,9 @@ class _LecturerNfcSessionManagementScreenState
           final isClosing =
               openSession != null &&
               _closingSessionIds.contains(openSession.sessionId);
+          final withinTimeWindow = _isLectureWithinAttendanceWindow(lecture);
           final busy = isOpening || isClosing;
+          final canOpenNow = todaySelected && withinTimeWindow;
 
           return Container(
             margin: const EdgeInsets.only(bottom: 10),
@@ -684,11 +705,25 @@ class _LecturerNfcSessionManagementScreenState
                     fontFamily: 'Cairo',
                   ),
                 ),
+                if (openSession == null && !canOpenNow) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _tr(
+                      'يمكن فتح NFC فقط خلال نافذة وقت المحاضرة.',
+                      'NFC can only be opened during lecture time window.',
+                    ),
+                    style: const TextStyle(
+                      color: _danger,
+                      fontSize: 12,
+                      fontFamily: 'Cairo',
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: (!todaySelected || busy)
+                    onPressed: ((openSession == null && !canOpenNow) || busy)
                         ? null
                         : () {
                             if (openSession == null) {

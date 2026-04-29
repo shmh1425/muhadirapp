@@ -194,8 +194,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
             setState(() {
               _isScanning = false;
               _statusError = true;
-              _statusMessage =
-                  'تعذر قراءة البطاقة. أعيدي تمرير الجهاز مرة أخرى.';
+              _statusMessage = 'فشل في قراءة البطاقة، يرجى إعادة المحاولة.';
             });
             return;
           }
@@ -250,9 +249,11 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       case NfcAttendanceErrorCode.invalidLecturerCard:
         return 'البطاقة غير معروفة. يرجى التواصل مع المحاضر أو الدعم.';
       case NfcAttendanceErrorCode.noActiveSession:
-        return 'لا توجد جلسة تحضير مفتوحة الآن. انتظري حتى يفتح المحاضر الجلسة.';
+        return 'فشل تسجيل الحضور، هذه ليست محاضرة مدرجة في جدولك الدراسي.';
+      case NfcAttendanceErrorCode.outsideLectureWindow:
+        return 'محاولة تسجيل حضور خارج وقت المحاضرة، لا يمكن تسجيل الحضور قبل أو بعد الوقت المحدد.';
       case NfcAttendanceErrorCode.studentNotEnrolled:
-        return 'أنتِ غير مسجلة في هذه الشعبة.';
+        return 'فشل تسجيل الحضور، هذه ليست محاضرة مدرجة في جدولك الدراسي.';
       case NfcAttendanceErrorCode.alreadyMarked:
         return 'تم تسجيل حضورك مسبقاً.';
       default:
@@ -261,6 +262,11 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   String _extractCardId(NfcTag tag) {
+    final fromNdef = _extractCardIdFromNdef(tag);
+    if (fromNdef.isNotEmpty) {
+      return _extractLecturerCardIdFromText(fromNdef);
+    }
+
     final data = tag.data;
     final candidates = <dynamic>[
       _dig(data, ['nfca', 'identifier']),
@@ -280,6 +286,58 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       }
     }
     return '';
+  }
+
+  String _extractLecturerCardIdFromText(String rawText) {
+    final text = rawText.trim();
+    if (text.isEmpty) return '';
+
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is Map) {
+        final payload = Map<String, dynamic>.from(decoded);
+        final type = (payload['type'] ?? '').toString().trim().toLowerCase();
+        final id = (payload['id'] ?? '').toString().trim();
+        if (type == 'lecturer_card' && id.isNotEmpty) {
+          return NfcAttendanceService.normalizeLecturerCardId(id);
+        }
+      }
+    } catch (_) {
+      // Fallback to legacy plain text card payload.
+    }
+
+    return NfcAttendanceService.normalizeLecturerCardId(text);
+  }
+
+  String _extractCardIdFromNdef(NfcTag tag) {
+    final ndef = Ndef.from(tag);
+    final message = ndef?.cachedMessage;
+    if (message == null) return '';
+
+    for (final record in message.records) {
+      final textValue = _decodeNdefRecordAsText(record);
+      if (textValue.isNotEmpty) {
+        return textValue;
+      }
+    }
+
+    return '';
+  }
+
+  String _decodeNdefRecordAsText(NdefRecord record) {
+    final payload = record.payload;
+    if (payload.isEmpty) return '';
+
+    final type = ascii.decode(record.type, allowInvalid: true);
+    if (record.typeNameFormat == NdefTypeNameFormat.nfcWellknown && type == 'T') {
+      final status = payload.first;
+      final languageLength = status & 0x3F;
+      if (payload.length <= languageLength + 1) return '';
+      final textBytes = payload.sublist(languageLength + 1);
+      return utf8.decode(textBytes, allowMalformed: true).trim();
+    }
+
+    return utf8.decode(payload, allowMalformed: true).trim();
   }
 
   dynamic _dig(Map<dynamic, dynamic> map, List<String> path) {

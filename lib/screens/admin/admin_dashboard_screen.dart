@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -802,17 +803,32 @@ class _AdminLecturerNfcBindingScreenState
 
   String? _selectedLecturerId;
   bool _isBindingCard = false;
+  bool _isTestingCard = false;
 
   void _showMessage(String text) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
-  Future<void> _bindCardToSelectedLecturer() async {
+  Future<void> _writeSelectedLecturerIdToCard() async {
     final lecturerId = (_selectedLecturerId ?? '').trim();
     if (lecturerId.isEmpty) {
       _showMessage('اختاري المحاضر أولاً من القائمة.');
       return;
     }
+
+    final normalizedLecturerId = NfcAttendanceService.normalizeLecturerCardId(
+      lecturerId,
+    );
+    if (normalizedLecturerId.isEmpty) {
+      _showMessage('معرّف المحاضر غير صالح للكتابة على البطاقة.');
+      return;
+    }
+    final cardPayload = jsonEncode({
+      'type': 'lecturer_card',
+      'id': normalizedLecturerId,
+      'v': 1,
+      'issuedAt': DateTime.now().toUtc().toIso8601String(),
+    });
 
     setState(() => _isBindingCard = true);
     try {
@@ -824,24 +840,121 @@ class _AdminLecturerNfcBindingScreenState
         return;
       }
 
-      _showMessage('تم تفعيل وضع القراءة. قرّبي الجهاز من بطاقة المحاضر...');
-      final cardId = await _scanSingleCardId();
-      if (!mounted || cardId == null || cardId.isEmpty) return;
+      _showMessage('ضعي بطاقة NFC خلف الهاتف لكتابة معرف المحاضر...');
+      final writtenValue = await _writeSingleCardValue(cardPayload);
+      if (!mounted || writtenValue == null || writtenValue.isEmpty) return;
 
       await NfcAttendanceService.instance.saveLecturerCardId(
         lecturerId: lecturerId,
-        lecturerCardId: cardId,
+        lecturerCardId: normalizedLecturerId,
       );
 
       if (!mounted) return;
-      _showMessage('تم ربط البطاقة ($cardId) بالمحاضر بنجاح.');
+      _showMessage('تمت كتابة البطاقة (JSON) وربطها بالمحاضر بنجاح: $normalizedLecturerId');
     } catch (e) {
-      _showMessage('تعذر ربط البطاقة: $e');
+      _showMessage('تعذر كتابة/ربط البطاقة: $e');
     } finally {
       if (mounted) {
         setState(() => _isBindingCard = false);
       }
     }
+  }
+
+  Future<void> _testSelectedLecturerCard(String expectedCardId) async {
+    final lecturerId = (_selectedLecturerId ?? '').trim();
+    if (lecturerId.isEmpty) {
+      _showMessage('اختاري المحاضر أولاً من القائمة.');
+      return;
+    }
+
+    final expected = NfcAttendanceService.normalizeLecturerCardId(expectedCardId);
+    if (expected.isEmpty) {
+      _showMessage('لا يوجد معرف بطاقة متوقع لهذا المحاضر حالياً.');
+      return;
+    }
+
+    setState(() => _isTestingCard = true);
+    try {
+      final available = await NfcManager.instance.isAvailable();
+      if (!available) {
+        _showMessage(
+          'NFC غير متاح. في iPhone يلزم تفعيل Near Field Communication Tag Reading في التوقيع.',
+        );
+        return;
+      }
+
+      _showMessage('ضعي بطاقة NFC لاختبارها الآن...');
+      final scannedValue = await _scanSingleCardId();
+      if (!mounted || scannedValue == null || scannedValue.isEmpty) return;
+
+      if (scannedValue == expected) {
+        _showMessage('نجاح الاختبار: البطاقة صحيحة وتطابق المحاضر المختار.');
+      } else {
+        _showMessage('فشل الاختبار: البطاقة المقروءة ($scannedValue) لا تطابق ($expected).');
+      }
+    } catch (e) {
+      _showMessage('تعذر اختبار البطاقة: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isTestingCard = false);
+      }
+    }
+  }
+
+  Future<String?> _writeSingleCardValue(String value) async {
+    final completer = Completer<String?>();
+    bool handled = false;
+
+    await NfcManager.instance.startSession(
+      onDiscovered: (tag) async {
+        if (handled) return;
+        handled = true;
+
+        try {
+          final ndef = Ndef.from(tag);
+          if (ndef == null) {
+            await NfcManager.instance.stopSession(
+              errorMessage: 'هذه البطاقة لا تدعم NDEF.',
+            );
+            completer.complete(null);
+            return;
+          }
+
+          if (!ndef.isWritable) {
+            await NfcManager.instance.stopSession(
+              errorMessage: 'البطاقة غير قابلة للكتابة.',
+            );
+            completer.complete(null);
+            return;
+          }
+
+          await ndef.write(NdefMessage([NdefRecord.createText(value)]));
+          await NfcManager.instance.stopSession(
+            alertMessage: 'تمت كتابة البطاقة بنجاح.',
+          );
+          completer.complete(value);
+        } catch (e) {
+          await NfcManager.instance.stopSession(
+            errorMessage: 'فشلت كتابة البطاقة. حاولي بطاقة أخرى.',
+          );
+          completer.completeError(e);
+        }
+      },
+    );
+
+    return completer.future.timeout(
+      const Duration(seconds: 20),
+      onTimeout: () async {
+        try {
+          await NfcManager.instance.stopSession(
+            errorMessage: 'انتهت مهلة الكتابة. أعيدي المحاولة.',
+          );
+        } catch (_) {
+          // no-op
+        }
+        return null;
+      },
+    );
   }
 
   Future<String?> _scanSingleCardId() async {
@@ -853,7 +966,7 @@ class _AdminLecturerNfcBindingScreenState
         if (handled) return;
         handled = true;
 
-        final cardId = _extractCardIdFromTagData(tag.data);
+        final cardId = _extractCardId(tag);
         if (cardId.isEmpty) {
           await NfcManager.instance.stopSession(
             errorMessage: 'تعذر قراءة معرّف البطاقة.',
@@ -882,6 +995,65 @@ class _AdminLecturerNfcBindingScreenState
         return null;
       },
     );
+  }
+
+  String _extractCardId(NfcTag tag) {
+    final fromNdef = _extractCardIdFromNdef(tag);
+    if (fromNdef.isNotEmpty) {
+      return _extractLecturerCardIdFromText(fromNdef);
+    }
+    return _extractCardIdFromTagData(tag.data);
+  }
+
+  String _extractLecturerCardIdFromText(String rawText) {
+    final text = rawText.trim();
+    if (text.isEmpty) return '';
+
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is Map) {
+        final payload = Map<String, dynamic>.from(decoded);
+        final type = (payload['type'] ?? '').toString().trim().toLowerCase();
+        final id = (payload['id'] ?? '').toString().trim();
+        if (type == 'lecturer_card' && id.isNotEmpty) {
+          return NfcAttendanceService.normalizeLecturerCardId(id);
+        }
+      }
+    } catch (_) {
+      // Fallback to legacy plain text card payload.
+    }
+
+    return NfcAttendanceService.normalizeLecturerCardId(text);
+  }
+
+  String _extractCardIdFromNdef(NfcTag tag) {
+    final ndef = Ndef.from(tag);
+    final message = ndef?.cachedMessage;
+    if (message == null) return '';
+
+    for (final record in message.records) {
+      final textValue = _decodeNdefRecordAsText(record);
+      if (textValue.isNotEmpty) {
+        return textValue;
+      }
+    }
+    return '';
+  }
+
+  String _decodeNdefRecordAsText(NdefRecord record) {
+    final payload = record.payload;
+    if (payload.isEmpty) return '';
+
+    final type = ascii.decode(record.type, allowInvalid: true);
+    if (record.typeNameFormat == NdefTypeNameFormat.nfcWellknown && type == 'T') {
+      final status = payload.first;
+      final languageLength = status & 0x3F;
+      if (payload.length <= languageLength + 1) return '';
+      final textBytes = payload.sublist(languageLength + 1);
+      return utf8.decode(textBytes, allowMalformed: true).trim();
+    }
+
+    return utf8.decode(payload, allowMalformed: true).trim();
   }
 
   String _extractCardIdFromTagData(Map<dynamic, dynamic> data) {
@@ -1021,9 +1193,9 @@ class _AdminLecturerNfcBindingScreenState
                   ),
                 const SizedBox(height: 10),
                 FilledButton.icon(
-                  onPressed: _isBindingCard
+                  onPressed: (_isBindingCard || _isTestingCard)
                       ? null
-                      : _bindCardToSelectedLecturer,
+                      : _writeSelectedLecturerIdToCard,
                   icon: _isBindingCard
                       ? const SizedBox(
                           width: 16,
@@ -1036,8 +1208,26 @@ class _AdminLecturerNfcBindingScreenState
                       : const Icon(Icons.nfc_rounded),
                   label: Text(
                     _isBindingCard
-                        ? 'وضع القراءة مفعّل...'
-                        : 'تفعيل وضع القراءة وربط البطاقة',
+                        ? 'جاري كتابة البطاقة...'
+                        : 'اكتب ID المحاضر على البطاقة',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: (_isBindingCard || _isTestingCard || selectedId == null)
+                      ? null
+                      : () => _testSelectedLecturerCard(
+                          currentCardId.isEmpty ? selectedId : currentCardId,
+                        ),
+                  icon: _isTestingCard
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.fact_check_outlined),
+                  label: Text(
+                    _isTestingCard ? 'جاري اختبار البطاقة...' : 'اختبار البطاقة',
                   ),
                 ),
                 const SizedBox(height: 16),

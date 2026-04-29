@@ -14,6 +14,7 @@ enum NfcAttendanceErrorCode {
   noActiveSession,
   studentNotEnrolled,
   alreadyMarked,
+  outsideLectureWindow,
   invalidInput,
   unknown,
 }
@@ -151,6 +152,20 @@ class NfcAttendanceService {
     }
 
     final date = _normalizedDate(lectureDate ?? DateTime.now());
+    final now = DateTime.now();
+    if (!AttendanceStatusPolicy.isSessionWithinAttendanceWindow(
+      lectureDate: date,
+      lectureStartTime: lecture.startTime,
+      lectureEndTime: lecture.endTime,
+      currentTime: now,
+    )) {
+      throw NfcAttendanceException(
+        code: NfcAttendanceErrorCode.outsideLectureWindow,
+        message:
+            'Cannot open NFC session now. Opening is allowed only during the lecture attendance window.',
+      );
+    }
+
     final sessionId = await ManualAttendanceService.instance
         .prepareSessionForLecture(lecture: lecture, sessionDate: date);
 
@@ -284,8 +299,8 @@ class NfcAttendanceService {
     final activeSession = _pickActiveSessionNow(sessionsSnap.docs, now);
     if (activeSession == null) {
       throw NfcAttendanceException(
-        code: NfcAttendanceErrorCode.noActiveSession,
-        message: 'لا توجد محاضرة نشطة الآن لهذه البطاقة.',
+        code: NfcAttendanceErrorCode.outsideLectureWindow,
+        message: 'محاولة تسجيل حضور خارج وقت المحاضرة.',
       );
     }
 
