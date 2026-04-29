@@ -336,26 +336,6 @@ class SettingsScreen extends StatelessWidget {
                           );
                         },
                       ),
-                      _SettingsTile(
-                        child: Row(
-                          children: [
-                            const Icon(Icons.star_border, color: Color(0xFF006571)),
-                            const SizedBox(width: 12),
-                            const Expanded(
-                              child: Align(
-                                alignment: AlignmentDirectional.centerStart,
-                                child: TText(
-                                  'قيم تجربتك',
-                                  textAlign: TextAlign.start,
-                                  style: TextStyle(color: Color(0xFF006571)),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            const _StarRatingRow(),
-                          ],
-                        ),
-                      ),
                       const SizedBox(height: 12),
                       InkWell(
                         borderRadius: BorderRadius.circular(14),
@@ -448,33 +428,3 @@ class _SettingsTile extends StatelessWidget {
   }
 }
 
-class _StarRatingRow extends StatelessWidget {
-  const _StarRatingRow();
-
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<int>(
-      valueListenable: AppSettings.instance.rating,
-      builder: (context, rating, child) {
-        return Row(
-          children: List.generate(5, (index) {
-            final isSelected = index < rating;
-            return GestureDetector(
-              onTap: () {
-                AppSettings.instance.rating.value = index + 1;
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Icon(
-                  Icons.star,
-                  size: 16,
-                  color: isSelected ? const Color(0xFFFFC107) : const Color(0xFFB0B0B0),
-                ),
-              ),
-            );
-          }),
-        );
-      },
-    );
-  }
-}
