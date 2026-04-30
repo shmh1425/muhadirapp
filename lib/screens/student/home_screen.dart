@@ -174,12 +174,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
               const SizedBox(height: 30),
 
-              // زر التحضير الآن بأبعاد ثابتة
+              // زر التحضير الآن بعرض مرن (يتجنب overflow على الشاشات الصغيرة)
               Center(
-                child: Container(
-                  width: 296, // عرض ثابت
-                  height: 73, // ارتفاع ثابت
-                  decoration: BoxDecoration(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 296),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 73,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [Color(0xFF27A2A9), Color(0xFF006571)],
                       stops: [0.25, 0.95], // 25% and 95%
@@ -187,32 +190,34 @@ class _HomeScreenState extends State<HomeScreen> {
                       end: Alignment.bottomCenter,
                     ),
                     borderRadius: BorderRadius.circular(45),
-                  ),
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const NfcAttendanceScreen(),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      padding: EdgeInsets.zero,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(45),
                       ),
-                    ),
-                    child: TText(
-                      translation.translateToEnglish
-                          ? 'Mark Attendance'
-                          : 'التحضير الآن',
-                      style: const TextStyle(
-                        fontSize: 23,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const NfcAttendanceScreen(),
+                            ),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(45),
+                          ),
+                        ),
+                        child: TText(
+                          translation.translateToEnglish
+                              ? 'Mark Attendance'
+                              : 'التحضير الآن',
+                          style: const TextStyle(
+                            fontSize: 23,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ),
                   ),

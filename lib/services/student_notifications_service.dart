@@ -343,6 +343,57 @@ class StudentNotificationsService {
     });
   }
 
+  /// Add an in-app notification for successful attendance registration.
+  /// Stored in `student_notifications` so it shows in the bell + notifications list.
+  Future<void> addAttendanceSuccessNotification({
+    required int studentId,
+    required String attendanceMethod, // 'nfc' | 'qr'
+    String? courseName,
+    String? section,
+    String? sectionId,
+    String? sessionId,
+    DateTime? lectureDate,
+    String? lectureStartTime,
+    String? lectureEndTime,
+  }) async {
+    if (studentId <= 0) return;
+    if (!isSignedIn()) return;
+
+    final method = attendanceMethod.trim().toLowerCase();
+    final methodAr = method == 'qr' ? 'QR' : 'NFC';
+    final name = (courseName ?? '').toString().trim();
+    final sec = (section ?? '').toString().trim();
+    final secLabel = sec.isNotEmpty ? ' - شعبة $sec' : '';
+
+    final now = FieldValue.serverTimestamp();
+    await _firestore.collection(_studentNotifCollection).add(<String, dynamic>{
+      'studentId': studentId,
+      'category': 'attendance',
+      'actionType': 'attendance_success',
+      'titleAr': 'تم تسجيل حضورك',
+      'titleEn': 'Attendance recorded',
+      'messageAr': name.isNotEmpty
+          ? 'تم تسجيل حضورك بنجاح في "$name"$secLabel عبر $methodAr.'
+          : 'تم تسجيل حضورك بنجاح عبر $methodAr.',
+      'messageEn': name.isNotEmpty
+          ? 'Your attendance was recorded for "$name"${sec.isNotEmpty ? ' — Section $sec' : ''} via ${method.toUpperCase()}.'
+          : 'Your attendance was recorded via ${method.toUpperCase()}.',
+      'courseName': name,
+      'section': sec,
+      'sectionId': (sectionId ?? '').toString().trim(),
+      'sessionId': (sessionId ?? '').toString().trim(),
+      'lectureDate': lectureDate == null ? null : Timestamp.fromDate(lectureDate),
+      'lectureStartTime': (lectureStartTime ?? '').toString().trim(),
+      'lectureEndTime': (lectureEndTime ?? '').toString().trim(),
+      'isRead': false,
+      'isDeleted': false,
+      'createdAt': now,
+      'updatedAt': now,
+    });
+  }
+
+  bool isSignedIn() => _auth.currentUser != null;
+
   /// Lecturer-style: mark one merged notification as read.
   Future<void> markAsRead({
     required int studentId,

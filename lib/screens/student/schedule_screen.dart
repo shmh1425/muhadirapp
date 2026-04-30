@@ -333,8 +333,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return rtl ? _days.reversed.toList() : _days;
   }
 
-  // أوقات الجدول ساعة ساعة من 08:00 إلى 18:00 (المحاضرات تبدأ من 8)
+  // أوقات الجدول بنظام 24 ساعة (يعرض أي شعبة مهما كان وقتها).
   final List<TimeSlot> _timeSlots = <TimeSlot>[
+    TimeSlot(start: '00:00', end: '01:00'),
+    TimeSlot(start: '01:00', end: '02:00'),
+    TimeSlot(start: '02:00', end: '03:00'),
+    TimeSlot(start: '03:00', end: '04:00'),
+    TimeSlot(start: '04:00', end: '05:00'),
+    TimeSlot(start: '05:00', end: '06:00'),
+    TimeSlot(start: '06:00', end: '07:00'),
+    TimeSlot(start: '07:00', end: '08:00'),
     TimeSlot(start: '08:00', end: '09:00'),
     TimeSlot(start: '09:00', end: '10:00'),
     TimeSlot(start: '10:00', end: '11:00'),
@@ -345,6 +353,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     TimeSlot(start: '15:00', end: '16:00'),
     TimeSlot(start: '16:00', end: '17:00'),
     TimeSlot(start: '17:00', end: '18:00'),
+    TimeSlot(start: '18:00', end: '19:00'),
+    TimeSlot(start: '19:00', end: '20:00'),
+    TimeSlot(start: '20:00', end: '21:00'),
+    TimeSlot(start: '21:00', end: '22:00'),
+    TimeSlot(start: '22:00', end: '23:00'),
+    TimeSlot(start: '23:00', end: '24:00'),
   ];
 
   static const Map<int, String> _dayOfWeekToName = <int, String>{
@@ -817,7 +831,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         // Courses overlay - مربع مدمج (ساعتين = مربع واحد يمتد خليتين)
         ...dayCourses.map((course) {
           final startMin = _parseTimeToMinutes(course.startTime);
-          final endMin = _parseTimeToMinutes(course.endTime);
+          var endMin = _parseTimeToMinutes(course.endTime);
+          // Support schedules that cross midnight (e.g. 18:00 -> 00:00).
+          if (endMin <= startMin) {
+            endMin += 24 * 60;
+          }
           final durationMin = (endMin - startMin).clamp(0, 24 * 60);
           final slotCount = (durationMin / slotMinutes).ceil().clamp(
             1,
@@ -827,7 +845,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               .floor()
               .clamp(0, _timeSlots.length - 1);
           final top = slotIndex * _rowHeight;
-          final blockHeight = slotCount * _rowHeight;
+          final visibleSlots = (_timeSlots.length - slotIndex).clamp(1, _timeSlots.length);
+          final blockHeight = slotCount.clamp(1, visibleSlots) * _rowHeight;
 
           return Positioned(
             top: top,

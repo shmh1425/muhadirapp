@@ -304,15 +304,41 @@ class NfcAttendanceService {
       );
     }
 
-    final enrollmentSnap = await _firestore
-        .collection(_enrollmentsCollection)
-        .where('sectionId', isEqualTo: activeSession.sectionId)
-        .where('studentId', isEqualTo: studentId)
-        .limit(1)
-        .get();
+    final rawSectionId = activeSession.sectionId.trim();
+    final normalizedSectionId =
+        rawSectionId.replaceAll(RegExp(r'\s+'), '');
 
-    if (enrollmentSnap.docs.isEmpty ||
-        enrollmentSnap.docs.first.data()['isActive'] == false) {
+    final enrollmentSnaps = <QuerySnapshot<Map<String, dynamic>>>[];
+    enrollmentSnaps.add(
+      await _firestore
+          .collection(_enrollmentsCollection)
+          .where('sectionId', isEqualTo: rawSectionId)
+          .where('studentId', isEqualTo: studentId)
+          .get(),
+    );
+    if (normalizedSectionId.isNotEmpty && normalizedSectionId != rawSectionId) {
+      enrollmentSnaps.add(
+        await _firestore
+            .collection(_enrollmentsCollection)
+            .where('sectionId', isEqualTo: normalizedSectionId)
+            .where('studentId', isEqualTo: studentId)
+            .get(),
+      );
+    }
+
+    final enrollmentDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[
+      for (final snap in enrollmentSnaps) ...snap.docs,
+    ];
+
+    // There may be multiple enrollment rows for the same student+section
+    // (e.g. old inactive row + new active row). Consider student enrolled
+    // if ANY row is active (or missing `isActive` field).
+    final hasActiveEnrollment = enrollmentDocs.any((d) {
+      final data = d.data();
+      return data['isActive'] != false;
+    });
+
+    if (enrollmentDocs.isEmpty || !hasActiveEnrollment) {
       throw NfcAttendanceException(
         code: NfcAttendanceErrorCode.studentNotEnrolled,
         message: 'الطالب غير مسجل في هذه الشعبة.',
@@ -322,7 +348,11 @@ class NfcAttendanceService {
     final recordId = '${activeSession.sessionId}_$studentId';
     final recordRef = _firestore.collection(_recordsCollection).doc(recordId);
     final studentProfile = await _loadStudentProfile(studentId);
-    final enrollmentData = enrollmentSnap.docs.first.data();
+    final enrollmentData = enrollmentDocs
+        .map((d) => d.data())
+        .firstWhere((d) => d['isActive'] != false, orElse: () {
+      return enrollmentDocs.first.data();
+    });
     final studentName = studentProfile.name.isNotEmpty
         ? studentProfile.name
         : (enrollmentData['studentName'] ?? '').toString().trim();

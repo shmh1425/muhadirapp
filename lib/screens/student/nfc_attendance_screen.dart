@@ -13,7 +13,9 @@ import '../../features/translation/widgets/t_text.dart';
 import '../../services/attendance/nfc_attendance_service.dart';
 import '../../services/attendance/qr_attendance_service.dart';
 import '../../services/student_auth_service.dart';
+import '../../services/student_notifications_service.dart';
 import '../../shared/widgets/chat_fab.dart';
+import '../../shared/widgets/attendance_result_popup.dart';
 import 'components/custom_nav_bar_icons.dart';
 import 'components/notification_bell.dart';
 import 'home_screen.dart';
@@ -34,6 +36,10 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   final QrAttendanceService _qrAttendance = QrAttendanceService.instance;
   final GlobalKey _qrViewKey = GlobalKey(debugLabel: 'student-qr-scanner');
 
+  String _tr(String ar, String en) {
+    return TranslationController.instance.translateToEnglish ? en : ar;
+  }
+
   bool _isNfc = true;
   int selectedIndex = 2;
   AnimationController? _pulseController;
@@ -50,10 +56,15 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   bool _checkingQrAvailability = false;
   bool _qrScannerInitialized = false;
 
-  String _statusMessage =
-      'اضغطي "ابدئي التحضير" ثم مرري الجوال على بطاقة المحاضر.';
+  late String _statusMessage = _tr(
+    'اضغط "بدء التحضير" ثم قرّب الجهاز من بطاقة المحاضر.',
+    'Tap "Start attendance" then hold your device near the lecturer card.',
+  );
   bool _statusError = false;
-  String _qrStatusMessage = 'وجهي الكاميرا نحو رمز التحضير المعروض لدى المحاضر.';
+  late String _qrStatusMessage = _tr(
+    'وجّه الكاميرا نحو رمز التحضير المعروض لدى المحاضر.',
+    'Point the camera at the attendance QR shown by the lecturer.',
+  );
   bool _qrStatusError = false;
 
   void _toggleMode(bool nfc) {
@@ -65,11 +76,15 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         _qrCameraUnavailable = false;
         _qrPermissionDenied = false;
         _qrScannerInitialized = false;
-        _qrStatusMessage =
-            'وجهي الكاميرا نحو رمز التحضير المعروض لدى المحاضر.';
+        _qrStatusMessage = _tr(
+          'وجّه الكاميرا نحو رمز التحضير المعروض لدى المحاضر.',
+          'Point the camera at the attendance QR shown by the lecturer.',
+        );
       } else {
-        _statusMessage =
-            'اضغطي "ابدئي التحضير" ثم مرري الجوال على بطاقة المحاضر.';
+        _statusMessage = _tr(
+          'اضغط "بدء التحضير" ثم قرّب الجهاز من بطاقة المحاضر.',
+          'Tap "Start attendance" then hold your device near the lecturer card.',
+        );
       }
     });
 
@@ -145,7 +160,10 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         _nfcAvailable = false;
         _checkingNfcAvailability = false;
         _statusError = true;
-        _statusMessage = 'تعذر التحقق من حالة NFC. حاولي مرة أخرى.';
+        _statusMessage = _tr(
+          'تعذر التحقق من حالة NFC. يرجى المحاولة مرة أخرى.',
+          'Unable to check NFC status. Please try again.',
+        );
       });
     }
   }
@@ -165,8 +183,10 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     if (!_nfcAvailable) {
       setState(() {
         _statusError = true;
-        _statusMessage =
-            'NFC غير متاح. على iPhone يلزم تفعيل Near Field Communication Tag Reading في التوقيع.';
+        _statusMessage = _tr(
+          'NFC غير متاح. على iPhone يلزم تفعيل Near Field Communication Tag Reading في التوقيع.',
+          'NFC is not available. On iPhone, enable Near Field Communication Tag Reading.',
+        );
       });
       return;
     }
@@ -174,7 +194,10 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     setState(() {
       _isScanning = true;
       _statusError = false;
-      _statusMessage = 'جاري انتظار بطاقة المحاضر...';
+        _statusMessage = _tr(
+          'جاري انتظار بطاقة المحاضر...',
+          'Waiting for the lecturer card...',
+        );
     });
 
     bool handled = false;
@@ -188,13 +211,19 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
           final cardId = _extractCardId(tag);
           if (cardId.isEmpty) {
             await NfcManager.instance.stopSession(
-              errorMessage: 'تعذر قراءة معرّف البطاقة.',
+              errorMessage: _tr(
+                'تعذر قراءة معرّف البطاقة.',
+                'Unable to read the card identifier.',
+              ),
             );
             if (!mounted) return;
             setState(() {
               _isScanning = false;
               _statusError = true;
-              _statusMessage = 'فشل في قراءة البطاقة، يرجى إعادة المحاولة.';
+              _statusMessage = _tr(
+                'تعذر قراءة البطاقة. يرجى إعادة المحاولة.',
+                'Failed to read the card. Please try again.',
+              );
             });
             return;
           }
@@ -206,13 +235,45 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
               currentTime: DateTime.now(),
             );
 
-            await NfcManager.instance.stopSession(alertMessage: result.message);
+            await NfcManager.instance.stopSession(
+              alertMessage: TranslationController.instance.translateToEnglish
+                  ? 'Attendance recorded successfully.'
+                  : result.message,
+            );
             if (!mounted) return;
             setState(() {
               _isScanning = false;
               _statusError = false;
               _statusMessage = result.message;
             });
+            final session = result.session;
+            // Best-effort: store in-app notification (ignore failures).
+            try {
+              await StudentNotificationsService.instance
+                  .addAttendanceSuccessNotification(
+                studentId: student.studentId,
+                attendanceMethod: 'nfc',
+                courseName: session?.courseName,
+                section: session?.sectionLabel,
+                sectionId: session?.sectionId,
+                sessionId: session?.sessionId,
+                lectureDate: session?.lectureDate,
+                lectureStartTime: session?.lectureStartTime,
+                lectureEndTime: session?.lectureEndTime,
+              );
+            } catch (_) {}
+            if (!mounted) return;
+            await AttendanceResultPopup.show(
+              context,
+              success: true,
+              message: _tr(
+                'تم تسجيل حضورك بنجاح',
+                'Attendance recorded successfully',
+              ),
+              subtitle: TranslationController.instance.translateToEnglish
+                  ? 'Your attendance has been recorded.'
+                  : result.message,
+            );
           } on NfcAttendanceException catch (e) {
             final message = _friendlyErrorMessage(e);
             await NfcManager.instance.stopSession(errorMessage: message);
@@ -222,8 +283,18 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
               _statusError = true;
               _statusMessage = message;
             });
+            await AttendanceResultPopup.show(
+              context,
+              success: false,
+              message: _tr('فشل تسجيل الحضور', 'Attendance failed'),
+              subtitle: message,
+              autoDismiss: false,
+            );
           } catch (e) {
-            final message = 'حدث خطأ غير متوقع أثناء تسجيل الحضور.';
+            final message = _tr(
+              'حدث خطأ غير متوقع أثناء تسجيل الحضور.',
+              'An unexpected error occurred while recording attendance.',
+            );
             await NfcManager.instance.stopSession(errorMessage: message);
             if (!mounted) return;
             setState(() {
@@ -231,6 +302,13 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
               _statusError = true;
               _statusMessage = '$message\n$e';
             });
+            await AttendanceResultPopup.show(
+              context,
+              success: false,
+              message: _tr('فشل تسجيل الحضور', 'Attendance failed'),
+              subtitle: message,
+              autoDismiss: false,
+            );
           }
         },
       );
@@ -249,11 +327,11 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       case NfcAttendanceErrorCode.invalidLecturerCard:
         return 'البطاقة غير معروفة. يرجى التواصل مع المحاضر أو الدعم.';
       case NfcAttendanceErrorCode.noActiveSession:
-        return 'فشل تسجيل الحضور، هذه ليست محاضرة مدرجة في جدولك الدراسي.';
+        return 'لا توجد جلسة تحضير مفتوحة حالياً لهذه المحاضرة. تأكدي أن المحاضر فتح التحضير.';
       case NfcAttendanceErrorCode.outsideLectureWindow:
         return 'محاولة تسجيل حضور خارج وقت المحاضرة، لا يمكن تسجيل الحضور قبل أو بعد الوقت المحدد.';
       case NfcAttendanceErrorCode.studentNotEnrolled:
-        return 'فشل تسجيل الحضور، هذه ليست محاضرة مدرجة في جدولك الدراسي.';
+        return 'أنت غير مسجل/ـة في هذه الشعبة، لذلك لا يمكن تسجيل حضورك.';
       case NfcAttendanceErrorCode.alreadyMarked:
         return 'تم تسجيل حضورك مسبقاً.';
       default:
@@ -393,8 +471,10 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       if (!mounted) return;
       setState(() {
         if (!_qrStatusError) {
-          _qrStatusMessage =
-              'وجهي الكاميرا نحو رمز التحضير المعروض لدى المحاضر.';
+          _qrStatusMessage = _tr(
+            'وجّه الكاميرا نحو رمز التحضير المعروض لدى المحاضر.',
+            'Point the camera at the attendance QR shown by the lecturer.',
+          );
         }
       });
     } catch (_) {
@@ -403,7 +483,10 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         _qrStatusError = true;
         _isQrScanPaused = true;
         _qrCameraUnavailable = true;
-        _qrStatusMessage = 'الكاميرا غير متاحة حالياً على هذا الجهاز.';
+        _qrStatusMessage = _tr(
+          'الكاميرا غير متاحة حالياً على هذا الجهاز.',
+          'Camera is not available on this device right now.',
+        );
       });
     } finally {
       if (mounted) {
@@ -438,7 +521,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       _qrStatusError = false;
       _qrPermissionDenied = false;
       _qrCameraUnavailable = false;
-      _qrStatusMessage = 'جاري تجهيز ماسح QR...';
+      _qrStatusMessage = _tr('جاري تجهيز ماسح QR...', 'Preparing QR scanner...');
     });
 
     final availability = await _resolveQrCameraAvailability();
@@ -451,7 +534,10 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       _isQrScanPaused = !availability.available;
       _qrStatusError = !availability.available;
       _qrStatusMessage = availability.message ??
-          'وجهي الكاميرا نحو رمز التحضير المعروض لدى المحاضر.';
+          _tr(
+            'وجّه الكاميرا نحو رمز التحضير المعروض لدى المحاضر.',
+            'Point the camera at the attendance QR shown by the lecturer.',
+          );
     });
 
     if (availability.available) {
@@ -534,6 +620,31 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         _qrStatusError = false;
         _qrStatusMessage = result.message;
       });
+      try {
+        await StudentNotificationsService.instance.addAttendanceSuccessNotification(
+          studentId: StudentAuthService.instance.currentStudent?.studentId ?? 0,
+          attendanceMethod: 'qr',
+          courseName: result.session.courseName,
+          section: result.session.section,
+          sectionId: result.session.sectionId,
+          sessionId: result.session.sessionId,
+          lectureDate: result.session.lectureDate,
+          lectureStartTime: result.session.lectureStartTime,
+          lectureEndTime: result.session.lectureEndTime,
+        );
+      } catch (_) {}
+      if (!mounted) return;
+      await AttendanceResultPopup.show(
+        context,
+        success: true,
+        message: _tr(
+          'تم تسجيل حضورك بنجاح',
+          'Attendance recorded successfully',
+        ),
+        subtitle: TranslationController.instance.translateToEnglish
+            ? 'Your attendance has been recorded.'
+            : result.message,
+      );
     } on QrAttendanceException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -541,13 +652,33 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         _qrStatusError = true;
         _qrStatusMessage = e.message;
       });
+      await AttendanceResultPopup.show(
+        context,
+        success: false,
+        message: _tr('فشل تسجيل الحضور', 'Attendance failed'),
+        subtitle: e.message,
+        autoDismiss: false,
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _isProcessingQrScan = false;
         _qrStatusError = true;
-        _qrStatusMessage = 'تعذر تسجيل الحضور حالياً. حاولي مرة أخرى.';
+        _qrStatusMessage = _tr(
+          'تعذر تسجيل الحضور حالياً. يرجى المحاولة مرة أخرى.',
+          'Unable to record attendance right now. Please try again.',
+        );
       });
+      await AttendanceResultPopup.show(
+        context,
+        success: false,
+        message: _tr('فشل تسجيل الحضور', 'Attendance failed'),
+        subtitle: _tr(
+          'تعذر تسجيل الحضور حالياً. يرجى المحاولة مرة أخرى.',
+          'Unable to record attendance right now. Please try again.',
+        ),
+        autoDismiss: false,
+      );
     }
   }
 
@@ -565,7 +696,10 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
           _isQrScanPaused = true;
           _qrCameraUnavailable = true;
           _qrStatusError = true;
-          _qrStatusMessage = 'الكاميرا غير متاحة حالياً على هذا الجهاز.';
+          _qrStatusMessage = _tr(
+            'الكاميرا غير متاحة حالياً على هذا الجهاز.',
+            'Camera is not available on this device right now.',
+          );
         });
       },
     );
@@ -584,8 +718,10 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         _qrCameraUnavailable = false;
         _qrStatusError = false;
         if (!_isProcessingQrScan) {
-          _qrStatusMessage =
-              'وجهي الكاميرا نحو رمز التحضير المعروض لدى المحاضر.';
+          _qrStatusMessage = _tr(
+            'وجّه الكاميرا نحو رمز التحضير المعروض لدى المحاضر.',
+            'Point the camera at the attendance QR shown by the lecturer.',
+          );
         }
       });
       return;
@@ -596,7 +732,10 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       _qrStatusError = true;
       _isQrScanPaused = true;
       _qrStatusMessage =
-          'لم يتم السماح باستخدام الكاميرا. الرجاء تفعيل صلاحية الكاميرا لمسح رمز QR.';
+          _tr(
+            'لم يتم السماح باستخدام الكاميرا. يرجى تفعيل صلاحية الكاميرا لمسح رمز QR.',
+            'Camera permission is not granted. Please enable camera access to scan the QR.',
+          );
     });
   }
 
@@ -859,8 +998,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                                       )
                                     : Text(
                                         _checkingNfcAvailability
-                                            ? 'جاري التحقق...'
-                                            : 'ابدئي التحضير',
+                                            ? _tr('جاري التحقق...', 'Checking...')
+                                            : _tr('بدء التحضير', 'Start attendance'),
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w700,
                                           fontFamily: 'Cairo',
@@ -906,9 +1045,12 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                                       _qrCameraUnavailable)
                                     _QrScannerFallback(
                                       message: _checkingQrAvailability
-                                          ? 'جاري تجهيز الكاميرا...'
+                                          ? _tr('جاري تجهيز الكاميرا...', 'Preparing camera...')
                                           : _qrPermissionDenied
-                                          ? 'لم يتم السماح باستخدام الكاميرا. الرجاء تفعيل صلاحية الكاميرا لمسح رمز QR.'
+                                          ? _tr(
+                                              'لم يتم السماح باستخدام الكاميرا. يرجى تفعيل صلاحية الكاميرا لمسح رمز QR.',
+                                              'Camera permission is not granted. Please enable camera access to scan the QR.',
+                                            )
                                           : _qrStatusMessage,
                                       showRetry:
                                           !_checkingQrAvailability &&
@@ -987,7 +1129,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                                   ),
                                 ),
                                 child: Text(
-                                  _isQrScanPaused ? 'إعادة المسح' : 'بدء المسح',
+                                  _isQrScanPaused
+                                      ? _tr('إعادة المسح', 'Scan again')
+                                      : _tr('بدء مسح QR', 'Start QR scan'),
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w700,
                                     fontFamily: 'Cairo',

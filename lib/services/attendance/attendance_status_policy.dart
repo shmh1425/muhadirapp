@@ -68,7 +68,9 @@ class AttendanceStatusPolicy {
     if (lectureEnd.isBefore(lectureStart)) {
       lectureEnd = lectureEnd.add(const Duration(days: 1));
     }
-    final finalizeAt = lectureEnd.add(attendanceLateWindow);
+    // Finalize remaining "pending" students as absent exactly at lecture end.
+    // (Attendance scanning still uses attendanceLateWindow elsewhere.)
+    final finalizeAt = lectureEnd;
     return currentTime.isAfter(finalizeAt) ||
         currentTime.isAtSameMomentAs(finalizeAt);
   }

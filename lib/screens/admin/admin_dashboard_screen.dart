@@ -85,8 +85,15 @@ const List<MapEntry<int, String>> _weekDays = <MapEntry<int, String>>[
   MapEntry(4, 'الخميس'),
 ];
 
-/// الساعات من 7 صباحاً إلى 6 مساءً، ساعة ساعة (كل محاضرة ساعتين أو أربع ساعات)
+/// أوقات اليوم بنظام 24 ساعة (اختيار وقت عادي بدون تقييد).
 const List<String> _timeSlots = <String>[
+  '00:00',
+  '01:00',
+  '02:00',
+  '03:00',
+  '04:00',
+  '05:00',
+  '06:00',
   '07:00',
   '08:00',
   '09:00',
@@ -99,6 +106,11 @@ const List<String> _timeSlots = <String>[
   '16:00',
   '17:00',
   '18:00',
+  '19:00',
+  '20:00',
+  '21:00',
+  '22:00',
+  '23:00',
 ];
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -3039,9 +3051,16 @@ class _SectionScheduleDialogState extends State<_SectionScheduleDialog> {
 
   List<String> _endTimeOptionsFor(String start) {
     final idx = _timeSlots.indexOf(start);
-    if (idx < 0) return _timeSlots;
+    if (idx < 0) {
+      return _timeSlots;
+    }
+
+    // Allow 24-hour selection including crossing midnight:
+    // show times after start first, then wrap-around (excluding start itself).
     final after = _timeSlots.skip(idx + 1).toList();
-    return after.isEmpty ? [start] : after;
+    final before = _timeSlots.take(idx).toList();
+    final options = <String>[...after, ...before];
+    return options.isEmpty ? _timeSlots : options;
   }
 
   @override
@@ -3061,10 +3080,16 @@ class _SectionScheduleDialogState extends State<_SectionScheduleDialog> {
       var end = _endTime[i];
       final startIdx = _timeSlots.indexOf(_startTime[i]);
       final endIdx = _timeSlots.indexOf(end);
-      if (endIdx <= startIdx)
-        end = _timeSlots.length > startIdx + 1
-            ? _timeSlots[startIdx + 1]
-            : _startTime[i];
+      // Ensure end is not identical to start; if it is, auto-pick the next slot.
+      if (_startTime[i] == end || startIdx < 0 || endIdx < 0) {
+        if (startIdx >= 0) {
+          end = (startIdx + 1 < _timeSlots.length)
+              ? _timeSlots[startIdx + 1]
+              : _timeSlots.first;
+        } else {
+          end = _timeSlots.isNotEmpty ? _timeSlots.first : end;
+        }
+      }
       list.add({
         'dayOfWeek': _dayOfWeek[i],
         'startTime': _startTime[i],
