@@ -28,7 +28,7 @@ class LecturerNavBar extends StatelessWidget {
               borderRadius: BorderRadius.circular(36),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
+                  color: Colors.black.withValues(alpha: 0.08),
                   blurRadius: 18,
                   offset: const Offset(0, 8),
                 ),
@@ -44,7 +44,7 @@ class LecturerNavBar extends StatelessWidget {
                     onTap: () => onItemTapped(0),
                   ),
                   _NavItem(
-                    icon: Icons.qr_code_2_rounded, // QR middle icon
+                    icon: Icons.nfc_rounded, // Attendance tools
                     isActive: selectedIndex == 1,
                     onTap: () => onItemTapped(1),
                   ),
@@ -109,11 +109,11 @@ class LecturerNavBar extends StatelessWidget {
       case 0:
         return Icons.person;
       case 1:
-        return Icons.qr_code_2_rounded;
+        return Icons.nfc_rounded;
       case 2:
         return Icons.home;
       default:
-        return Icons.qr_code_2_rounded;
+        return Icons.nfc_rounded;
     }
   }
 }
@@ -141,15 +141,10 @@ class _NavItem extends StatelessWidget {
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 160),
             opacity: isActive ? 0.0 : 1.0,
-            child: Icon(
-              icon,
-              size: _iconSize,
-              color: _activeColor,
-            ),
+            child: Icon(icon, size: _iconSize, color: _activeColor),
           ),
         ),
       ),
     );
   }
 }
-

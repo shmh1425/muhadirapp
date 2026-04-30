@@ -10,16 +10,6 @@ import 'lecturer_nfc_session_management_screen.dart';
 class LecturerNavigation {
   LecturerNavigation._();
 
-  static const int _editableWindowDays = 14;
-
-  static bool _isEditableDate(DateTime date) {
-    final normalized = DateTime(date.year, date.month, date.day);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final cutoff = today.subtract(const Duration(days: _editableWindowDays));
-    return !normalized.isBefore(cutoff);
-  }
-
   /// الانتقال إلى صفحة إدارة المحاضرات (من الهوم، البروفايل، أو أي مكان).
   static void goToManageLectures(BuildContext context) {
     Navigator.push(
@@ -48,8 +38,6 @@ class LecturerNavigation {
     final normalizedDate = selectedDate == null
         ? null
         : DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
-    final forceViewOnly =
-        normalizedDate != null && !_isEditableDate(normalizedDate);
 
     Navigator.push(
       context,
@@ -57,7 +45,7 @@ class LecturerNavigation {
         builder: (_) => LecturerAttendanceScreen(
           lecture: lecture,
           selectedDate: normalizedDate,
-          viewOnly: forceViewOnly,
+          viewOnly: false,
           sessionId: sessionId,
         ),
       ),

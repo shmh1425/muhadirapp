@@ -62,9 +62,15 @@ class _LecturerExcuseManagementScreenState
     if (reason.isEmpty) return reason;
     switch (reason) {
       case 'لم يرفق المستند خلال المدة':
-        return _tr('لم يرفق المستند خلال المدة', 'Document was not attached within the period');
+        return _tr(
+          'لم يرفق المستند خلال المدة',
+          'Document was not attached within the period',
+        );
       case 'ليس عذراً صحيحاً موثوقاً':
-        return _tr('ليس عذراً صحيحاً موثوقاً', 'Not a valid or reliable excuse');
+        return _tr(
+          'ليس عذراً صحيحاً موثوقاً',
+          'Not a valid or reliable excuse',
+        );
       case 'تاريخ الغياب غير متوافق':
         return _tr('تاريخ الغياب غير متوافق', 'Absence date does not match');
       case 'سبب آخر':
@@ -120,7 +126,16 @@ class _LecturerExcuseManagementScreenState
   }
 
   String get _lectureDayName {
-    const days = ['', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'];
+    const days = [
+      '',
+      'الاثنين',
+      'الثلاثاء',
+      'الأربعاء',
+      'الخميس',
+      'الجمعة',
+      'السبت',
+      'الأحد',
+    ];
     const daysEn = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     final i = _lecture.dayOfWeek.clamp(1, 7);
     return LecturerLanguageController.isArabic ? days[i] : daysEn[i];
@@ -128,13 +143,14 @@ class _LecturerExcuseManagementScreenState
 
   bool get _hasPendingDecisions => _staged.isNotEmpty;
 
-  bool get _initialLoading =>
-      !_seenExcuseSnapshot || !_seenRecordsSnapshot;
+  bool get _initialLoading => !_seenExcuseSnapshot || !_seenRecordsSnapshot;
 
   Map<int, String> get _nameByStudentId {
     final m = <int, String>{};
     for (final r in _records) {
-      m[r.studentId] = r.studentName.trim().isNotEmpty ? r.studentName : '${r.studentId}';
+      m[r.studentId] = r.studentName.trim().isNotEmpty
+          ? r.studentName
+          : '${r.studentId}';
     }
     return m;
   }
@@ -143,18 +159,13 @@ class _LecturerExcuseManagementScreenState
     final want = (_lecture.sectionId ?? '').trim();
     if (want.isEmpty) return List<ExcuseRequest>.from(_excuses);
     return _excuses
-        .where(
-          (e) => e.sectionId.trim() == want || e.sectionId.trim().isEmpty,
-        )
+        .where((e) => e.sectionId.trim() == want || e.sectionId.trim().isEmpty)
         .toList();
   }
 
-  // Policy note: only [reviewDeadlineAt] on the excuse document disables actions.
-  // There is no global "N hours after submit" rule in code yet.
+  // Product decision: keep excuse review editable for all weeks without time lock.
   bool _isPastReviewDeadline(ExcuseRequest r) {
-    final d = r.reviewDeadlineAt;
-    if (d == null) return false;
-    return DateTime.now().isAfter(d);
+    return false;
   }
 
   ExcuseStatus _baseUiStatus(ExcuseRequest r) {
@@ -240,40 +251,42 @@ class _LecturerExcuseManagementScreenState
           lectureStartTime: _lecture.startTime,
         )
         .listen(
-      (list) {
-        if (!mounted) return;
-        setState(() {
-          _excuses = list;
-          _seenExcuseSnapshot = true;
-          _excuseStreamError = null;
-          _pruneStaged();
-        });
-      },
-      onError: (Object e) {
-        debugPrint('[LecturerExcuseManagement] excuse stream failed: $e');
-        if (!mounted) return;
-        setState(() {
-          _excuseStreamError = e.toString();
-          _seenExcuseSnapshot = true;
-        });
-      },
-    );
-    _recordsSub = _manualAttendanceService.watchSessionRecords(widget.sessionId).listen(
-      (list) {
-        if (!mounted) return;
-        setState(() {
-          _records = list;
-          _seenRecordsSnapshot = true;
-        });
-      },
-      onError: (Object e) {
-        debugPrint('[LecturerExcuseManagement] records stream failed: $e');
-        if (!mounted) return;
-        setState(() {
-          _seenRecordsSnapshot = true;
-        });
-      },
-    );
+          (list) {
+            if (!mounted) return;
+            setState(() {
+              _excuses = list;
+              _seenExcuseSnapshot = true;
+              _excuseStreamError = null;
+              _pruneStaged();
+            });
+          },
+          onError: (Object e) {
+            debugPrint('[LecturerExcuseManagement] excuse stream failed: $e');
+            if (!mounted) return;
+            setState(() {
+              _excuseStreamError = e.toString();
+              _seenExcuseSnapshot = true;
+            });
+          },
+        );
+    _recordsSub = _manualAttendanceService
+        .watchSessionRecords(widget.sessionId)
+        .listen(
+          (list) {
+            if (!mounted) return;
+            setState(() {
+              _records = list;
+              _seenRecordsSnapshot = true;
+            });
+          },
+          onError: (Object e) {
+            debugPrint('[LecturerExcuseManagement] records stream failed: $e');
+            if (!mounted) return;
+            setState(() {
+              _seenRecordsSnapshot = true;
+            });
+          },
+        );
   }
 
   @override
@@ -357,10 +370,10 @@ class _LecturerExcuseManagementScreenState
                         height: 44,
                         child: OutlinedButton(
                           onPressed: () async {
-                            final attachmentName =
-                                (item.attachmentName ?? '').trim();
-                            final attachmentUrl =
-                                (item.attachmentUrl ?? '').trim();
+                            final attachmentName = (item.attachmentName ?? '')
+                                .trim();
+                            final attachmentUrl = (item.attachmentUrl ?? '')
+                                .trim();
                             await _showAttachmentPreviewDialog(
                               attachmentName: attachmentName,
                               attachmentUrl: attachmentUrl,
@@ -455,8 +468,13 @@ class _LecturerExcuseManagementScreenState
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
           child: Dialog(
-            insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 28,
+              vertical: 24,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 340),
               child: Padding(
@@ -612,108 +630,27 @@ class _LecturerExcuseManagementScreenState
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                    Text(
-                      row.displayName,
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF213236),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      row.academicId,
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 14,
-                        color: Color(0xFF64748B),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      _tr('المقرر', 'Course'),
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF94A3B8),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      item.courseNameAr.trim().isNotEmpty
-                          ? item.courseNameAr.trim()
-                          : _lecture.courseName,
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 14,
-                        color: Color(0xFF334155),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      _tr('الشعبة', 'Section'),
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF94A3B8),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      item.sectionId.trim().isNotEmpty
-                          ? item.sectionId.trim()
-                          : '${_tr('الشعبة', 'Section')} ${_lecture.section}',
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 14,
-                        color: Color(0xFF334155),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      _tr('تاريخ المحاضرة', 'Lecture date'),
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF94A3B8),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _excuseLectureDateLabel(item),
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 14,
-                        color: Color(0xFF334155),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      _tr('وقت المحاضرة', 'Lecture time'),
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF94A3B8),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _excuseTimeRangeLabel(item),
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 14,
-                        color: Color(0xFF334155),
-                      ),
-                    ),
-                    if ((item.attachmentName ?? '').trim().isNotEmpty) ...[
-                      const SizedBox(height: 10),
                       Text(
-                        _tr('اسم المرفق', 'Attachment name'),
+                        row.displayName,
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF213236),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        row.academicId,
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 14,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _tr('المقرر', 'Course'),
                         style: const TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 12,
@@ -723,18 +660,18 @@ class _LecturerExcuseManagementScreenState
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        item.attachmentName!.trim(),
+                        item.courseNameAr.trim().isNotEmpty
+                            ? item.courseNameAr.trim()
+                            : _lecture.courseName,
                         style: const TextStyle(
                           fontFamily: 'Cairo',
-                          fontSize: 13,
+                          fontSize: 14,
                           color: Color(0xFF334155),
                         ),
                       ),
-                    ],
-                    if ((item.reasonText ?? '').trim().isNotEmpty) ...[
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 10),
                       Text(
-                        _tr('نص العذر', 'Excuse text'),
+                        _tr('الشعبة', 'Section'),
                         style: const TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 12,
@@ -742,167 +679,259 @@ class _LecturerExcuseManagementScreenState
                           color: Color(0xFF94A3B8),
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 4),
                       Text(
-                        item.reasonText!.trim(),
+                        item.sectionId.trim().isNotEmpty
+                            ? item.sectionId.trim()
+                            : '${_tr('الشعبة', 'Section')} ${_lecture.section}',
                         style: const TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 14,
                           color: Color(0xFF334155),
-                          height: 1.35,
                         ),
                       ),
-                    ],
-                    const SizedBox(height: 12),
-                    Text(
-                      _tr('مرفق', 'Attachment'),
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF94A3B8),
+                      const SizedBox(height: 10),
+                      Text(
+                        _tr('تاريخ المحاضرة', 'Lecture date'),
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF94A3B8),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    if (!hasAttachment)
+                      const SizedBox(height: 4),
                       Text(
-                        _tr('لا يوجد مرفق مرفوع.', 'No attachment uploaded.'),
+                        _excuseLectureDateLabel(item),
                         style: const TextStyle(
                           fontFamily: 'Cairo',
-                          fontSize: 13,
-                          color: Color(0xFF64748B),
+                          fontSize: 14,
+                          color: Color(0xFF334155),
                         ),
-                      )
-                    else if (!validAttachmentUrl)
+                      ),
+                      const SizedBox(height: 10),
                       Text(
-                        _tr('رابط المرفق غير صالح.', 'Invalid attachment link.'),
+                        _tr('وقت المحاضرة', 'Lecture time'),
                         style: const TextStyle(
                           fontFamily: 'Cairo',
-                          fontSize: 13,
-                          color: Color(0xFFB91C1C),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF94A3B8),
                         ),
-                      )
-                    else
-                      InkWell(
-                        onTap: () async {
-                          debugPrint(
-                            '[LecturerExcuseManagement] attachment widget tapped for excuseId=${item.id}',
-                          );
-                          await _showAttachmentPreviewDialog(
-                            attachmentName: attachmentName,
-                            attachmentUrl: attachmentUrl,
-                          );
-                        },
-                        borderRadius: BorderRadius.circular(8),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
-                          child: Text(
-                            attachmentName.isNotEmpty
-                                ? attachmentName
-                                : _tr('فتح المرفق', 'Open attachment'),
-                            style: const TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 13,
-                              color: Color(0xFF006571),
-                              decoration: TextDecoration.underline,
-                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _excuseTimeRangeLabel(item),
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 14,
+                          color: Color(0xFF334155),
+                        ),
+                      ),
+                      if ((item.attachmentName ?? '').trim().isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          _tr('اسم المرفق', 'Attachment name'),
+                          style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF94A3B8),
                           ),
                         ),
-                      ),
-                    const SizedBox(height: 16),
-                    Text(
-                      _statusFullLabel(eff),
-                      style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: _statusColor(eff),
-                      ),
-                    ),
-                    if (item.status == ExcuseRequestStatus.pending &&
-                        _isPastReviewDeadline(item)) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        _tr('انتهت مهلة المراجعة.', 'Review deadline has passed.'),
-                        style: const TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 13,
-                          color: Color(0xFF64748B),
+                        const SizedBox(height: 4),
+                        Text(
+                          item.attachmentName!.trim(),
+                          style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 13,
+                            color: Color(0xFF334155),
+                          ),
                         ),
-                      ),
-                    ],
-                    if (eff == ExcuseStatus.rejected && rejectShown.isNotEmpty) ...[
+                      ],
+                      if ((item.reasonText ?? '').trim().isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        Text(
+                          _tr('نص العذر', 'Excuse text'),
+                          style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF94A3B8),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          item.reasonText!.trim(),
+                          style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 14,
+                            color: Color(0xFF334155),
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       Text(
-                        _translateRejectReason(rejectShown),
+                        _tr('مرفق', 'Attachment'),
                         style: const TextStyle(
                           fontFamily: 'Cairo',
-                          fontSize: 13,
-                          color: Color(0xFF64748B),
-                          height: 1.4,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF94A3B8),
                         ),
                       ),
-                    ],
-                    const SizedBox(height: 16),
-                    if (_canReview(item))
-                      SizedBox(
-                        width: double.infinity,
-                        height: 44,
-                        child: OutlinedButton(
-                          onPressed: () async {
-                            Navigator.of(ctx).pop();
-                            await Future<void>.delayed(const Duration(milliseconds: 80));
-                            if (!mounted) return;
-                            await _showAcceptRejectSheet(row);
-                          },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: _primary,
-                            side: const BorderSide(color: Color(0xFF006571)),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                      const SizedBox(height: 4),
+                      if (!hasAttachment)
+                        Text(
+                          _tr('لا يوجد مرفق مرفوع.', 'No attachment uploaded.'),
+                          style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 13,
+                            color: Color(0xFF64748B),
                           ),
-                          child: Text(
-                            _tr('اتخاذ القرار', 'Take decision'),
-                            style: const TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
+                        )
+                      else if (!validAttachmentUrl)
+                        Text(
+                          _tr(
+                            'رابط المرفق غير صالح.',
+                            'Invalid attachment link.',
+                          ),
+                          style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 13,
+                            color: Color(0xFFB91C1C),
+                          ),
+                        )
+                      else
+                        InkWell(
+                          onTap: () async {
+                            debugPrint(
+                              '[LecturerExcuseManagement] attachment widget tapped for excuseId=${item.id}',
+                            );
+                            await _showAttachmentPreviewDialog(
+                              attachmentName: attachmentName,
+                              attachmentUrl: attachmentUrl,
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Text(
+                              attachmentName.isNotEmpty
+                                  ? attachmentName
+                                  : _tr('فتح المرفق', 'Open attachment'),
+                              style: const TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 13,
+                                color: Color(0xFF006571),
+                                decoration: TextDecoration.underline,
+                              ),
                             ),
                           ),
                         ),
-                      )
-                    else if (item.status == ExcuseRequestStatus.accepted ||
-                        item.status == ExcuseRequestStatus.rejected)
-                      SizedBox(
-                        width: double.infinity,
-                        height: 44,
-                        child: OutlinedButton(
-                          onPressed: () async {
-                            Navigator.of(ctx).pop();
-                            await Future<void>.delayed(const Duration(milliseconds: 80));
-                            if (!mounted) return;
-                            final ok = await _confirmDecisionChange();
-                            if (ok != true || !mounted) return;
-                            await _showAcceptRejectSheet(row);
-                          },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: _primary,
-                            side: const BorderSide(color: Color(0xFF006571)),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: Text(
-                            _tr('تعديل القرار', 'Change decision'),
-                            style: const TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _statusFullLabel(eff),
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: _statusColor(eff),
                         ),
                       ),
+                      if (item.status == ExcuseRequestStatus.pending &&
+                          _isPastReviewDeadline(item)) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          _tr(
+                            'انتهت مهلة المراجعة.',
+                            'Review deadline has passed.',
+                          ),
+                          style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 13,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                      if (eff == ExcuseStatus.rejected &&
+                          rejectShown.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          _translateRejectReason(rejectShown),
+                          style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 13,
+                            color: Color(0xFF64748B),
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      if (_canReview(item))
+                        SizedBox(
+                          width: double.infinity,
+                          height: 44,
+                          child: OutlinedButton(
+                            onPressed: () async {
+                              Navigator.of(ctx).pop();
+                              await Future<void>.delayed(
+                                const Duration(milliseconds: 80),
+                              );
+                              if (!mounted) return;
+                              await _showAcceptRejectSheet(row);
+                            },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _primary,
+                              side: const BorderSide(color: Color(0xFF006571)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Text(
+                              _tr('اتخاذ القرار', 'Take decision'),
+                              style: const TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        )
+                      else if (item.status == ExcuseRequestStatus.accepted ||
+                          item.status == ExcuseRequestStatus.rejected)
+                        SizedBox(
+                          width: double.infinity,
+                          height: 44,
+                          child: OutlinedButton(
+                            onPressed: () async {
+                              Navigator.of(ctx).pop();
+                              await Future<void>.delayed(
+                                const Duration(milliseconds: 80),
+                              );
+                              if (!mounted) return;
+                              final ok = await _confirmDecisionChange();
+                              if (ok != true || !mounted) return;
+                              await _showAcceptRejectSheet(row);
+                            },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _primary,
+                              side: const BorderSide(color: Color(0xFF006571)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Text(
+                              _tr('تعديل القرار', 'Change decision'),
+                              style: const TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -983,7 +1012,9 @@ class _LecturerExcuseManagementScreenState
     if (!_hasPendingDecisions) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_tr('لا توجد قرارات جديدة للحفظ.', 'No new decisions to save.')),
+          content: Text(
+            _tr('لا توجد قرارات جديدة للحفظ.', 'No new decisions to save.'),
+          ),
         ),
       );
       return;
@@ -1058,7 +1089,12 @@ class _LecturerExcuseManagementScreenState
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_tr('تم حفظ قرارات الأعذار بنجاح.', 'Excuse decisions saved successfully.')),
+          content: Text(
+            _tr(
+              'تم حفظ قرارات الأعذار بنجاح.',
+              'Excuse decisions saved successfully.',
+            ),
+          ),
           backgroundColor: const Color(0xFF2B9E56),
           duration: const Duration(seconds: 2),
         ),
@@ -1069,7 +1105,9 @@ class _LecturerExcuseManagementScreenState
       if (mounted) setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_tr('فشل الحفظ. حاول مرة أخرى.', 'Save failed. Please try again.')),
+          content: Text(
+            _tr('فشل الحفظ. حاول مرة أخرى.', 'Save failed. Please try again.'),
+          ),
           backgroundColor: const Color(0xFFD32F2F),
         ),
       );
@@ -1078,7 +1116,9 @@ class _LecturerExcuseManagementScreenState
       if (mounted) setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_tr('فشل الحفظ. حاول مرة أخرى.', 'Save failed. Please try again.')),
+          content: Text(
+            _tr('فشل الحفظ. حاول مرة أخرى.', 'Save failed. Please try again.'),
+          ),
           backgroundColor: const Color(0xFFD32F2F),
         ),
       );
@@ -1130,9 +1170,7 @@ class _LecturerExcuseManagementScreenState
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: const Color(0xFFE8E8E8)),
-        ),
+        border: Border(bottom: BorderSide(color: const Color(0xFFE8E8E8))),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1294,7 +1332,8 @@ class _LecturerExcuseManagementScreenState
       );
     }
     final hasAnyExcuses = _sectionScopedExcuses.isNotEmpty;
-    final blockingExcuseError = _excuseStreamError != null &&
+    final blockingExcuseError =
+        _excuseStreamError != null &&
         !hasAnyExcuses &&
         _seenExcuseSnapshot &&
         _seenRecordsSnapshot;
@@ -1338,7 +1377,10 @@ class _LecturerExcuseManagementScreenState
                       child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Text(
-                          _tr('لا يوجد طلاب في هذا الفلتر.', 'No students in this filter.'),
+                          _tr(
+                            'لا يوجد طلاب في هذا الفلتر.',
+                            'No students in this filter.',
+                          ),
                           style: const TextStyle(
                             fontFamily: 'Cairo',
                             color: Color(0xFF666666),
@@ -1353,7 +1395,8 @@ class _LecturerExcuseManagementScreenState
                     child: ListView.separated(
                       padding: const EdgeInsets.only(bottom: 12),
                       itemCount: list.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFEAEFF0)),
+                      separatorBuilder: (_, __) =>
+                          const Divider(height: 1, color: Color(0xFFEAEFF0)),
                       itemBuilder: (context, index) {
                         return _buildExcuseRow(list[index], index.isEven);
                       },
@@ -1381,13 +1424,35 @@ class _LecturerExcuseManagementScreenState
             flex: 4,
             child: Align(
               alignment: AlignmentDirectional.centerStart,
-              child: Text(_tr('اسم الطالب/ة', 'Student Name'), style: _tableHeaderStyle, textAlign: TextAlign.start),
+              child: Text(
+                _tr('اسم الطالب/ة', 'Student Name'),
+                style: _tableHeaderStyle,
+                textAlign: TextAlign.start,
+              ),
             ),
           ),
           SizedBox(width: _colGap),
-          SizedBox(width: _colIdWidth, child: Center(child: Text(_tr('الرقم الجامعي', 'ID'), style: _tableHeaderStyle, textAlign: TextAlign.center))),
+          SizedBox(
+            width: _colIdWidth,
+            child: Center(
+              child: Text(
+                _tr('الرقم الجامعي', 'ID'),
+                style: _tableHeaderStyle,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
           SizedBox(width: _colGap),
-          SizedBox(width: _colStatusWidth, child: Center(child: Text(_tr('حالة العذر', 'Excuse Status'), style: _tableHeaderStyle, textAlign: TextAlign.center))),
+          SizedBox(
+            width: _colStatusWidth,
+            child: Center(
+              child: Text(
+                _tr('حالة العذر', 'Excuse Status'),
+                style: _tableHeaderStyle,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1514,7 +1579,9 @@ class _LecturerExcuseManagementScreenState
                   : null,
               color: enabled ? null : const Color(0xFFE2E8F0),
               borderRadius: BorderRadius.circular(14),
-              border: enabled ? null : Border.all(color: const Color(0xFFCBD5E1), width: 1),
+              border: enabled
+                  ? null
+                  : Border.all(color: const Color(0xFFCBD5E1), width: 1),
             ),
             child: _isSaving
                 ? const SizedBox(
@@ -1522,8 +1589,9 @@ class _LecturerExcuseManagementScreenState
                     width: 22,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.5,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(Color(0xFF006571)),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFF006571),
+                      ),
                     ),
                   )
                 : Text(

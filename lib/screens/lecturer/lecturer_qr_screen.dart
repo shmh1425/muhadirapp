@@ -5,8 +5,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../models/attendance/nfc_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../models/attendance/qr_attendance_session.dart';
+import '../../services/attendance/nfc_attendance_service.dart';
 import '../../services/attendance/qr_attendance_service.dart';
 import '../../services/lecturer/lecture_repository.dart';
 import '../../services/lecturer/calendar_sync_service.dart';
@@ -27,13 +29,20 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
   List<LectureItem> _allLectures = [];
   final LectureRepository _calendarRepository = LectureRepository();
   final QrAttendanceService _qrAttendanceService = QrAttendanceService.instance;
+  final NfcAttendanceService _nfcAttendanceService =
+      NfcAttendanceService.instance;
   StreamSubscription<void>? _calendarSyncSub;
+  StreamSubscription<List<NfcAttendanceSession>>? _nfcSessionsSub;
   late String _qrData;
   LectureItem? _activeLecture;
   QrAttendanceSession? _qrSession;
+  List<NfcAttendanceSession> _openNfcSessions = <NfcAttendanceSession>[];
   bool _isSyncRefreshing = false;
   bool _isLoadingSession = false;
+  bool _isLoadingNfcAction = false;
+  bool _isNfcActiveForLecture = false;
   String? _sessionErrorMessage;
+  _CheckInMethod _selectedMethod = _CheckInMethod.qr;
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
@@ -44,12 +53,22 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
     _calendarSyncSub = CalendarSyncService.instance.watchChanges().listen(
       (_) => _handleRealtimeCalendarChange(),
     );
+    _nfcSessionsSub = _nfcAttendanceService
+        .watchOpenSessionsForCurrentLecturer()
+        .listen((sessions) {
+          if (!mounted) return;
+          setState(() {
+            _openNfcSessions = sessions;
+            _recomputeNfcActiveForCurrentLecture();
+          });
+        });
     _loadLectures();
   }
 
   @override
   void dispose() {
     _calendarSyncSub?.cancel();
+    _nfcSessionsSub?.cancel();
     super.dispose();
   }
 
@@ -89,6 +108,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
       setState(() {
         _activeLecture = lecture;
         _sessionErrorMessage = null;
+        _recomputeNfcActiveForCurrentLecture();
       });
     }
 
@@ -141,7 +161,8 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
         _qrSession = null;
         _qrData = '';
         if (e.code == 'permission-denied') {
-          _sessionErrorMessage = 'فشل إنشاء جلسة QR: لا توجد صلاحية للوصول إلى Firestore.';
+          _sessionErrorMessage =
+              'فشل إنشاء جلسة QR: لا توجد صلاحية للوصول إلى Firestore.';
         } else {
           _sessionErrorMessage = 'فشل إنشاء/جلب جلسة QR من Firestore.';
         }
@@ -196,6 +217,33 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
       'tokenVersion': session.tokenVersion,
       'expiresAt': session.expiresAt.toUtc().toIso8601String(),
     });
+  }
+
+  void _recomputeNfcActiveForCurrentLecture() {
+    final lecture = _activeLecture;
+    if (lecture == null) {
+      _isNfcActiveForLecture = false;
+      return;
+    }
+
+    final sectionId = (lecture.sectionId ?? '').trim();
+    if (sectionId.isEmpty) {
+      _isNfcActiveForLecture = false;
+      return;
+    }
+
+    final now = _calendarRepository.currentDateTime;
+    final today = DateTime(now.year, now.month, now.day);
+    _isNfcActiveForLecture = _openNfcSessions.any((session) {
+      return session.isOpen &&
+          session.sectionId == sectionId &&
+          session.lectureStartTime.trim() == lecture.startTime.trim() &&
+          _isSameDate(session.lectureDate, today);
+    });
+  }
+
+  bool _isSameDate(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   Future<void> _onRefreshPressed() async {
@@ -253,11 +301,97 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
     }
 
     if (_sessionErrorMessage != null) {
+      messenger?.showSnackBar(SnackBar(content: Text(_sessionErrorMessage!)));
+    }
+  }
+
+  Future<void> _onEnableNfcPressed() async {
+    final lecture = _activeLecture;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (lecture == null) {
       messenger?.showSnackBar(
         SnackBar(
-          content: Text(_sessionErrorMessage!),
+          content: Text(
+            _tr('لا توجد محاضرة حالياً', 'No lecture is currently active'),
+          ),
         ),
       );
+      return;
+    }
+    if (_isNfcActiveForLecture) {
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(
+            _tr(
+              'التحضير عبر NFC مفعل بالفعل لهذه المحاضرة.',
+              'NFC attendance is already active for this lecture.',
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoadingNfcAction = true);
+    try {
+      await _nfcAttendanceService.openSessionForLecture(
+        lecture: lecture,
+        lectureDate: _calendarRepository.currentDateTime,
+      );
+      if (!mounted) return;
+      setState(() => _isNfcActiveForLecture = true);
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(
+            _tr(
+              'تم تفعيل التحضير عبر NFC لهذه المحاضرة.',
+              'NFC attendance is now active for this lecture.',
+            ),
+          ),
+          backgroundColor: const Color(0xFF2B9E56),
+        ),
+      );
+    } on NfcAttendanceException catch (e) {
+      if (!mounted) return;
+      final message = switch (e.code) {
+        NfcAttendanceErrorCode.missingLecturerCard => _tr(
+          'NFC غير متاح: لا توجد بطاقة NFC مرتبطة بحسابك.',
+          'NFC unavailable: no lecturer card is assigned to your account.',
+        ),
+        NfcAttendanceErrorCode.outsideLectureWindow => _tr(
+          'لا يمكن تفعيل NFC الآن. متاح فقط أثناء نافذة وقت المحاضرة.',
+          'NFC can only be enabled during the lecture attendance window.',
+        ),
+        NfcAttendanceErrorCode.invalidInput => _tr(
+          'فشل تفعيل NFC بسبب نقص بيانات المحاضرة.',
+          'Failed to enable NFC because lecture data is incomplete.',
+        ),
+        _ => _tr(
+          'تعذر تفعيل NFC لهذه المحاضرة.',
+          'Failed to enable NFC for this lecture.',
+        ),
+      };
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(
+            _tr(
+              'تعذر تفعيل NFC لهذه المحاضرة.',
+              'Failed to enable NFC for this lecture.',
+            ),
+          ),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoadingNfcAction = false);
     }
   }
 
@@ -280,7 +414,15 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Center(
                     child: Text(
-                      _tr('قم بإظهار ال QR للطلاب', 'Show the QR to students'),
+                      _selectedMethod == _CheckInMethod.qr
+                          ? _tr(
+                              'قم بإظهار ال QR للطلاب',
+                              'Show the QR to students',
+                            )
+                          : _tr(
+                              'فعّل التحضير عبر NFC للطلاب',
+                              'Enable NFC attendance for students',
+                            ),
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         fontSize: 22,
@@ -289,6 +431,81 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
                         height: 1.4,
                         fontFamily: 'Cairo',
                       ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF2F5F6),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFD9E5E8)),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () {
+                              setState(
+                                () => _selectedMethod = _CheckInMethod.qr,
+                              );
+                            },
+                            child: Container(
+                              height: 38,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: _selectedMethod == _CheckInMethod.qr
+                                    ? const Color(0xFF006571)
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                'QR',
+                                style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontWeight: FontWeight.w800,
+                                  color: _selectedMethod == _CheckInMethod.qr
+                                      ? Colors.white
+                                      : const Color(0xFF4F656B),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () {
+                              setState(
+                                () => _selectedMethod = _CheckInMethod.nfc,
+                              );
+                            },
+                            child: Container(
+                              height: 38,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: _selectedMethod == _CheckInMethod.nfc
+                                    ? const Color(0xFF006571)
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                'NFC',
+                                style: TextStyle(
+                                  fontFamily: 'Cairo',
+                                  fontWeight: FontWeight.w800,
+                                  color: _selectedMethod == _CheckInMethod.nfc
+                                      ? Colors.white
+                                      : const Color(0xFF4F656B),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -418,7 +635,8 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (_isLoadingSession) ...[
+                          if (_selectedMethod == _CheckInMethod.qr &&
+                              _isLoadingSession) ...[
                             const SizedBox(
                               width: 36,
                               height: 36,
@@ -432,6 +650,30 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
                               _tr(
                                 'جاري تحميل جلسة QR...',
                                 'Loading QR session...',
+                              ),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF465A5F),
+                                fontFamily: 'Cairo',
+                              ),
+                            ),
+                          ] else if (_selectedMethod == _CheckInMethod.nfc &&
+                              _isLoadingNfcAction) ...[
+                            const SizedBox(
+                              width: 36,
+                              height: 36,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 3,
+                                color: primaryColor,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              _tr(
+                                'جاري تفعيل NFC...',
+                                'Activating NFC attendance...',
                               ),
                               textAlign: TextAlign.center,
                               style: const TextStyle(
@@ -475,6 +717,46 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
                                 fontSize: 15,
                                 fontWeight: FontWeight.w700,
                                 color: Color(0xFF465A5F),
+                                fontFamily: 'Cairo',
+                              ),
+                            ),
+                          ] else if (_selectedMethod == _CheckInMethod.nfc) ...[
+                            Icon(
+                              _isNfcActiveForLecture
+                                  ? Icons.nfc_rounded
+                                  : Icons.nfc_outlined,
+                              size: 64,
+                              color: primaryColor,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              _isNfcActiveForLecture
+                                  ? _tr(
+                                      'NFC مفعل لهذه المحاضرة',
+                                      'NFC is active for this lecture',
+                                    )
+                                  : _tr(
+                                      'NFC غير مفعل بعد لهذه المحاضرة',
+                                      'NFC is not active for this lecture yet',
+                                    ),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF465A5F),
+                                fontFamily: 'Cairo',
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              _tr(
+                                'يمكن للطلاب التحضير بالبطاقة بعد تفعيل الجلسة.',
+                                'Students can check in by card once the session is active.',
+                              ),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF5F7A80),
                                 fontFamily: 'Cairo',
                               ),
                             ),
@@ -534,21 +816,30 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
                                   borderRadius: BorderRadius.circular(26),
                                 ),
                                 child: TextButton.icon(
-                                  onPressed: _isLoadingSession
-                                      ? null
-                                      : _onRefreshPressed,
+                                  onPressed:
+                                      _selectedMethod == _CheckInMethod.qr
+                                      ? (_isLoadingSession
+                                            ? null
+                                            : _onRefreshPressed)
+                                      : (_isLoadingNfcAction
+                                            ? null
+                                            : _onEnableNfcPressed),
                                   style: TextButton.styleFrom(
                                     foregroundColor: Colors.white,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(26),
                                     ),
                                   ),
-                                  icon: const Icon(
-                                    Icons.refresh_rounded,
+                                  icon: Icon(
+                                    _selectedMethod == _CheckInMethod.qr
+                                        ? Icons.refresh_rounded
+                                        : Icons.nfc_rounded,
                                     size: 20,
                                   ),
                                   label: Text(
-                                    _tr('تحديث الكود', 'Refresh Code'),
+                                    _selectedMethod == _CheckInMethod.qr
+                                        ? _tr('تحديث الكود', 'Refresh Code')
+                                        : _tr('تفعيل NFC', 'Enable NFC'),
                                     style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w700,
@@ -573,3 +864,5 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
     );
   }
 }
+
+enum _CheckInMethod { qr, nfc }

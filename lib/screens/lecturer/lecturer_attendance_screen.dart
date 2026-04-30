@@ -63,7 +63,6 @@ class LecturerAttendanceScreen extends StatefulWidget {
 
 class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   static const Color _primary = Color(0xFF006571);
-  static const int _editableWindowDays = 14;
 
   // عرض الأعمدة ثابت لتفادي اهتزاز المحاذاة بين الهيدر والصفوف
   static const double _colIdWidth = 88.0;
@@ -75,7 +74,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   final ManualAttendanceService _manualAttendanceService =
       ManualAttendanceService.instance;
   final LectureRepository _calendarRepository = LectureRepository();
-  final NfcAttendanceService _nfcAttendanceService = NfcAttendanceService.instance;
+  final NfcAttendanceService _nfcAttendanceService =
+      NfcAttendanceService.instance;
   final QrAttendanceService _qrAttendanceService = QrAttendanceService.instance;
   StreamSubscription<List<ManualAttendanceRecord>>? _recordsSubscription;
   StreamSubscription<void>? _calendarSyncSub;
@@ -110,16 +110,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   bool get _viewOnly => widget.viewOnly;
   DateTime? get _selectedDate => widget.selectedDate;
   String? get _providedSessionId => widget.sessionId;
-  bool get _effectiveViewOnly => _viewOnly || !_isWithinEditableWindow;
-
-  bool get _isWithinEditableWindow {
-    if (_selectedDate == null) return true;
-    final target = _sessionDate;
-    final now = _calendarReferenceDate ?? DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final cutoff = today.subtract(const Duration(days: _editableWindowDays));
-    return !target.isBefore(cutoff);
-  }
+  bool get _effectiveViewOnly => _viewOnly;
 
   /// صيغة موحدة لعرض النسبة: "N٪" بدون مسافات أو رموز زيادة.
   String _formatPercentage(int value) => '$value٪';
@@ -485,7 +476,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         .watchOpenSessionsForCurrentLecturer()
         .listen((sessions) {
           if (!mounted) return;
-          final currentSessionId = _sessionId ?? _buildSessionIdForCurrentLecture();
+          final currentSessionId =
+              _sessionId ?? _buildSessionIdForCurrentLecture();
           final isOpen = sessions.any(
             (s) => s.sessionId == currentSessionId && s.isOpen,
           );
@@ -631,10 +623,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       _showMethodSnack(message, error: true);
     } catch (_) {
       _showMethodSnack(
-        _tr(
-          'فشل تحديث أو تحميل رمز QR.',
-          'Failed to load or refresh QR code.',
-        ),
+        _tr('فشل تحديث أو تحميل رمز QR.', 'Failed to load or refresh QR code.'),
         error: true,
       );
     } finally {
@@ -851,7 +840,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(text),
-        backgroundColor: error ? const Color(0xFFD32F2F) : const Color(0xFF2B9E56),
+        backgroundColor: error
+            ? const Color(0xFFD32F2F)
+            : const Color(0xFF2B9E56),
       ),
     );
   }
@@ -1044,12 +1035,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                           border: Border.all(color: const Color(0xFF4A90E2)),
                         ),
                         child: Text(
-                          _viewOnly
-                              ? _tr('عرض فقط', 'View only')
-                              : _tr(
-                                  'معاينة فقط (أكثر من أسبوعين)',
-                                  'Preview only (older than 2 weeks)',
-                                ),
+                          _tr('عرض فقط', 'View only'),
                           style: const TextStyle(
                             fontFamily: 'Cairo',
                             fontSize: 11,
@@ -1272,7 +1258,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
             Text(
               _selectedMethod == AttendanceMethod.nfc
                   ? 'NFC'
-                  : (_selectedMethod == AttendanceMethod.qr ? 'QR' : _tr('الطريقة', 'Method')),
+                  : (_selectedMethod == AttendanceMethod.qr
+                        ? 'QR'
+                        : _tr('الطريقة', 'Method')),
               style: const TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 11,
@@ -1281,7 +1269,11 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
               ),
             ),
             const SizedBox(width: 2),
-            const Icon(Icons.arrow_drop_down_rounded, size: 18, color: Color(0xFF50656B)),
+            const Icon(
+              Icons.arrow_drop_down_rounded,
+              size: 18,
+              color: Color(0xFF50656B),
+            ),
           ],
         ),
       ),
@@ -1450,8 +1442,13 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       context: context,
       builder: (dialogContext) {
         return Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 24,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           backgroundColor: const Color(0xFFFAFDFD),
           surfaceTintColor: Colors.transparent,
           child: StatefulBuilder(
@@ -1534,7 +1531,10 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFF006571), width: 1.8),
+                        border: Border.all(
+                          color: const Color(0xFF006571),
+                          width: 1.8,
+                        ),
                       ),
                       child: QrImageView(
                         data: _qrData,
@@ -1802,8 +1802,10 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   Widget _buildStatusChipCell(_StudentRow student, _StatusStyle? statusStyle) {
     final effectiveStyle =
         statusStyle ?? _statusStyle(AttendanceStatus.present);
+    final effectiveStatus = _effectiveStatus(student);
     final showSync = student.isOffline;
     final chipLabel = effectiveStyle.chipLabel;
+    final statusIcon = _statusIcon(effectiveStatus);
     final isSuspended = student.isSuspended ?? false;
     final VoidCallback onChipTap = _effectiveViewOnly
         ? () => ScaffoldMessenger.of(context).showSnackBar(
@@ -1832,6 +1834,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       chipLabel,
       effectiveStyle.bg,
       effectiveStyle.fg,
+      icon: statusIcon,
       showSync: showSync,
       onSyncTap: showSync ? _showPendingSyncSnack : null,
       onChipTap: onChipTap,
@@ -1857,6 +1860,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     String label,
     Color bg,
     Color fg, {
+    required IconData icon,
     bool showSync = false,
     VoidCallback? onSyncTap,
     required VoidCallback onChipTap,
@@ -1893,7 +1897,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
               ),
             ),
           if (showSync && onSyncTap != null) const SizedBox(width: 4),
-          Flexible(
+          Tooltip(
+            message: label,
             child: Material(
               color: Colors.transparent,
               child: InkWell(
@@ -1904,17 +1909,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                     horizontal: 4,
                     vertical: 2,
                   ),
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      color: fg,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  child: Icon(icon, size: 16, color: fg),
                 ),
               ),
             ),
@@ -1922,6 +1917,21 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         ],
       ),
     );
+  }
+
+  IconData _statusIcon(AttendanceStatus status) {
+    switch (status) {
+      case AttendanceStatus.pending:
+        return Icons.schedule_rounded;
+      case AttendanceStatus.present:
+        return Icons.check_rounded;
+      case AttendanceStatus.absent:
+        return Icons.close_rounded;
+      case AttendanceStatus.excused:
+        return Icons.fact_check_rounded;
+      case AttendanceStatus.late:
+        return Icons.access_time_filled_rounded;
+    }
   }
 
   /// حفظ = Primary، معاينة الأعذار = Secondary. في وضع العرض فقط لا يظهر زر الحفظ.
@@ -2243,6 +2253,7 @@ const TextStyle _tableHeaderStyle = TextStyle(
 enum AttendanceStatusFilter { all, present, excused, absent, late }
 
 enum AttendanceStatus { pending, present, absent, excused, late }
+
 enum AttendanceMethod { nfc, qr, manual }
 
 class _StudentRow {
