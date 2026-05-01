@@ -15,7 +15,7 @@ import '../../services/female_security_auth_service.dart';
 const _kTealLight = Color(0xFF27A2A9);
 const _kTextDark = Color(0xFF2D2D2D);
 const _kTextMuted = Color(0xFF757575);
-const _kLogoutRed = Color(0xFFC00000);
+const _kLogoutRed = Color(0xFFD32F2F);
 const _kCardShadow = Color(0x0D000000);
 
 // ─────────────────────────────────────────────────────────────────────────────

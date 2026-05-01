@@ -10,12 +10,16 @@ import 'security_settings_screen.dart';
 import 'widgets/security_date_picker_dialog.dart';
 
 const _kTeal = Color(0xFF27A2A9);
-const _kRed = Color(0xFFC00000);
+const _kTealDark = Color(0xFF006571);
+const _kRed = Color(0xFFD32F2F);
+const _kRedDark = Color(0xFFB71C1C);
 const _kTextDark = Color(0xFF2D2D2D);
 const _kTextMuted = Color(0xFF757575);
 const _kGreyIconBg = Color(0xFFE8E8E8);
 const _kGreyBorder = Color(0xFFE0E0E0);
 const _kDateIconBg = Color(0xFFF5F5F5);
+const _kInputFill = Color(0xFFF8F7F7);
+const _kCardShadow = Color(0x0D000000);
 
 class RejectedStudentsScreen extends StatefulWidget {
   const RejectedStudentsScreen({super.key});
@@ -268,7 +272,7 @@ class _RejectedHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Material(
-              color: const Color(0xFFF7F8F8),
+              color: _kInputFill,
               shape: const CircleBorder(),
               child: InkWell(
                 onTap: onRefresh,
@@ -357,9 +361,12 @@ class _CompactStateCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFFFAFAFA),
+        color: _kInputFill,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _kGreyBorder.withValues(alpha: 0.7)),
+        boxShadow: const [
+          BoxShadow(color: _kCardShadow, blurRadius: 10, offset: Offset(0, 2)),
+        ],
       ),
       child: Column(
         children: [
@@ -389,9 +396,12 @@ class _CompactLoadingCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 20),
       decoration: BoxDecoration(
-        color: const Color(0xFFFAFAFA),
+        color: _kInputFill,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _kGreyBorder.withValues(alpha: 0.7)),
+        boxShadow: const [
+          BoxShadow(color: _kCardShadow, blurRadius: 10, offset: Offset(0, 2)),
+        ],
       ),
       child: const Center(
         child: SizedBox(
@@ -468,8 +478,19 @@ class _StatusBadge extends StatelessWidget {
       height: 42,
       margin: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
-        color: _kRed,
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [_kRed, _kRedDark],
+        ),
         borderRadius: BorderRadius.circular(13),
+        boxShadow: [
+          BoxShadow(
+            color: _kRed.withValues(alpha: 0.18),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Center(
         child: Text(
@@ -497,7 +518,7 @@ class _RejectedSearchBar extends StatelessWidget {
     return Container(
       height: 42,
       decoration: BoxDecoration(
-        color: const Color(0xFFFAFAFA),
+        color: _kInputFill,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: _kGreyBorder.withValues(alpha: 0.75)),
       ),
@@ -550,6 +571,9 @@ class _RejectedList extends StatelessWidget {
         color: Colors.white,
         border: Border.all(color: _kGreyBorder),
         borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(color: _kCardShadow, blurRadius: 10, offset: Offset(0, 2)),
+        ],
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -590,7 +614,13 @@ class _RejectedTableHeader extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 10),
-      decoration: const BoxDecoration(color: _kTeal),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [_kTeal, _kTealDark],
+        ),
+      ),
       child: Row(
         children: [
           Expanded(

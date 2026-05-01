@@ -10,7 +10,7 @@ const _kTealLight = Color(0xFF27A2A9);
 const _kTealDark = Color(0xFF006571);
 const _kTextDark = Color(0xFF2D2D2D);
 const _kTextMuted = Color(0xFF757575);
-const _kRejectRed = Color(0xFFC00000);
+const _kRejectRed = Color(0xFFD32F2F);
 const _kGreyBorder = Color(0xFFE0E0E0);
 
 // ─────────────────────────────────────────────────────────────────────────────

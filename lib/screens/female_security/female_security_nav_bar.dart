@@ -10,55 +10,63 @@ class FemaleSecurityNavBar extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onItemTapped;
 
-  static const _barHeight = 58.0;
+  static const _primaryTeal = Color(0xFF27A2A9);
+  static const _darkTeal = Color(0xFF006571);
+  static const _pillHeight = 64.0;
+  static const _activeSize = 52.0;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.95),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: _barHeight + 10,
-          child: Directionality(
-            textDirection: TextDirection.ltr,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _NavItem(
-                  icon: Icons.how_to_reg_outlined,
-                  activeIcon: Icons.how_to_reg,
-                  isActive: selectedIndex == 0,
-                  onTap: () => onItemTapped(0),
-                ),
-                _NavItem(
-                  icon: Icons.person_off_outlined,
-                  activeIcon: Icons.person_off,
-                  isActive: selectedIndex == 1,
-                  onTap: () => onItemTapped(1),
-                ),
-                _NavItem(
-                  icon: Icons.campaign_outlined,
-                  activeIcon: Icons.campaign,
-                  isActive: selectedIndex == 2,
-                  onTap: () => onItemTapped(2),
-                ),
-                _NavItem(
-                  icon: Icons.manage_accounts_outlined,
-                  activeIcon: Icons.manage_accounts,
-                  isActive: selectedIndex == 3,
-                  onTap: () => onItemTapped(3),
-                ),
-              ],
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 10),
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: SizedBox(
+            height: _pillHeight + 8,
+            child: Container(
+              height: _pillHeight,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(36),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  _NavItem(
+                    icon: Icons.how_to_reg_outlined,
+                    activeIcon: Icons.how_to_reg,
+                    isActive: selectedIndex == 0,
+                    onTap: () => onItemTapped(0),
+                  ),
+                  _NavItem(
+                    icon: Icons.person_off_outlined,
+                    activeIcon: Icons.person_off,
+                    isActive: selectedIndex == 1,
+                    onTap: () => onItemTapped(1),
+                  ),
+                  _NavItem(
+                    icon: Icons.campaign_outlined,
+                    activeIcon: Icons.campaign,
+                    isActive: false,
+                    isEnabled: false,
+                    onTap: () => onItemTapped(2),
+                  ),
+                  _NavItem(
+                    icon: Icons.manage_accounts_outlined,
+                    activeIcon: Icons.manage_accounts,
+                    isActive: selectedIndex == 3,
+                    onTap: () => onItemTapped(3),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -73,34 +81,62 @@ class _NavItem extends StatelessWidget {
     required this.activeIcon,
     required this.isActive,
     required this.onTap,
+    this.isEnabled = true,
   });
 
   final IconData icon;
   final IconData activeIcon;
   final bool isActive;
   final VoidCallback onTap;
-
-  static const _activeColor = Color(0xFF27A2A9);
+  final bool isEnabled;
 
   @override
   Widget build(BuildContext context) {
+    const iconSize = 24.0;
+
     return Expanded(
       child: InkWell(
-        onTap: onTap,
+        onTap: isEnabled ? onTap : null,
+        borderRadius: BorderRadius.circular(32),
         child: Center(
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            width: isActive ? 46 : 38,
-            height: isActive ? 46 : 38,
+            curve: Curves.easeOutCubic,
+            width: FemaleSecurityNavBar._activeSize,
+            height: FemaleSecurityNavBar._activeSize,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: isActive ? _activeColor : Colors.transparent,
+              gradient: isActive
+                  ? const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        FemaleSecurityNavBar._primaryTeal,
+                        FemaleSecurityNavBar._darkTeal,
+                      ],
+                    )
+                  : null,
+              boxShadow: isActive
+                  ? [
+                      BoxShadow(
+                        color: FemaleSecurityNavBar._primaryTeal.withValues(
+                          alpha: 0.26,
+                        ),
+                        blurRadius: 12,
+                        offset: const Offset(0, 5),
+                      ),
+                    ]
+                  : null,
             ),
             child: Center(
               child: Icon(
                 isActive ? activeIcon : icon,
-                size: isActive ? 23 : 22,
-                color: isActive ? Colors.white : Colors.grey.shade600,
+                size: iconSize,
+                color: isActive
+                    ? Colors.white
+                    : Colors.grey.shade600.withValues(
+                        alpha: isEnabled ? 1 : 0.38,
+                      ),
               ),
             ),
           ),
