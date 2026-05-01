@@ -13,8 +13,6 @@ class CustomNavBarIcons extends StatelessWidget {
 
   static const _barHeight = 64.0;
   static const _circleSize = 60.0;
-  static const _iconSize = 24.0;
-  static const _activeColor = Color(0xFF006571);
 
   @override
   Widget build(BuildContext context) {
@@ -32,19 +30,20 @@ class CustomNavBarIcons extends StatelessWidget {
               borderRadius: BorderRadius.circular(36),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
+                  color: Colors.black.withValues(alpha: 0.08),
                   blurRadius: 18,
                   offset: const Offset(0, 8),
                 ),
               ],
             ),
             child: Directionality(
-              textDirection:
-                  mirrorForEnglish ? TextDirection.rtl : TextDirection.ltr,
+              textDirection: mirrorForEnglish
+                  ? TextDirection.rtl
+                  : TextDirection.ltr,
               child: Row(
                 children: [
                   _NavItem(
-                    icon: Icons.tune,
+                    icon: Icons.manage_accounts_outlined,
                     isActive: selectedIndex == 0,
                     onTap: () => onItemTapped(0),
                   ),
@@ -99,10 +98,7 @@ class CustomNavBarIcons extends StatelessWidget {
     );
   }
 
-  Alignment _alignmentForIndex(
-    int index, {
-    required bool mirrorForEnglish,
-  }) {
+  Alignment _alignmentForIndex(int index, {required bool mirrorForEnglish}) {
     switch (index) {
       case 0:
         return Alignment(mirrorForEnglish ? 0.8 : -0.8, 0.55);
@@ -118,7 +114,7 @@ class CustomNavBarIcons extends StatelessWidget {
   IconData _iconForIndex(int index) {
     switch (index) {
       case 0:
-        return Icons.tune;
+        return Icons.manage_accounts;
       case 1:
         return Icons.grid_view;
       case 2:
@@ -152,11 +148,7 @@ class _NavItem extends StatelessWidget {
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 160),
             opacity: isActive ? 0.0 : 1.0,
-            child: Icon(
-              icon,
-              size: _iconSize,
-              color: _activeColor,
-            ),
+            child: Icon(icon, size: _iconSize, color: _activeColor),
           ),
         ),
       ),

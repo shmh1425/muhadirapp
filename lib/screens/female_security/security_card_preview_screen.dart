@@ -41,9 +41,9 @@ class SecurityCardPreviewScreen extends StatelessWidget {
               child: Column(
                 children: [
                   _buildAppBar(context),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   _buildStatusPill(),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 18),
                   _buildCard(context),
                 ],
               ),
@@ -60,9 +60,11 @@ class SecurityCardPreviewScreen extends StatelessWidget {
       children: [
         IconButton(
           onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(
-            Icons.arrow_forward_ios,
-            size: 20,
+          icon: Icon(
+            SecurityLocalization.isEnglish
+                ? Icons.arrow_back_ios_new_rounded
+                : Icons.arrow_forward_ios_rounded,
+            size: 19,
             color: _kTextDark,
           ),
           padding: EdgeInsets.zero,
@@ -73,7 +75,7 @@ class SecurityCardPreviewScreen extends StatelessWidget {
             SecurityLocalization.previewCard,
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 20,
+              fontSize: 19,
               fontWeight: FontWeight.bold,
               color: _kTextDark,
               fontFamily: 'Cairo',
@@ -96,7 +98,7 @@ class SecurityCardPreviewScreen extends StatelessWidget {
         : SecurityLocalization.rejectedStatus;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
       decoration: BoxDecoration(
         color: fillColor,
         borderRadius: BorderRadius.circular(24),
@@ -105,7 +107,7 @@ class SecurityCardPreviewScreen extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 14,
+          fontSize: 13,
           fontWeight: FontWeight.w600,
           color: borderColor,
           fontFamily: 'Cairo',
@@ -121,12 +123,19 @@ class SecurityCardPreviewScreen extends StatelessWidget {
       children: [
         Container(
           width: double.infinity,
-          margin: const EdgeInsets.only(top: 44),
-          padding: const EdgeInsets.fromLTRB(20, 56, 20, 20),
+          margin: const EdgeInsets.only(top: 38),
+          padding: const EdgeInsets.fromLTRB(18, 50, 18, 18),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _kTealLight, width: 1.5),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _kTealLight, width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 12,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
           child: _buildCardContent(),
         ),
@@ -136,7 +145,7 @@ class SecurityCardPreviewScreen extends StatelessWidget {
   }
 
   Widget _buildAvatar() {
-    final size = 88.0;
+    final size = 78.0;
     Widget image = student.photoUrl != null && student.photoUrl!.isNotEmpty
         ? Image.network(
             student.photoUrl!,
@@ -160,7 +169,7 @@ class SecurityCardPreviewScreen extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: _kTealLight, width: 3),
+        border: Border.all(color: _kTealLight, width: 2.5),
         boxShadow: [
           BoxShadow(
             color: _kTealLight.withValues(alpha: 0.2),
@@ -193,18 +202,18 @@ class SecurityCardPreviewScreen extends StatelessWidget {
 
   Widget _buildCardContent() {
     const boldStyle = TextStyle(
-      fontSize: 15,
+      fontSize: 14,
       fontWeight: FontWeight.bold,
       color: _kTextDark,
       fontFamily: 'Cairo',
     );
     const regularStyle = TextStyle(
-      fontSize: 14,
+      fontSize: 13,
       color: _kTextDark,
       fontFamily: 'Cairo',
     );
     const mutedStyle = TextStyle(
-      fontSize: 13,
+      fontSize: 12,
       color: _kTextMuted,
       fontFamily: 'Cairo',
     );
@@ -219,7 +228,7 @@ class SecurityCardPreviewScreen extends StatelessWidget {
           textAlign: TextAlign.center,
           style: boldStyle,
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         Text(
           '${SecurityLocalization.entryTime}: ${student.entryTime}',
           style: regularStyle,
@@ -228,9 +237,9 @@ class SecurityCardPreviewScreen extends StatelessWidget {
         Text(student.dayLabel, style: regularStyle),
         const SizedBox(height: 4),
         Text(student.dateLabel, style: regularStyle),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 5),
           decoration: BoxDecoration(
             color: _kTealDark,
             borderRadius: BorderRadius.circular(8),
@@ -245,7 +254,7 @@ class SecurityCardPreviewScreen extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         Text(student.college, style: boldStyle),
         const SizedBox(height: 4),
         Text(student.major, style: regularStyle),
@@ -255,7 +264,7 @@ class SecurityCardPreviewScreen extends StatelessWidget {
         Text(student.nationality, style: boldStyle),
         const SizedBox(height: 4),
         Text(student.extraId, style: boldStyle),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         Divider(height: 1, color: _kGreyBorder),
         const SizedBox(height: 12),
         Text(student.gateLabel, textAlign: TextAlign.center, style: mutedStyle),

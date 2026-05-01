@@ -12,7 +12,6 @@ import 'widgets/security_date_picker_dialog.dart';
 const _kTealLight = Color(0xFF27A2A9);
 const _kTextDark = Color(0xFF2D2D2D);
 const _kTextMuted = Color(0xFF757575);
-const _kGreyFill = Color(0xFFF0F0F0);
 const _kGreyIconBg = Color(0xFFE8E8E8);
 const _kGreyBorder = Color(0xFFE0E0E0);
 const _kDateIconBg = Color(0xFFF5F5F5);
@@ -179,12 +178,7 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
                               snapshot.data ?? const <SecurityGateScanRecord>[],
                             );
                             return ListView(
-                              padding: const EdgeInsets.fromLTRB(
-                                20,
-                                16,
-                                20,
-                                12,
-                              ),
+                              padding: const EdgeInsets.fromLTRB(24, 18, 24, 8),
                               children: [
                                 HeaderSection(
                                   onRefresh: _onRefresh,
@@ -192,35 +186,32 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
                                   formattedDate: formattedDate,
                                   isDateActive: _dateUpdated,
                                 ),
-                                const SizedBox(height: 20),
+                                const SizedBox(height: 12),
+                                const _AcceptedStatusBanner(),
+                                const SizedBox(height: 12),
                                 SearchBar(
                                   controller: _searchController,
                                   onChanged: (_) => setState(() {}),
                                 ),
-                                const SizedBox(height: 16),
+                                const SizedBox(height: 12),
                                 if (snapshot.hasError)
-                                  _SecurityStateMessage(
+                                  _CompactStateCard(
                                     message:
                                         SecurityLocalization.acceptedLoadError,
+                                    icon: Icons.error_outline_rounded,
                                   )
                                 else if (snapshot.connectionState ==
                                         ConnectionState.waiting &&
                                     !snapshot.hasData)
-                                  const Center(
-                                    child: Padding(
-                                      padding: EdgeInsets.symmetric(
-                                        vertical: 24,
-                                      ),
-                                      child: CircularProgressIndicator(),
-                                    ),
-                                  )
+                                  const _CompactLoadingCard()
                                 else if (scans.isEmpty)
-                                  _SecurityStateMessage(
+                                  _CompactStateCard(
                                     message:
                                         SecurityLocalization.noAcceptedStudents,
+                                    icon: Icons.how_to_reg_outlined,
                                   )
                                 else
-                                  _AcceptedDataTable(scans: scans),
+                                  _AcceptedTable(scans: scans),
                               ],
                             );
                           },
@@ -274,79 +265,239 @@ class HeaderSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final infoTextAlign = SecurityLocalization.isEnglish
+        ? TextAlign.left
+        : TextAlign.right;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Text(
+          SecurityLocalization.acceptedStudents,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            color: _kTealLight,
+            fontFamily: 'Cairo',
+          ),
+        ),
+        const SizedBox(height: 12),
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          textDirection: TextDirection.ltr,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            IconButton(
-              onPressed: onRefresh,
-              icon: const Icon(Icons.refresh, color: _kTealLight, size: 26),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-              style: IconButton.styleFrom(foregroundColor: _kTealLight),
-            ),
-            Text(
-              SecurityLocalization.acceptedStudents,
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: _kTealLight,
-                fontFamily: 'Cairo',
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            ValueListenableBuilder<String>(
-              valueListenable: selectedCampusName,
-              builder: (context, campus, _) => Text(
-                '${SecurityLocalization.location}: $campus',
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: _kTealLight,
-                  fontFamily: 'Cairo',
-                  fontWeight: FontWeight.w500,
+            Material(
+              color: const Color(0xFFF7F8F8),
+              shape: const CircleBorder(),
+              child: InkWell(
+                onTap: onRefresh,
+                customBorder: const CircleBorder(),
+                child: const SizedBox(
+                  width: 34,
+                  height: 34,
+                  child: Center(
+                    child: Icon(
+                      Icons.refresh_rounded,
+                      color: _kTextMuted,
+                      size: 20,
+                    ),
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 6),
-            ValueListenableBuilder<int>(
-              valueListenable: selectedGate,
-              builder: (context, gate, _) => RichText(
-                text: TextSpan(
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: _kTextDark,
-                    fontFamily: 'Cairo',
-                  ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Directionality(
+                textDirection: SecurityLocalization.direction,
+                child: Column(
+                  crossAxisAlignment: SecurityLocalization.isEnglish
+                      ? CrossAxisAlignment.start
+                      : CrossAxisAlignment.end,
                   children: [
-                    TextSpan(text: '${SecurityLocalization.gate} '),
-                    TextSpan(
-                      text: '$gate',
-                      style: const TextStyle(
-                        color: _kTealLight,
-                        fontWeight: FontWeight.bold,
+                    ValueListenableBuilder<String>(
+                      valueListenable: selectedCampusName,
+                      builder: (context, campus, _) => Text(
+                        '${SecurityLocalization.location}: '
+                        '${SecurityLocalization.campusName(campus)}',
+                        textAlign: infoTextAlign,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: _kTextDark,
+                          fontFamily: 'Cairo',
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      textDirection: SecurityLocalization.direction,
+                      children: [
+                        ValueListenableBuilder<int>(
+                          valueListenable: selectedGate,
+                          builder: (context, gate, _) => Text(
+                            '${SecurityLocalization.gate} $gate',
+                            textAlign: infoTextAlign,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: _kTextDark,
+                              fontFamily: 'Cairo',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        DateRow(
+                          formattedDate: formattedDate,
+                          isActive: isDateActive,
+                          onTap: onPickDate,
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 6),
-            DateRow(
-              formattedDate: formattedDate,
-              isActive: isDateActive,
-              onTap: onPickDate,
-            ),
           ],
         ),
       ],
+    );
+  }
+}
+
+class _AcceptedStatusBanner extends StatelessWidget {
+  const _AcceptedStatusBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 44,
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: _kTealLight,
+        borderRadius: BorderRadius.circular(13),
+      ),
+      child: Center(
+        child: Text(
+          SecurityLocalization.acceptedBannerStatus,
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+            fontFamily: 'Cairo',
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CompactStateCard extends StatelessWidget {
+  const _CompactStateCard({required this.message, required this.icon});
+
+  final String message;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFAFA),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _kGreyBorder.withValues(alpha: 0.7)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 22, color: _kTextMuted),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: _kTextMuted,
+              fontSize: 13,
+              fontFamily: 'Cairo',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompactLoadingCard extends StatelessWidget {
+  const _CompactLoadingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFAFA),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _kGreyBorder.withValues(alpha: 0.7)),
+      ),
+      child: const Center(
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(strokeWidth: 2.4),
+        ),
+      ),
+    );
+  }
+}
+
+class _AcceptedTableHeader extends StatelessWidget {
+  const _AcceptedTableHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    Text headerText(String text, {double size = 12}) => Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: size,
+        fontWeight: FontWeight.bold,
+        color: Colors.white,
+        fontFamily: 'Cairo',
+      ),
+    );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 10),
+      color: _kTealLight,
+      child: Row(
+        children: [
+          Expanded(
+            flex: 4,
+            child: Align(
+              alignment: SecurityLocalization.isEnglish
+                  ? Alignment.centerLeft
+                  : Alignment.centerRight,
+              child: headerText(SecurityLocalization.studentName),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Center(child: headerText(SecurityLocalization.universityId)),
+          ),
+          Expanded(
+            flex: 2,
+            child: Center(child: headerText(SecurityLocalization.scanTime)),
+          ),
+          SizedBox(
+            width: 46,
+            child: Center(
+              child: headerText(SecurityLocalization.preview, size: 10),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -377,8 +528,8 @@ class DateRow extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Container(
-              width: 28,
-              height: 28,
+              width: 24,
+              height: 24,
               decoration: BoxDecoration(
                 color: _kDateIconBg,
                 borderRadius: BorderRadius.circular(8),
@@ -386,7 +537,7 @@ class DateRow extends StatelessWidget {
               child: Center(
                 child: Icon(
                   Icons.calendar_today_rounded,
-                  size: 16,
+                  size: 14,
                   color: iconColor,
                 ),
               ),
@@ -395,7 +546,7 @@ class DateRow extends StatelessWidget {
             Text(
               '${SecurityLocalization.date}: $formattedDate',
               style: const TextStyle(
-                fontSize: 14,
+                fontSize: 12,
                 color: _kTextDark,
                 fontFamily: 'Cairo',
               ),
@@ -420,14 +571,11 @@ class SearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 48,
+      height: 42,
       decoration: BoxDecoration(
-        color: _kGreyFill,
-        borderRadius: BorderRadius.circular(25.0),
-        border: Border.all(
-          color: _kGreyBorder.withValues(alpha: 0.5),
-          width: 0.5,
-        ),
+        color: const Color(0xFFFAFAFA),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _kGreyBorder.withValues(alpha: 0.75)),
       ),
       child: TextField(
         controller: controller,
@@ -449,14 +597,14 @@ class SearchBar extends StatelessWidget {
           ),
           prefixIconConstraints: const BoxConstraints(
             minWidth: 48,
-            minHeight: 48,
+            minHeight: 42,
           ),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
           focusedBorder: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
-            vertical: 14,
+            vertical: 10,
           ),
         ),
       ),
@@ -464,121 +612,137 @@ class SearchBar extends StatelessWidget {
   }
 }
 
-class _AcceptedDataTable extends StatelessWidget {
-  const _AcceptedDataTable({required this.scans});
+class _AcceptedTable extends StatelessWidget {
+  const _AcceptedTable({required this.scans});
 
   final List<SecurityGateScanRecord> scans;
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          headingRowColor: WidgetStateProperty.all(_kTealLight),
-          headingTextStyle: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-            fontFamily: 'Cairo',
-          ),
-          dataTextStyle: const TextStyle(
-            fontSize: 13,
-            color: _kTextDark,
-            fontFamily: 'Cairo',
-          ),
-          columnSpacing: 12,
-          horizontalMargin: 16,
-          columns: [
-            DataColumn(label: Text(SecurityLocalization.studentName)),
-            DataColumn(label: Text(SecurityLocalization.universityId)),
-            DataColumn(label: Text(SecurityLocalization.scanTime)),
-            DataColumn(label: Text(SecurityLocalization.previewCard)),
-          ],
-          rows: scans.asMap().entries.map((entry) {
-            final index = entry.key;
-            final scan = entry.value;
-            return DataRow(
-              color: WidgetStateProperty.all(
-                index % 2 == 1 ? const Color(0xFFFAFAFA) : Colors.white,
-              ),
-              cells: [
-                DataCell(
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      scan.studentName,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: _kTextDark,
-                        fontFamily: 'Cairo',
-                      ),
-                    ),
-                  ),
-                ),
-                DataCell(Text(scan.universityId)),
-                DataCell(Text(scan.formattedTime)),
-                DataCell(
-                  Center(
-                    child: Material(
-                      color: _kGreyIconBg,
-                      shape: const CircleBorder(),
-                      child: InkWell(
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => SecurityCardPreviewScreen(
-                                isAccepted: true,
-                                student: scan.toStudentCardInfo(),
-                              ),
-                            ),
-                          );
-                        },
-                        customBorder: const CircleBorder(),
-                        child: const SizedBox(
-                          width: 34,
-                          height: 34,
-                          child: Center(
-                            child: Icon(
-                              Icons.visibility_outlined,
-                              size: 17,
-                              color: _kTextMuted,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: _kGreyBorder),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          const _AcceptedTableHeader(),
+          ...List.generate(scans.length, (index) {
+            final scan = scans[index];
+            return _AcceptedTableRow(
+              scan: scan,
+              isLast: index == scans.length - 1,
+              isAlternate: index % 2 == 1,
             );
-          }).toList(),
-        ),
+          }),
+        ],
       ),
     );
   }
 }
 
-class _SecurityStateMessage extends StatelessWidget {
-  const _SecurityStateMessage({required this.message});
+class _AcceptedTableRow extends StatelessWidget {
+  const _AcceptedTableRow({
+    required this.scan,
+    required this.isLast,
+    required this.isAlternate,
+  });
 
-  final String message;
+  final SecurityGateScanRecord scan;
+  final bool isLast;
+  final bool isAlternate;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
       decoration: BoxDecoration(
-        color: _kGreyFill,
-        borderRadius: BorderRadius.circular(16),
+        color: isAlternate ? const Color(0xFFFAFAFA) : Colors.white,
+        border: Border(bottom: BorderSide(color: _kGreyBorder, width: 0.6)),
+        borderRadius: isLast
+            ? const BorderRadius.vertical(bottom: Radius.circular(12))
+            : null,
       ),
-      child: Center(
-        child: Text(
-          message,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: _kTextMuted, fontFamily: 'Cairo'),
-        ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 4,
+            child: Text(
+              scan.studentName,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: SecurityLocalization.isEnglish
+                  ? TextAlign.left
+                  : TextAlign.right,
+              style: const TextStyle(
+                fontSize: 13,
+                color: _kTextDark,
+                fontFamily: 'Cairo',
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Center(
+              child: Text(
+                scan.universityId,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: _kTextDark,
+                  fontFamily: 'Cairo',
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Center(
+              child: Text(
+                scan.formattedTime,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: _kTextDark,
+                  fontFamily: 'Cairo',
+                ),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 46,
+            child: Center(
+              child: Material(
+                color: _kGreyIconBg,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => SecurityCardPreviewScreen(
+                          isAccepted: true,
+                          student: scan.toStudentCardInfo(),
+                        ),
+                      ),
+                    );
+                  },
+                  customBorder: const CircleBorder(),
+                  child: const SizedBox(
+                    width: 30,
+                    height: 30,
+                    child: Center(
+                      child: Icon(
+                        Icons.visibility_outlined,
+                        size: 16,
+                        color: _kTextMuted,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

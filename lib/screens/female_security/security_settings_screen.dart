@@ -48,21 +48,21 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
           backgroundColor: Colors.white,
           body: SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
               child: Column(
                 children: [
                   Text(
                     SecurityLocalization.settings,
                     style: TextStyle(
-                      fontSize: 26,
+                      fontSize: 25,
                       fontWeight: FontWeight.bold,
                       color: _kTealLight,
                       fontFamily: 'Cairo',
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
                   _buildProfileSection(),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 18),
 
                   _buildOptionCard(
                     icon: Icons.language_rounded,
@@ -80,11 +80,11 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                     onTap: SecurityLocalization.controller.toggle,
                   ),
 
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
 
                   _buildNotificationsCard(),
 
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
 
                   _buildOptionCard(
                     icon: Icons.star_rounded,
@@ -112,13 +112,15 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                     onTap: () {},
                   ),
 
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
 
                   _buildOptionCard(
                     icon: Icons.settings_rounded,
                     label: SecurityLocalization.generalSettings,
-                    trailing: const Icon(
-                      Icons.chevron_left,
+                    trailing: Icon(
+                      SecurityLocalization.isEnglish
+                          ? Icons.chevron_right
+                          : Icons.chevron_left,
                       color: _kTextMuted,
                       size: 24,
                       textDirection: TextDirection.ltr,
@@ -132,14 +134,16 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                     },
                   ),
 
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
 
                   _buildOptionCard(
                     icon: Icons.logout_rounded,
                     label: SecurityLocalization.logout,
                     labelColor: _kLogoutRed,
-                    trailing: const Icon(
-                      Icons.chevron_left,
+                    trailing: Icon(
+                      SecurityLocalization.isEnglish
+                          ? Icons.chevron_right
+                          : Icons.chevron_left,
                       color: _kLogoutRed,
                       size: 24,
                       textDirection: TextDirection.ltr,
@@ -147,7 +151,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                     onTap: _showLogoutDialog,
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 12),
                 ],
               ),
             ),
@@ -195,94 +199,111 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                 .toString();
         final email = _authService.currentUserEmail ?? 'username@example.com';
 
-        return Column(
-          children: [
-            GestureDetector(
-              onTap: _isUploadingPhoto ? null : _pickAndUploadProfileImage,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Container(
-                    width: 88,
-                    height: 88,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: _kTealLight, width: 2),
-                      color: _kTextMuted.withValues(alpha: 0.12),
-                    ),
-                    child: ClipOval(
-                      child: photoUrl.isNotEmpty
-                          ? Image.network(
-                              photoUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  const _SecurityProfilePlaceholder(),
-                            )
-                          : const _SecurityProfilePlaceholder(),
-                    ),
-                  ),
-                  if (_isUploadingPhoto)
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: const [
+              BoxShadow(
+                color: _kCardShadow,
+                blurRadius: 10,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              GestureDetector(
+                onTap: _isUploadingPhoto ? null : _pickAndUploadProfileImage,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
                     Container(
-                      width: 88,
-                      height: 88,
+                      width: 76,
+                      height: 76,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.black.withValues(alpha: 0.35),
+                        border: Border.all(color: _kTealLight, width: 2),
+                        color: _kTextMuted.withValues(alpha: 0.12),
                       ),
-                      child: const Center(
-                        child: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.6,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
+                      child: ClipOval(
+                        child: photoUrl.isNotEmpty
+                            ? Image.network(
+                                photoUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    const _SecurityProfilePlaceholder(),
+                              )
+                            : const _SecurityProfilePlaceholder(),
+                      ),
+                    ),
+                    if (_isUploadingPhoto)
+                      Container(
+                        width: 76,
+                        height: 76,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.black.withValues(alpha: 0.35),
+                        ),
+                        child: const Center(
+                          child: SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.4,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: const BoxDecoration(
-                        color: _kTealLight,
-                        shape: BoxShape.circle,
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: const BoxDecoration(
+                          color: _kTealLight,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.camera_alt_rounded,
+                          size: 14,
+                          color: Colors.white,
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.camera_alt_rounded,
-                        size: 16,
-                        color: Colors.white,
-                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              fullName.isEmpty
-                  ? SecurityLocalization.securityAccount
-                  : fullName,
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-                color: _kTextDark,
-                fontFamily: 'Cairo',
+              const SizedBox(height: 10),
+              Text(
+                fullName.isEmpty
+                    ? SecurityLocalization.securityAccount
+                    : fullName,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: _kTextDark,
+                  fontFamily: 'Cairo',
+                ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              email,
-              style: const TextStyle(
-                fontSize: 14,
-                color: _kTextMuted,
-                fontFamily: 'Cairo',
+              const SizedBox(height: 4),
+              Text(
+                email,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: _kTextMuted,
+                  fontFamily: 'Cairo',
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );
@@ -324,12 +345,12 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
         textDirection: SecurityLocalization.direction,
         child: Dialog(
           backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 42),
           child: Container(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.12),
@@ -341,22 +362,34 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.logout_rounded, size: 52, color: _kLogoutRed),
-                const SizedBox(height: 20),
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: _kLogoutRed.withValues(alpha: 0.08),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.logout_rounded,
+                    size: 27,
+                    color: _kLogoutRed,
+                  ),
+                ),
+                const SizedBox(height: 14),
                 Text(
                   SecurityLocalization.confirmLogout,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 15,
                     color: _kTextDark,
                     fontFamily: 'Cairo',
                     height: 1.4,
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 18),
                 SizedBox(
                   width: double.infinity,
-                  height: 50,
+                  height: 44,
                   child: ElevatedButton(
                     onPressed: () async {
                       Navigator.of(ctx).pop();
@@ -372,7 +405,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                       foregroundColor: Colors.white,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
                     child: Text(
@@ -385,17 +418,17 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
-                  height: 50,
+                  height: 44,
                   child: OutlinedButton(
                     onPressed: () => Navigator.of(ctx).pop(),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _kLogoutRed,
                       side: const BorderSide(color: _kLogoutRed),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
                     child: Text(
@@ -467,12 +500,12 @@ class _OptionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final content = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         textDirection: SecurityLocalization.direction,
         children: [
-          Icon(icon, size: 24, color: labelColor ?? _kTextDark),
-          const SizedBox(width: 14),
+          Icon(icon, size: 22, color: labelColor ?? _kTextDark),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               label,
@@ -487,7 +520,7 @@ class _OptionCard extends StatelessWidget {
               ),
             ),
           ),
-          if (trailing != null) ...[const SizedBox(width: 10), trailing!],
+          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
         ],
       ),
     );
@@ -495,7 +528,7 @@ class _OptionCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: const [
           BoxShadow(color: _kCardShadow, blurRadius: 10, offset: Offset(0, 2)),
         ],
@@ -504,7 +537,7 @@ class _OptionCard extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           child: content,
         ),
       ),
@@ -518,7 +551,7 @@ class _SecurityProfilePlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: Icon(Icons.person_rounded, size: 44, color: _kTextMuted),
+      child: Icon(Icons.person_rounded, size: 38, color: _kTextMuted),
     );
   }
 }

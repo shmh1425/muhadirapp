@@ -15,6 +15,7 @@ class SecurityLocalization {
 
   static String get acceptedStudents => tr('المقبولين', 'Accepted Students');
   static String get rejectedStudents => tr('المرفوضين', 'Rejected Students');
+  static String get acceptedBannerStatus => tr('مقبول', 'Accepted');
   static String get acceptedStatus => tr('تم الدخول', 'Accepted');
   static String get rejectedStatus => tr('مرفوض', 'Rejected');
   static String get location => tr('الموقع', 'Location');

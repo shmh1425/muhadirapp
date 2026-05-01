@@ -87,23 +87,23 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
         textDirection: SecurityLocalization.direction,
         child: Dialog(
           backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 28),
           child: Material(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(18),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+              padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _buildHeader(context),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 10),
                   _buildAvatar(),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 14),
                   _buildStudentInfo(),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   _buildRejectionReasonField(),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
                   _buildButtons(),
                 ],
               ),
@@ -124,7 +124,7 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
           backgroundColor: Colors.white,
           side: const BorderSide(color: _kTextMuted, width: 1),
           shape: const CircleBorder(),
-          minimumSize: const Size(40, 40),
+          minimumSize: const Size(36, 36),
         ),
       ),
     );
@@ -156,11 +156,11 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
           child: _decorationDot(_kTextMuted.withValues(alpha: 0.25)),
         ),
         Container(
-          width: 100,
-          height: 100,
+          width: 86,
+          height: 86,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: _kTealLight, width: 3),
+            border: Border.all(color: _kTealLight, width: 2.5),
             boxShadow: [
               BoxShadow(
                 color: _kTealLight.withValues(alpha: 0.2),
@@ -199,7 +199,7 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
         child: Text(
           widget.result.fullName.isNotEmpty ? widget.result.fullName[0] : '?',
           style: const TextStyle(
-            fontSize: 36,
+            fontSize: 32,
             fontWeight: FontWeight.bold,
             color: _kTealLight,
             fontFamily: 'Cairo',
@@ -211,17 +211,17 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
 
   Widget _buildStudentInfo() {
     const labelStyle = TextStyle(
-      fontSize: 13,
+      fontSize: 12,
       color: _kTextMuted,
       fontFamily: 'Cairo',
     );
     const valueStyle = TextStyle(
-      fontSize: 14,
+      fontSize: 13,
       color: _kTextDark,
       fontFamily: 'Cairo',
     );
     const nameValueStyle = TextStyle(
-      fontSize: 15,
+      fontSize: 14,
       color: _kTealLight,
       fontWeight: FontWeight.w600,
       fontFamily: 'Cairo',
@@ -236,21 +236,21 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
           valueStyle: nameValueStyle,
           labelStyle: labelStyle,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         _infoRow(
           '${SecurityLocalization.universityId}:',
           widget.result.universityId,
           valueStyle: valueStyle,
           labelStyle: labelStyle,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         _infoRow(
           '${SecurityLocalization.major}:',
           widget.result.major,
           valueStyle: valueStyle,
           labelStyle: labelStyle,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         _infoRow(
           '${SecurityLocalization.scanTime}:',
           widget.result.scanTime,
@@ -270,9 +270,9 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
         labelStyle: const TextStyle(color: _kTextMuted, fontFamily: 'Cairo'),
         filled: true,
         fillColor: Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: _kTextMuted, width: 1),
         ),
       ),
@@ -305,7 +305,13 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
       textDirection: SecurityLocalization.direction,
       children: [
         Expanded(
-          child: Text(value, textAlign: TextAlign.left, style: valueStyle),
+          child: Text(
+            value,
+            textAlign: SecurityLocalization.isEnglish
+                ? TextAlign.left
+                : TextAlign.right,
+            style: valueStyle,
+          ),
         ),
         const SizedBox(width: 8),
         Text(label, style: labelStyle),
@@ -318,7 +324,7 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(
-          height: 50,
+          height: 44,
           child: ElevatedButton(
             onPressed: _isSavingAcceptedScan ? null : _handleAccept,
             style: ElevatedButton.styleFrom(
@@ -326,22 +332,22 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
               foregroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
             child: Text(
               SecurityLocalization.confirm,
               style: TextStyle(
-                fontSize: 17,
+                fontSize: 15,
                 fontWeight: FontWeight.bold,
                 fontFamily: 'Cairo',
               ),
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         SizedBox(
-          height: 50,
+          height: 44,
           child: ElevatedButton(
             onPressed: () {
               if (_selectedReason == null) {
@@ -361,13 +367,13 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
               foregroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
             child: Text(
               SecurityLocalization.reject,
               style: TextStyle(
-                fontSize: 17,
+                fontSize: 15,
                 fontWeight: FontWeight.bold,
                 fontFamily: 'Cairo',
               ),

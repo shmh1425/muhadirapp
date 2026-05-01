@@ -13,7 +13,6 @@ const _kTeal = Color(0xFF27A2A9);
 const _kRed = Color(0xFFC00000);
 const _kTextDark = Color(0xFF2D2D2D);
 const _kTextMuted = Color(0xFF757575);
-const _kGreyFill = Color(0xFFF0F0F0);
 const _kGreyIconBg = Color(0xFFE8E8E8);
 const _kGreyBorder = Color(0xFFE0E0E0);
 const _kDateIconBg = Color(0xFFF5F5F5);
@@ -158,7 +157,7 @@ class _RejectedStudentsScreenState extends State<RejectedStudentsScreen> {
                         builder: (context, snapshot) {
                           final scans = _filterScans(snapshot.data ?? const []);
                           return ListView(
-                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                            padding: const EdgeInsets.fromLTRB(24, 18, 24, 8),
                             children: [
                               _RejectedHeader(
                                 onRefresh: _onRefresh,
@@ -166,32 +165,29 @@ class _RejectedStudentsScreenState extends State<RejectedStudentsScreen> {
                                 formattedDate: _getFormattedDate(_selectedDate),
                                 isDateActive: _dateUpdated,
                               ),
-                              const SizedBox(height: 20),
+                              const SizedBox(height: 12),
                               const _StatusBadge(),
-                              const SizedBox(height: 18),
+                              const SizedBox(height: 12),
                               _RejectedSearchBar(
                                 controller: _searchController,
                                 onChanged: (_) => setState(() {}),
                               ),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 12),
                               if (snapshot.hasError)
-                                _StateMessage(
+                                _CompactStateCard(
                                   message:
                                       SecurityLocalization.rejectedLoadError,
+                                  icon: Icons.error_outline_rounded,
                                 )
                               else if (snapshot.connectionState ==
                                       ConnectionState.waiting &&
                                   !snapshot.hasData)
-                                const Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 24),
-                                    child: CircularProgressIndicator(),
-                                  ),
-                                )
+                                const _CompactLoadingCard()
                               else if (scans.isEmpty)
-                                _StateMessage(
+                                _CompactStateCard(
                                   message:
                                       SecurityLocalization.noRejectedStudents,
+                                  icon: Icons.person_off_outlined,
                                 )
                               else
                                 _RejectedList(
@@ -249,86 +245,161 @@ class _RejectedHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final infoTextAlign = SecurityLocalization.isEnglish
+        ? TextAlign.left
+        : TextAlign.right;
+
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Stack(
-          alignment: Alignment.center,
+        Text(
+          SecurityLocalization.rejectedStudents,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            color: _kTeal,
+            fontFamily: 'Cairo',
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          textDirection: TextDirection.ltr,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Align(
-              alignment: Alignment.centerRight,
-              child: IconButton(
-                onPressed: onRefresh,
-                icon: const Icon(Icons.refresh, color: _kTextMuted, size: 26),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            Material(
+              color: const Color(0xFFF7F8F8),
+              shape: const CircleBorder(),
+              child: InkWell(
+                onTap: onRefresh,
+                customBorder: const CircleBorder(),
+                child: const SizedBox(
+                  width: 34,
+                  height: 34,
+                  child: Center(
+                    child: Icon(
+                      Icons.refresh_rounded,
+                      color: _kTextMuted,
+                      size: 20,
+                    ),
+                  ),
+                ),
               ),
             ),
-            Text(
-              SecurityLocalization.rejectedStudents,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: _kTeal,
-                fontFamily: 'Cairo',
+            const SizedBox(width: 12),
+            Expanded(
+              child: Directionality(
+                textDirection: SecurityLocalization.direction,
+                child: Column(
+                  crossAxisAlignment: SecurityLocalization.isEnglish
+                      ? CrossAxisAlignment.start
+                      : CrossAxisAlignment.end,
+                  children: [
+                    ValueListenableBuilder<String>(
+                      valueListenable: selectedCampusName,
+                      builder: (context, campus, _) => Text(
+                        '${SecurityLocalization.location}: '
+                        '${SecurityLocalization.campusName(campus)}',
+                        textAlign: infoTextAlign,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: _kTextDark,
+                          fontFamily: 'Cairo',
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      textDirection: SecurityLocalization.direction,
+                      children: [
+                        ValueListenableBuilder<int>(
+                          valueListenable: selectedGate,
+                          builder: (context, gate, _) => Text(
+                            '${SecurityLocalization.gate} $gate',
+                            textAlign: infoTextAlign,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: _kTextDark,
+                              fontFamily: 'Cairo',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        _DateRow(
+                          formattedDate: formattedDate,
+                          isActive: isDateActive,
+                          onTap: onPickDate,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 18),
-        Align(
-          alignment: Alignment.centerRight,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              ValueListenableBuilder<String>(
-                valueListenable: selectedCampusName,
-                builder: (context, campus, _) => Text(
-                  '${SecurityLocalization.location}: $campus',
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: _kTextDark,
-                    fontFamily: 'Cairo',
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              ValueListenableBuilder<int>(
-                valueListenable: selectedGate,
-                builder: (context, gate, _) => RichText(
-                  textAlign: TextAlign.right,
-                  text: TextSpan(
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: _kTextDark,
-                      fontFamily: 'Cairo',
-                    ),
-                    children: [
-                      TextSpan(text: '${SecurityLocalization.gate} '),
-                      TextSpan(
-                        text: '$gate',
-                        style: const TextStyle(
-                          color: _kTeal,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              _DateRow(
-                formattedDate: formattedDate,
-                isActive: isDateActive,
-                onTap: onPickDate,
-              ),
-            ],
-          ),
-        ),
       ],
+    );
+  }
+}
+
+class _CompactStateCard extends StatelessWidget {
+  const _CompactStateCard({required this.message, required this.icon});
+
+  final String message;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFAFA),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _kGreyBorder.withValues(alpha: 0.7)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 22, color: _kTextMuted),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: _kTextMuted,
+              fontSize: 13,
+              fontFamily: 'Cairo',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompactLoadingCard extends StatelessWidget {
+  const _CompactLoadingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFAFA),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _kGreyBorder.withValues(alpha: 0.7)),
+      ),
+      child: const Center(
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(strokeWidth: 2.4),
+        ),
+      ),
     );
   }
 }
@@ -348,39 +419,42 @@ class _DateRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final iconColor = isActive ? _kTeal : _kTextMuted;
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          '${SecurityLocalization.date}: $formattedDate',
-          style: const TextStyle(
-            fontSize: 14,
-            color: _kTextDark,
-            fontFamily: 'Cairo',
-          ),
-        ),
-        const SizedBox(width: 8),
-        InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              color: _kDateIconBg,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Center(
-              child: Icon(
-                Icons.calendar_today_rounded,
-                size: 16,
-                color: iconColor,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: _kDateIconBg,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.calendar_today_rounded,
+                  size: 14,
+                  color: iconColor,
+                ),
               ),
             ),
-          ),
+            const SizedBox(width: 8),
+            Text(
+              '${SecurityLocalization.date}: $formattedDate',
+              style: const TextStyle(
+                fontSize: 12,
+                color: _kTextDark,
+                fontFamily: 'Cairo',
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -391,17 +465,17 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      height: 42,
+      margin: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: _kRed,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(13),
       ),
       child: Center(
         child: Text(
           SecurityLocalization.rejectedStatus,
           style: TextStyle(
-            fontSize: 22,
+            fontSize: 17,
             fontWeight: FontWeight.bold,
             color: Colors.white,
             fontFamily: 'Cairo',
@@ -421,14 +495,11 @@ class _RejectedSearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 44,
+      height: 42,
       decoration: BoxDecoration(
-        color: _kGreyFill,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: _kGreyBorder.withValues(alpha: 0.5),
-          width: 0.5,
-        ),
+        color: const Color(0xFFFAFAFA),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _kGreyBorder.withValues(alpha: 0.75)),
       ),
       child: TextField(
         controller: controller,
@@ -450,14 +521,14 @@ class _RejectedSearchBar extends StatelessWidget {
           ),
           prefixIconConstraints: const BoxConstraints(
             minWidth: 48,
-            minHeight: 44,
+            minHeight: 42,
           ),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
           focusedBorder: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
-            vertical: 12,
+            vertical: 10,
           ),
         ),
       ),
@@ -474,18 +545,26 @@ class _RejectedList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const _RejectedTableHeader(),
-        ...List.generate(scans.length, (i) {
-          return _RejectedRow(
-            entry: scans[i],
-            isLast: i == scans.length - 1,
-            isAlternate: i % 2 == 1,
-            onInfoTap: onInfoTap,
-          );
-        }),
-      ],
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: _kGreyBorder),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          const _RejectedTableHeader(),
+          ...List.generate(scans.length, (i) {
+            return _RejectedRow(
+              entry: scans[i],
+              isLast: i == scans.length - 1,
+              isAlternate: i % 2 == 1,
+              onInfoTap: onInfoTap,
+            );
+          }),
+        ],
+      ),
     );
   }
 }
@@ -510,17 +589,16 @@ class _RejectedTableHeader extends StatelessWidget {
     );
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-      decoration: const BoxDecoration(
-        color: _kTeal,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 10),
+      decoration: const BoxDecoration(color: _kTeal),
       child: Row(
         children: [
           Expanded(
             flex: 4,
             child: Align(
-              alignment: Alignment.centerRight,
+              alignment: SecurityLocalization.isEnglish
+                  ? Alignment.centerLeft
+                  : Alignment.centerRight,
               child: headerText(SecurityLocalization.studentName),
             ),
           ),
@@ -576,7 +654,7 @@ class _RejectedRowState extends State<_RejectedRow> {
     const iconColW = 40.0;
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
       decoration: BoxDecoration(
         color: widget.isAlternate ? const Color(0xFFFAFAFA) : Colors.white,
         border: Border(bottom: BorderSide(color: _kGreyBorder, width: 0.6)),
@@ -590,9 +668,13 @@ class _RejectedRowState extends State<_RejectedRow> {
             flex: 4,
             child: Text(
               widget.entry.studentName,
-              textAlign: TextAlign.right,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: SecurityLocalization.isEnglish
+                  ? TextAlign.left
+                  : TextAlign.right,
               style: const TextStyle(
-                fontSize: 14,
+                fontSize: 13,
                 color: _kTextDark,
                 fontFamily: 'Cairo',
               ),
@@ -643,8 +725,8 @@ class _RejectedRowState extends State<_RejectedRow> {
                   },
                   customBorder: const CircleBorder(),
                   child: const SizedBox(
-                    width: 32,
-                    height: 32,
+                    width: 30,
+                    height: 30,
                     child: Center(
                       child: Icon(
                         Icons.visibility_outlined,
@@ -681,17 +763,13 @@ class _RejectedRowState extends State<_RejectedRow> {
                   },
                   customBorder: const CircleBorder(),
                   child: const SizedBox(
-                    width: 32,
-                    height: 32,
+                    width: 30,
+                    height: 30,
                     child: Center(
-                      child: Text(
-                        'i',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: _kTextMuted,
-                          fontFamily: 'Cairo',
-                        ),
+                      child: Icon(
+                        Icons.info_outline_rounded,
+                        size: 17,
+                        color: _kTextMuted,
                       ),
                     ),
                   ),
@@ -715,7 +793,7 @@ class _ReasonPopup extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: 220,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -730,6 +808,8 @@ class _ReasonPopup extends StatelessWidget {
       ),
       child: Row(
         children: [
+          const Icon(Icons.info_outline_rounded, size: 17, color: _kRed),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               reason,
@@ -740,37 +820,13 @@ class _ReasonPopup extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           InkWell(
             onTap: onClose,
             borderRadius: BorderRadius.circular(12),
             child: const Icon(Icons.close, size: 18, color: _kTextMuted),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _StateMessage extends StatelessWidget {
-  const _StateMessage({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      decoration: BoxDecoration(
-        color: _kGreyFill,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Center(
-        child: Text(
-          message,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: _kTextMuted, fontFamily: 'Cairo'),
-        ),
       ),
     );
   }

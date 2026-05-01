@@ -10,19 +10,16 @@ class FemaleSecurityNavBar extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onItemTapped;
 
-  static const _barHeight = 64.0;
-  static const _circleSize = 52.0;
-  static const _iconSize = 24.0;
-  static const _activeColor = Color(0xFF27A2A9);
+  static const _barHeight = 58.0;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.95),
+        color: Colors.white.withValues(alpha: 0.95),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 12,
             offset: const Offset(0, -4),
           ),
@@ -31,7 +28,7 @@ class FemaleSecurityNavBar extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: _barHeight + 12,
+          height: _barHeight + 10,
           child: Directionality(
             textDirection: TextDirection.ltr,
             child: Row(
@@ -56,8 +53,8 @@ class FemaleSecurityNavBar extends StatelessWidget {
                   onTap: () => onItemTapped(2),
                 ),
                 _NavItem(
-                  icon: Icons.tune,
-                  activeIcon: Icons.tune,
+                  icon: Icons.manage_accounts_outlined,
+                  activeIcon: Icons.manage_accounts,
                   isActive: selectedIndex == 3,
                   onTap: () => onItemTapped(3),
                 ),
@@ -93,8 +90,8 @@ class _NavItem extends StatelessWidget {
         child: Center(
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            width: isActive ? 48 : 40,
-            height: isActive ? 48 : 40,
+            width: isActive ? 46 : 38,
+            height: isActive ? 46 : 38,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: isActive ? _activeColor : Colors.transparent,
@@ -102,7 +99,7 @@ class _NavItem extends StatelessWidget {
             child: Center(
               child: Icon(
                 isActive ? activeIcon : icon,
-                size: 24,
+                size: isActive ? 23 : 22,
                 color: isActive ? Colors.white : Colors.grey.shade600,
               ),
             ),

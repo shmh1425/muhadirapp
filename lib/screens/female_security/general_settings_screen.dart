@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../services/female_security/security_gate_scan_service.dart';
+import 'accepted_screen.dart';
+import 'female_security_nav_bar.dart';
+import 'rejected_students_screen.dart';
 import 'security_prefs.dart';
 import '../../theme/app_theme_controller.dart';
 import 'security_localization.dart';
@@ -44,11 +47,11 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
           backgroundColor: Colors.white,
           body: SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 18),
               child: Column(
                 children: [
                   _buildAppBar(context),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 18),
                   _buildOptionCard(
                     icon: Icons.sync_rounded,
                     iconColor: _kTealLight,
@@ -59,14 +62,33 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
                       activeThumbColor: _kTealLight,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   _buildThemeModeCard(),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   _buildGateCard(),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 12),
                 ],
               ),
             ),
+          ),
+          bottomNavigationBar: FemaleSecurityNavBar(
+            selectedIndex: 3,
+            onItemTapped: (index) {
+              if (index == 0) {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const AcceptedScreen()),
+                  (route) => false,
+                );
+              } else if (index == 1) {
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (_) => const RejectedStudentsScreen(),
+                  ),
+                );
+              } else if (index == 3) {
+                Navigator.of(context).maybePop();
+              }
+            },
           ),
         ),
       ),
@@ -79,9 +101,11 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
       children: [
         IconButton(
           onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(
-            Icons.arrow_forward_ios,
-            size: 20,
+          icon: Icon(
+            SecurityLocalization.isEnglish
+                ? Icons.arrow_back_ios_new_rounded
+                : Icons.arrow_forward_ios_rounded,
+            size: 19,
             color: _kTextDark,
           ),
           padding: EdgeInsets.zero,
@@ -92,7 +116,7 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
             SecurityLocalization.generalSettings,
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 26,
+              fontSize: 24,
               fontWeight: FontWeight.bold,
               color: _kTealLight,
               fontFamily: 'Cairo',
@@ -242,12 +266,12 @@ class _GenOptionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final content = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         textDirection: SecurityLocalization.direction,
         children: [
-          Icon(icon, size: 24, color: iconColor ?? _kTextDark),
-          const SizedBox(width: 14),
+          Icon(icon, size: 22, color: iconColor ?? _kTextDark),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               label,
@@ -262,7 +286,7 @@ class _GenOptionCard extends StatelessWidget {
               ),
             ),
           ),
-          if (trailing != null) ...[const SizedBox(width: 10), trailing!],
+          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
         ],
       ),
     );
@@ -270,7 +294,7 @@ class _GenOptionCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: const [
           BoxShadow(color: _kCardShadow, blurRadius: 10, offset: Offset(0, 2)),
         ],
