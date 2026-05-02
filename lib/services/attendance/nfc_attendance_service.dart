@@ -152,19 +152,6 @@ class NfcAttendanceService {
     }
 
     final date = _normalizedDate(lectureDate ?? DateTime.now());
-    final now = DateTime.now();
-    if (!AttendanceStatusPolicy.isSessionWithinAttendanceWindow(
-      lectureDate: date,
-      lectureStartTime: lecture.startTime,
-      lectureEndTime: lecture.endTime,
-      currentTime: now,
-    )) {
-      throw NfcAttendanceException(
-        code: NfcAttendanceErrorCode.outsideLectureWindow,
-        message:
-            'Cannot open NFC session now. Opening is allowed only during the lecture attendance window.',
-      );
-    }
 
     final sessionId = await ManualAttendanceService.instance
         .prepareSessionForLecture(lecture: lecture, sessionDate: date);
@@ -299,8 +286,8 @@ class NfcAttendanceService {
     final activeSession = _pickActiveSessionNow(sessionsSnap.docs, now);
     if (activeSession == null) {
       throw NfcAttendanceException(
-        code: NfcAttendanceErrorCode.outsideLectureWindow,
-        message: 'محاولة تسجيل حضور خارج وقت المحاضرة.',
+        code: NfcAttendanceErrorCode.noActiveSession,
+        message: 'لا توجد جلسة تحضير NFC مفتوحة حالياً.',
       );
     }
 
@@ -520,7 +507,9 @@ class NfcAttendanceService {
       }
     }
 
-    return null;
+    // If no session matches the lecture time window, still allow the latest
+    // open session. This keeps NFC behavior aligned with manual QR activation.
+    return sessions.isNotEmpty ? sessions.first : null;
   }
 
   bool _isSessionActive(NfcAttendanceSession session, DateTime now) {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
 
@@ -66,6 +67,17 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     'Point the camera at the attendance QR shown by the lecturer.',
   );
   bool _qrStatusError = false;
+
+  String _nfcUnavailableMessage({required bool english}) {
+    if (kIsWeb) {
+      return english
+          ? 'NFC is not supported in the browser. Use the iOS/Android app on a real device.'
+          : 'NFC غير مدعوم على المتصفح. استخدمي التطبيق على iOS/Android في جهاز حقيقي.';
+    }
+    return english
+        ? 'NFC is not available. On iPhone, enable Near Field Communication Tag Reading.'
+        : 'NFC غير متاح. على iPhone يلزم تفعيل Near Field Communication Tag Reading في التوقيع.';
+  }
 
   void _toggleMode(bool nfc) {
     setState(() {
@@ -142,6 +154,16 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
 
   Future<void> _checkNfcAvailability() async {
     setState(() => _checkingNfcAvailability = true);
+    if (kIsWeb) {
+      if (!mounted) return;
+      setState(() {
+        _nfcAvailable = false;
+        _checkingNfcAvailability = false;
+        _statusError = true;
+        _statusMessage = _nfcUnavailableMessage(english: false);
+      });
+      return;
+    }
     try {
       final available = await NfcManager.instance.isAvailable();
       if (!mounted) return;
@@ -150,8 +172,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         _checkingNfcAvailability = false;
         if (!available) {
           _statusError = true;
-          _statusMessage =
-              'NFC غير متاح. على iPhone يلزم تفعيل Near Field Communication Tag Reading في التوقيع.';
+          _statusMessage = _nfcUnavailableMessage(english: false);
         }
       });
     } catch (_) {
@@ -184,8 +205,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       setState(() {
         _statusError = true;
         _statusMessage = _tr(
-          'NFC غير متاح. على iPhone يلزم تفعيل Near Field Communication Tag Reading في التوقيع.',
-          'NFC is not available. On iPhone, enable Near Field Communication Tag Reading.',
+          _nfcUnavailableMessage(english: false),
+          _nfcUnavailableMessage(english: true),
         );
       });
       return;
@@ -201,9 +222,14 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     });
 
     bool handled = false;
+    final sessionDone = Completer<void>();
 
     try {
       await NfcManager.instance.startSession(
+        alertMessage: _tr(
+          'قرّبي أعلى الهاتف من بطاقة المحاضر.',
+          'Hold the top of your phone near the lecturer card.',
+        ),
         onDiscovered: (NfcTag tag) async {
           if (handled) return;
           handled = true;
@@ -225,6 +251,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                 'Failed to read the card. Please try again.',
               );
             });
+            if (!sessionDone.isCompleted) {
+              sessionDone.complete();
+            }
             return;
           }
 
@@ -274,6 +303,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                   ? 'Your attendance has been recorded.'
                   : result.message,
             );
+            if (!sessionDone.isCompleted) {
+              sessionDone.complete();
+            }
           } on NfcAttendanceException catch (e) {
             final message = _friendlyErrorMessage(e);
             await NfcManager.instance.stopSession(errorMessage: message);
@@ -290,6 +322,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
               subtitle: message,
               autoDismiss: false,
             );
+            if (!sessionDone.isCompleted) {
+              sessionDone.complete();
+            }
           } catch (e) {
             final message = _tr(
               'حدث خطأ غير متوقع أثناء تسجيل الحضور.',
@@ -309,6 +344,51 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
               subtitle: message,
               autoDismiss: false,
             );
+            if (!sessionDone.isCompleted) {
+              sessionDone.complete();
+            }
+          }
+        },
+        onError: (error) async {
+          if (handled) return;
+          handled = true;
+          final message = _tr(
+            'تم إيقاف جلسة NFC. أعيدي المحاولة.',
+            'NFC session was stopped. Please try again.',
+          );
+          if (mounted) {
+            setState(() {
+              _isScanning = false;
+              _statusError = true;
+              _statusMessage = '$message\n${error.message}';
+            });
+          }
+          if (!sessionDone.isCompleted) {
+            sessionDone.complete();
+          }
+        },
+      );
+
+      await sessionDone.future.timeout(
+        const Duration(seconds: 20),
+        onTimeout: () async {
+          if (handled) return;
+          handled = true;
+          final message = _tr(
+            'لم يتم اكتشاف بطاقة خلال 20 ثانية. قرّبي أعلى iPhone من البطاقة أو جرّبي بطاقة أخرى.',
+            'No NFC tag detected within 20 seconds. Move the top of the iPhone closer to the card or try another card.',
+          );
+          try {
+            await NfcManager.instance.stopSession(errorMessage: message);
+          } catch (_) {
+            // no-op
+          }
+          if (mounted) {
+            setState(() {
+              _isScanning = false;
+              _statusError = true;
+              _statusMessage = message;
+            });
           }
         },
       );
@@ -347,6 +427,10 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
 
     final data = tag.data;
     final candidates = <dynamic>[
+      _dig(data, ['mifare', 'identifier']),
+      _dig(data, ['iso15693', 'identifier']),
+      _dig(data, ['iso7816', 'identifier']),
+      _dig(data, ['iso15693', 'icSerialNumber']),
       _dig(data, ['nfca', 'identifier']),
       _dig(data, ['mifareclassic', 'identifier']),
       _dig(data, ['mifareultralight', 'identifier']),

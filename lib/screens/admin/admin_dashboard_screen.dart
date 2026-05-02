@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 
@@ -821,6 +822,13 @@ class _AdminLecturerNfcBindingScreenState
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
+  String _nfcUnavailableMessage() {
+    if (kIsWeb) {
+      return 'NFC غير مدعوم على المتصفح. استخدمي تطبيق iOS/Android على جهاز حقيقي.';
+    }
+    return 'NFC غير متاح. في iPhone يلزم تفعيل Near Field Communication Tag Reading في التوقيع.';
+  }
+
   Future<void> _writeSelectedLecturerIdToCard() async {
     final lecturerId = (_selectedLecturerId ?? '').trim();
     if (lecturerId.isEmpty) {
@@ -846,9 +854,7 @@ class _AdminLecturerNfcBindingScreenState
     try {
       final available = await NfcManager.instance.isAvailable();
       if (!available) {
-        _showMessage(
-          'NFC غير متاح. في iPhone يلزم تفعيل Near Field Communication Tag Reading في التوقيع.',
-        );
+        _showMessage(_nfcUnavailableMessage());
         return;
       }
 
@@ -889,9 +895,7 @@ class _AdminLecturerNfcBindingScreenState
     try {
       final available = await NfcManager.instance.isAvailable();
       if (!available) {
-        _showMessage(
-          'NFC غير متاح. في iPhone يلزم تفعيل Near Field Communication Tag Reading في التوقيع.',
-        );
+        _showMessage(_nfcUnavailableMessage());
         return;
       }
 
@@ -926,7 +930,8 @@ class _AdminLecturerNfcBindingScreenState
           final ndef = Ndef.from(tag);
           if (ndef == null) {
             await NfcManager.instance.stopSession(
-              errorMessage: 'هذه البطاقة لا تدعم NDEF.',
+              errorMessage:
+                  'هذه البطاقة لا تدعم NDEF على iPhone. جرّبي بطاقة NTAG213/215/216.',
             );
             completer.complete(null);
             return;
@@ -959,7 +964,8 @@ class _AdminLecturerNfcBindingScreenState
       onTimeout: () async {
         try {
           await NfcManager.instance.stopSession(
-            errorMessage: 'انتهت مهلة الكتابة. أعيدي المحاولة.',
+            errorMessage:
+                'انتهت مهلة الكتابة. قرّبي أعلى iPhone من البطاقة، أو جرّبي بطاقة NTAG.',
           );
         } catch (_) {
           // no-op
@@ -1070,6 +1076,10 @@ class _AdminLecturerNfcBindingScreenState
 
   String _extractCardIdFromTagData(Map<dynamic, dynamic> data) {
     final candidates = <dynamic>[
+      _dig(data, ['mifare', 'identifier']),
+      _dig(data, ['iso15693', 'identifier']),
+      _dig(data, ['iso7816', 'identifier']),
+      _dig(data, ['iso15693', 'icSerialNumber']),
       _dig(data, ['nfca', 'identifier']),
       _dig(data, ['mifareclassic', 'identifier']),
       _dig(data, ['mifareultralight', 'identifier']),
