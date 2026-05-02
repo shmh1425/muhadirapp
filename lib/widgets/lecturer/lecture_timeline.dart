@@ -8,11 +8,15 @@ import 'lecture_card.dart';
 class LectureTimeline extends StatelessWidget {
   final List<LectureItem> lectures;
   final void Function(LectureItem lecture)? onLectureTap;
+  final void Function(LectureItem lecture)? onDelayLectureTap;
+  final void Function(LectureItem lecture)? onCancelLectureTap;
 
   const LectureTimeline({
     super.key,
     required this.lectures,
     this.onLectureTap,
+    this.onDelayLectureTap,
+    this.onCancelLectureTap,
   });
 
   @override
@@ -111,6 +115,12 @@ class LectureTimeline extends StatelessWidget {
                         lecture: lecture,
                         onTap: onLectureTap != null
                             ? () => onLectureTap!(lecture)
+                            : null,
+                        onDelayTap: onDelayLectureTap != null
+                            ? () => onDelayLectureTap!(lecture)
+                            : null,
+                        onCancelTap: onCancelLectureTap != null
+                            ? () => onCancelLectureTap!(lecture)
                             : null,
                       ),
                     ),

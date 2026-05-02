@@ -8,6 +8,20 @@ import '../../repositories/academic_term_repository.dart';
 import '../lecturer_auth_service.dart';
 import 'attendance_status_policy.dart';
 
+class ManualEnrollmentStudent {
+  const ManualEnrollmentStudent({
+    required this.studentId,
+    required this.studentName,
+    required this.studentEmail,
+    required this.studentDocId,
+  });
+
+  final int studentId;
+  final String studentName;
+  final String studentEmail;
+  final String studentDocId;
+}
+
 class ManualAttendanceService {
   ManualAttendanceService._();
   static final ManualAttendanceService instance = ManualAttendanceService._();
@@ -74,6 +88,52 @@ class ManualAttendanceService {
         });
   }
 
+  /// Read-only fallback roster for a section (no writes).
+  /// Useful for preview mode when session records are not yet created.
+  Future<List<ManualEnrollmentStudent>> getActiveSectionRoster(
+    String sectionId,
+  ) async {
+    final rawSectionId = sectionId.trim();
+    if (rawSectionId.isEmpty) return const <ManualEnrollmentStudent>[];
+
+    final normalizedSectionId = rawSectionId.replaceAll(RegExp(r'\s+'), '');
+    final snapshots = <QuerySnapshot<Map<String, dynamic>>>[
+      await _firestore
+          .collection(_enrollmentsCollection)
+          .where('sectionId', isEqualTo: rawSectionId)
+          .get(),
+    ];
+    if (normalizedSectionId != rawSectionId) {
+      snapshots.add(
+        await _firestore
+            .collection(_enrollmentsCollection)
+            .where('sectionId', isEqualTo: normalizedSectionId)
+            .get(),
+      );
+    }
+
+    final byStudentId = <int, ManualEnrollmentStudent>{};
+    for (final snap in snapshots) {
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        if (data['isActive'] == false) continue;
+        final studentId = _safeInt(data['studentId']);
+        if (studentId <= 0) continue;
+        final name = (data['studentName'] ?? '').toString().trim();
+        byStudentId[studentId] = ManualEnrollmentStudent(
+          studentId: studentId,
+          studentName: name.isEmpty ? '$studentId' : name,
+          studentEmail: (data['studentEmail'] ?? '').toString().trim(),
+          studentDocId: (data['studentDocId'] ?? '').toString().trim(),
+        );
+      }
+    }
+
+    final roster = byStudentId.values.toList();
+    roster.sort((a, b) => a.studentName.compareTo(b.studentName));
+    return roster;
+  }
+
   Stream<List<ManualAttendanceRecord>> watchStudentRecords(int studentId) {
     return _firestore
         .collection(_recordsCollection)
@@ -96,8 +156,7 @@ class ManualAttendanceService {
   Future<ManualAttendanceSession?> getSessionById(String sessionId) async {
     final id = sessionId.trim();
     if (id.isEmpty) return null;
-    final snap =
-        await _firestore.collection(_sessionsCollection).doc(id).get();
+    final snap = await _firestore.collection(_sessionsCollection).doc(id).get();
     if (!snap.exists) return null;
     return ManualAttendanceSession.fromDocumentSnapshot(snap);
   }
@@ -212,16 +271,13 @@ class ManualAttendanceService {
     final nowStamp = FieldValue.serverTimestamp();
     final updater =
         LecturerAuthService.instance.currentLecturer?.lecturerId ?? '';
-    await ref.set(
-      <String, dynamic>{
-        'status': ManualAttendanceRecord.statusToString(status),
-        'attendanceTime': _attendanceTimeForStatus(status),
-        'updatedAt': nowStamp,
-        'updatedBy': updater,
-        'attendanceMethod': 'manual',
-      },
-      SetOptions(merge: true),
-    );
+    await ref.set(<String, dynamic>{
+      'status': ManualAttendanceRecord.statusToString(status),
+      'attendanceTime': _attendanceTimeForStatus(status),
+      'updatedAt': nowStamp,
+      'updatedBy': updater,
+      'attendanceMethod': 'manual',
+    }, SetOptions(merge: true));
     return true;
   }
 
@@ -274,30 +330,22 @@ class ManualAttendanceService {
 
     final batch = _firestore.batch();
     for (final doc in pendingSnapshot.docs) {
-      batch.set(
-        doc.reference,
-        {
-          'status': ManualAttendanceRecord.statusToString(
-            ManualAttendanceStatus.absent,
-          ),
-          'attendanceTime': _attendanceTimeForStatus(
-            ManualAttendanceStatus.absent,
-          ),
-          'updatedAt': FieldValue.serverTimestamp(),
-          'updatedByRole': 'system',
-        },
-        SetOptions(merge: true),
-      );
+      batch.set(doc.reference, {
+        'status': ManualAttendanceRecord.statusToString(
+          ManualAttendanceStatus.absent,
+        ),
+        'attendanceTime': _attendanceTimeForStatus(
+          ManualAttendanceStatus.absent,
+        ),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'updatedByRole': 'system',
+      }, SetOptions(merge: true));
     }
 
-    batch.set(
-      sessionRef,
-      {
-        'attendanceFinalized': true,
-        'updatedAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
+    batch.set(sessionRef, {
+      'attendanceFinalized': true,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
     await batch.commit();
     return true;
   }
@@ -308,16 +356,20 @@ class ManualAttendanceService {
     required LectureItem lecture,
     required DateTime date,
   }) async {
-    final sessionRef = _firestore.collection(_sessionsCollection).doc(sessionId);
+    final sessionRef = _firestore
+        .collection(_sessionsCollection)
+        .doc(sessionId);
     final existingSessionSnap = await sessionRef.get();
-    final existingSessionData = existingSessionSnap.data() ?? <String, dynamic>{};
+    final existingSessionData =
+        existingSessionSnap.data() ?? <String, dynamic>{};
     final sectionRef = _firestore.collection('sections').doc(sectionId);
     final sectionSnap = await sectionRef.get();
     final sectionData = sectionSnap.data() ?? <String, dynamic>{};
     final now = DateTime.now();
     final existingOpenedAt = existingSessionData['sessionOpenedAt'];
-    final sessionOpenedAt =
-        existingOpenedAt is Timestamp ? existingOpenedAt.toDate() : now;
+    final sessionOpenedAt = existingOpenedAt is Timestamp
+        ? existingOpenedAt.toDate()
+        : now;
 
     final termLabel = (sectionData['term'] ?? '').toString();
     final termId = (sectionData['termId'] ?? '').toString().trim();
@@ -336,7 +388,8 @@ class ManualAttendanceService {
       'lectureDay': date.day,
       'dateKey': _dateKey(date),
       'attendanceMethod': 'manual',
-      'lecturerId': LecturerAuthService.instance.currentLecturer?.lecturerId ?? '',
+      'lecturerId':
+          LecturerAuthService.instance.currentLecturer?.lecturerId ?? '',
       'sessionOpenedAt': Timestamp.fromDate(sessionOpenedAt),
       'term': termLabel,
       'updatedAt': FieldValue.serverTimestamp(),
@@ -352,7 +405,11 @@ class ManualAttendanceService {
       if (term != null) {
         payload['termId'] = termId;
         final weeks = await AcademicTermRepository.instance.getWeeks(termId);
-        final officialWeekNumber = _officialWeekFromDate(term.startDate, date, term.officialWeeksCount);
+        final officialWeekNumber = _officialWeekFromDate(
+          term.startDate,
+          date,
+          term.officialWeeksCount,
+        );
         payload['officialWeekNumber'] = officialWeekNumber;
         TermWeek? week;
         for (final w in weeks) {
@@ -367,7 +424,8 @@ class ManualAttendanceService {
           countInAttendance = week.countInAttendance;
         }
         if (countInAttendance) {
-          final dateExcluded = await AcademicTermRepository.instance.isDateExcludedFromAttendance(termId, date);
+          final dateExcluded = await AcademicTermRepository.instance
+              .isDateExcludedFromAttendance(termId, date);
           if (dateExcluded) countInAttendance = false;
         }
         payload['countInAttendance'] = countInAttendance;
@@ -378,9 +436,17 @@ class ManualAttendanceService {
   }
 
   /// Compute 1-based official week number from term start and session date.
-  static int _officialWeekFromDate(DateTime termStart, DateTime sessionDate, int officialWeeksCount) {
+  static int _officialWeekFromDate(
+    DateTime termStart,
+    DateTime sessionDate,
+    int officialWeeksCount,
+  ) {
     final start = DateTime(termStart.year, termStart.month, termStart.day);
-    final session = DateTime(sessionDate.year, sessionDate.month, sessionDate.day);
+    final session = DateTime(
+      sessionDate.year,
+      sessionDate.month,
+      sessionDate.day,
+    );
     final days = session.difference(start).inDays;
     if (days < 0) return 1;
     final week = (days / 7).floor() + 1;
@@ -395,8 +461,7 @@ class ManualAttendanceService {
     required DateTime date,
   }) async {
     final session = await getSessionById(sessionId);
-    final sessionOpenedAt =
-        session?.sessionOpenedAt ?? DateTime.now();
+    final sessionOpenedAt = session?.sessionOpenedAt ?? DateTime.now();
     final existingSnapshot = await _firestore
         .collection(_recordsCollection)
         .where('sessionId', isEqualTo: sessionId)
@@ -555,16 +620,29 @@ class ManualAttendanceService {
   /// totalCountableSessions = finalized instructional sessions;
   /// unexcusedAbsenceCount = records with status absent (excused/present/late excluded);
   /// absencePercentage = unexcusedAbsenceCount / totalCountableSessions * 100.
-  Future<({int totalCountableSessions, int unexcusedAbsenceCount, double absencePercentage})>
-      getAbsenceStatsForStudentInSection(
+  Future<
+    ({
+      int totalCountableSessions,
+      int unexcusedAbsenceCount,
+      double absencePercentage,
+    })
+  >
+  getAbsenceStatsForStudentInSection(
     int studentId,
     String sectionId, {
     String? termId,
   }) async {
-    final countableSessions = await getCountableSessionsForSection(sectionId, termId: termId);
+    final countableSessions = await getCountableSessionsForSection(
+      sectionId,
+      termId: termId,
+    );
     final totalCountableSessions = countableSessions.length;
     if (totalCountableSessions == 0) {
-      return (totalCountableSessions: 0, unexcusedAbsenceCount: 0, absencePercentage: 0.0);
+      return (
+        totalCountableSessions: 0,
+        unexcusedAbsenceCount: 0,
+        absencePercentage: 0.0,
+      );
     }
     final sessionIds = countableSessions.map((s) => s.sessionId).toSet();
     int unexcusedAbsenceCount = 0;

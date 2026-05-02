@@ -90,11 +90,9 @@ class _LecturerAttendanceReportScreenState
 
   bool get _isCourseSelected =>
       _selectedCourseCode != null && _selectedCourseCode!.trim().isNotEmpty;
-  bool get _isWeekSelected => _selectedWeekNumber != null;
   bool get _hasSelectedSession =>
       _selectedSessionId != null && _selectedSessionId!.trim().isNotEmpty;
-  bool get _hasCompleteRequiredSelection =>
-      _isCourseSelected && _isWeekSelected && _hasSelectedSession;
+  bool get _hasCompleteRequiredSelection => _hasSelectedSession;
 
   List<_CourseOption> get _courseOptions {
     final map = <String, _CourseOption>{};
@@ -113,34 +111,30 @@ class _LecturerAttendanceReportScreenState
   }
 
   List<int> get _weekOptionsForSelectedCourse {
-    if (!_isCourseSelected) return const <int>[];
-    final weeks =
-        _groups
-            .where((group) {
-              final key = group.courseCode.trim().isNotEmpty
-                  ? group.courseCode.trim()
-                  : group.courseName.trim();
-              return key == _selectedCourseCode;
-            })
-            .map((group) => group.weekNumber)
-            .toSet()
-            .toList()
-          ..sort();
+    final source = _isCourseSelected
+        ? _groups.where((group) {
+            final key = group.courseCode.trim().isNotEmpty
+                ? group.courseCode.trim()
+                : group.courseName.trim();
+            return key == _selectedCourseCode;
+          })
+        : _groups;
+    final weeks = source.map((group) => group.weekNumber).toSet().toList()
+      ..sort();
     return weeks;
   }
 
   List<_LectureAttendanceGroup> get _filteredGroups {
-    if (!_isCourseSelected || !_isWeekSelected) {
-      return const <_LectureAttendanceGroup>[];
-    }
     var list = _groups.where((group) {
-      final courseKey = group.courseCode.trim().isNotEmpty
-          ? group.courseCode.trim()
-          : group.courseName.trim();
-      if (courseKey != _selectedCourseCode) return false;
-      if (group.weekNumber != _selectedWeekNumber) return false;
-      if (_selectedSessionId != null && _selectedSessionId!.trim().isNotEmpty) {
-        return group.sessionId == _selectedSessionId;
+      if (_isCourseSelected) {
+        final courseKey = group.courseCode.trim().isNotEmpty
+            ? group.courseCode.trim()
+            : group.courseName.trim();
+        if (courseKey != _selectedCourseCode) return false;
+      }
+      if (_selectedWeekNumber != null &&
+          group.weekNumber != _selectedWeekNumber) {
+        return false;
       }
       return true;
     }).toList();
@@ -276,12 +270,6 @@ class _LecturerAttendanceReportScreenState
         session.lectureDate.month,
         session.lectureDate.day,
       );
-      // Keep report aligned with academic calendar:
-      // skip sessions outside attendance counting (breaks/exceptions/holidays).
-      if (!session.countInAttendance ||
-          _calendarRepository.isHoliday(effectiveDate)) {
-        continue;
-      }
       final records =
           recordsBySession[session.sessionId] ??
           const <ManualAttendanceRecord>[];
@@ -1568,8 +1556,8 @@ class _LecturerAttendanceReportScreenState
                 const SizedBox(height: 2),
                 Text(
                   _tr(
-                    'فلترة التقرير واختيار محاضرة الأسبوع',
-                    'Filter the report and choose the week lecture',
+                    'فلترة التقرير واختيار المحاضرة',
+                    'Filter the report and choose lecture',
                   ),
                   style: TextStyle(
                     fontFamily: 'Cairo',
@@ -1696,25 +1684,18 @@ class _LecturerAttendanceReportScreenState
           _buildFilterSectionTitle(
             icon: Icons.view_week_rounded,
             title: _tr('الأسبوع', 'Week'),
-            hint: _tr('بعد اختيار المقرر', 'After selecting course'),
+            hint: _tr('اختياري لتضييق النتائج', 'Optional to narrow results'),
           ),
           const SizedBox(height: 8),
-          if (!_isCourseSelected)
+          if (weeks.isEmpty)
             _buildInlineFilterHint(
               _tr(
-                'اختاري المقرر أولاً حتى تظهر الأسابيع.',
-                'Choose course first to show weeks.',
-              ),
-            )
-          else if (weeks.isEmpty)
-            _buildInlineFilterHint(
-              _tr(
-                'لا توجد أسابيع متاحة لهذا المقرر.',
-                'No weeks available for this course.',
+                'لا توجد أسابيع متاحة حالياً.',
+                'No weeks available right now.',
               ),
             )
           else
-            _buildWeekChoiceScroller(weeks),
+            _buildWeekDropdown(weeks),
           const SizedBox(height: 8),
           Align(
             alignment: AlignmentDirectional.centerStart,
@@ -1791,141 +1772,39 @@ class _LecturerAttendanceReportScreenState
     );
   }
 
-  Widget _buildWeekChoiceScroller(List<int> weeks) {
-    return SizedBox(
-      height: 104,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: weeks.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (_, index) {
-          final week = weeks[index];
-          return SizedBox(
-            width: 114,
-            child: _buildWeekNumberCard(
-              week: week,
-              selected: _selectedWeekNumber == week,
-              isCurrent: _currentWeekNumber == week,
-              onTap: () => _onWeekChanged(auto: false, week: week),
-            ),
-          );
-        },
+  Widget _buildWeekDropdown(List<int> weeks) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFD6E5E8)),
       ),
-    );
-  }
-
-  Widget _buildWeekNumberCard({
-    required int week,
-    required bool selected,
-    required bool isCurrent,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: AnimatedScale(
-          scale: selected ? 1.015 : 1,
-          duration: const Duration(milliseconds: 140),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            padding: const EdgeInsets.fromLTRB(9, 8, 9, 8),
-            decoration: BoxDecoration(
-              color: selected ? const Color(0xFFE6F5F7) : Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: selected
-                    ? const Color(0xFF0B8793)
-                    : const Color(0xFFD6E5E8),
-                width: selected ? 1.8 : 1.2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: selected ? 0.06 : 0.03),
-                  blurRadius: selected ? 14 : 8,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _tr('الأسبوع', 'Week'),
-                        style: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 9.8,
-                          fontWeight: FontWeight.w800,
-                          color: selected
-                              ? const Color(0xFF0E5D67)
-                              : const Color(0xFF678189),
-                        ),
-                      ),
-                    ),
-                    if (isCurrent)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: selected
-                              ? const Color(0xFF0E7F8C)
-                              : const Color(0xFFE9F3F5),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          _tr('الحالي', 'Now'),
-                          style: TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 8.4,
-                            fontWeight: FontWeight.w800,
-                            color: selected
-                                ? Colors.white
-                                : const Color(0xFF46666E),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: Container(
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      gradient: selected
-                          ? const LinearGradient(
-                              colors: [Color(0xFF0B8793), Color(0xFF0A6F79)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            )
-                          : const LinearGradient(
-                              colors: [Color(0xFFF1F7F8), Color(0xFFE8F1F3)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '$week',
-                      style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 24,
-                        fontWeight: FontWeight.w900,
-                        color: selected
-                            ? Colors.white
-                            : const Color(0xFF0E5D67),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int?>(
+          isExpanded: true,
+          value: _selectedWeekNumber,
+          icon: const Icon(Icons.keyboard_arrow_down_rounded),
+          borderRadius: BorderRadius.circular(12),
+          style: const TextStyle(
+            fontFamily: 'Cairo',
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF2B4B52),
           ),
+          items: [
+            DropdownMenuItem<int?>(
+              value: null,
+              child: Text(_tr('كل الأسابيع', 'All weeks')),
+            ),
+            ...weeks.map(
+              (week) => DropdownMenuItem<int?>(
+                value: week,
+                child: Text(_tr('الأسبوع $week', 'Week $week')),
+              ),
+            ),
+          ],
+          onChanged: (week) => _onWeekChanged(auto: false, week: week),
         ),
       ),
     );
@@ -2046,8 +1925,6 @@ class _LecturerAttendanceReportScreenState
   }
 
   Widget _buildWeekLectureCards() {
-    if (!_isCourseSelected || !_isWeekSelected) return const SizedBox.shrink();
-
     final sessions = _filteredGroups;
     if (sessions.isEmpty) {
       return Container(
@@ -2060,8 +1937,8 @@ class _LecturerAttendanceReportScreenState
         ),
         child: Text(
           _tr(
-            'لا توجد محاضرات لهذا المقرر في الأسبوع المختار.',
-            'No lectures for this course in the selected week.',
+            'لا توجد محاضرات مطابقة للفلاتر الحالية.',
+            'No lectures match the current filters.',
           ),
           textAlign: TextAlign.center,
           style: const TextStyle(
@@ -2353,18 +2230,17 @@ class _LecturerAttendanceReportScreenState
     Color text = const Color(0xFF455D63);
     IconData icon = Icons.info_outline_rounded;
 
-    if (!_isCourseSelected) {
-      message = _tr('اختاري المقرر أولاً.', 'Select the course first.');
-    } else if (!_isWeekSelected) {
+    final hasSessions = _filteredGroups.isNotEmpty;
+    if (!hasSessions) {
       message = _tr(
-        'اختاري الأسبوع الدراسي بعد اختيار المقرر.',
-        'Select the academic week after choosing the course.',
+        'لا توجد بيانات محاضرات ضمن الفلاتر الحالية.',
+        'No lecture data found within the current filters.',
       );
-      icon = Icons.view_week_rounded;
+      icon = Icons.event_busy_rounded;
     } else if (!_hasSelectedSession) {
       message = _tr(
-        'اختاري محاضرة من كروت الأسبوع لبدء التقرير.',
-        'Select a lecture card from the week to start the report.',
+        'اختاري محاضرة من القائمة لبدء التقرير.',
+        'Select a lecture card from the list to start the report.',
       );
       icon = Icons.library_books_rounded;
     } else {

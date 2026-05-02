@@ -21,15 +21,8 @@ class _LecturerNotificationsScreenState
     extends State<LecturerNotificationsScreen> {
   final LecturerNotificationService _notificationService =
       LecturerNotificationService.instance;
-  String _selectedCategory = 'الكل';
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
-
-  void _changeCategory(String category) {
-    setState(() {
-      _selectedCategory = category;
-    });
-  }
 
   void _goBack() {
     Navigator.of(context).pop();
@@ -49,11 +42,10 @@ class _LecturerNotificationsScreenState
     await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            _LecturerNotificationDetailsScreen(
-              notification: notification,
-              service: _notificationService,
-            ),
+        builder: (_) => _LecturerNotificationDetailsScreen(
+          notification: notification,
+          service: _notificationService,
+        ),
       ),
     );
   }
@@ -64,9 +56,7 @@ class _LecturerNotificationsScreenState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            _tr('تم حذف الإشعار.', 'Notification deleted.'),
-          ),
+          content: Text(_tr('تم حذف الإشعار.', 'Notification deleted.')),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -241,22 +231,89 @@ class _LecturerNotificationsScreenState
     }
   }
 
-  List<LecturerNotification> _filteredNotifications(
+  List<LecturerNotification> _sortNotifications(
     List<LecturerNotification> all,
   ) {
-    if (_selectedCategory == 'الكل') return all;
-    return all.where((n) {
-      switch (_selectedCategory) {
-        case 'أكاديمي':
-          return n.isAcademic;
-        case 'شخصي':
-          return n.isPersonalLectureAction;
-        case 'الطلاب':
-          return n.isStudentRelated;
-        default:
-          return true;
+    final sorted = List<LecturerNotification>.from(all);
+    sorted.sort((a, b) {
+      if (a.isRead != b.isRead) return a.isRead ? 1 : -1;
+      final ta = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final tb = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return tb.compareTo(ta);
+    });
+    return sorted;
+  }
+
+  DateTime _dayOnly(DateTime value) =>
+      DateTime(value.year, value.month, value.day);
+
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  List<_NotificationGroup> _groupNotifications(List<LecturerNotification> all) {
+    final sorted = _sortNotifications(all);
+    final now = DateTime.now();
+    final today = _dayOnly(now);
+    final weekStart = today.subtract(Duration(days: today.weekday % 7));
+
+    final unread = <LecturerNotification>[];
+    final todayItems = <LecturerNotification>[];
+    final thisWeek = <LecturerNotification>[];
+    final older = <LecturerNotification>[];
+
+    for (final item in sorted) {
+      final created = item.createdAt;
+      if (created == null) {
+        older.add(item);
+        continue;
       }
-    }).toList();
+      final day = _dayOnly(created.toLocal());
+      if (!item.isRead) unread.add(item);
+      if (_isSameDay(day, today)) {
+        todayItems.add(item);
+      } else if ((day.isAfter(weekStart) || _isSameDay(day, weekStart)) &&
+          day.isBefore(today)) {
+        thisWeek.add(item);
+      } else if (day.isBefore(weekStart)) {
+        older.add(item);
+      }
+    }
+
+    final groups = <_NotificationGroup>[];
+    if (unread.isNotEmpty) {
+      groups.add(
+        _NotificationGroup(
+          titleAr: 'غير مقروءة',
+          titleEn: 'Unread',
+          items: unread,
+          highlight: true,
+        ),
+      );
+    }
+    if (todayItems.isNotEmpty) {
+      groups.add(
+        _NotificationGroup(
+          titleAr: 'اليوم',
+          titleEn: 'Today',
+          items: todayItems,
+        ),
+      );
+    }
+    if (thisWeek.isNotEmpty) {
+      groups.add(
+        _NotificationGroup(
+          titleAr: 'هذا الأسبوع',
+          titleEn: 'This Week',
+          items: thisWeek,
+        ),
+      );
+    }
+    if (older.isNotEmpty) {
+      groups.add(
+        _NotificationGroup(titleAr: 'أقدم', titleEn: 'Older', items: older),
+      );
+    }
+    return groups;
   }
 
   @override
@@ -282,27 +339,7 @@ class _LecturerNotificationsScreenState
                       child: ProfileBackButton(onTap: _goBack),
                     ),
                     const SizedBox(height: 10),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFFD6E6E8)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.04),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: _CategoryTabs(
-                        selected: _selectedCategory,
-                        onChanged: _changeCategory,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     Expanded(
                       child: StreamBuilder<List<LecturerNotification>>(
                         stream: _notificationService
@@ -320,7 +357,8 @@ class _LecturerNotificationsScreenState
                               icon: Icons.error_outline_rounded,
                             );
                           }
-                          if (snapshot.connectionState == ConnectionState.waiting &&
+                          if (snapshot.connectionState ==
+                                  ConnectionState.waiting &&
                               !snapshot.hasData) {
                             return const Center(
                               child: CircularProgressIndicator(
@@ -330,10 +368,30 @@ class _LecturerNotificationsScreenState
                           }
 
                           final allNotifications = snapshot.data ?? const [];
-                          final filtered = _filteredNotifications(allNotifications);
+                          final grouped = _groupNotifications(allNotifications);
+                          final unreadCount = allNotifications
+                              .where((n) => !n.isRead)
+                              .length;
+                          final excuseCount = allNotifications
+                              .where((n) => n.isExcuseRequest)
+                              .length;
+                          final todayCount = allNotifications.where((n) {
+                            final created = n.createdAt?.toLocal();
+                            if (created == null) return false;
+                            final now = DateTime.now();
+                            return created.year == now.year &&
+                                created.month == now.month &&
+                                created.day == now.day;
+                          }).length;
 
                           return Column(
                             children: [
+                              _NotificationOverviewCard(
+                                unreadCount: unreadCount,
+                                excuseCount: excuseCount,
+                                todayCount: todayCount,
+                              ),
+                              const SizedBox(height: 10),
                               Align(
                                 alignment: AlignmentDirectional.centerEnd,
                                 child: TextButton.icon(
@@ -361,7 +419,7 @@ class _LecturerNotificationsScreenState
                               ),
                               const SizedBox(height: 4),
                               Expanded(
-                                child: filtered.isEmpty
+                                child: allNotifications.isEmpty
                                     ? _StateMessage(
                                         text: _tr(
                                           'لا توجد تنبيهات حالياً',
@@ -373,15 +431,16 @@ class _LecturerNotificationsScreenState
                                         padding: const EdgeInsets.symmetric(
                                           vertical: 8,
                                         ),
-                                        itemCount: filtered.length,
+                                        itemCount: grouped.length,
                                         itemBuilder: (context, index) {
-                                          final item = filtered[index];
-                                          return GestureDetector(
-                                            onTap: () => _openDetails(item),
-                                            child: _NotificationCard(
-                                              item: item,
-                                              onDelete: () => _confirmDelete(item),
-                                            ),
+                                          final section = grouped[index];
+                                          return _NotificationSection(
+                                            titleAr: section.titleAr,
+                                            titleEn: section.titleEn,
+                                            highlight: section.highlight,
+                                            notifications: section.items,
+                                            onTapItem: _openDetails,
+                                            onDeleteItem: _confirmDelete,
                                           );
                                         },
                                       ),
@@ -402,71 +461,224 @@ class _LecturerNotificationsScreenState
   }
 }
 
-class _CategoryTabs extends StatelessWidget {
-  const _CategoryTabs({required this.selected, required this.onChanged});
+class _NotificationGroup {
+  const _NotificationGroup({
+    required this.titleAr,
+    required this.titleEn,
+    required this.items,
+    this.highlight = false,
+  });
 
-  final String selected;
-  final ValueChanged<String> onChanged;
+  final String titleAr;
+  final String titleEn;
+  final List<LecturerNotification> items;
+  final bool highlight;
+}
+
+class _NotificationOverviewCard extends StatelessWidget {
+  const _NotificationOverviewCard({
+    required this.unreadCount,
+    required this.excuseCount,
+    required this.todayCount,
+  });
+
+  final int unreadCount;
+  final int excuseCount;
+  final int todayCount;
 
   @override
   Widget build(BuildContext context) {
-    final labels = ['الكل', 'أكاديمي', 'شخصي', 'الطلاب'];
-    String displayLabel(String label) {
-      switch (label) {
-        case 'الكل':
-          return LecturerLanguageController.tr('الكل', 'All');
-        case 'أكاديمي':
-          return LecturerLanguageController.tr('أكاديمي', 'Academic');
-        case 'شخصي':
-          return LecturerLanguageController.tr('شخصي', 'Personal');
-        case 'الطلاب':
-          return LecturerLanguageController.tr('الطلاب', 'Students');
-        default:
-          return label;
-      }
-    }
+    String tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: const LinearGradient(
+          colors: [Color(0xFFEAF7F8), Color(0xFFF8FCFC)],
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+        ),
+        border: Border.all(color: const Color(0xFFD1E5E9)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            tr('نظرة سريعة', 'Quick Overview'),
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              color: Color(0xFF0B5D67),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _StatPill(
+                label: tr('غير مقروءة', 'Unread'),
+                value: unreadCount,
+                bg: const Color(0xFFFFF2F2),
+                fg: const Color(0xFFD32F2F),
+                icon: Icons.mark_email_unread_outlined,
+              ),
+              _StatPill(
+                label: tr('طلبات الأعذار', 'Excuses'),
+                value: excuseCount,
+                bg: const Color(0xFFFFF8E8),
+                fg: const Color(0xFFB07A06),
+                icon: Icons.rule_folder_outlined,
+              ),
+              _StatPill(
+                label: tr('تنبيهات اليوم', 'Today'),
+                value: todayCount,
+                bg: const Color(0xFFE8F7F2),
+                fg: const Color(0xFF0B8060),
+                icon: Icons.today_outlined,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      physics: const BouncingScrollPhysics(),
+class _StatPill extends StatelessWidget {
+  const _StatPill({
+    required this.label,
+    required this.value,
+    required this.bg,
+    required this.fg,
+    required this.icon,
+  });
+
+  final String label;
+  final int value;
+  final Color bg;
+  final Color fg;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Row(
-        children: labels.map((label) {
-          final bool isActive = label == selected;
-          return Padding(
-            padding: const EdgeInsets.only(left: 6),
-            child: GestureDetector(
-              onTap: () => onChanged(label),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 170),
-                curve: Curves.easeOut,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: isActive
-                      ? const Color(0xFF006571)
-                      : const Color(0xFFF2F6F7),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isActive
-                        ? const Color(0xFF006571)
-                        : const Color(0xFFD9E5E7),
-                  ),
-                ),
-                child: Text(
-                  displayLabel(label),
-                  style: TextStyle(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: fg),
+          const SizedBox(width: 5),
+          Text(
+            '$value',
+            style: TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+              color: fg,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: fg,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NotificationSection extends StatelessWidget {
+  const _NotificationSection({
+    required this.titleAr,
+    required this.titleEn,
+    required this.highlight,
+    required this.notifications,
+    required this.onTapItem,
+    required this.onDeleteItem,
+  });
+
+  final String titleAr;
+  final String titleEn;
+  final bool highlight;
+  final List<LecturerNotification> notifications;
+  final ValueChanged<LecturerNotification> onTapItem;
+  final ValueChanged<LecturerNotification> onDeleteItem;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = LecturerLanguageController.tr(titleAr, titleEn);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: highlight
+                  ? const Color(0xFFEAF8F9)
+                  : const Color(0xFFF2F6F7),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
                     fontFamily: 'Cairo',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: isActive ? Colors.white : const Color(0xFF425C62),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF1E4D55),
                   ),
                 ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: const Color(0xFFD2E3E7)),
+                  ),
+                  child: Text(
+                    '${notifications.length}',
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF2D5D65),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ...notifications.map(
+            (item) => GestureDetector(
+              onTap: () => onTapItem(item),
+              child: _NotificationCard(
+                item: item,
+                onDelete: () => onDeleteItem(item),
               ),
             ),
-          );
-        }).toList(),
+          ),
+        ],
       ),
     );
   }
@@ -542,14 +754,16 @@ class _NotificationCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: item.isRead ? const Color(0xFFFAFCFC) : const Color(0xFFF4FBFC),
+        color: item.isRead ? const Color(0xFFFAFCFC) : const Color(0xFFF1FAFC),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: item.isRead ? const Color(0xFFDDE7EA) : const Color(0xFF8FC4CB),
+          color: item.isRead
+              ? const Color(0xFFDDE7EA)
+              : const Color(0xFF6CB2BD),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(alpha: item.isRead ? 0.04 : 0.06),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -584,6 +798,27 @@ class _NotificationCard extends StatelessWidget {
                   ),
                 ),
               ),
+              if (!item.isRead)
+                Container(
+                  margin: const EdgeInsets.only(right: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF006571),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    tr('جديد', 'New'),
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
               IconButton(
                 onPressed: onDelete,
                 icon: const Icon(
@@ -637,7 +872,7 @@ class _NotificationCard extends StatelessWidget {
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  _formatDate(item.createdAt),
+                  '${_relativeTime(item.createdAt)} · ${_formatDate(item.createdAt)}',
                   style: const TextStyle(
                     fontSize: 11.5,
                     color: Colors.black54,
@@ -676,12 +911,43 @@ class _NotificationCard extends StatelessWidget {
 
   String _formatDate(DateTime? value) {
     if (value == null) {
-      return LecturerLanguageController.tr('تاريخ غير متوفر', 'Date unavailable');
+      return LecturerLanguageController.tr(
+        'تاريخ غير متوفر',
+        'Date unavailable',
+      );
     }
     final d = value.toLocal();
     final hh = d.hour.toString().padLeft(2, '0');
     final mm = d.minute.toString().padLeft(2, '0');
     return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')} $hh:$mm';
+  }
+
+  String _relativeTime(DateTime? value) {
+    if (value == null) {
+      return LecturerLanguageController.tr('الآن', 'Now');
+    }
+    final now = DateTime.now();
+    final diff = now.difference(value.toLocal());
+    if (diff.inMinutes < 1) return LecturerLanguageController.tr('الآن', 'Now');
+    if (diff.inMinutes < 60) {
+      return LecturerLanguageController.tr(
+        'قبل ${diff.inMinutes} دقيقة',
+        '${diff.inMinutes}m ago',
+      );
+    }
+    if (diff.inHours < 24) {
+      return LecturerLanguageController.tr(
+        'قبل ${diff.inHours} ساعة',
+        '${diff.inHours}h ago',
+      );
+    }
+    if (diff.inDays < 7) {
+      return LecturerLanguageController.tr(
+        'قبل ${diff.inDays} يوم',
+        '${diff.inDays}d ago',
+      );
+    }
+    return LecturerLanguageController.tr('أقدم', 'Older');
   }
 
   Widget _metaChip(String text, Color bg, Color fg) {
@@ -831,12 +1097,14 @@ class _LecturerNotificationDetailsScreenState
               final isPending = status == 'pending';
               final isRejected = status == 'rejected';
               final isAccepted = status == 'accepted';
-              final bool canApproveOrReject = notification.isExcuseRequest &&
-                  resolved != null &&
-                  isPending;
+              final bool canApproveOrReject =
+                  notification.isExcuseRequest && resolved != null && isPending;
 
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -1046,9 +1314,13 @@ class _LecturerNotificationDetailsScreenState
                   try {
                     await service.deleteNotification(notification.id);
                   } on FirebaseException catch (e, st) {
-                    debugPrint('[LecturerNotifications] detail delete failed: $e\n$st');
+                    debugPrint(
+                      '[LecturerNotifications] detail delete failed: $e\n$st',
+                    );
                   } catch (e, st) {
-                    debugPrint('[LecturerNotifications] detail delete failed: $e\n$st');
+                    debugPrint(
+                      '[LecturerNotifications] detail delete failed: $e\n$st',
+                    );
                   }
                   if (context.mounted) Navigator.of(context).pop(true);
                 },
@@ -1098,11 +1370,7 @@ class _LecturerNotificationDetailsScreenState
       );
       return;
     }
-    _applyExcuseDecision(
-      context,
-      approve: false,
-      rejectionReason: reason,
-    );
+    _applyExcuseDecision(context, approve: false, rejectionReason: reason);
   }
 
   Future<void> _showDecisionDialog(BuildContext context) async {
@@ -1114,8 +1382,13 @@ class _LecturerNotificationDetailsScreenState
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
           child: Dialog(
-            insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 28,
+              vertical: 24,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 340),
               child: Padding(
@@ -1214,8 +1487,13 @@ class _LecturerNotificationDetailsScreenState
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
           child: Dialog(
-            insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 28,
+              vertical: 24,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 340),
               child: Padding(
@@ -1311,7 +1589,9 @@ class _LecturerNotificationDetailsScreenState
   ) {
     ExcuseAttachmentPreview.showAttachmentPreviewDialog(
       context: context,
-      attachmentName: details.attachmentName == '-' ? '' : details.attachmentName,
+      attachmentName: details.attachmentName == '-'
+          ? ''
+          : details.attachmentName,
       attachmentUrl: details.attachmentUrl == '-' ? '' : details.attachmentUrl,
       tr: LecturerLanguageController.tr,
       textDirection: LecturerLanguageController.direction(),
@@ -1336,7 +1616,9 @@ class _LecturerNotificationDetailsScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            LecturerLanguageController.isArabic ? result.messageAr : result.messageEn,
+            LecturerLanguageController.isArabic
+                ? result.messageAr
+                : result.messageEn,
           ),
           backgroundColor: result.success
               ? const Color(0xFF2B9E56)
@@ -1373,7 +1655,10 @@ class _LecturerNotificationDetailsScreenState
 
   String _formatDate(DateTime? value) {
     if (value == null) {
-      return LecturerLanguageController.tr('تاريخ غير متوفر', 'Date unavailable');
+      return LecturerLanguageController.tr(
+        'تاريخ غير متوفر',
+        'Date unavailable',
+      );
     }
     final d = value.toLocal();
     final hh = d.hour.toString().padLeft(2, '0');
@@ -1418,8 +1703,14 @@ class _ExcusePreviewCard extends StatelessWidget {
           ),
           _previewRow(tr('المقرر', 'Course'), details.courseName),
           _previewRow(tr('الشعبة', 'Section'), details.section),
-          _previewRow(tr('تاريخ المحاضرة', 'Lecture date'), details.lectureDate),
-          _previewRow(tr('وقت البداية', 'Start time'), details.lectureStartTime),
+          _previewRow(
+            tr('تاريخ المحاضرة', 'Lecture date'),
+            details.lectureDate,
+          ),
+          _previewRow(
+            tr('وقت البداية', 'Start time'),
+            details.lectureStartTime,
+          ),
           _previewRow(tr('وقت النهاية', 'End time'), details.lectureEndTime),
           _previewRow(tr('حالة الطلب', 'Status'), details.status),
           const SizedBox(height: 8),
@@ -1465,7 +1756,9 @@ class _ExcusePreviewCard extends StatelessWidget {
           Align(
             alignment: Alignment.centerLeft,
             child: OutlinedButton.icon(
-              onPressed: details.attachmentUrl == '-' ? null : onPreviewAttachment,
+              onPressed: details.attachmentUrl == '-'
+                  ? null
+                  : onPreviewAttachment,
               icon: const Icon(
                 Icons.attachment_rounded,
                 color: Color(0xFF006571),
@@ -1643,10 +1936,7 @@ class _NotificationExcuseDetails {
   ) {
     final details = notification.excuseDetails;
     final snapshot = notification.excuseRequestSnapshot;
-    String read(
-      String key, {
-      String fallback = '',
-    }) {
+    String read(String key, {String fallback = ''}) {
       final fromDetails = (details[key] ?? '').toString().trim();
       if (fromDetails.isNotEmpty) return fromDetails;
       final fromSnapshot = (snapshot[key] ?? '').toString().trim();
@@ -1667,18 +1957,35 @@ class _NotificationExcuseDetails {
       submissionTime: read('submissionTime', fallback: '-'),
       studentName: read('studentName', fallback: '-'),
       academicNumber: read('academicNumber', fallback: '-'),
-      courseName: read('courseNameAr', fallback: notification.courseName.isEmpty ? '-' : notification.courseName),
-      section: read('sectionId', fallback: notification.section.isEmpty ? notification.sectionId : notification.section),
+      courseName: read(
+        'courseNameAr',
+        fallback: notification.courseName.isEmpty
+            ? '-'
+            : notification.courseName,
+      ),
+      section: read(
+        'sectionId',
+        fallback: notification.section.isEmpty
+            ? notification.sectionId
+            : notification.section,
+      ),
       lectureDate: lectureDateText.isEmpty ? '-' : lectureDateText,
       lectureStartTime: read(
         'lectureStartTime',
-        fallback: notification.lectureStartTime.isEmpty ? '-' : notification.lectureStartTime,
+        fallback: notification.lectureStartTime.isEmpty
+            ? '-'
+            : notification.lectureStartTime,
       ),
       lectureEndTime: read(
         'lectureEndTime',
-        fallback: notification.lectureEndTime.isEmpty ? '-' : notification.lectureEndTime,
+        fallback: notification.lectureEndTime.isEmpty
+            ? '-'
+            : notification.lectureEndTime,
       ),
-      excuseText: read('reasonText', fallback: read('excuseText', fallback: '')),
+      excuseText: read(
+        'reasonText',
+        fallback: read('excuseText', fallback: ''),
+      ),
       attachmentName: read('attachmentName', fallback: '-'),
       attachmentUrl: read('attachmentUrl', fallback: '-'),
       status: read('status', fallback: '-'),
@@ -1749,7 +2056,9 @@ class _ResolvedExcuseData {
     final base = _NotificationExcuseDetails.fromNotification(notification);
     final liveReason = readLive('reasonText');
     final snapshotReason =
-        (notification.excuseRequestSnapshot['reasonText'] ?? '').toString().trim();
+        (notification.excuseRequestSnapshot['reasonText'] ?? '')
+            .toString()
+            .trim();
     final detailsReason = (notification.excuseDetails['excuseText'] ?? '')
         .toString()
         .trim();
@@ -1757,11 +2066,14 @@ class _ResolvedExcuseData {
         ? liveReason
         : (snapshotReason.isNotEmpty ? snapshotReason : detailsReason);
     final details = base.copyWith(
-      lectureDate: _NotificationExcuseDetails._normalizeDateText(
-        readLive('lectureDate'),
-      ).isEmpty
+      lectureDate:
+          _NotificationExcuseDetails._normalizeDateText(
+            readLive('lectureDate'),
+          ).isEmpty
           ? base.lectureDate
-          : _NotificationExcuseDetails._normalizeDateText(readLive('lectureDate')),
+          : _NotificationExcuseDetails._normalizeDateText(
+              readLive('lectureDate'),
+            ),
       lectureStartTime: readLive('lectureStartTime').isEmpty
           ? base.lectureStartTime
           : readLive('lectureStartTime'),
@@ -1776,9 +2088,15 @@ class _ResolvedExcuseData {
           ? base.attachmentUrl
           : readLive('attachmentUrl'),
       status: readLive('status').isEmpty ? base.status : readLive('status'),
-      section: readLive('sectionId').isEmpty ? base.section : readLive('sectionId'),
-      courseName: readLive('courseNameAr').isEmpty ? base.courseName : readLive('courseNameAr'),
-      academicNumber: readLive('studentId').isEmpty ? base.academicNumber : readLive('studentId'),
+      section: readLive('sectionId').isEmpty
+          ? base.section
+          : readLive('sectionId'),
+      courseName: readLive('courseNameAr').isEmpty
+          ? base.courseName
+          : readLive('courseNameAr'),
+      academicNumber: readLive('studentId').isEmpty
+          ? base.academicNumber
+          : readLive('studentId'),
       submissionTime: readLive('submittedAt').isEmpty
           ? base.submissionTime
           : _formatReviewDate(_readTs(liveData['submittedAt'])),
@@ -1840,8 +2158,8 @@ class _ReviewedStatusNotice extends StatelessWidget {
     final label = isAccepted
         ? tr('تمت مراجعة الطلب: مقبول', 'Request reviewed: accepted')
         : isRejected
-            ? tr('تمت مراجعة الطلب: مرفوض', 'Request reviewed: rejected')
-            : tr('حالة الطلب: $status', 'Request status: $status');
+        ? tr('تمت مراجعة الطلب: مرفوض', 'Request reviewed: rejected')
+        : tr('حالة الطلب: $status', 'Request status: $status');
     final fg = isAccepted ? const Color(0xFF0D7D3E) : const Color(0xFFB91C1C);
     final bg = isAccepted ? const Color(0xFFF0FDF4) : const Color(0xFFFEF2F2);
     return Container(

@@ -64,13 +64,6 @@ class LecturerAttendanceScreen extends StatefulWidget {
 class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   static const Color _primary = Color(0xFF006571);
 
-  // عرض الأعمدة ثابت لتفادي اهتزاز المحاذاة بين الهيدر والصفوف
-  static const double _colIdWidth = 88.0;
-  static const double _colTimeWidth = 54.0;
-  static const double _colStatusWidth = 78.0;
-  static const double _colPctWidth = 42.0;
-  static const double _cellHPad = 6.0;
-
   final ManualAttendanceService _manualAttendanceService =
       ManualAttendanceService.instance;
   final LectureRepository _calendarRepository = LectureRepository();
@@ -100,6 +93,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   String _qrData = '';
   bool _isLoadingQr = false;
   bool _isRefreshingQrToken = false;
+  bool _isUsingRosterFallback = false;
   Timer? _qrAutoRefreshTimer;
   static const int _qrAutoRefreshIntervalSeconds = 30;
   int _qrAutoRefreshSecondsLeft = _qrAutoRefreshIntervalSeconds;
@@ -454,11 +448,25 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         .listen(
           (records) {
             if (!mounted) return;
+            if (records.isNotEmpty) {
+              setState(() {
+                _students = records.map(_studentFromRecord).toList();
+                if (_isUsingRosterFallback) {
+                  _methodStatusMessage = null;
+                }
+                _isUsingRosterFallback = false;
+                _isLoadingAttendance = false;
+                _attendanceLoadError = null;
+              });
+              return;
+            }
             setState(() {
-              _students = records.map(_studentFromRecord).toList();
+              _students = <_StudentRow>[];
+              _isUsingRosterFallback = false;
               _isLoadingAttendance = false;
               _attendanceLoadError = null;
             });
+            unawaited(_loadFallbackRosterForSection(sessionId));
           },
           onError: (error) {
             if (!mounted) return;
@@ -468,6 +476,31 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
             });
           },
         );
+  }
+
+  Future<void> _loadFallbackRosterForSection(String sessionId) async {
+    final sectionId = (_lecture.sectionId ?? '').trim();
+    if (sectionId.isEmpty) return;
+    try {
+      final roster = await _manualAttendanceService.getActiveSectionRoster(
+        sectionId,
+      );
+      if (!mounted || _sessionId != sessionId) return;
+      if (roster.isEmpty) return;
+      setState(() {
+        if (_students.isNotEmpty) return;
+        _students = roster
+            .map((s) => _studentFromEnrollment(s, sessionId))
+            .toList();
+        _isUsingRosterFallback = true;
+        _methodStatusMessage = _tr(
+          'تم عرض قائمة الطلاب من تسجيلات الشعبة (عرض فقط).',
+          'Showing enrolled roster for preview mode.',
+        );
+      });
+    } catch (_) {
+      // Ignore fallback roster errors and keep current state.
+    }
   }
 
   void _attachNfcSessionWatcher() {
@@ -861,6 +894,22 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           : _timeTextForStatus(uiStatus),
       percentage: _percentageForStatus(uiStatus),
       status: uiStatus,
+      isOffline: false,
+      isSuspended: false,
+    );
+  }
+
+  _StudentRow _studentFromEnrollment(
+    ManualEnrollmentStudent enrollment,
+    String sessionId,
+  ) {
+    return _StudentRow(
+      id: '${sessionId}_${enrollment.studentId}',
+      name: enrollment.studentName,
+      academicNumber: enrollment.studentId.toString(),
+      attendanceTime: '--',
+      percentage: 0,
+      status: AttendanceStatus.pending,
       isOffline: false,
       isSuspended: false,
     );
@@ -1342,58 +1391,164 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           border: Border.all(color: const Color(0xFFDDE6E8)),
         ),
         child: _filteredStudents.isEmpty
-            ? Column(
-                mainAxisSize: MainAxisSize.max,
-                children: [
-                  _buildTableHeader(),
-                  Expanded(
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          _tr(
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    _allStudents.isEmpty
+                        ? _tr(
+                            'لا يوجد طلاب مسجلون في هذه الشعبة حتى الآن.',
+                            'No enrolled students found for this section yet.',
+                          )
+                        : _tr(
                             'لا يوجد طلاب في هذا الفلتر.',
                             'No students in this filter.',
                           ),
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            color: Color(0xFF666666),
-                            fontWeight: FontWeight.w600,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      color: Color(0xFF666666),
+                      fontWeight: FontWeight.w600,
                     ),
+                    textAlign: TextAlign.center,
                   ),
-                ],
+                ),
               )
-            : CustomScrollView(
-                physics: const ClampingScrollPhysics(),
-                slivers: [
-                  SliverToBoxAdapter(child: _buildTableHeader()),
-                  SliverList(
-                    delegate: SliverChildBuilderDelegate((context, index) {
-                      final student = _filteredStudents[index];
-                      final statusStyle = _statusStyle(
-                        _effectiveStatus(student),
-                      );
-                      final row = _buildTableRow(
-                        student,
-                        statusStyle,
-                        index.isEven,
-                      );
-                      if (index == 0) return row;
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Divider(height: 1, color: Color(0xFFEAEFF0)),
-                          row,
-                        ],
-                      );
-                    }, childCount: _filteredStudents.length),
-                  ),
-                ],
+            : ListView.builder(
+                padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+                itemCount: _filteredStudents.length,
+                itemBuilder: (context, index) {
+                  final student = _filteredStudents[index];
+                  final statusStyle = _statusStyle(_effectiveStatus(student));
+                  return _buildStudentModernCard(
+                    student: student,
+                    statusStyle: statusStyle,
+                    index: index,
+                  );
+                },
               ),
+      ),
+    );
+  }
+
+  Widget _buildStudentModernCard({
+    required _StudentRow student,
+    required _StatusStyle statusStyle,
+    required int index,
+  }) {
+    final timeText = student.attendanceTime.trim().isEmpty
+        ? '--'
+        : student.attendanceTime.trim();
+    final suspended = student.isSuspended ?? false;
+    final baseBg = suspended ? const Color(0xFFFFF1F1) : Colors.white;
+    final border = suspended
+        ? const Color(0xFFF2C4C4)
+        : (index.isEven ? const Color(0xFFDDE6E8) : const Color(0xFFE8EFF1));
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: baseBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.035),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 8,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: statusStyle.activeBg,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  student.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF213236),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _studentMetaPill(
+                label: _tr('ID', 'ID'),
+                value: student.academicNumber,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _studentMetaPill(
+                label: _tr('وقت التحضير', 'Time'),
+                value: timeText,
+              ),
+              _studentMetaPill(
+                label: _tr('النسبة', 'Percent'),
+                value: _formatPercentage(student.percentage),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: _buildStatusChipCell(student, statusStyle),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _studentMetaPill({required String label, required String value}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F8F9),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFDDE8EA)),
+      ),
+      child: RichText(
+        text: TextSpan(
+          children: [
+            TextSpan(
+              text: '$label: ',
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF4E646A),
+              ),
+            ),
+            TextSpan(
+              text: value,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF223C43),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1642,160 +1797,6 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     );
     dialogOpen = false;
     _stopQrAutoRefreshTimer();
-  }
-
-  Widget _buildTableHeader() {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: _cellHPad, vertical: 10),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF1F6F7),
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(13),
-          topRight: Radius.circular(13),
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 4,
-            child: Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: Text(
-                _tr('اسم الطالب/ة', 'Student Name'),
-                style: _tableHeaderStyle,
-                textAlign: TextAlign.start,
-              ),
-            ),
-          ),
-          SizedBox(
-            width: _colIdWidth,
-            child: Center(
-              child: Text(
-                _tr('الرقم الجامعي', 'ID'),
-                style: _tableHeaderStyle,
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-          SizedBox(
-            width: _colTimeWidth,
-            child: Center(
-              child: Text(
-                _tr('وقت التحضير', 'Time'),
-                style: _tableHeaderStyle,
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-          SizedBox(
-            width: _colStatusWidth,
-            child: Center(
-              child: Text(
-                _tr('الحالة', 'Status'),
-                style: _tableHeaderStyle,
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-          SizedBox(
-            width: _colPctWidth,
-            child: Center(
-              child: Text(
-                _tr('النسبة', '%'),
-                style: _tableHeaderStyle,
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTableRow(
-    _StudentRow student,
-    _StatusStyle statusStyle,
-    bool isEven,
-  ) {
-    final timeText = student.attendanceTime.trim().isEmpty
-        ? '--'
-        : student.attendanceTime.trim();
-    final suspended = student.isSuspended ?? false;
-    final baseBg = suspended
-        ? const Color(0xFFFFEBEE)
-        : (isEven ? Colors.white : const Color(0xFFFCFEFE));
-    return Container(
-      color: baseBg,
-      padding: EdgeInsets.symmetric(horizontal: _cellHPad, vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 4,
-            child: Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: Text(
-                student.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF213236),
-                ),
-                textAlign: TextAlign.start,
-              ),
-            ),
-          ),
-          SizedBox(
-            width: _colIdWidth,
-            child: Center(
-              child: Text(
-                student.academicNumber,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 11,
-                  color: Color(0xFF55666B),
-                ),
-              ),
-            ),
-          ),
-          SizedBox(
-            width: _colTimeWidth,
-            child: Center(
-              child: Text(
-                timeText,
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 11,
-                  color: Color(0xFF465A5F),
-                ),
-              ),
-            ),
-          ),
-          SizedBox(
-            width: _colStatusWidth,
-            child: Center(child: _buildStatusChipCell(student, statusStyle)),
-          ),
-          SizedBox(
-            width: _colPctWidth,
-            child: Center(
-              child: Text(
-                _formatPercentage(student.percentage),
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF41575D),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   /// خلية الحالة: عرض ثابت. الطالب المحروم (صفه أحمر) غير قابل لتعديل الحالة؛ رمز Sync لـ Pending sync؛ الضغط = منتقي الحالة.
@@ -2242,13 +2243,6 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     }
   }
 }
-
-const TextStyle _tableHeaderStyle = TextStyle(
-  fontFamily: 'Cairo',
-  fontSize: 11,
-  fontWeight: FontWeight.w800,
-  color: Color(0xFF41575D),
-);
 
 enum AttendanceStatusFilter { all, present, excused, absent, late }
 

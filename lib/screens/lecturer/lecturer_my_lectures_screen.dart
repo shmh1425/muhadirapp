@@ -15,7 +15,6 @@ class LecturerMyLecturesScreen extends StatefulWidget {
 
 class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
   static const Color _primaryColor = Color(0xFF006571);
-  static const double _tableRadius = 22;
 
   List<LectureItem> _allLectures = [];
   bool _isLoadingLectures = true;
@@ -261,52 +260,76 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
     required List<LectureItem> lectures,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 5,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: _primaryColor,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                _displayDayName(day),
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF12343B),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE8F4F5),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  '${lectures.length}',
-                  style: const TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFDDE9EB)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 14,
+              offset: const Offset(0, 7),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 5,
+                  height: 24,
+                  decoration: BoxDecoration(
                     color: _primaryColor,
+                    borderRadius: BorderRadius.circular(20),
                   ),
                 ),
+                const SizedBox(width: 8),
+                Text(
+                  _displayDayName(day),
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF32484D),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8F4F5),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '${lectures.length}',
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: _primaryColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ...lectures.map(
+              (lecture) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _buildLectureCard(lecture),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ...lectures.map(_buildLectureCard),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -317,118 +340,101 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
     final accentEnd = isPractical
         ? const Color(0xFF167B83)
         : const Color(0xFF0D5C66);
+    final timeLabel =
+        '${_displayHour(_normalizeHour(lecture.startTime))} - ${_displayHour(_normalizeHour(lecture.endTime))}';
+    final subtitle = '${_displayDayName(lecture.dayOfWeek)} • $timeLabel';
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(_tableRadius),
-          onTap: () => _showLectureDialog(lecture),
-          child: Ink(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(_tableRadius),
-              border: Border.all(color: const Color(0xFFD7E8EB)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 16,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 7,
-                  height: 118,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [accentStart, accentEnd],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                    ),
-                    borderRadius: const BorderRadiusDirectional.only(
-                      topStart: Radius.circular(_tableRadius),
-                      bottomStart: Radius.circular(_tableRadius),
-                    ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _showLectureDialog(lecture),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFDCE7E9)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 6,
+                height: 72,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [accentStart, accentEnd],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
                   ),
+                  borderRadius: BorderRadius.circular(999),
                 ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                    child: Column(
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                lecture.courseName,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontFamily: 'Cairo',
-                                  fontSize: 15,
-                                  color: Color(0xFF17363D),
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
+                        Expanded(
+                          child: Text(
+                            lecture.courseName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 16,
+                              color: Color(0xFF17363D),
+                              fontWeight: FontWeight.w800,
                             ),
-                            const SizedBox(width: 8),
-                            Icon(
-                              Icons.arrow_forward_ios_rounded,
-                              size: 14,
-                              color: _primaryColor.withValues(alpha: 0.7),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            _buildInfoPill(
-                              icon: Icons.access_time_rounded,
-                              label:
-                                  '${_displayHour(_normalizeHour(lecture.startTime))} - ${_displayHour(_normalizeHour(lecture.endTime))}',
-                            ),
-                            _buildInfoPill(
-                              icon: Icons.account_tree_outlined,
-                              label:
-                                  '${_tr('الشعبة', 'Section')} ${lecture.section}',
-                            ),
-                            _buildInfoPill(
-                              icon: Icons.meeting_room_outlined,
-                              label: lecture.hall,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          lecture.location?.trim().isNotEmpty == true
-                              ? lecture.location!.trim()
-                              : _tr(
-                                  'الموقع غير محدد',
-                                  'Location not specified',
-                                ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 12,
-                            color: Color(0xFF61797F),
-                            fontWeight: FontWeight.w600,
                           ),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 14,
+                          color: _primaryColor.withValues(alpha: 0.7),
                         ),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 12,
+                        color: Color(0xFF6C8288),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 7,
+                      runSpacing: 7,
+                      children: [
+                        _buildInfoPill(
+                          icon: Icons.account_tree_outlined,
+                          label:
+                              '${_tr('الشعبة', 'Section')} ${lecture.section}',
+                        ),
+                        _buildInfoPill(
+                          icon: Icons.meeting_room_outlined,
+                          label: lecture.hall,
+                        ),
+                        _buildInfoPill(
+                          icon: Icons.school_outlined,
+                          label: lecture.activity,
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -437,11 +443,11 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
 
   Widget _buildInfoPill({required IconData icon, required String label}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F8F9),
+        color: const Color(0xFFF7FAFB),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFE2EEF0)),
+        border: Border.all(color: const Color(0xFFDCE7E9)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

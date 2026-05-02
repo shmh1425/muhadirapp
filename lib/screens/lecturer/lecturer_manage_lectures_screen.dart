@@ -1084,7 +1084,7 @@ class _LecturerManageLecturesScreenState
           _buildManageFilterSectionTitle(
             icon: Icons.view_week_rounded,
             title: _tr('الأسبوع', 'Week'),
-            hint: _tr('بعد اختيار المقرر', 'After selecting course'),
+            hint: _tr('اختيار سريع بدون كروت', 'Compact dropdown selector'),
           ),
           const SizedBox(height: 8),
           if (!_isCourseSelectedForManage)
@@ -1095,7 +1095,7 @@ class _LecturerManageLecturesScreenState
               ),
             )
           else
-            _buildManageWeekScroller(weeks),
+            _buildManageWeekDropdown(weeks),
           const SizedBox(height: 8),
           Align(
             alignment: AlignmentDirectional.centerStart,
@@ -1344,141 +1344,39 @@ class _LecturerManageLecturesScreenState
     );
   }
 
-  Widget _buildManageWeekScroller(List<int> weeks) {
-    return SizedBox(
-      height: 104,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: weeks.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (_, index) {
-          final week = weeks[index];
-          return SizedBox(
-            width: 114,
-            child: _buildManageWeekNumberCard(
-              week: week,
-              selected: _selectedWeekNumber == week,
-              isCurrent: _currentWeekNumber == week,
-              onTap: () => _onManageWeekChanged(week),
-            ),
-          );
-        },
+  Widget _buildManageWeekDropdown(List<int> weeks) {
+    final selected = _selectedWeekNumber ?? _currentWeekNumber;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFD6E5E8)),
       ),
-    );
-  }
-
-  Widget _buildManageWeekNumberCard({
-    required int week,
-    required bool selected,
-    required bool isCurrent,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: AnimatedScale(
-          scale: selected ? 1.015 : 1,
-          duration: const Duration(milliseconds: 140),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            padding: const EdgeInsets.fromLTRB(9, 8, 9, 8),
-            decoration: BoxDecoration(
-              color: selected ? const Color(0xFFE6F5F7) : Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: selected
-                    ? const Color(0xFF0B8793)
-                    : const Color(0xFFD6E5E8),
-                width: selected ? 1.8 : 1.2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: selected ? 0.06 : 0.03),
-                  blurRadius: selected ? 14 : 8,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _tr('الأسبوع', 'Week'),
-                        style: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 9.8,
-                          fontWeight: FontWeight.w800,
-                          color: selected
-                              ? const Color(0xFF0E5D67)
-                              : const Color(0xFF678189),
-                        ),
-                      ),
-                    ),
-                    if (isCurrent)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: selected
-                              ? const Color(0xFF0E7F8C)
-                              : const Color(0xFFE9F3F5),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          _tr('الحالي', 'Now'),
-                          style: TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 8.4,
-                            fontWeight: FontWeight.w800,
-                            color: selected
-                                ? Colors.white
-                                : const Color(0xFF46666E),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: Container(
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      gradient: selected
-                          ? const LinearGradient(
-                              colors: [Color(0xFF0B8793), Color(0xFF0A6F79)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            )
-                          : const LinearGradient(
-                              colors: [Color(0xFFF1F7F8), Color(0xFFE8F1F3)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '$week',
-                      style: TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 24,
-                        fontWeight: FontWeight.w900,
-                        color: selected
-                            ? Colors.white
-                            : const Color(0xFF0E5D67),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          isExpanded: true,
+          value: weeks.contains(selected) ? selected : weeks.first,
+          icon: const Icon(Icons.keyboard_arrow_down_rounded),
+          borderRadius: BorderRadius.circular(12),
+          style: const TextStyle(
+            fontFamily: 'Cairo',
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF2B4B52),
           ),
+          items: weeks
+              .map(
+                (week) => DropdownMenuItem<int>(
+                  value: week,
+                  child: Text(_tr('الأسبوع $week', 'Week $week')),
+                ),
+              )
+              .toList(),
+          onChanged: (week) {
+            if (week == null) return;
+            _onManageWeekChanged(week);
+          },
         ),
       ),
     );
@@ -1697,148 +1595,200 @@ class _LecturerManageLecturesScreenState
         ? Icons.cancel_rounded
         : Icons.schedule_rounded;
 
-    return InkWell(
-      onTap: () {
-        setState(() {
-          if (isSelected) {
-            _selectedLectureKeys.remove(key);
-            _selectedDate = null;
-          } else {
-            _selectedLectureKeys
-              ..clear()
-              ..add(key);
-            _selectedDate = date;
-            _applyFilters();
-          }
-        });
-      },
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFEAF7F8) : actionSoftBg,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isSelected ? _primary : actionAccent.withValues(alpha: 0.35),
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Icon(
-                isSelected
-                    ? Icons.check_circle_rounded
-                    : Icons.radio_button_unchecked_rounded,
-                size: 26,
-                color: isSelected ? _primary : const Color(0xFF8EA3A9),
-              ),
+    final mainTitle = lecture.courseName.trim().isNotEmpty
+        ? lecture.courseName.trim()
+        : '${_tr('الشعبة', 'Section')} ${lecture.section}';
+    final subTitle = '$dayLabel • $timeRange';
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            if (isSelected) {
+              _selectedLectureKeys.remove(key);
+              _selectedDate = null;
+            } else {
+              _selectedLectureKeys
+                ..clear()
+                ..add(key);
+              _selectedDate = date;
+              _applyFilters();
+            }
+          });
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFFEAF7F8) : actionSoftBg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isSelected
+                  ? const Color(0xFF0B7D88)
+                  : const Color(0xFFDCE7E9),
+              width: isSelected ? 1.5 : 1,
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          ),
+          child: Column(
+            children: [
+              Row(
                 children: [
-                  Text(
-                    lecture.courseName.trim().isEmpty
-                        ? '${_tr('الشعبة', 'Section')} ${lecture.section}'
-                        : lecture.courseName,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF1F2E33),
-                      fontFamily: 'Cairo',
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '$dayLabel - $dateLabel',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF5A6F76),
-                      fontFamily: 'Cairo',
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${_tr('الوقت', 'Time')}: $timeRange',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF5A6F76),
-                      fontFamily: 'Cairo',
-                    ),
-                  ),
-                  if (actionBannerText != null) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 7,
+                  Container(
+                    width: 6,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: isSelected
+                            ? const [Color(0xFF0B8793), Color(0xFF076772)]
+                            : const [Color(0xFFCFE4E7), Color(0xFFC2DCE0)],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
                       ),
-                      decoration: BoxDecoration(
-                        color: actionAccent.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: actionAccent.withValues(alpha: 0.34),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          mainTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 13.1,
+                            fontWeight: FontWeight.w800,
+                            color: isSelected
+                                ? const Color(0xFF15414A)
+                                : const Color(0xFF2E4348),
+                          ),
                         ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(actionBannerIcon, size: 16, color: actionAccent),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              actionBannerText,
-                              style: TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                                color: actionAccent,
-                              ),
+                        const SizedBox(height: 3),
+                        Text(
+                          subTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 11.3,
+                            fontWeight: FontWeight.w700,
+                            color: isSelected
+                                ? const Color(0xFF2A5C65)
+                                : const Color(0xFF627B82),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            _buildSectionSelectionMetaChip(
+                              '${_tr('الشعبة', 'Section')} ${lecture.section}',
                             ),
-                          ),
-                        ],
-                      ),
+                            _buildSectionSelectionMetaChip(
+                              '${_tr('القاعة', 'Hall')}: ${locationText.isEmpty ? '—' : locationText}',
+                            ),
+                            if (lecture.activity.trim().isNotEmpty)
+                              _buildSectionSelectionMetaChip(
+                                '${_tr('النشاط', 'Activity')}: ${lecture.activity.trim()}',
+                              ),
+                          ],
+                        ),
+                      ],
                     ),
-                  ],
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      _buildSectionSelectionMetaChip(
-                        '${_tr('الشعبة', 'Section')} ${lecture.section}',
-                      ),
-                      _buildSectionSelectionMetaChip(
-                        '${_tr('القاعة', 'Hall')}: ${locationText.isEmpty ? '—' : locationText}',
-                      ),
-                      if (lecture.activity.trim().isNotEmpty)
-                        _buildSectionSelectionMetaChip(
-                          '${_tr('النشاط', 'Activity')}: ${lecture.activity.trim()}',
+                      Text(
+                        dateLabel,
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: isSelected
+                              ? const Color(0xFF2A5C65)
+                              : const Color(0xFF769097),
                         ),
+                      ),
+                      const SizedBox(height: 7),
+                      Icon(
+                        isSelected
+                            ? Icons.check_circle_rounded
+                            : Icons.radio_button_unchecked_rounded,
+                        size: 18,
+                        color: isSelected
+                            ? const Color(0xFF006571)
+                            : const Color(0xFF8AA0A6),
+                      ),
+                      const SizedBox(height: 6),
                       _buildSectionSelectionStatusChip(status),
-                      if (actionStatus.isCanceled)
-                        _buildSectionSelectionStatusChip(
-                          _tr('ملغية بالفعل', 'Already canceled'),
-                          color: _cancelRed,
-                        ),
-                      if (actionStatus.isDelayed)
-                        _buildSectionSelectionStatusChip(
-                          _tr(
-                            'مؤجلة ${actionStatus.delayMinutes ?? 0} دقيقة',
-                            'Delayed ${actionStatus.delayMinutes ?? 0} min',
-                          ),
-                          color: _delayYellow,
-                        ),
                     ],
                   ),
                 ],
               ),
-            ),
-          ],
+              if (actionBannerText != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: actionAccent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: actionAccent.withValues(alpha: 0.34),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(actionBannerIcon, size: 16, color: actionAccent),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          actionBannerText,
+                          style: TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: actionAccent,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (actionStatus.isCanceled || actionStatus.isDelayed) ...[
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    if (actionStatus.isCanceled)
+                      _buildSectionSelectionStatusChip(
+                        _tr('ملغية بالفعل', 'Already canceled'),
+                        color: _cancelRed,
+                      ),
+                    if (actionStatus.isDelayed)
+                      _buildSectionSelectionStatusChip(
+                        _tr(
+                          'مؤجلة ${actionStatus.delayMinutes ?? 0} دقيقة',
+                          'Delayed ${actionStatus.delayMinutes ?? 0} min',
+                        ),
+                        color: _delayYellow,
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

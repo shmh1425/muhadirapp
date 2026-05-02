@@ -1236,18 +1236,6 @@ class _LecturerExcuseManagementScreenState
     );
   }
 
-  static const double _colIdWidth = 110.0;
-  static const double _colStatusWidth = 120.0;
-  static const double _cellHPad = 14.0;
-  static const double _colGap = 10.0;
-
-  static const TextStyle _tableHeaderStyle = TextStyle(
-    fontFamily: 'Cairo',
-    fontSize: 11,
-    fontWeight: FontWeight.w800,
-    color: Color(0xFF41575D),
-  );
-
   Widget _buildFilterBar() {
     final filters = [
       ExcuseStatusFilter.all,
@@ -1367,150 +1355,144 @@ class _LecturerExcuseManagementScreenState
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: const Color(0xFFDDE6E8)),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildTableHeaderRow(),
-            list.isEmpty
-                ? Expanded(
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          _tr(
-                            'لا يوجد طلاب في هذا الفلتر.',
-                            'No students in this filter.',
-                          ),
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            color: Color(0xFF666666),
-                            fontWeight: FontWeight.w600,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
+        child: list.isEmpty
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    _tr(
+                      'لا يوجد طلاب في هذا الفلتر.',
+                      'No students in this filter.',
                     ),
-                  )
-                : Expanded(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      itemCount: list.length,
-                      separatorBuilder: (_, __) =>
-                          const Divider(height: 1, color: Color(0xFFEAEFF0)),
-                      itemBuilder: (context, index) {
-                        return _buildExcuseRow(list[index], index.isEven);
-                      },
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      color: Color(0xFF666666),
+                      fontWeight: FontWeight.w600,
                     ),
+                    textAlign: TextAlign.center,
                   ),
-          ],
-        ),
+                ),
+              )
+            : ListView.builder(
+                padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+                itemCount: list.length,
+                itemBuilder: (context, index) {
+                  return _buildExcuseModernCard(list[index], index);
+                },
+              ),
       ),
     );
   }
 
-  Widget _buildTableHeaderRow() {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: _cellHPad, vertical: 12),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF1F6F7),
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(13),
-          topRight: Radius.circular(13),
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 4,
-            child: Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: Text(
-                _tr('اسم الطالب/ة', 'Student Name'),
-                style: _tableHeaderStyle,
-                textAlign: TextAlign.start,
-              ),
-            ),
-          ),
-          SizedBox(width: _colGap),
-          SizedBox(
-            width: _colIdWidth,
-            child: Center(
-              child: Text(
-                _tr('الرقم الجامعي', 'ID'),
-                style: _tableHeaderStyle,
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-          SizedBox(width: _colGap),
-          SizedBox(
-            width: _colStatusWidth,
-            child: Center(
-              child: Text(
-                _tr('حالة العذر', 'Excuse Status'),
-                style: _tableHeaderStyle,
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildExcuseRow(_ExcuseViewRow row, bool isEven) {
+  Widget _buildExcuseModernCard(_ExcuseViewRow row, int index) {
     final eff = _effectiveStatus(row.request);
-    final baseBg = Colors.white;
-    final rowBg = isEven ? baseBg : const Color(0xFFFCFEFE);
+    final fg = _statusChipFg(eff);
+    final border = index.isEven
+        ? const Color(0xFFDDE6E8)
+        : const Color(0xFFE8EFF1);
     return Material(
-      color: rowBg,
+      color: Colors.transparent,
       child: InkWell(
         onTap: () => _onViewRow(row),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
-          padding: EdgeInsets.symmetric(horizontal: _cellHPad, vertical: 10),
-          child: Row(
-            children: [
-              Expanded(
-                flex: 4,
-                child: Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: Text(
-                    row.displayName,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF213236),
-                    ),
-                    textAlign: TextAlign.start,
-                  ),
-                ),
-              ),
-              SizedBox(width: _colGap),
-              SizedBox(
-                width: _colIdWidth,
-                child: Center(
-                  child: Text(
-                    row.academicId,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 11,
-                      color: Color(0xFF55666B),
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(width: _colGap),
-              SizedBox(
-                width: _colStatusWidth,
-                child: Center(child: _buildStatusChip(eff)),
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: fg,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      row.displayName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF213236),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _excuseMetaPill(
+                    label: _tr('ID', 'ID'),
+                    value: row.academicId,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildStatusChip(eff),
+                  _excuseMetaPill(
+                    label: _tr('العذر', 'Excuse'),
+                    value: _tr('عرض التفاصيل', 'View details'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _excuseMetaPill({required String label, required String value}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F8F9),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFDDE8EA)),
+      ),
+      child: RichText(
+        text: TextSpan(
+          children: [
+            TextSpan(
+              text: '$label: ',
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF4E646A),
+              ),
+            ),
+            TextSpan(
+              text: value,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF223C43),
+              ),
+            ),
+          ],
         ),
       ),
     );
