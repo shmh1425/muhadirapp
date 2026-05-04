@@ -43,6 +43,10 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
   bool _isNfcActiveForLecture = false;
   String? _sessionErrorMessage;
   _CheckInMethod _selectedMethod = _CheckInMethod.qr;
+  _QrDisplayMode _qrDisplayMode = _QrDisplayMode.qrCode;
+  Timer? _codeRefreshTimer;
+  static const int _codeRefreshIntervalSeconds = 45;
+  int _codeRefreshSecondsLeft = _codeRefreshIntervalSeconds;
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
@@ -69,6 +73,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
   void dispose() {
     _calendarSyncSub?.cancel();
     _nfcSessionsSub?.cancel();
+    _stopCodeRefreshTimer();
     super.dispose();
   }
 
@@ -118,6 +123,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
         _qrSession = null;
         _qrData = '';
       });
+      _stopCodeRefreshTimer();
       return;
     }
 
@@ -137,6 +143,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
         _sessionErrorMessage =
             'تعذر إنشاء جلسة QR: بيانات المحاضرة ناقصة (${missingFields.join(', ')}).';
       });
+      _stopCodeRefreshTimer();
       return;
     }
 
@@ -155,6 +162,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
         _qrData = _buildQrPayload(session);
         _sessionErrorMessage = null;
       });
+      _startCodeRefreshTimer();
     } on FirebaseException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -167,6 +175,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
           _sessionErrorMessage = 'فشل إنشاء/جلب جلسة QR من Firestore.';
         }
       });
+      _stopCodeRefreshTimer();
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -174,6 +183,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
         _qrData = '';
         _sessionErrorMessage = 'فشل إنشاء/جلب جلسة QR من Firestore.';
       });
+      _stopCodeRefreshTimer();
     } finally {
       if (mounted) {
         setState(() {
@@ -277,6 +287,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
           _qrSession = refreshed;
           _qrData = _buildQrPayload(refreshed);
         });
+        _startCodeRefreshTimer();
       } else {
         await _syncLectureAndCode();
       }
@@ -303,6 +314,32 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
     if (_sessionErrorMessage != null) {
       messenger?.showSnackBar(SnackBar(content: Text(_sessionErrorMessage!)));
     }
+  }
+
+  void _startCodeRefreshTimer() {
+    _stopCodeRefreshTimer();
+    _codeRefreshSecondsLeft = _codeRefreshIntervalSeconds;
+    _codeRefreshTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      if (!mounted ||
+          _selectedMethod != _CheckInMethod.qr ||
+          _qrSession == null ||
+          _isLoadingSession) {
+        return;
+      }
+      if (_codeRefreshSecondsLeft > 1) {
+        setState(() => _codeRefreshSecondsLeft--);
+        return;
+      }
+      await _onRefreshPressed();
+      if (mounted) {
+        setState(() => _codeRefreshSecondsLeft = _codeRefreshIntervalSeconds);
+      }
+    });
+  }
+
+  void _stopCodeRefreshTimer() {
+    _codeRefreshTimer?.cancel();
+    _codeRefreshTimer = null;
   }
 
   Future<void> _onEnableNfcPressed() async {
@@ -449,9 +486,14 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
                           child: InkWell(
                             borderRadius: BorderRadius.circular(10),
                             onTap: () {
-                              setState(
-                                () => _selectedMethod = _CheckInMethod.qr,
-                              );
+                              setState(() {
+                                _selectedMethod = _CheckInMethod.qr;
+                                _codeRefreshSecondsLeft =
+                                    _codeRefreshIntervalSeconds;
+                              });
+                              if (_qrSession != null) {
+                                _startCodeRefreshTimer();
+                              }
                             },
                             child: Container(
                               height: 38,
@@ -482,6 +524,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
                               setState(
                                 () => _selectedMethod = _CheckInMethod.nfc,
                               );
+                              _stopCodeRefreshTimer();
                             },
                             child: Container(
                               height: 38,
@@ -762,28 +805,124 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
                             ),
                           ] else ...[
                             Container(
+                              height: 40,
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(24),
+                                color: const Color(0xFFF2F5F6),
+                                borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: const Color(0xFF006571),
-                                  width: 3,
+                                  color: const Color(0xFFD9E5E8),
                                 ),
                               ),
-                              padding: const EdgeInsets.all(16),
-                              child: QrImageView(
-                                data: _qrData,
-                                size: MediaQuery.of(context).size.width * 0.5,
-                                backgroundColor: Colors.white,
-                                eyeStyle: const QrEyeStyle(
-                                  eyeShape: QrEyeShape.square,
-                                  color: Color(0xFF00474F),
-                                ),
-                                dataModuleStyle: const QrDataModuleStyle(
-                                  dataModuleShape: QrDataModuleShape.square,
-                                  color: Color(0xFF00474F),
-                                ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: _QrDisplayChip(
+                                      label: _tr('رمز QR', 'QR Code'),
+                                      isActive:
+                                          _qrDisplayMode ==
+                                          _QrDisplayMode.qrCode,
+                                      onTap: () => setState(
+                                        () => _qrDisplayMode =
+                                            _QrDisplayMode.qrCode,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _QrDisplayChip(
+                                      label: _tr('الرمز الرقمي', 'Number Code'),
+                                      isActive:
+                                          _qrDisplayMode ==
+                                          _QrDisplayMode.numberCode,
+                                      onTap: () => setState(
+                                        () => _qrDisplayMode =
+                                            _QrDisplayMode.numberCode,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
+                            const SizedBox(height: 16),
+                            if (_qrDisplayMode == _QrDisplayMode.numberCode)
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 18,
+                                  vertical: 22,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF7FBFC),
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(
+                                    color: const Color(0xFFD9E5E8),
+                                  ),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      _tr('رمز الحضور', 'Attendance Code'),
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w800,
+                                        color: Color(0xFF465A5F),
+                                        fontFamily: 'Cairo',
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Directionality(
+                                      textDirection: TextDirection.ltr,
+                                      child: Text(
+                                        _qrSession?.numericCode.isNotEmpty ==
+                                                true
+                                            ? _qrSession!.numericCode
+                                            : '------',
+                                        style: const TextStyle(
+                                          fontSize: 42,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: 8,
+                                          color: Color(0xFF00474F),
+                                          fontFamily: 'Cairo',
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      '${_tr('سيتم تحديث الرمز خلال', 'Code refreshes in')} ${_codeRefreshSecondsLeft}s',
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF5F7A80),
+                                        fontFamily: 'Cairo',
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
+                              Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(24),
+                                  border: Border.all(
+                                    color: const Color(0xFF006571),
+                                    width: 3,
+                                  ),
+                                ),
+                                padding: const EdgeInsets.all(16),
+                                child: QrImageView(
+                                  data: _qrData,
+                                  size: MediaQuery.of(context).size.width * 0.5,
+                                  backgroundColor: Colors.white,
+                                  eyeStyle: const QrEyeStyle(
+                                    eyeShape: QrEyeShape.square,
+                                    color: Color(0xFF00474F),
+                                  ),
+                                  dataModuleStyle: const QrDataModuleStyle(
+                                    dataModuleShape: QrDataModuleShape.square,
+                                    color: Color(0xFF00474F),
+                                  ),
+                                ),
+                              ),
                             const SizedBox(height: 10),
                             Text(
                               _tr(
@@ -865,4 +1004,45 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
   }
 }
 
+class _QrDisplayChip extends StatelessWidget {
+  const _QrDisplayChip({
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: onTap,
+      child: Container(
+        height: 34,
+        alignment: Alignment.center,
+        margin: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          color: isActive ? const Color(0xFF006571) : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontFamily: 'Cairo',
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: isActive ? Colors.white : const Color(0xFF4F656B),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 enum _CheckInMethod { qr, nfc }
+
+enum _QrDisplayMode { qrCode, numberCode }

@@ -95,7 +95,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   bool _isRefreshingQrToken = false;
   bool _isUsingRosterFallback = false;
   Timer? _qrAutoRefreshTimer;
-  static const int _qrAutoRefreshIntervalSeconds = 30;
+  static const int _qrAutoRefreshIntervalSeconds = 45;
   int _qrAutoRefreshSecondsLeft = _qrAutoRefreshIntervalSeconds;
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
@@ -1658,6 +1658,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     String? dialogError;
     int countdown = _qrAutoRefreshSecondsLeft;
     bool popupRefreshing = false;
+    bool showNumberCode = false;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
@@ -1747,7 +1748,81 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                     ],
                     const SizedBox(height: 10),
                     Container(
-                      padding: const EdgeInsets.all(10),
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF2F5F6),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFD9E5E8)),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(10),
+                              onTap: () {
+                                showNumberCode = false;
+                                setDialogState(() {});
+                              },
+                              child: Container(
+                                margin: const EdgeInsets.all(3),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: showNumberCode
+                                      ? Colors.transparent
+                                      : const Color(0xFF006571),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  _tr('رمز QR', 'QR Code'),
+                                  style: TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: showNumberCode
+                                        ? const Color(0xFF4F656B)
+                                        : Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(10),
+                              onTap: () {
+                                showNumberCode = true;
+                                setDialogState(() {});
+                              },
+                              child: Container(
+                                margin: const EdgeInsets.all(3),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: showNumberCode
+                                      ? const Color(0xFF006571)
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  _tr('الرمز الرقمي', 'Number Code'),
+                                  style: TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: showNumberCode
+                                        ? Colors.white
+                                        : const Color(0xFF4F656B),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: showNumberCode ? 260 : null,
+                      padding: EdgeInsets.all(showNumberCode ? 16 : 10),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(14),
@@ -1756,11 +1831,41 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                           width: 1.8,
                         ),
                       ),
-                      child: QrImageView(
-                        data: _qrData,
-                        size: 220,
-                        backgroundColor: Colors.white,
-                      ),
+                      child: showNumberCode
+                          ? Column(
+                              children: [
+                                Text(
+                                  _tr('رمز الحضور', 'Attendance Code'),
+                                  style: const TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF465A5F),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Directionality(
+                                  textDirection: TextDirection.ltr,
+                                  child: Text(
+                                    _qrSession!.numericCode.isNotEmpty
+                                        ? _qrSession!.numericCode
+                                        : '------',
+                                    style: const TextStyle(
+                                      fontFamily: 'Cairo',
+                                      fontSize: 38,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 7,
+                                      color: Color(0xFF00474F),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : QrImageView(
+                              data: _qrData,
+                              size: 220,
+                              backgroundColor: Colors.white,
+                            ),
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -1794,8 +1899,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                           children: [
                             TextSpan(
                               text: _tr(
-                                'يتجدد تلقائيًا خلال: ',
-                                'Auto refresh in: ',
+                                'سيتم تحديث الرمز خلال ',
+                                'Code refreshes in ',
                               ),
                             ),
                             TextSpan(
