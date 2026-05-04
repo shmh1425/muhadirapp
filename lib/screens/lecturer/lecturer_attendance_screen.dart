@@ -1413,24 +1413,122 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                   ),
                 ),
               )
-            : ListView.builder(
-                padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
-                itemCount: _filteredStudents.length,
-                itemBuilder: (context, index) {
-                  final student = _filteredStudents[index];
-                  final statusStyle = _statusStyle(_effectiveStatus(student));
-                  return _buildStudentModernCard(
-                    student: student,
-                    statusStyle: statusStyle,
-                    index: index,
-                  );
-                },
+            : Column(
+                children: [
+                  _buildStudentsTableHeader(),
+                  Expanded(
+                    child: ListView.separated(
+                      padding: EdgeInsets.zero,
+                      itemCount: _filteredStudents.length,
+                      separatorBuilder: (_, __) =>
+                          const Divider(height: 1, color: Color(0xFFE8EFF1)),
+                      itemBuilder: (context, index) {
+                        final student = _filteredStudents[index];
+                        final statusStyle = _statusStyle(
+                          _effectiveStatus(student),
+                        );
+                        return _buildStudentTableRow(
+                          student: student,
+                          statusStyle: statusStyle,
+                          index: index,
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
       ),
     );
   }
 
-  Widget _buildStudentModernCard({
+  Widget _buildStudentsTableHeader() {
+    return Container(
+      color: const Color(0xFFF1F6F7),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 34,
+            child: Text(
+              '#',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF4A6066),
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 4,
+            child: Text(
+              _tr('الطالب', 'Student'),
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF4A6066),
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(
+              _tr('الرقم', 'ID'),
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF4A6066),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 50,
+            child: Text(
+              _tr('الوقت', 'Time'),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF4A6066),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 44,
+            child: Text(
+              '%',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF4A6066),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 112,
+            child: Text(
+              _tr('الحالة', 'Status'),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF4A6066),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStudentTableRow({
     required _StudentRow student,
     required _StatusStyle statusStyle,
     required int index,
@@ -1439,116 +1537,83 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         ? '--'
         : student.attendanceTime.trim();
     final suspended = student.isSuspended ?? false;
-    final baseBg = suspended ? const Color(0xFFFFF1F1) : Colors.white;
-    final border = suspended
-        ? const Color(0xFFF2C4C4)
-        : (index.isEven ? const Color(0xFFDDE6E8) : const Color(0xFFE8EFF1));
-
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: baseBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.035),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      color: suspended
+          ? const Color(0xFFFFF5F5)
+          : (index.isEven ? Colors.white : const Color(0xFFFBFDFD)),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: statusStyle.activeBg,
-                  borderRadius: BorderRadius.circular(99),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  student.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF213236),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              _studentMetaPill(
-                label: _tr('ID', 'ID'),
-                value: student.academicNumber,
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _studentMetaPill(
-                label: _tr('وقت التحضير', 'Time'),
-                value: timeText,
-              ),
-              _studentMetaPill(
-                label: _tr('النسبة', 'Percent'),
-                value: _formatPercentage(student.percentage),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: _buildStatusChipCell(student, statusStyle),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _studentMetaPill({required String label, required String value}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF4F8F9),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFDDE8EA)),
-      ),
-      child: RichText(
-        text: TextSpan(
-          children: [
-            TextSpan(
-              text: '$label: ',
+          SizedBox(
+            width: 34,
+            child: Text(
+              '${index + 1}',
+              textAlign: TextAlign.center,
               style: const TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF4E646A),
+                color: Color(0xFF5E6C70),
               ),
             ),
-            TextSpan(
-              text: value,
+          ),
+          Expanded(
+            flex: 4,
+            child: Text(
+              student.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF213236),
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(
+              student.academicNumber,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 11.5,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF223C43),
+                color: Color(0xFF4E6268),
               ),
             ),
-          ],
-        ),
+          ),
+          SizedBox(
+            width: 50,
+            child: Text(
+              timeText,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11,
+                color: Color(0xFF4E6268),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 44,
+            child: Text(
+              _formatPercentage(student.percentage),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF3D555B),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 112,
+            child: _buildStatusChipCell(student, statusStyle),
+          ),
+        ],
       ),
     );
   }
