@@ -22,6 +22,12 @@ class QrAttendanceSession {
     required this.expiresAt,
     required this.tokenVersion,
     required this.currentTokenId,
+    required this.numericCode,
+    required this.numericCodeGeneratedAt,
+    required this.numericCodeExpiresAt,
+    required this.codeVersion,
+    this.previousNumericCode,
+    this.previousNumericCodeExpiredAt,
     this.sessionOpenedAt,
     this.createdAt,
     this.updatedAt,
@@ -47,6 +53,12 @@ class QrAttendanceSession {
   final DateTime expiresAt;
   final int tokenVersion;
   final String currentTokenId;
+  final String numericCode;
+  final DateTime numericCodeGeneratedAt;
+  final DateTime numericCodeExpiresAt;
+  final int codeVersion;
+  final String? previousNumericCode;
+  final DateTime? previousNumericCodeExpiredAt;
   final DateTime? sessionOpenedAt;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -87,6 +99,12 @@ class QrAttendanceSession {
     DateTime? expiresAt,
     int? tokenVersion,
     String? currentTokenId,
+    String? numericCode,
+    DateTime? numericCodeGeneratedAt,
+    DateTime? numericCodeExpiresAt,
+    int? codeVersion,
+    String? previousNumericCode,
+    DateTime? previousNumericCodeExpiredAt,
     DateTime? sessionOpenedAt,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -112,6 +130,14 @@ class QrAttendanceSession {
       expiresAt: expiresAt ?? this.expiresAt,
       tokenVersion: tokenVersion ?? this.tokenVersion,
       currentTokenId: currentTokenId ?? this.currentTokenId,
+      numericCode: numericCode ?? this.numericCode,
+      numericCodeGeneratedAt:
+          numericCodeGeneratedAt ?? this.numericCodeGeneratedAt,
+      numericCodeExpiresAt: numericCodeExpiresAt ?? this.numericCodeExpiresAt,
+      codeVersion: codeVersion ?? this.codeVersion,
+      previousNumericCode: previousNumericCode ?? this.previousNumericCode,
+      previousNumericCodeExpiredAt:
+          previousNumericCodeExpiredAt ?? this.previousNumericCodeExpiredAt,
       sessionOpenedAt: sessionOpenedAt ?? this.sessionOpenedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -140,6 +166,16 @@ class QrAttendanceSession {
       'expiresAt': Timestamp.fromDate(expiresAt),
       'tokenVersion': tokenVersion,
       'currentTokenId': currentTokenId,
+      'numericCode': numericCode,
+      'numericCodeGeneratedAt': Timestamp.fromDate(numericCodeGeneratedAt),
+      'numericCodeExpiresAt': Timestamp.fromDate(numericCodeExpiresAt),
+      'codeVersion': codeVersion,
+      if (previousNumericCode != null)
+        'previousNumericCode': previousNumericCode,
+      if (previousNumericCodeExpiredAt != null)
+        'previousNumericCodeExpiredAt': Timestamp.fromDate(
+          previousNumericCodeExpiredAt!,
+        ),
       if (sessionOpenedAt != null)
         'sessionOpenedAt': Timestamp.fromDate(sessionOpenedAt!),
       if (createdAt != null) 'createdAt': Timestamp.fromDate(createdAt!),
@@ -150,8 +186,14 @@ class QrAttendanceSession {
   static QrAttendanceSession _fromMap(String docId, Map<String, dynamic> data) {
     final lectureDate = _parseLectureDate(data);
     final generatedAt = _toDateTime(data['generatedAt']) ?? DateTime.now();
-    final expiresAt = _toDateTime(data['expiresAt']) ??
+    final expiresAt =
+        _toDateTime(data['expiresAt']) ??
         generatedAt.add(const Duration(minutes: 2));
+    final numericCodeGeneratedAt =
+        _toDateTime(data['numericCodeGeneratedAt']) ?? generatedAt;
+    final numericCodeExpiresAt =
+        _toDateTime(data['numericCodeExpiresAt']) ??
+        numericCodeGeneratedAt.add(const Duration(seconds: 45));
 
     return QrAttendanceSession(
       sessionId: (data['sessionId'] ?? docId).toString().trim(),
@@ -177,6 +219,14 @@ class QrAttendanceSession {
       expiresAt: expiresAt,
       tokenVersion: _safeInt(data['tokenVersion'], fallback: 1),
       currentTokenId: (data['currentTokenId'] ?? '').toString().trim(),
+      numericCode: (data['numericCode'] ?? '').toString().trim(),
+      numericCodeGeneratedAt: numericCodeGeneratedAt,
+      numericCodeExpiresAt: numericCodeExpiresAt,
+      codeVersion: _safeInt(data['codeVersion'], fallback: 1),
+      previousNumericCode: _nullableTrimmedString(data['previousNumericCode']),
+      previousNumericCodeExpiredAt: _toDateTime(
+        data['previousNumericCodeExpiredAt'],
+      ),
       sessionOpenedAt: _toDateTime(data['sessionOpenedAt']),
       createdAt: _toDateTime(data['createdAt']),
       updatedAt: _toDateTime(data['updatedAt']),
@@ -220,6 +270,11 @@ class QrAttendanceSession {
     if (value is int) return value;
     if (value is num) return value.toInt();
     return int.tryParse((value ?? '').toString()) ?? fallback;
+  }
+
+  static String? _nullableTrimmedString(dynamic value) {
+    final text = (value ?? '').toString().trim();
+    return text.isEmpty ? null : text;
   }
 
   static DateTime _normalizedDate(DateTime value) =>

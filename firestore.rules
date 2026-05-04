@@ -99,6 +99,10 @@ service cloud.firestore {
         'tokenVersion',
         'generatedAt',
         'expiresAt',
+        'numericCode',
+        'numericCodeGeneratedAt',
+        'numericCodeExpiresAt',
+        'codeVersion',
         'createdAt',
         'updatedAt',
       ]);
@@ -112,6 +116,10 @@ service cloud.firestore {
           data.sectionId is string &&
           data.currentTokenId is string &&
           data.tokenVersion is number &&
+          data.numericCode is string &&
+          data.numericCodeGeneratedAt is timestamp &&
+          data.numericCodeExpiresAt is timestamp &&
+          data.codeVersion is number &&
           data.isOpen is bool &&
           data.attendanceMethod == 'qr' &&
           isLecturerByClaimOrId(data.lecturerId) &&
@@ -127,6 +135,10 @@ service cloud.firestore {
           data.attendanceMethod == 'qr' &&
           data.currentTokenId is string &&
           data.tokenVersion is number &&
+          data.numericCode is string &&
+          data.numericCodeGeneratedAt is timestamp &&
+          data.numericCodeExpiresAt is timestamp &&
+          data.codeVersion is number &&
           data.isOpen is bool;
     }
 

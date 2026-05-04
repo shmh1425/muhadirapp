@@ -19,6 +19,8 @@ enum QrAttendanceErrorCode {
   sessionClosed,
   tokenMismatch,
   qrExpired,
+  invalidNumericCode,
+  numericCodeExpired,
   attendanceWindowClosed,
   studentNotEnrolled,
   alreadyMarked,
@@ -66,7 +68,8 @@ class QrAttendanceService {
   static const String _manualSessionsCollection = 'manual_attendance_sessions';
   static const String _manualRecordsCollection = 'manual_attendance_records';
   static const String _enrollmentsCollection = 'student_section_enrollments';
-  static const Duration defaultQrValidity = Duration(minutes: 2);
+  static const Duration defaultQrValidity = Duration(seconds: 45);
+  static const Duration numericCodeValidity = Duration(seconds: 45);
 
   void _debugLog(String message) {
     if (kDebugMode) {
@@ -113,14 +116,24 @@ class QrAttendanceService {
       lectureStartTime: lecture.startTime,
     );
 
-    final sessionRef = _firestore.collection(_sessionsCollection).doc(sessionId);
+    final sessionRef = _firestore
+        .collection(_sessionsCollection)
+        .doc(sessionId);
     final existing = await sessionRef.get();
     if (existing.exists && existing.data() != null) {
-      return QrAttendanceSession.fromDocumentSnapshot(existing);
+      final session = QrAttendanceSession.fromDocumentSnapshot(existing);
+      final now = DateTime.now();
+      if (session.numericCode.isEmpty ||
+          now.isAfter(session.numericCodeExpiresAt) ||
+          now.isAfter(session.expiresAt)) {
+        return refreshSessionToken(session.sessionId);
+      }
+      return session;
     }
 
     final now = DateTime.now();
     final tokenId = _generateTokenId();
+    final numericCode = _generateNumericCode();
     final payload = <String, dynamic>{
       'sessionId': sessionId,
       'sectionId': sectionId,
@@ -143,6 +156,10 @@ class QrAttendanceService {
       'expiresAt': Timestamp.fromDate(_calculateExpiresAt(now)),
       'tokenVersion': 1,
       'currentTokenId': tokenId,
+      'numericCode': numericCode,
+      'numericCodeGeneratedAt': Timestamp.fromDate(now),
+      'numericCodeExpiresAt': Timestamp.fromDate(now.add(numericCodeValidity)),
+      'codeVersion': 1,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
@@ -171,17 +188,96 @@ class QrAttendanceService {
     final now = DateTime.now();
     final newVersion = currentSession.tokenVersion + 1;
     final newToken = _generateTokenId();
+    final newNumericCode = _generateNumericCode(
+      excluding: currentSession.numericCode,
+    );
 
     await ref.set({
       'currentTokenId': newToken,
       'tokenVersion': newVersion,
       'generatedAt': Timestamp.fromDate(now),
       'expiresAt': Timestamp.fromDate(_calculateExpiresAt(now, validity)),
+      'numericCode': newNumericCode,
+      'numericCodeGeneratedAt': Timestamp.fromDate(now),
+      'numericCodeExpiresAt': Timestamp.fromDate(now.add(numericCodeValidity)),
+      'codeVersion': currentSession.codeVersion + 1,
+      if (currentSession.numericCode.isNotEmpty)
+        'previousNumericCode': currentSession.numericCode,
+      if (currentSession.numericCode.isNotEmpty)
+        'previousNumericCodeExpiredAt': Timestamp.fromDate(now),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
     final updated = await ref.get();
     return QrAttendanceSession.fromDocumentSnapshot(updated);
+  }
+
+  Future<QrAttendanceSubmissionResult> submitAttendanceFromNumericCode(
+    String code, {
+    DateTime? currentTime,
+  }) async {
+    final normalizedCode = code.replaceAll(RegExp(r'\D'), '').trim();
+    if (normalizedCode.isEmpty) {
+      throw QrAttendanceException(
+        code: QrAttendanceErrorCode.invalidNumericCode,
+        message: 'رمز الحضور مطلوب',
+      );
+    }
+
+    final now = currentTime ?? DateTime.now();
+    final currentMatches = await _firestore
+        .collection(_sessionsCollection)
+        .where('numericCode', isEqualTo: normalizedCode)
+        .limit(10)
+        .get();
+
+    QrAttendanceSession? closedMatch;
+    QrAttendanceSession? expiredMatch;
+    QrAttendanceSession? usableMatch;
+
+    for (final doc in currentMatches.docs) {
+      final session = QrAttendanceSession.fromDocumentSnapshot(doc);
+      if (!session.isOpen) {
+        closedMatch ??= session;
+        continue;
+      }
+      if (now.isAfter(session.numericCodeExpiresAt) ||
+          now.isAfter(session.expiresAt)) {
+        expiredMatch ??= session;
+        continue;
+      }
+      usableMatch ??= session;
+    }
+
+    if (usableMatch != null) {
+      return submitAttendanceFromQrPayload(<String, dynamic>{
+        'sessionId': usableMatch.sessionId,
+        'sectionId': usableMatch.sectionId,
+        'tokenId': usableMatch.currentTokenId,
+        'tokenVersion': usableMatch.tokenVersion,
+        'expiresAt': usableMatch.expiresAt.toUtc().toIso8601String(),
+      }, currentTime: now);
+    }
+
+    if (closedMatch != null) {
+      throw QrAttendanceException(
+        code: QrAttendanceErrorCode.sessionClosed,
+        message: 'تم إغلاق الجلسة',
+      );
+    }
+
+    if (expiredMatch != null ||
+        await _matchesPreviousNumericCode(normalizedCode)) {
+      throw QrAttendanceException(
+        code: QrAttendanceErrorCode.numericCodeExpired,
+        message: 'انتهت صلاحية الرمز',
+      );
+    }
+
+    throw QrAttendanceException(
+      code: QrAttendanceErrorCode.invalidNumericCode,
+      message: 'الرمز غير صحيح',
+    );
   }
 
   Future<QrAttendanceSession?> getSessionById(String sessionId) async {
@@ -213,7 +309,9 @@ class QrAttendanceService {
     final expiresAtRaw = (payload['expiresAt'] ?? '').toString().trim();
     final tokenVersion = _safeInt(payload['tokenVersion']);
 
-    _debugLog('QR_SCAN_PAYLOAD_PARSED sessionId=$sessionId sectionId=$sectionId');
+    _debugLog(
+      'QR_SCAN_PAYLOAD_PARSED sessionId=$sessionId sectionId=$sectionId',
+    );
 
     if (sessionId.isEmpty ||
         sectionId.isEmpty ||
@@ -350,9 +448,7 @@ class QrAttendanceService {
       _debugLog('QR_DUPLICATE_QR_READ_START');
       final qrRecordSnap = await qrRecordRef.get();
       existsQrRecord = qrRecordSnap.exists;
-      _debugLog(
-        'QR_DUPLICATE_QR_READ_SUCCESS exists=$existsQrRecord',
-      );
+      _debugLog('QR_DUPLICATE_QR_READ_SUCCESS exists=$existsQrRecord');
     } on FirebaseException catch (e) {
       _debugLog('QR_DUPLICATE_QR_READ_FAILED errorCode=${e.code}');
       if (e.code != 'permission-denied') {
@@ -375,16 +471,15 @@ class QrAttendanceService {
       _debugLog('QR_DUPLICATE_MANUAL_READ_START');
       final manualRecordSnap = await manualRecordRef.get();
       existsManualRecord = manualRecordSnap.exists;
-      _debugLog(
-        'QR_DUPLICATE_MANUAL_READ_SUCCESS exists=$existsManualRecord',
-      );
+      _debugLog('QR_DUPLICATE_MANUAL_READ_SUCCESS exists=$existsManualRecord');
     } on FirebaseException catch (e) {
       _debugLog('QR_DUPLICATE_MANUAL_READ_FAILED errorCode=${e.code}');
       _debugLog('QR_SUBMIT_FAILED reason=duplicate_manual_read_${e.code}');
       if (e.code == 'permission-denied') {
         throw QrAttendanceException(
           code: QrAttendanceErrorCode.permissionDenied,
-          message: 'تعذر التحقق من كشف الحضور بسبب صلاحيات النظام. يرجى إبلاغ الدعم.',
+          message:
+              'تعذر التحقق من كشف الحضور بسبب صلاحيات النظام. يرجى إبلاغ الدعم.',
         );
       }
       throw QrAttendanceException(
@@ -409,7 +504,8 @@ class QrAttendanceService {
       await _firestore.runTransaction((transaction) async {
         final existingManualRecord = await transaction.get(manualRecordRef);
         if (existingManualRecord.exists) {
-          final existingData = existingManualRecord.data() ?? <String, dynamic>{};
+          final existingData =
+              existingManualRecord.data() ?? <String, dynamic>{};
           final existingStatus = (existingData['status'] ?? '')
               .toString()
               .trim()
@@ -458,39 +554,37 @@ class QrAttendanceService {
           SetOptions(merge: true),
         );
 
-        transaction.set(
-          manualSessionRef,
-          {
-            'sessionId': session.sessionId,
-            'sectionId': session.sectionId,
-            'courseName': session.courseName,
-            'courseCode': session.courseCode,
-            'section': session.section,
-            'lectureDate': Timestamp.fromDate(session.lectureDate),
-            'lectureYear': session.lectureYear,
-            'lectureMonth': session.lectureMonth,
-            'lectureDay': session.lectureDay,
-            'lectureDayOfWeek': session.lectureDayOfWeek,
-            'dateKey': session.dateKey,
-            'lectureStartTime': session.lectureStartTime,
-            'lectureEndTime': session.lectureEndTime,
-            'sessionOpenedAt': Timestamp.fromDate(
-              session.sessionOpenedAt ??
-                  AttendanceStatusPolicy.combineDateAndTime(
-                    session.lectureDate,
-                    session.lectureStartTime,
-                  ),
-            ),
-            'attendanceMethod': 'qr',
-            'lecturerId': session.lecturerId,
-            'updatedAt': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
+        transaction.set(manualSessionRef, {
+          'sessionId': session.sessionId,
+          'sectionId': session.sectionId,
+          'courseName': session.courseName,
+          'courseCode': session.courseCode,
+          'section': session.section,
+          'lectureDate': Timestamp.fromDate(session.lectureDate),
+          'lectureYear': session.lectureYear,
+          'lectureMonth': session.lectureMonth,
+          'lectureDay': session.lectureDay,
+          'lectureDayOfWeek': session.lectureDayOfWeek,
+          'dateKey': session.dateKey,
+          'lectureStartTime': session.lectureStartTime,
+          'lectureEndTime': session.lectureEndTime,
+          'sessionOpenedAt': Timestamp.fromDate(
+            session.sessionOpenedAt ??
+                AttendanceStatusPolicy.combineDateAndTime(
+                  session.lectureDate,
+                  session.lectureStartTime,
+                ),
+          ),
+          'attendanceMethod': 'qr',
+          'lecturerId': session.lecturerId,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
       });
       _debugLog('QR_MANUAL_RECORD_WRITE_SUCCESS');
     } on QrAttendanceException {
-      _debugLog('QR_MANUAL_RECORD_WRITE_FAILED errorCode=duplicate_or_validation');
+      _debugLog(
+        'QR_MANUAL_RECORD_WRITE_FAILED errorCode=duplicate_or_validation',
+      );
       rethrow;
     } on FirebaseException catch (e) {
       _debugLog('QR_MANUAL_RECORD_WRITE_FAILED errorCode=${e.code}');
@@ -573,6 +667,23 @@ class QrAttendanceService {
       buffer.write(alphabet[index]);
     }
     return buffer.toString();
+  }
+
+  String _generateNumericCode({String? excluding}) {
+    String code;
+    do {
+      code = (_random.nextInt(900000) + 100000).toString();
+    } while (excluding != null && code == excluding);
+    return code;
+  }
+
+  Future<bool> _matchesPreviousNumericCode(String code) async {
+    final previousMatches = await _firestore
+        .collection(_sessionsCollection)
+        .where('previousNumericCode', isEqualTo: code)
+        .limit(1)
+        .get();
+    return previousMatches.docs.isNotEmpty;
   }
 
   static String _dateKey(DateTime value) {
