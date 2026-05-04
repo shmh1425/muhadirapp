@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../data/chatbot_copy.dart';
 import '../data/chatbot_repository.dart';
 import '../data/openai_service.dart';
 import '../models/chat_message.dart';
@@ -110,6 +111,89 @@ String _forecastUnexcusedHoursSentence(double remUnex) {
   final n = (!remUnex.isFinite || remUnex <= 0) ? 0 : remUnex.floor();
   final noun = n == 1 ? 'ساعة' : 'ساعات';
   return 'يمكنك الغياب بدون عذر حتى: $n $noun';
+}
+
+/// True when the message is only a conversation opener (no academic question).
+bool _isGreetingOnly(String raw) {
+  final s = raw.trim();
+  if (s.isEmpty) return false;
+  if (s.contains('?') || s.contains('؟')) return false;
+
+  final lowered = s.toLowerCase();
+  const academicHints = <String>[
+    'غياب',
+    'حضور',
+    'جدول',
+    'محاضر',
+    'مادة',
+    'مواد',
+    'حرمان',
+    'عذر',
+    'اعذار',
+    'تخصص',
+    'nfc',
+    'qr',
+    'section',
+    'quiz',
+    'exam',
+    'grade',
+    'gpa',
+    'absence',
+    'schedule',
+    'course',
+    'lecturer',
+    'excuse',
+    'كم ',
+    'وش ',
+    'كيف ',
+    'متى ',
+    'where ',
+    'what ',
+    'how ',
+    'when ',
+  ];
+  for (final h in academicHints) {
+    if (lowered.contains(h)) return false;
+  }
+
+  final n = s
+      .replaceAll(RegExp(r'[👋😊🙂،,.!؟?\s]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim()
+      .toLowerCase();
+
+  const exact = <String>{
+    'سلام',
+    'السلام عليكم',
+    'السلام عليكم ورحمة الله وبركاته',
+    'السلام عليكم ورحمة الله',
+    'مرحبا',
+    'مرحباً',
+    'هلا',
+    'اهلا',
+    'أهلا',
+    'أهلاً',
+    'يا هلا',
+    'ياهلا',
+    'صباح الخير',
+    'مساء الخير',
+    'صباح النور',
+    'hello',
+    'hi',
+    'hey',
+    'good morning',
+    'good evening',
+    'good afternoon',
+    'greetings',
+    'hiya',
+    'howdy',
+  };
+  if (exact.contains(n)) return true;
+  if (n.startsWith('السلام عليكم') && n.length <= 55) return true;
+  if ((n.startsWith('مرحبا') || n.startsWith('مرحباً')) && n.length < 30) {
+    return true;
+  }
+  return false;
 }
 
 class ChatbotProvider extends ChangeNotifier {
@@ -309,7 +393,18 @@ class ChatbotProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // جلب بيانات الحضور — إذا فشل (صلاحيات/شبكة) نكمل بدونها حتى يرد البوت على التحية وأي سؤال
+      if (_isGreetingOnly(text)) {
+        final reply = forceEnglish ? ChatbotCopy.welcomeEn : ChatbotCopy.welcomeAr;
+        _messages.add(ChatMessage(
+          id: 'bot_${DateTime.now().millisecondsSinceEpoch}',
+          text: reply,
+          isUser: false,
+          timestamp: DateTime.now(),
+        ));
+        return;
+      }
+
+      // جلب بيانات الحضور — إذا فشل (صلاحيات/شبكة) نكمل بدونها؛ الرد يبقى ضمن النطاق الأكاديمي فقط (تعليمات النموذج).
       String attendanceString = '';
       AttendanceContext? attendanceContextObj;
       try {

@@ -135,8 +135,8 @@ class _EmptyState extends StatelessWidget {
               const SizedBox(height: 32),
               Text(
                 english
-                    ? 'Hello! How can I help you today?'
-                    : 'مرحباً! كيف أقدر أساعدك اليوم؟',
+                    ? 'Type your message or tap a suggestion below.'
+                    : 'اكتب رسالتك أو اختر أحد الاقتراحات أدناه.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 16,
@@ -170,10 +170,6 @@ class _EmptyState extends StatelessWidget {
                           onTap: () =>
                               onSuggestionTap('Summary of all my courses'),
                         ),
-                        _SuggestionChip(
-                          label: 'Study tips',
-                          onTap: () => onSuggestionTap('Study tips'),
-                        ),
                       ]
                     : <Widget>[
                         _SuggestionChip(
@@ -192,10 +188,6 @@ class _EmptyState extends StatelessWidget {
                         _SuggestionChip(
                           label: 'ملخص كل موادي',
                           onTap: () => onSuggestionTap('ملخص كل موادي'),
-                        ),
-                        _SuggestionChip(
-                          label: 'نصيحة للدراسة',
-                          onTap: () => onSuggestionTap('نصيحة للدراسة'),
                         ),
                       ],
               ),
@@ -489,15 +481,6 @@ class _InputBarState extends State<_InputBar> {
       ),
       child: Row(
         children: [
-          IconButton(
-            icon: Icon(
-              Icons.add_circle_outline,
-              color: Colors.grey[600],
-              size: 28,
-            ),
-            onPressed: () {},
-          ),
-          const SizedBox(width: 4),
           Expanded(
             child: TextField(
               controller: _controller,
