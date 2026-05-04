@@ -43,7 +43,7 @@ class CustomNavBarIcons extends StatelessWidget {
               child: Row(
                 children: [
                   _NavItem(
-                    icon: Icons.manage_accounts_outlined,
+                    icon: Icons.person_outline,
                     isActive: selectedIndex == 0,
                     onTap: () => onItemTapped(0),
                   ),
@@ -114,7 +114,7 @@ class CustomNavBarIcons extends StatelessWidget {
   IconData _iconForIndex(int index) {
     switch (index) {
       case 0:
-        return Icons.manage_accounts;
+        return Icons.person;
       case 1:
         return Icons.grid_view;
       case 2:

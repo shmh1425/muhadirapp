@@ -58,11 +58,18 @@ class SettingsScreen extends StatelessWidget {
     final majorDisplay =
         isEn ? majorEn : (majorArNormalized.isNotEmpty ? majorArNormalized : majorEn);
 
+    final nameEn = student.name.trim();
+    final nameArTrim = student.nameAr.trim();
+    // Arabic UI: secondary line English. English UI: secondary line Arabic.
+    final secondaryName = isEn
+        ? (nameArTrim.isNotEmpty ? nameArTrim : (nameEn.isNotEmpty ? nameEn : '-'))
+        : (nameEn.isNotEmpty ? nameEn : (nameArTrim.isNotEmpty ? nameArTrim : '-'));
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        TText(
-          student.name.isNotEmpty ? student.name : '-',
+        Text(
+          secondaryName,
           style: const TextStyle(
             color: Color(0xFF444444),
             fontSize: 15,
@@ -211,15 +218,20 @@ class SettingsScreen extends StatelessWidget {
                             onPressed: () => Navigator.of(context).maybePop(),
                           ),
                           const SizedBox(width: 6),
-                          const Expanded(
-                            child: TText(
-                              'الإعدادات',
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF006571),
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                translation.translateToEnglish
+                                    ? 'Personal Profile'
+                                    : 'الملف الشخصي',
+                                style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF006571),
+                                ),
+                                textAlign: TextAlign.right,
                               ),
-                              textAlign: TextAlign.center,
                             ),
                           ),
                           IconButton(
@@ -305,24 +317,35 @@ class SettingsScreen extends StatelessWidget {
                               ValueListenableBuilder<bool>(
                                 valueListenable: AppSettings.instance.blurProfileImage,
                                 builder: (context, isBlurred, child) {
+                                  final showPhoto = !isBlurred;
                                   return _SettingsTile(
                                     child: Row(
                                       children: [
-                                        const Expanded(
+                                        const Icon(
+                                          Icons.account_circle_outlined,
+                                          color: Color(0xFF006571),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
                                           child: Align(
-                                            alignment: AlignmentDirectional.centerStart,
-                                            child: TText(
-                                              'تغبيش الصورة',
+                                            alignment:
+                                                AlignmentDirectional.centerStart,
+                                            child: Text(
+                                              translation.translateToEnglish
+                                                  ? 'Show Personal Photo'
+                                                  : 'إظهار الصورة الشخصية',
                                               textAlign: TextAlign.start,
-                                              style: TextStyle(color: Color(0xFF006571)),
+                                              style: const TextStyle(
+                                                color: Color(0xFF006571),
+                                              ),
                                             ),
                                           ),
                                         ),
-                                        const Spacer(),
                                         Switch(
-                                          value: isBlurred,
+                                          value: showPhoto,
                                           onChanged: (value) {
-                                            AppSettings.instance.blurProfileImage.value = value;
+                                            AppSettings.instance.blurProfileImage
+                                                .value = !value;
                                           },
                                           activeColor: const Color(0xFF006571),
                                         ),

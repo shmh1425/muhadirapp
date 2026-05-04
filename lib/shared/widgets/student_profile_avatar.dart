@@ -48,7 +48,7 @@ class StudentProfileAvatar extends StatelessWidget {
         return ValueListenableBuilder<bool>(
           valueListenable: AppSettings.instance.blurProfileImage,
           builder: (context, isBlurred, _) {
-            final double blurSigma = (isFemale && isBlurred) ? 7 : 0;
+            final double blurSigma = (isFemale && isBlurred) ? 5 : 0;
             final bool preferHtmlElement = blurSigma <= 0;
 
             Widget imageChild;
