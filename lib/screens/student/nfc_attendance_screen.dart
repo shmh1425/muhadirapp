@@ -6,6 +6,7 @@ import 'dart:io' show Platform;
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 
@@ -36,6 +37,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   final NfcAttendanceService _nfcAttendance = NfcAttendanceService.instance;
   final QrAttendanceService _qrAttendance = QrAttendanceService.instance;
   final GlobalKey _qrViewKey = GlobalKey(debugLabel: 'student-qr-scanner');
+  final TextEditingController _attendanceCodeController =
+      TextEditingController();
 
   String _tr(String ar, String en) {
     return TranslationController.instance.translateToEnglish ? en : ar;
@@ -56,6 +59,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   bool _qrCameraUnavailable = false;
   bool _checkingQrAvailability = false;
   bool _qrScannerInitialized = false;
+  bool _isEnteringQrCode = false;
+  bool _isSubmittingAttendanceCode = false;
 
   late String _statusMessage = _tr(
     'اضغط "بدء التحضير" ثم قرّب الجهاز من بطاقة المحاضر.',
@@ -85,6 +90,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       _statusError = false;
       if (!nfc) {
         _qrStatusError = false;
+        _isEnteringQrCode = false;
         _qrCameraUnavailable = false;
         _qrPermissionDenied = false;
         _qrScannerInitialized = false;
@@ -423,6 +429,28 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     }
   }
 
+  String _friendlyQrCodeMessage(QrAttendanceException e) {
+    switch (e.code) {
+      case QrAttendanceErrorCode.invalidNumericCode:
+        return _tr('الرمز غير صحيح', 'Invalid code');
+      case QrAttendanceErrorCode.numericCodeExpired:
+      case QrAttendanceErrorCode.qrExpired:
+      case QrAttendanceErrorCode.tokenMismatch:
+        return _tr('انتهت صلاحية الرمز', 'Code expired');
+      case QrAttendanceErrorCode.sessionClosed:
+        return _tr('تم إغلاق الجلسة', 'Session closed');
+      case QrAttendanceErrorCode.studentNotEnrolled:
+        return _tr(
+          'الطالبة غير مسجلة في هذه الشعبة',
+          'You are not enrolled in this section',
+        );
+      case QrAttendanceErrorCode.alreadyMarked:
+        return _tr('تم تسجيل الحضور مسبقًا', 'Attendance already recorded');
+      default:
+        return e.message;
+    }
+  }
+
   String _friendlySessionErrorMessage(NfcError error) {
     if (error.type == NfcErrorType.userCanceled) {
       return _tr('تم إلغاء جلسة NFC.', 'NFC session was canceled.');
@@ -620,11 +648,121 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   Future<void> _retryQrScan() async {
     if (!mounted) return;
     setState(() {
+      _isEnteringQrCode = false;
       _qrStatusError = false;
       _isProcessingQrScan = false;
       _isQrScanPaused = false;
     });
     await _prepareQrScanner();
+  }
+
+  Future<void> _showAttendanceCodeEntry() async {
+    if (!mounted || _isNfc) return;
+    await _stopQrScanner();
+    setState(() {
+      _isEnteringQrCode = true;
+      _isQrScanPaused = true;
+      _qrStatusError = false;
+      _qrStatusMessage = _tr(
+        'أدخلي رمز الحضور المعروض لدى المحاضر.',
+        'Enter the attendance code shown by the lecturer.',
+      );
+    });
+  }
+
+  Future<void> _submitAttendanceCode() async {
+    if (_isSubmittingAttendanceCode || _isNfc) return;
+    final code = _attendanceCodeController.text.trim();
+    if (code.isEmpty) {
+      setState(() {
+        _qrStatusError = true;
+        _qrStatusMessage = _tr('رمز الحضور مطلوب', 'Code is required');
+      });
+      return;
+    }
+
+    setState(() {
+      _isSubmittingAttendanceCode = true;
+      _qrStatusError = false;
+      _qrStatusMessage = _tr('جاري التحقق من الرمز...', 'Verifying code...');
+    });
+
+    try {
+      final result = await _qrAttendance.submitAttendanceFromNumericCode(
+        code,
+        currentTime: DateTime.now(),
+      );
+      if (!mounted) return;
+      setState(() {
+        _isSubmittingAttendanceCode = false;
+        _qrStatusError = false;
+        _qrStatusMessage = _tr(
+          'تم تسجيل الحضور بنجاح',
+          'Attendance recorded successfully',
+        );
+      });
+      try {
+        await StudentNotificationsService.instance
+            .addAttendanceSuccessNotification(
+              studentId:
+                  StudentAuthService.instance.currentStudent?.studentId ?? 0,
+              attendanceMethod: 'qr',
+              courseName: result.session.courseName,
+              section: result.session.section,
+              sectionId: result.session.sectionId,
+              sessionId: result.session.sessionId,
+              lectureDate: result.session.lectureDate,
+              lectureStartTime: result.session.lectureStartTime,
+              lectureEndTime: result.session.lectureEndTime,
+            );
+      } catch (_) {}
+      if (!mounted) return;
+      await AttendanceResultPopup.show(
+        context,
+        success: true,
+        message: _tr(
+          'تم تسجيل حضورك بنجاح',
+          'Attendance recorded successfully',
+        ),
+        subtitle: _tr(
+          'تم تسجيل الحضور بنجاح',
+          'Attendance recorded successfully',
+        ),
+      );
+    } on QrAttendanceException catch (e) {
+      if (!mounted) return;
+      final message = _friendlyQrCodeMessage(e);
+      setState(() {
+        _isSubmittingAttendanceCode = false;
+        _qrStatusError = true;
+        _qrStatusMessage = message;
+      });
+      await AttendanceResultPopup.show(
+        context,
+        success: false,
+        message: _tr('فشل تسجيل الحضور', 'Attendance failed'),
+        subtitle: message,
+        autoDismiss: false,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      final message = _tr(
+        'تعذر تسجيل الحضور حالياً. يرجى المحاولة مرة أخرى.',
+        'Unable to record attendance right now. Please try again.',
+      );
+      setState(() {
+        _isSubmittingAttendanceCode = false;
+        _qrStatusError = true;
+        _qrStatusMessage = message;
+      });
+      await AttendanceResultPopup.show(
+        context,
+        success: false,
+        message: _tr('فشل تسجيل الحضور', 'Attendance failed'),
+        subtitle: message,
+        autoDismiss: false,
+      );
+    }
   }
 
   Future<void> _prepareQrScanner() async {
@@ -887,6 +1025,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   @override
   void dispose() {
     _pulseController?.dispose();
+    _attendanceCodeController.dispose();
     try {
       NfcManager.instance.stopSession();
     } catch (_) {
@@ -1140,6 +1279,38 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Container(
+                              width: 260,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFD7F1F1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              padding: const EdgeInsets.all(4),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: _ModeChip(
+                                      label: _tr('رمز QR', 'QR Code'),
+                                      isActive: !_isEnteringQrCode,
+                                      onTap: _retryQrScan,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: _ModeChip(
+                                      label: _tr(
+                                        'إدخال رمز الحضور',
+                                        'Enter Code',
+                                      ),
+                                      isActive: _isEnteringQrCode,
+                                      onTap: _showAttendanceCodeEntry,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Container(
                               width: 290,
                               height: 290,
                               decoration: BoxDecoration(
@@ -1154,7 +1325,70 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                               child: Stack(
                                 alignment: Alignment.center,
                                 children: [
-                                  if (_qrScannerInitialized)
+                                  if (_isEnteringQrCode)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 24,
+                                      ),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.pin_rounded,
+                                            size: 46,
+                                            color: Color(0xFF006571),
+                                          ),
+                                          const SizedBox(height: 14),
+                                          TextField(
+                                            controller:
+                                                _attendanceCodeController,
+                                            keyboardType: TextInputType.number,
+                                            textAlign: TextAlign.center,
+                                            maxLength: 6,
+                                            inputFormatters: [
+                                              FilteringTextInputFormatter
+                                                  .digitsOnly,
+                                            ],
+                                            style: const TextStyle(
+                                              fontFamily: 'Cairo',
+                                              fontSize: 28,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 3,
+                                              color: Color(0xFF1F2E33),
+                                            ),
+                                            decoration: InputDecoration(
+                                              counterText: '',
+                                              labelText: _tr(
+                                                'رمز الحضور',
+                                                'Attendance Code',
+                                              ),
+                                              labelStyle: const TextStyle(
+                                                fontFamily: 'Cairo',
+                                                color: Color(0xFF5F7A80),
+                                              ),
+                                              enabledBorder: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                                borderSide: const BorderSide(
+                                                  color: Color(0xFFCCE8EA),
+                                                ),
+                                              ),
+                                              focusedBorder: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                                borderSide: const BorderSide(
+                                                  color: Color(0xFF006571),
+                                                  width: 2,
+                                                ),
+                                              ),
+                                            ),
+                                            onSubmitted: (_) =>
+                                                _submitAttendanceCode(),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  else if (_qrScannerInitialized)
                                     QRView(
                                       key: _qrViewKey,
                                       onQRViewCreated: _onQrViewCreated,
@@ -1166,9 +1400,10 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                                         cutOutSize: 190,
                                       ),
                                     ),
-                                  if (!_qrScannerInitialized ||
-                                      _qrPermissionDenied ||
-                                      _qrCameraUnavailable)
+                                  if (!_isEnteringQrCode &&
+                                      (!_qrScannerInitialized ||
+                                          _qrPermissionDenied ||
+                                          _qrCameraUnavailable))
                                     _QrScannerFallback(
                                       message: _checkingQrAvailability
                                           ? _tr(
@@ -1186,19 +1421,22 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                                           !_qrPermissionDenied,
                                       onRetry: _retryQrScan,
                                     ),
-                                  IgnorePointer(
-                                    child: Container(
-                                      width: 190,
-                                      height: 190,
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(22),
-                                        border: Border.all(
-                                          color: Colors.white,
-                                          width: 3,
+                                  if (!_isEnteringQrCode)
+                                    IgnorePointer(
+                                      child: Container(
+                                        width: 190,
+                                        height: 190,
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            22,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.white,
+                                            width: 3,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
                                   if (_isStartingQrScanner)
                                     Container(
                                       color: Colors.black.withValues(
@@ -1251,10 +1489,14 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                               height: 44,
                               child: FilledButton(
                                 onPressed:
-                                    (_isStartingQrScanner ||
-                                        _isProcessingQrScan)
+                                    (_isEnteringQrCode
+                                        ? _isSubmittingAttendanceCode
+                                        : (_isStartingQrScanner ||
+                                              _isProcessingQrScan))
                                     ? null
-                                    : _retryQrScan,
+                                    : (_isEnteringQrCode
+                                          ? _submitAttendanceCode
+                                          : _retryQrScan),
                                 style: FilledButton.styleFrom(
                                   backgroundColor: const Color(0xFF006571),
                                   shape: RoundedRectangleBorder(
@@ -1262,7 +1504,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                                   ),
                                 ),
                                 child: Text(
-                                  _isQrScanPaused
+                                  _isEnteringQrCode
+                                      ? _tr('تحقق من الرمز', 'Verify Code')
+                                      : _isQrScanPaused
                                       ? _tr('إعادة المسح', 'Scan again')
                                       : _tr('بدء مسح QR', 'Start QR scan'),
                                   style: const TextStyle(
@@ -1381,11 +1625,19 @@ class _ModeChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(18),
         ),
         child: Center(
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                maxLines: 1,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'Cairo',
+                ),
+              ),
             ),
           ),
         ),
