@@ -215,17 +215,24 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     setState(() {
       _isScanning = true;
       _statusError = false;
-        _statusMessage = _tr(
-          'جاري انتظار بطاقة المحاضر...',
-          'Waiting for the lecturer card...',
-        );
+      _statusMessage = _tr(
+        'جاري انتظار بطاقة المحاضر...',
+        'Waiting for the lecturer card...',
+      );
     });
 
     bool handled = false;
     final sessionDone = Completer<void>();
+    final pollingOptions = Platform.isIOS
+        ? <NfcPollingOption>{
+            NfcPollingOption.iso14443,
+            NfcPollingOption.iso15693,
+          }
+        : null;
 
     try {
       await NfcManager.instance.startSession(
+        pollingOptions: pollingOptions,
         alertMessage: _tr(
           'قرّبي أعلى الهاتف من بطاقة المحاضر.',
           'Hold the top of your phone near the lecturer card.',
@@ -280,16 +287,16 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
             try {
               await StudentNotificationsService.instance
                   .addAttendanceSuccessNotification(
-                studentId: student.studentId,
-                attendanceMethod: 'nfc',
-                courseName: session?.courseName,
-                section: session?.sectionLabel,
-                sectionId: session?.sectionId,
-                sessionId: session?.sessionId,
-                lectureDate: session?.lectureDate,
-                lectureStartTime: session?.lectureStartTime,
-                lectureEndTime: session?.lectureEndTime,
-              );
+                    studentId: student.studentId,
+                    attendanceMethod: 'nfc',
+                    courseName: session?.courseName,
+                    section: session?.sectionLabel,
+                    sectionId: session?.sectionId,
+                    sessionId: session?.sessionId,
+                    lectureDate: session?.lectureDate,
+                    lectureStartTime: session?.lectureStartTime,
+                    lectureEndTime: session?.lectureEndTime,
+                  );
             } catch (_) {}
             if (!mounted) return;
             await AttendanceResultPopup.show(
@@ -352,15 +359,12 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         onError: (error) async {
           if (handled) return;
           handled = true;
-          final message = _tr(
-            'تم إيقاف جلسة NFC. أعيدي المحاولة.',
-            'NFC session was stopped. Please try again.',
-          );
+          final message = _friendlySessionErrorMessage(error);
           if (mounted) {
             setState(() {
               _isScanning = false;
-              _statusError = true;
-              _statusMessage = '$message\n${error.message}';
+              _statusError = error.type != NfcErrorType.userCanceled;
+              _statusMessage = message;
             });
           }
           if (!sessionDone.isCompleted) {
@@ -417,6 +421,31 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       default:
         return e.message;
     }
+  }
+
+  String _friendlySessionErrorMessage(NfcError error) {
+    if (error.type == NfcErrorType.userCanceled) {
+      return _tr('تم إلغاء جلسة NFC.', 'NFC session was canceled.');
+    }
+
+    final raw = error.message.trim();
+    final lowered = raw.toLowerCase();
+
+    if (Platform.isIOS && lowered.contains('missing required entitlement')) {
+      return _tr(
+        'تعذر بدء NFC بسبب إعدادات iOS. فعّلي Near Field Communication Tag Reading في Signing & Capabilities ثم أعيدي البناء على الجهاز.',
+        'NFC failed to start due to iOS app capabilities. Enable Near Field Communication Tag Reading in Signing & Capabilities, then rebuild on the device.',
+      );
+    }
+
+    if (raw.isNotEmpty) {
+      return raw;
+    }
+
+    return _tr(
+      'تم إيقاف جلسة NFC. أعيدي المحاولة.',
+      'NFC session was stopped. Please try again.',
+    );
   }
 
   String _extractCardId(NfcTag tag) {
@@ -491,7 +520,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     if (payload.isEmpty) return '';
 
     final type = ascii.decode(record.type, allowInvalid: true);
-    if (record.typeNameFormat == NdefTypeNameFormat.nfcWellknown && type == 'T') {
+    if (record.typeNameFormat == NdefTypeNameFormat.nfcWellknown &&
+        type == 'T') {
       final status = payload.first;
       final languageLength = status & 0x3F;
       if (payload.length <= languageLength + 1) return '';
@@ -605,7 +635,10 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       _qrStatusError = false;
       _qrPermissionDenied = false;
       _qrCameraUnavailable = false;
-      _qrStatusMessage = _tr('جاري تجهيز ماسح QR...', 'Preparing QR scanner...');
+      _qrStatusMessage = _tr(
+        'جاري تجهيز ماسح QR...',
+        'Preparing QR scanner...',
+      );
     });
 
     final availability = await _resolveQrCameraAvailability();
@@ -617,7 +650,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       _qrScannerInitialized = availability.available;
       _isQrScanPaused = !availability.available;
       _qrStatusError = !availability.available;
-      _qrStatusMessage = availability.message ??
+      _qrStatusMessage =
+          availability.message ??
           _tr(
             'وجّه الكاميرا نحو رمز التحضير المعروض لدى المحاضر.',
             'Point the camera at the attendance QR shown by the lecturer.',
@@ -705,17 +739,19 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         _qrStatusMessage = result.message;
       });
       try {
-        await StudentNotificationsService.instance.addAttendanceSuccessNotification(
-          studentId: StudentAuthService.instance.currentStudent?.studentId ?? 0,
-          attendanceMethod: 'qr',
-          courseName: result.session.courseName,
-          section: result.session.section,
-          sectionId: result.session.sectionId,
-          sessionId: result.session.sessionId,
-          lectureDate: result.session.lectureDate,
-          lectureStartTime: result.session.lectureStartTime,
-          lectureEndTime: result.session.lectureEndTime,
-        );
+        await StudentNotificationsService.instance
+            .addAttendanceSuccessNotification(
+              studentId:
+                  StudentAuthService.instance.currentStudent?.studentId ?? 0,
+              attendanceMethod: 'qr',
+              courseName: result.session.courseName,
+              section: result.session.section,
+              sectionId: result.session.sectionId,
+              sessionId: result.session.sessionId,
+              lectureDate: result.session.lectureDate,
+              lectureStartTime: result.session.lectureStartTime,
+              lectureEndTime: result.session.lectureEndTime,
+            );
       } catch (_) {}
       if (!mounted) return;
       await AttendanceResultPopup.show(
@@ -815,11 +851,10 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       _qrPermissionDenied = true;
       _qrStatusError = true;
       _isQrScanPaused = true;
-      _qrStatusMessage =
-          _tr(
-            'لم يتم السماح باستخدام الكاميرا. يرجى تفعيل صلاحية الكاميرا لمسح رمز QR.',
-            'Camera permission is not granted. Please enable camera access to scan the QR.',
-          );
+      _qrStatusMessage = _tr(
+        'لم يتم السماح باستخدام الكاميرا. يرجى تفعيل صلاحية الكاميرا لمسح رمز QR.',
+        'Camera permission is not granted. Please enable camera access to scan the QR.',
+      );
     });
   }
 
@@ -835,7 +870,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       final tokenVersion = payload['tokenVersion'];
       final expiresAt = (payload['expiresAt'] ?? '').toString().trim();
 
-      final hasRequiredValues = sessionId.isNotEmpty &&
+      final hasRequiredValues =
+          sessionId.isNotEmpty &&
           sectionId.isNotEmpty &&
           tokenId.isNotEmpty &&
           expiresAt.isNotEmpty &&
@@ -1082,8 +1118,14 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                                       )
                                     : Text(
                                         _checkingNfcAvailability
-                                            ? _tr('جاري التحقق...', 'Checking...')
-                                            : _tr('بدء التحضير', 'Start attendance'),
+                                            ? _tr(
+                                                'جاري التحقق...',
+                                                'Checking...',
+                                              )
+                                            : _tr(
+                                                'بدء التحضير',
+                                                'Start attendance',
+                                              ),
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w700,
                                           fontFamily: 'Cairo',
@@ -1129,7 +1171,10 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                                       _qrCameraUnavailable)
                                     _QrScannerFallback(
                                       message: _checkingQrAvailability
-                                          ? _tr('جاري تجهيز الكاميرا...', 'Preparing camera...')
+                                          ? _tr(
+                                              'جاري تجهيز الكاميرا...',
+                                              'Preparing camera...',
+                                            )
                                           : _qrPermissionDenied
                                           ? _tr(
                                               'لم يتم السماح باستخدام الكاميرا. يرجى تفعيل صلاحية الكاميرا لمسح رمز QR.',
@@ -1156,7 +1201,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                                   ),
                                   if (_isStartingQrScanner)
                                     Container(
-                                      color: Colors.black.withValues(alpha: 0.22),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.22,
+                                      ),
                                       alignment: Alignment.center,
                                       child: const CircularProgressIndicator(
                                         color: Colors.white,
@@ -1203,7 +1250,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                               width: 210,
                               height: 44,
                               child: FilledButton(
-                                onPressed: (_isStartingQrScanner || _isProcessingQrScan)
+                                onPressed:
+                                    (_isStartingQrScanner ||
+                                        _isProcessingQrScan)
                                     ? null
                                     : _retryQrScan,
                                 style: FilledButton.styleFrom(
@@ -1299,13 +1348,9 @@ class _QrScannerFallback extends StatelessWidget {
 }
 
 class _QrCameraAvailability {
-  const _QrCameraAvailability._({
-    required this.available,
-    this.message,
-  });
+  const _QrCameraAvailability._({required this.available, this.message});
 
-  const _QrCameraAvailability.available()
-    : this._(available: true);
+  const _QrCameraAvailability.available() : this._(available: true);
 
   const _QrCameraAvailability.unavailable(String message)
     : this._(available: false, message: message);

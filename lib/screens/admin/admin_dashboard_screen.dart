@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -868,7 +869,9 @@ class _AdminLecturerNfcBindingScreenState
       );
 
       if (!mounted) return;
-      _showMessage('تمت كتابة البطاقة (JSON) وربطها بالمحاضر بنجاح: $normalizedLecturerId');
+      _showMessage(
+        'تمت كتابة البطاقة (JSON) وربطها بالمحاضر بنجاح: $normalizedLecturerId',
+      );
     } catch (e) {
       _showMessage('تعذر كتابة/ربط البطاقة: $e');
     } finally {
@@ -885,7 +888,9 @@ class _AdminLecturerNfcBindingScreenState
       return;
     }
 
-    final expected = NfcAttendanceService.normalizeLecturerCardId(expectedCardId);
+    final expected = NfcAttendanceService.normalizeLecturerCardId(
+      expectedCardId,
+    );
     if (expected.isEmpty) {
       _showMessage('لا يوجد معرف بطاقة متوقع لهذا المحاضر حالياً.');
       return;
@@ -906,7 +911,9 @@ class _AdminLecturerNfcBindingScreenState
       if (scannedValue == expected) {
         _showMessage('نجاح الاختبار: البطاقة صحيحة وتطابق المحاضر المختار.');
       } else {
-        _showMessage('فشل الاختبار: البطاقة المقروءة ($scannedValue) لا تطابق ($expected).');
+        _showMessage(
+          'فشل الاختبار: البطاقة المقروءة ($scannedValue) لا تطابق ($expected).',
+        );
       }
     } catch (e) {
       _showMessage('تعذر اختبار البطاقة: $e');
@@ -920,8 +927,15 @@ class _AdminLecturerNfcBindingScreenState
   Future<String?> _writeSingleCardValue(String value) async {
     final completer = Completer<String?>();
     bool handled = false;
+    final pollingOptions = Platform.isIOS
+        ? <NfcPollingOption>{
+            NfcPollingOption.iso14443,
+            NfcPollingOption.iso15693,
+          }
+        : null;
 
     await NfcManager.instance.startSession(
+      pollingOptions: pollingOptions,
       onDiscovered: (tag) async {
         if (handled) return;
         handled = true;
@@ -957,6 +971,20 @@ class _AdminLecturerNfcBindingScreenState
           completer.completeError(e);
         }
       },
+      onError: (error) async {
+        if (handled) return;
+        handled = true;
+        final message =
+            error.message.trim().toLowerCase().contains(
+              'missing required entitlement',
+            )
+            ? 'تعذر بدء NFC على iPhone بسبب إعدادات التطبيق (Capabilities).'
+            : error.message;
+        _showMessage(message.isEmpty ? 'تم إيقاف جلسة NFC.' : message);
+        if (!completer.isCompleted) {
+          completer.complete(null);
+        }
+      },
     );
 
     return completer.future.timeout(
@@ -978,8 +1006,15 @@ class _AdminLecturerNfcBindingScreenState
   Future<String?> _scanSingleCardId() async {
     final completer = Completer<String?>();
     bool handled = false;
+    final pollingOptions = Platform.isIOS
+        ? <NfcPollingOption>{
+            NfcPollingOption.iso14443,
+            NfcPollingOption.iso15693,
+          }
+        : null;
 
     await NfcManager.instance.startSession(
+      pollingOptions: pollingOptions,
       onDiscovered: (tag) async {
         if (handled) return;
         handled = true;
@@ -997,6 +1032,20 @@ class _AdminLecturerNfcBindingScreenState
           alertMessage: 'تمت القراءة بنجاح',
         );
         completer.complete(cardId);
+      },
+      onError: (error) async {
+        if (handled) return;
+        handled = true;
+        final message =
+            error.message.trim().toLowerCase().contains(
+              'missing required entitlement',
+            )
+            ? 'تعذر بدء NFC على iPhone بسبب إعدادات التطبيق (Capabilities).'
+            : error.message;
+        _showMessage(message.isEmpty ? 'تم إيقاف جلسة NFC.' : message);
+        if (!completer.isCompleted) {
+          completer.complete(null);
+        }
       },
     );
 
@@ -1063,7 +1112,8 @@ class _AdminLecturerNfcBindingScreenState
     if (payload.isEmpty) return '';
 
     final type = ascii.decode(record.type, allowInvalid: true);
-    if (record.typeNameFormat == NdefTypeNameFormat.nfcWellknown && type == 'T') {
+    if (record.typeNameFormat == NdefTypeNameFormat.nfcWellknown &&
+        type == 'T') {
       final status = payload.first;
       final languageLength = status & 0x3F;
       if (payload.length <= languageLength + 1) return '';
@@ -1236,7 +1286,8 @@ class _AdminLecturerNfcBindingScreenState
                 ),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
-                  onPressed: (_isBindingCard || _isTestingCard || selectedId == null)
+                  onPressed:
+                      (_isBindingCard || _isTestingCard || selectedId == null)
                       ? null
                       : () => _testSelectedLecturerCard(
                           currentCardId.isEmpty ? selectedId : currentCardId,
@@ -1249,7 +1300,9 @@ class _AdminLecturerNfcBindingScreenState
                         )
                       : const Icon(Icons.fact_check_outlined),
                   label: Text(
-                    _isTestingCard ? 'جاري اختبار البطاقة...' : 'اختبار البطاقة',
+                    _isTestingCard
+                        ? 'جاري اختبار البطاقة...'
+                        : 'اختبار البطاقة',
                   ),
                 ),
                 const SizedBox(height: 16),
