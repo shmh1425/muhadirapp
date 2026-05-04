@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../screens/lecturer/widgets/modern_popup_dialog.dart';
 
 class ExcuseAttachmentPreview {
   static bool isValidAttachmentUrl(String raw) {
@@ -19,14 +20,7 @@ class ExcuseAttachmentPreview {
   }) {
     final lowerName = attachmentName.toLowerCase();
     final lowerUrl = attachmentUrl.toLowerCase();
-    const imageExt = <String>[
-      '.png',
-      '.jpg',
-      '.jpeg',
-      '.webp',
-      '.gif',
-      '.bmp',
-    ];
+    const imageExt = <String>['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'];
     for (final ext in imageExt) {
       if (lowerName.endsWith(ext) || lowerUrl.contains(ext)) {
         return true;
@@ -62,7 +56,9 @@ class ExcuseAttachmentPreview {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(tr('رابط المرفق غير صالح.', 'Invalid attachment link.')),
+          content: Text(
+            tr('رابط المرفق غير صالح.', 'Invalid attachment link.'),
+          ),
           backgroundColor: const Color(0xFFD32F2F),
         ),
       );
@@ -84,144 +80,130 @@ class ExcuseAttachmentPreview {
         return Directionality(
           textDirection: textDirection,
           child: Dialog(
-            insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            child: SizedBox(
-              width: double.infinity,
-              height: MediaQuery.of(ctx).size.height * 0.75,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 10, 10),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            attachmentName.isNotEmpty
-                                ? attachmentName
-                                : tr('معاينة المرفق', 'Attachment preview'),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontFamily: 'Cairo',
-                              fontWeight: FontWeight.w800,
-                              fontSize: 14,
-                              color: Color(0xFF213236),
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.of(ctx).pop(),
-                          icon: const Icon(Icons.close),
-                          tooltip: tr('إغلاق', 'Close'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
-                  Expanded(
-                    child: isImage
-                        ? Container(
-                            color: const Color(0xFFF8FAFC),
-                            child: InteractiveViewer(
-                              minScale: 1,
-                              maxScale: 8,
-                              child: Center(
-                                child: Image.network(
-                                  attachmentUrl,
-                                  fit: BoxFit.contain,
-                                  filterQuality: FilterQuality.high,
-                                  errorBuilder: (_, __, ___) => Center(
-                                    child: Text(
-                                      tr(
-                                        'تعذر معاينة المرفق.\nيمكنك فتحه في تبويب جديد.',
-                                        'Could not preview attachment.\nYou can open it in a new tab.',
-                                      ),
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        fontFamily: 'Cairo',
-                                        color: Color(0xFF64748B),
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 24,
+            ),
+            child: ModernPopupSheet(
+              title: attachmentName.isNotEmpty
+                  ? attachmentName
+                  : tr('معاينة المرفق', 'Attachment preview'),
+              onClose: () => Navigator.of(ctx).pop(),
+              accentColor: primaryColor,
+              margin: EdgeInsets.zero,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+              child: SizedBox(
+                width: double.infinity,
+                height: MediaQuery.of(ctx).size.height * 0.75,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: isImage
+                          ? Container(
+                              color: const Color(0xFFF8FAFC),
+                              child: InteractiveViewer(
+                                minScale: 1,
+                                maxScale: 8,
+                                child: Center(
+                                  child: Image.network(
+                                    attachmentUrl,
+                                    fit: BoxFit.contain,
+                                    filterQuality: FilterQuality.high,
+                                    errorBuilder: (_, __, ___) => Center(
+                                      child: Text(
+                                        tr(
+                                          'تعذر معاينة المرفق.\nيمكنك فتحه في تبويب جديد.',
+                                          'Could not preview attachment.\nYou can open it in a new tab.',
+                                        ),
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                          fontFamily: 'Cairo',
+                                          color: Color(0xFF64748B),
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                          )
-                        : isPdf
-                            ? Container(
-                                color: const Color(0xFFF8FAFC),
-                                child: kIsWeb
-                                    ? Center(
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(16),
-                                          child: Text(
-                                            tr(
-                                              'معاينة PDF داخل التطبيق على الويب تتطلب إعداد CORS صحيح في Firebase Storage.\nيمكنك فتح الملف في تبويب جديد.',
-                                              'In-app PDF preview on Web requires proper Firebase Storage CORS configuration.\nYou can open the file in a new tab.',
-                                            ),
-                                            textAlign: TextAlign.center,
-                                            style: const TextStyle(
-                                              fontFamily: 'Cairo',
-                                              color: Color(0xFF64748B),
-                                              height: 1.4,
-                                            ),
+                            )
+                          : isPdf
+                          ? Container(
+                              color: const Color(0xFFF8FAFC),
+                              child: kIsWeb
+                                  ? Center(
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(16),
+                                        child: Text(
+                                          tr(
+                                            'معاينة PDF داخل التطبيق على الويب تتطلب إعداد CORS صحيح في Firebase Storage.\nيمكنك فتح الملف في تبويب جديد.',
+                                            'In-app PDF preview on Web requires proper Firebase Storage CORS configuration.\nYou can open the file in a new tab.',
+                                          ),
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontFamily: 'Cairo',
+                                            color: Color(0xFF64748B),
+                                            height: 1.4,
                                           ),
                                         ),
-                                      )
-                                    : SfPdfViewer.network(
-                                        attachmentUrl,
-                                        canShowScrollHead: true,
-                                        canShowScrollStatus: true,
-                                        onDocumentLoaded: (_) {
-                                          debugPrint(
-                                            '$logTag PDF preview loaded successfully: '
-                                            'url="$attachmentUrl"',
-                                          );
-                                        },
-                                        onDocumentLoadFailed: (details) {
-                                          debugPrint(
-                                            '$logTag PDF preview failed: '
-                                            '${details.error} (${details.description}) '
-                                            'url="$attachmentUrl"',
-                                          );
-                                          if (!context.mounted) return;
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                tr(
-                                                  'تعذر معاينة المرفق.',
-                                                  'Could not preview attachment.',
-                                                ),
-                                              ),
-                                              backgroundColor: const Color(0xFFD32F2F),
-                                            ),
-                                          );
-                                        },
                                       ),
-                              )
-                            : Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Center(
-                                  child: Text(
-                                    tr(
-                                      'هذا النوع من الملفات لا يدعم المعاينة المدمجة حالياً.\nيمكنك فتحه في تبويب جديد.',
-                                      'This file type is not supported for inline preview.\nYou can open it in a new tab.',
+                                    )
+                                  : SfPdfViewer.network(
+                                      attachmentUrl,
+                                      canShowScrollHead: true,
+                                      canShowScrollStatus: true,
+                                      onDocumentLoaded: (_) {
+                                        debugPrint(
+                                          '$logTag PDF preview loaded successfully: '
+                                          'url="$attachmentUrl"',
+                                        );
+                                      },
+                                      onDocumentLoadFailed: (details) {
+                                        debugPrint(
+                                          '$logTag PDF preview failed: '
+                                          '${details.error} (${details.description}) '
+                                          'url="$attachmentUrl"',
+                                        );
+                                        if (!context.mounted) return;
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              tr(
+                                                'تعذر معاينة المرفق.',
+                                                'Could not preview attachment.',
+                                              ),
+                                            ),
+                                            backgroundColor: const Color(
+                                              0xFFD32F2F,
+                                            ),
+                                          ),
+                                        );
+                                      },
                                     ),
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      fontFamily: 'Cairo',
-                                      color: Color(0xFF64748B),
-                                      height: 1.4,
-                                    ),
+                            )
+                          : Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Center(
+                                child: Text(
+                                  tr(
+                                    'هذا النوع من الملفات لا يدعم المعاينة المدمجة حالياً.\nيمكنك فتحه في تبويب جديد.',
+                                    'This file type is not supported for inline preview.\nYou can open it in a new tab.',
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontFamily: 'Cairo',
+                                    color: Color(0xFF64748B),
+                                    height: 1.4,
                                   ),
                                 ),
                               ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-                    child: SizedBox(
+                            ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
                       height: 44,
                       child: OutlinedButton(
                         onPressed: () => _openAttachmentUrl(
@@ -249,8 +231,8 @@ class ExcuseAttachmentPreview {
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -282,7 +264,9 @@ class ExcuseAttachmentPreview {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(tr('رابط المرفق غير صالح.', 'Attachment URL is invalid.')),
+          content: Text(
+            tr('رابط المرفق غير صالح.', 'Attachment URL is invalid.'),
+          ),
           backgroundColor: const Color(0xFFD32F2F),
         ),
       );
@@ -290,11 +274,15 @@ class ExcuseAttachmentPreview {
     }
     final uri = Uri.tryParse(raw);
     if (uri == null || !uri.isAbsolute || uri.scheme.toLowerCase() != 'https') {
-      debugPrint('$logTag invalid attachment URL parse: raw="$raw", uri="$uri"');
+      debugPrint(
+        '$logTag invalid attachment URL parse: raw="$raw", uri="$uri"',
+      );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(tr('رابط المرفق غير صالح.', 'Attachment URL is invalid.')),
+          content: Text(
+            tr('رابط المرفق غير صالح.', 'Attachment URL is invalid.'),
+          ),
           backgroundColor: const Color(0xFFD32F2F),
         ),
       );

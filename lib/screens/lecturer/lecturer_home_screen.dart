@@ -17,6 +17,7 @@ import '../../widgets/lecturer/lecturer_home_header.dart';
 import '../../widgets/lecturer/lecture_timeline.dart';
 import '../../widgets/lecturer/day_tap_handler.dart';
 import 'lecturer_navigation.dart';
+import 'widgets/modern_popup_dialog.dart';
 
 class LecturerHomeScreen extends StatefulWidget {
   const LecturerHomeScreen({super.key, this.lecturerName});
@@ -186,7 +187,8 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
         final options = [5, 10, 15, 20, 30];
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
-          child: AlertDialog(
+          child: ModernPopupDialog(
+            accentColor: const Color(0xFF006571),
             title: Text(
               LecturerLanguageController.tr(
                 'اختيار مدة التأخير',
@@ -197,28 +199,31 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
                 fontWeight: FontWeight.w800,
               ),
             ),
-            content: Wrap(
+            child: Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: options
-                  .map(
-                    (m) => OutlinedButton(
-                      onPressed: () => Navigator.of(ctx).pop(m),
-                      child: Text(
-                        LecturerLanguageController.tr('$m دقيقة', '$m min'),
-                        style: const TextStyle(fontFamily: 'Cairo'),
-                      ),
+              children: options.map((m) {
+                return OutlinedButton(
+                  onPressed: () => Navigator.of(ctx).pop(m),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF006571),
+                    side: const BorderSide(color: Color(0xFF006571)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  )
-                  .toList(),
+                  ),
+                  child: Text(
+                    LecturerLanguageController.tr('$m دقيقة', '$m min'),
+                    style: const TextStyle(fontFamily: 'Cairo'),
+                  ),
+                );
+              }).toList(),
             ),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: Text(
-                  LecturerLanguageController.tr('إلغاء', 'Cancel'),
-                  style: const TextStyle(fontFamily: 'Cairo'),
-                ),
+              ModernPopupActionButton(
+                label: LecturerLanguageController.tr('إلغاء', 'Cancel'),
+                onTap: () => Navigator.of(ctx).pop(),
+                isPrimary: false,
               ),
             ],
           ),
@@ -280,7 +285,8 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
       context: context,
       builder: (ctx) => Directionality(
         textDirection: LecturerLanguageController.direction(),
-        child: AlertDialog(
+        child: ModernPopupDialog(
+          accentColor: const Color(0xFFD32F2F),
           title: Text(
             LecturerLanguageController.tr(
               'تأكيد إلغاء المحاضرة',
@@ -291,31 +297,24 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
               fontWeight: FontWeight.w800,
             ),
           ),
-          content: Text(
+          child: Text(
             LecturerLanguageController.tr(
               'سيتم إشعار الطلاب بإلغاء هذه المحاضرة. هل تريد المتابعة؟',
               'Students will be notified that this lecture is canceled. Continue?',
             ),
-            style: const TextStyle(fontFamily: 'Cairo'),
+            style: const TextStyle(fontFamily: 'Cairo', height: 1.45),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text(
-                LecturerLanguageController.tr('تراجع', 'Back'),
-                style: const TextStyle(fontFamily: 'Cairo'),
-              ),
+            ModernPopupActionButton(
+              label: LecturerLanguageController.tr('تراجع', 'Back'),
+              onTap: () => Navigator.of(ctx).pop(false),
+              isPrimary: false,
             ),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: Text(
-                LecturerLanguageController.tr('تأكيد', 'Confirm'),
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  color: Color(0xFFD32F2F),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+            ModernPopupActionButton(
+              label: LecturerLanguageController.tr('تأكيد', 'Confirm'),
+              onTap: () => Navigator.of(ctx).pop(true),
+              isPrimary: true,
+              primaryColor: const Color(0xFFD32F2F),
             ),
           ],
         ),

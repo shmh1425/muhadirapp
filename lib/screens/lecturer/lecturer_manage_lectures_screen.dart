@@ -11,6 +11,7 @@ import '../../services/lecturer/lecturer_sections_service.dart';
 import '../../services/notifications/lecture_action_notification_service.dart';
 import '../../utils/shared/time_utils.dart';
 import 'lecturer_language.dart';
+import 'widgets/modern_popup_dialog.dart';
 import 'widgets/profile_back_button.dart';
 
 /// شاشة إدارة المحاضرات: فلترة، إشعار تأخير، إشعار إلغاء
@@ -528,30 +529,42 @@ class _LecturerManageLecturesScreenState
     final result = await showDialog<int>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(_tr('مدة التأخير', 'Delay duration')),
-          content: TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: InputDecoration(
-              hintText: _tr('عدد الدقائق', 'Minutes'),
+        return Directionality(
+          textDirection: LecturerLanguageController.direction(),
+          child: ModernPopupDialog(
+            title: Text(
+              _tr('مدة التأخير', 'Delay duration'),
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.w800,
+                color: _primary,
+              ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(_tr('إلغاء', 'Cancel')),
+            accentColor: _primary,
+            child: TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                hintText: _tr('عدد الدقائق', 'Minutes'),
+              ),
             ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(
+            actions: [
+              ModernPopupActionButton(
+                label: _tr('إلغاء', 'Cancel'),
+                onTap: () => Navigator.of(dialogContext).pop(),
+                isPrimary: false,
+              ),
+              ModernPopupActionButton(
+                label: _tr('تأكيد', 'Confirm'),
+                onTap: () => Navigator.of(
                   dialogContext,
-                ).pop(int.tryParse(controller.text.trim()));
-              },
-              child: Text(_tr('تأكيد', 'Confirm')),
-            ),
-          ],
+                ).pop(int.tryParse(controller.text.trim())),
+                isPrimary: true,
+                primaryColor: _primary,
+              ),
+            ],
+          ),
         );
       },
     );
@@ -697,48 +710,40 @@ class _LecturerManageLecturesScreenState
 
     showDialog<void>(
       context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _primary.withValues(alpha: 0.35)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.12),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
+      builder: (ctx) => Directionality(
+        textDirection: LecturerLanguageController.direction(),
+        child: ModernPopupDialog(
+          accentColor: _primary,
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.check_circle_rounded, size: 28, color: _primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _tr(
+                    'تم إرسال التأخير وإشعار الطلاب',
+                    'Delay sent and students notified',
+                  ),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF222222),
+                  ),
+                ),
               ),
             ],
           ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.check_circle_rounded, size: 56, color: _primary),
-              const SizedBox(height: 16),
-              Text(
-                _tr(
-                  'تم إرسال التأخير وإشعار الطلاب',
-                  'Delay sent and students notified',
-                ),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF222222),
-                  fontFamily: 'Cairo',
-                ),
-              ),
-              const SizedBox(height: 8),
               Text(
                 lecture.courseName,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 16,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                   color: Color(0xFF222222),
                   fontFamily: 'Cairo',
                 ),
@@ -747,7 +752,7 @@ class _LecturerManageLecturesScreenState
               Text(
                 '${_tr('وقت المحاضرة المحدث', 'Updated time')}: $newTimeDisplay',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 13.5,
                   color: Colors.grey.shade700,
                   fontFamily: 'Cairo',
                 ),
@@ -762,23 +767,16 @@ class _LecturerManageLecturesScreenState
                   fontFamily: 'Cairo',
                 ),
               ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _primary,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(_tr('حسناً', 'OK')),
-                ),
-              ),
             ],
           ),
+          actions: [
+            ModernPopupActionButton(
+              label: _tr('حسناً', 'OK'),
+              onTap: () => Navigator.pop(ctx),
+              isPrimary: true,
+              primaryColor: _primary,
+            ),
+          ],
         ),
       ),
     );
@@ -790,48 +788,40 @@ class _LecturerManageLecturesScreenState
   }) {
     showDialog<void>(
       context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _cancelRed.withValues(alpha: 0.35)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.12),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
+      builder: (ctx) => Directionality(
+        textDirection: LecturerLanguageController.direction(),
+        child: ModernPopupDialog(
+          accentColor: _cancelRed,
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.check_circle_rounded, size: 28, color: _cancelRed),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _tr(
+                    'تم إرسال الإلغاء وإشعار الطلاب',
+                    'Cancellation sent and students notified',
+                  ),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF222222),
+                    fontFamily: 'Cairo',
+                  ),
+                ),
               ),
             ],
           ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.check_circle_rounded, size: 56, color: _cancelRed),
-              const SizedBox(height: 16),
-              Text(
-                _tr(
-                  'تم إرسال الإلغاء وإشعار الطلاب',
-                  'Cancellation sent and students notified',
-                ),
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF222222),
-                  fontFamily: 'Cairo',
-                ),
-              ),
-              const SizedBox(height: 8),
               Text(
                 lecture.courseName,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 16,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                   color: Color(0xFF222222),
                   fontFamily: 'Cairo',
                 ),
@@ -846,23 +836,16 @@ class _LecturerManageLecturesScreenState
                   fontFamily: 'Cairo',
                 ),
               ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _cancelRed,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(_tr('حسناً', 'OK')),
-                ),
-              ),
             ],
           ),
+          actions: [
+            ModernPopupActionButton(
+              label: _tr('حسناً', 'OK'),
+              onTap: () => Navigator.pop(ctx),
+              isPrimary: true,
+              primaryColor: _cancelRed,
+            ),
+          ],
         ),
       ),
     );

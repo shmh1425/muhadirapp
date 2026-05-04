@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../services/lecturer/lecturer_sections_service.dart';
 import 'lecturer_language.dart';
+import 'widgets/modern_popup_dialog.dart';
 import 'widgets/profile_back_button.dart';
 
 class LecturerMyLecturesScreen extends StatefulWidget {
@@ -475,52 +476,14 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => Directionality(
         textDirection: LecturerLanguageController.direction(),
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: ModernPopupSheet(
+          accentColor: _primaryColor,
+          title: _tr('تفاصيل المحاضرة', 'Lecture Details'),
+          onClose: () => Navigator.of(ctx).pop(),
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.12),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 44,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD6D6D6),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _tr('تفاصيل المحاضرة', 'Lecture Details'),
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: _primaryColor,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    icon: const Icon(Icons.close_rounded, color: _primaryColor),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
               _detailRow(_tr('المقرر', 'Course'), lecture.courseName),
               _detailRow('CRN', lecture.crn),
               _detailRow(_tr('الشعبة', 'Section'), lecture.section),

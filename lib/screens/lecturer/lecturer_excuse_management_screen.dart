@@ -11,6 +11,7 @@ import '../../services/excuse/excuse_service.dart';
 import '../../widgets/lecturer/excuse_attachment_preview.dart';
 import '../../widgets/lecturer/excuse_rejection_reason_dialog.dart';
 import 'lecturer_language.dart';
+import 'widgets/modern_popup_dialog.dart';
 import 'widgets/profile_back_button.dart';
 
 /// شاشة إدارة الأعذار (Figure 11 – Excuse Management).
@@ -467,97 +468,44 @@ class _LecturerExcuseManagementScreenState
       builder: (ctx) {
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
-          child: Dialog(
-            insetPadding: const EdgeInsets.symmetric(
-              horizontal: 28,
-              vertical: 24,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 340),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      _tr('تعديل القرار', 'Change decision'),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF213236),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      _tr(
-                        'هل أنت متأكد من تعديل قرار العذر؟',
-                        'Are you sure you want to change the excuse decision?',
-                      ),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 14,
-                        height: 1.4,
-                        color: Color(0xFF475569),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => Navigator.of(ctx).pop(false),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFF64748B),
-                              side: const BorderSide(color: Color(0xFFE2E8F0)),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: Text(
-                              _tr('إلغاء', 'Cancel'),
-                              style: const TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: FilledButton(
-                            onPressed: () => Navigator.of(ctx).pop(true),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: _primary,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: Text(
-                              _tr('متابعة', 'Continue'),
-                              style: const TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+          child: ModernPopupDialog(
+            accentColor: _primary,
+            title: Text(
+              _tr('تعديل القرار', 'Change decision'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF213236),
               ),
             ),
+            child: Text(
+              _tr(
+                'هل أنت متأكد من تعديل قرار العذر؟',
+                'Are you sure you want to change the excuse decision?',
+              ),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 14,
+                height: 1.4,
+                color: Color(0xFF475569),
+              ),
+            ),
+            actions: [
+              ModernPopupActionButton(
+                label: _tr('إلغاء', 'Cancel'),
+                onTap: () => Navigator.of(ctx).pop(false),
+                isPrimary: false,
+              ),
+              ModernPopupActionButton(
+                label: _tr('متابعة', 'Continue'),
+                onTap: () => Navigator.of(ctx).pop(true),
+                isPrimary: true,
+                primaryColor: _primary,
+              ),
+            ],
           ),
         );
       },
@@ -611,20 +559,10 @@ class _LecturerExcuseManagementScreenState
             padding: EdgeInsets.only(bottom: bottomInset),
             child: SafeArea(
               top: false,
-              child: Container(
+              child: ModernPopupSheet(
+                accentColor: _primary,
                 margin: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.08),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,

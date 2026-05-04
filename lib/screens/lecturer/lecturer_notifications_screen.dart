@@ -1381,97 +1381,79 @@ class _LecturerNotificationDetailsScreenState
       builder: (ctx) {
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
-          child: Dialog(
-            insetPadding: const EdgeInsets.symmetric(
-              horizontal: 28,
-              vertical: 24,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 340),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      tr('قرار العذر', 'Excuse decision'),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF213236),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    SizedBox(
-                      height: 44,
-                      child: FilledButton(
-                        onPressed: () {
-                          Navigator.of(ctx).pop();
-                          _applyExcuseDecision(context, approve: true);
-                        },
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF006571),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: Text(
-                          tr('قبول العذر', 'Accept excuse'),
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      height: 44,
-                      child: OutlinedButton(
-                        onPressed: () {
-                          Navigator.of(ctx).pop();
-                          _showRejectDialog(context, requireReason: true);
-                        },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFFB91C1C),
-                          side: const BorderSide(color: Color(0xFFB91C1C)),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: Text(
-                          tr('رفض العذر', 'Reject excuse'),
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(),
-                      child: Text(
-                        tr('إغلاق', 'Close'),
-                        style: const TextStyle(
-                          fontFamily: 'Cairo',
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF64748B),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+          child: ModernPopupDialog(
+            accentColor: const Color(0xFF006571),
+            title: Text(
+              tr('قرار العذر', 'Excuse decision'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF213236),
               ),
             ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  height: 44,
+                  child: FilledButton(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _applyExcuseDecision(context, approve: true);
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF006571),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      tr('قبول العذر', 'Accept excuse'),
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 44,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      _showRejectDialog(context, requireReason: true);
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFB91C1C),
+                      side: const BorderSide(color: Color(0xFFB91C1C)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      tr('رفض العذر', 'Reject excuse'),
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              ModernPopupActionButton(
+                label: tr('إغلاق', 'Close'),
+                onTap: () => Navigator.of(ctx).pop(),
+                isPrimary: false,
+              ),
+            ],
           ),
         );
       },
@@ -1486,97 +1468,43 @@ class _LecturerNotificationDetailsScreenState
       builder: (ctx) {
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
-          child: Dialog(
-            insetPadding: const EdgeInsets.symmetric(
-              horizontal: 28,
-              vertical: 24,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 340),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      tr('تعديل القرار', 'Change decision'),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF213236),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      tr(
-                        'هل أنت متأكد من تعديل قرار العذر؟',
-                        'Are you sure you want to change the excuse decision?',
-                      ),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 14,
-                        height: 1.4,
-                        color: Color(0xFF475569),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => Navigator.of(ctx).pop(false),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFF64748B),
-                              side: const BorderSide(color: Color(0xFFE2E8F0)),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: Text(
-                              tr('إلغاء', 'Cancel'),
-                              style: const TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: FilledButton(
-                            onPressed: () => Navigator.of(ctx).pop(true),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF006571),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: Text(
-                              tr('متابعة', 'Continue'),
-                              style: const TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+          child: ModernPopupDialog(
+            accentColor: const Color(0xFF006571),
+            title: Text(
+              tr('تعديل القرار', 'Change decision'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF213236),
               ),
             ),
+            child: Text(
+              tr(
+                'هل أنت متأكد من تعديل قرار العذر؟',
+                'Are you sure you want to change the excuse decision?',
+              ),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 14,
+                height: 1.4,
+                color: Color(0xFF475569),
+              ),
+            ),
+            actions: [
+              ModernPopupActionButton(
+                label: tr('إلغاء', 'Cancel'),
+                onTap: () => Navigator.of(ctx).pop(false),
+                isPrimary: false,
+              ),
+              ModernPopupActionButton(
+                label: tr('متابعة', 'Continue'),
+                onTap: () => Navigator.of(ctx).pop(true),
+                isPrimary: true,
+              ),
+            ],
           ),
         );
       },

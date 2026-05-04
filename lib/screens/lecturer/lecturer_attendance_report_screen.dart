@@ -524,102 +524,52 @@ class _LecturerAttendanceReportScreenState
       barrierDismissible: true,
       barrierColor: Colors.black.withValues(alpha: 0.45),
       builder: (dialogContext) {
-        final screenW = MediaQuery.sizeOf(dialogContext).width;
-        final maxCardW = min(400.0, screenW - 40);
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
-          child: Dialog(
-            elevation: 0,
-            backgroundColor: Colors.transparent,
-            insetPadding: const EdgeInsets.symmetric(
-              horizontal: 20,
-              vertical: 28,
-            ),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: maxCardW,
-                minWidth: min(300.0, maxCardW),
+          child: ModernPopupDialog(
+            accentColor: _primary,
+            title: Text(
+              _tr('إجراء الحضور', 'Attendance action'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF2F4449),
               ),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: const Color(0xFFE3ECEE)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.12),
-                      blurRadius: 22,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(22, 22, 22, 14),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        _tr('إجراء الحضور', 'Attendance action'),
-                        style: const TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF2F4449),
-                          height: 1.25,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        _tr(
-                          'اختاري الإجراء للمحاضرة في ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
-                          'Choose action for lecture on ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
-                        ),
-                        style: const TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          height: 1.45,
-                          color: Color(0xFF5F747A),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        height: 1,
-                        margin: const EdgeInsets.only(top: 14, bottom: 4),
-                        color: const Color(0xFFE8EEF0),
-                      ),
-                      _sessionDecisionDialogActions(
-                        dialogContext: dialogContext,
-                        isFuture: isFuture,
-                        hasExistingAttendance: hasExistingAttendance,
-                      ),
-                      const SizedBox(height: 4),
-                      Center(
-                        child: TextButton(
-                          style: TextButton.styleFrom(
-                            foregroundColor: const Color(0xFF60757A),
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 10,
-                              horizontal: 20,
-                            ),
-                          ),
-                          onPressed: () => Navigator.of(dialogContext).pop(),
-                          child: Text(
-                            _tr('إلغاء', 'Cancel'),
-                            style: const TextStyle(
-                              fontFamily: 'Cairo',
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  _tr(
+                    'اختاري الإجراء للمحاضرة في ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                    'Choose action for lecture on ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                  ),
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    height: 1.45,
+                    color: Color(0xFF5F747A),
                   ),
                 ),
-              ),
+                const SizedBox(height: 10),
+                _sessionDecisionDialogActions(
+                  dialogContext: dialogContext,
+                  isFuture: isFuture,
+                  hasExistingAttendance: hasExistingAttendance,
+                ),
+              ],
             ),
+            actions: [
+              ModernPopupActionButton(
+                label: _tr('إلغاء', 'Cancel'),
+                onTap: () => Navigator.of(dialogContext).pop(),
+                isPrimary: false,
+              ),
+            ],
           ),
         );
       },
@@ -1008,42 +958,15 @@ class _LecturerAttendanceReportScreenState
         final statuses = _AttendanceStatus.values;
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
-          child: Container(
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(22),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
-                  blurRadius: 16,
-                  offset: const Offset(0, 7),
-                ),
-              ],
-            ),
+          child: ModernPopupSheet(
+            accentColor: _primary,
+            title: _tr('تعديل حالة الطالب', 'Edit student status'),
+            subtitle: student.name,
+            onClose: () => Navigator.pop(ctx),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  _tr('تعديل حالة الطالب', 'Edit student status'),
-                  style: const TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: _primary,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  student.name,
-                  style: const TextStyle(
-                    fontFamily: 'Cairo',
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 12),
                 ...statuses.map((status) {
                   final style = _statusStyle(status);
                   final selected = _effectiveStatus(student) == status;
@@ -1106,74 +1029,16 @@ class _LecturerAttendanceReportScreenState
       builder: (ctx) {
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
-          child: Container(
-            height: MediaQuery.of(ctx).size.height * 0.72,
-            margin: const EdgeInsets.only(top: 24),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            ),
+          child: ModernPopupSheet(
+            accentColor: _primary,
+            title: _tr('ملخص الحضور', 'Attendance Summary'),
+            subtitle:
+                '${group.courseName} • ${_dayName(group.dayOfWeek)} • ${group.timeRange} • ${_tr('الشعبة', 'Section')} ${group.section}',
+            onClose: () => Navigator.pop(ctx),
+            margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
             child: Column(
               children: [
-                const SizedBox(height: 10),
-                Container(
-                  width: 42,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFD8D8D8),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                      Expanded(
-                        child: Text(
-                          _tr('ملخص الحضور', 'Attendance Summary'),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: _primary,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 48),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        group.courseName,
-                        style: const TextStyle(
-                          fontFamily: 'Cairo',
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                          color: Color(0xFF24383D),
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${_dayName(group.dayOfWeek)} • ${group.timeRange} • ${_tr('الشعبة', 'Section')} ${group.section}',
-                        style: const TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 12,
-                          color: Color(0xFF60757A),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
                 const Divider(height: 1),
                 Expanded(
                   child: ListView(
@@ -2988,42 +2853,20 @@ class _LecturerAttendanceReportScreenState
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: EdgeInsets.only(
-          left: 24,
-          right: 24,
-          top: 12,
-          bottom: 24 + MediaQuery.paddingOf(ctx).bottom,
+      builder: (ctx) => ModernPopupSheet(
+        accentColor: _primary,
+        title: _tr('اختيار اليوم', 'Day picker'),
+        onClose: () => Navigator.pop(ctx),
+        margin: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          bottom: 16 + MediaQuery.paddingOf(ctx).bottom,
         ),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD8D8D8),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              _tr('اختيار اليوم', 'Day picker'),
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                fontFamily: 'Cairo',
-                color: Color(0xFF222222),
-              ),
-            ),
-            const SizedBox(height: 8),
             ...options.map((w) {
               final label = _dayName(w);
               final selected = _selectedDayOfWeek == w;
