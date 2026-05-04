@@ -1007,11 +1007,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                     ),
                   if (_selectedMethod == AttendanceMethod.qr)
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-                      child: Align(
-                        alignment: AlignmentDirectional.centerStart,
-                        child: _buildCompactQrActionButton(),
-                      ),
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
+                      child: _buildCompactQrActionButton(),
                     ),
                   _buildSyncLegend(),
                   const SizedBox(height: 14),
@@ -1620,32 +1617,78 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
   Widget _buildCompactQrActionButton() {
     final canOpen = _qrSession != null && _qrData.isNotEmpty && !_isLoadingQr;
-    return OutlinedButton.icon(
-      onPressed: _isLoadingQr
-          ? null
-          : () {
-              if (!canOpen) {
-                _showMethodSnack(
-                  _tr(
-                    'جاري تجهيز رمز QR، حاول مرة أخرى بعد لحظات.',
-                    'QR is still loading, please try again shortly.',
+    return SizedBox(
+      width: double.infinity,
+      height: 46,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _isLoadingQr
+              ? null
+              : () {
+                  if (!canOpen) {
+                    _showMethodSnack(
+                      _tr(
+                        'جاري تجهيز رمز QR، حاول مرة أخرى بعد لحظات.',
+                        'QR is still loading, please try again shortly.',
+                      ),
+                      error: true,
+                    );
+                    return;
+                  }
+                  _showQrPopup();
+                },
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              gradient: _isLoadingQr
+                  ? null
+                  : const LinearGradient(
+                      colors: [Color(0xFF27A2A9), Color(0xFF006571)],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+              color: _isLoadingQr ? const Color(0xFFE3E8EA) : null,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: _isLoadingQr
+                  ? null
+                  : [
+                      BoxShadow(
+                        color: _primary.withValues(alpha: 0.18),
+                        blurRadius: 12,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.qr_code_rounded,
+                  size: 20,
+                  color: _isLoadingQr ? const Color(0xFF92A2A7) : Colors.white,
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    _tr('عرض رمز التحضير', 'Show Attendance Code'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: _isLoadingQr
+                          ? const Color(0xFF92A2A7)
+                          : Colors.white,
+                    ),
                   ),
-                  error: true,
-                );
-                return;
-              }
-              _showQrPopup();
-            },
-      icon: const Icon(Icons.qr_code_rounded, size: 18),
-      label: Text(_tr('عرض رمز التحضير', 'Show QR Code')),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: const Color(0xFF006571),
-        side: const BorderSide(color: Color(0xFFD5E0E3)),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        textStyle: const TextStyle(
-          fontFamily: 'Cairo',
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
