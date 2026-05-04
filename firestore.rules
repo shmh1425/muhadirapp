@@ -258,6 +258,80 @@ service cloud.firestore {
       return isSignedIn();
     }
 
+    function hasBluetoothSessionRequiredFields(data) {
+      return data.keys().hasAll([
+        'sessionId',
+        'sectionId',
+        'courseCode',
+        'courseName',
+        'lecturerId',
+        'lectureDate',
+        'lectureStartTime',
+        'lectureEndTime',
+        'dateKey',
+        'attendanceMethod',
+        'isOpen',
+        'bluetoothSessionToken',
+        'tokenVersion',
+        'generatedAt',
+        'expiresAt',
+        'advertisedServiceUuid',
+        'minRssi',
+        'proximityPolicy',
+        'attendanceCount',
+        'createdAt',
+        'updatedAt',
+      ]);
+    }
+
+    function isValidBluetoothSessionCreate(sessionId) {
+      let data = request.resource.data;
+      return hasBluetoothSessionRequiredFields(data) &&
+          data.sessionId == sessionId &&
+          data.sessionId is string &&
+          data.sectionId is string &&
+          data.bluetoothSessionToken is string &&
+          data.tokenVersion is number &&
+          data.generatedAt is timestamp &&
+          data.expiresAt is timestamp &&
+          data.advertisedServiceUuid is string &&
+          data.minRssi is number &&
+          data.proximityPolicy is string &&
+          data.attendanceCount is number &&
+          data.isOpen is bool &&
+          data.attendanceMethod == 'bluetooth' &&
+          isLecturerByClaimOrId(data.lecturerId) &&
+          isSectionAssignedToLecturer(data.sectionId, data.lecturerId);
+    }
+
+    function isValidBluetoothSessionUpdate() {
+      let data = request.resource.data;
+      let old = resource.data;
+      return data.lecturerId == old.lecturerId &&
+          data.sessionId == old.sessionId &&
+          data.sectionId == old.sectionId &&
+          data.courseCode == old.courseCode &&
+          data.courseName == old.courseName &&
+          data.section == old.section &&
+          data.lectureDate == old.lectureDate &&
+          data.lectureStartTime == old.lectureStartTime &&
+          data.lectureEndTime == old.lectureEndTime &&
+          data.dateKey == old.dateKey &&
+          data.attendanceMethod == 'bluetooth' &&
+          data.advertisedServiceUuid == old.advertisedServiceUuid &&
+          data.attendanceCount == old.attendanceCount &&
+          data.bluetoothSessionToken is string &&
+          data.tokenVersion is number &&
+          data.generatedAt is timestamp &&
+          data.expiresAt is timestamp &&
+          data.advertisedServiceUuid is string &&
+          data.minRssi is number &&
+          data.proximityPolicy is string &&
+          data.attendanceCount is number &&
+          data.isOpen is bool &&
+          isLecturerByClaimOrId(old.lecturerId);
+    }
+
     match /admins/{uid} {
       allow read: if isSignedIn() && request.auth.uid == uid;
       allow write: if false;
@@ -400,6 +474,15 @@ service cloud.firestore {
     match /nfc_attendance_sessions/{sessionId} {
       allow read: if true;
       allow write: if isSignedIn();
+    }
+
+    // Bluetooth attendance sessions: lecturer-owned session/token lifecycle.
+    // No BLE scan/record writes are enabled in Phase 1.
+    match /bluetooth_attendance_sessions/{sessionId} {
+      allow read: if isSignedIn();
+      allow create: if isValidBluetoothSessionCreate(sessionId);
+      allow update: if isValidBluetoothSessionUpdate();
+      allow delete: if false;
     }
 
     // Student app notifications generated from lecturer actions.
