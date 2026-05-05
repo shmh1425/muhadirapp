@@ -48,6 +48,12 @@ class ExternalStudent {
   /// للعرض في الواجهة: الاسم العربي إن وُجد وإلا الإنجليزي
   String get displayName => nameAr.trim().isNotEmpty ? nameAr : name;
 
+  /// يطابق قيم `gender` في Firestore (مثل `F` / `f` / `female`).
+  bool get isFemale {
+    final g = gender.trim().toLowerCase();
+    return g == 'f' || g == 'female';
+  }
+
   factory ExternalStudent.fromMap(Map<String, dynamic>? map) {
     if (map == null) map = {};
     String safeStr(dynamic v) {
