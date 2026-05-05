@@ -45,6 +45,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   bool _isNfc = true;
+  bool _isBluetooth = false;
   int selectedIndex = 2;
   AnimationController? _pulseController;
   QRViewController? _qrScannerController;
@@ -87,6 +88,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   void _toggleMode(bool nfc) {
     setState(() {
       _isNfc = nfc;
+      _isBluetooth = false;
       _statusError = false;
       if (!nfc) {
         _qrStatusError = false;
@@ -112,9 +114,26 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _isNfc) return;
+      if (!mounted || _isNfc || _isBluetooth) return;
       _prepareQrScanner();
     });
+  }
+
+  void _toggleBluetoothMode() {
+    setState(() {
+      _isNfc = false;
+      _isBluetooth = true;
+      _statusError = false;
+      _qrStatusError = false;
+      _isEnteringQrCode = false;
+      _isProcessingQrScan = false;
+      _isQrScanPaused = true;
+      _qrStatusMessage = _tr(
+        'سيتم تفعيل المسح الفعلي في المرحلة القادمة.',
+        'Real Bluetooth scanning will be enabled in the next phase.',
+      );
+    });
+    _stopQrScanner();
   }
 
   Future<void> _onItemTapped(int index) async {
@@ -196,7 +215,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Future<void> _startNfcAttendance() async {
-    if (_isScanning || !_isNfc) return;
+    if (_isScanning || !_isNfc || _isBluetooth) return;
 
     final student = StudentAuthService.instance.currentStudent;
     if (student == null) {
@@ -596,7 +615,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Future<void> _startQrScanner() async {
-    if (_isNfc || _isStartingQrScanner || _isProcessingQrScan) return;
+    if (_isNfc || _isBluetooth || _isStartingQrScanner || _isProcessingQrScan) {
+      return;
+    }
     if (_qrCameraUnavailable || _qrPermissionDenied || !_qrScannerInitialized) {
       return;
     }
@@ -646,6 +667,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Future<void> _retryQrScan() async {
+    if (_isBluetooth) return;
     if (!mounted) return;
     setState(() {
       _isEnteringQrCode = false;
@@ -657,7 +679,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Future<void> _showAttendanceCodeEntry() async {
-    if (!mounted || _isNfc) return;
+    if (!mounted || _isNfc || _isBluetooth) return;
     await _stopQrScanner();
     setState(() {
       _isEnteringQrCode = true;
@@ -671,7 +693,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Future<void> _submitAttendanceCode() async {
-    if (_isSubmittingAttendanceCode || _isNfc) return;
+    if (_isSubmittingAttendanceCode || _isNfc || _isBluetooth) return;
     final code = _attendanceCodeController.text.trim();
     if (code.isEmpty) {
       setState(() {
@@ -766,7 +788,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Future<void> _prepareQrScanner() async {
-    if (!mounted || _isNfc || _checkingQrAvailability) return;
+    if (!mounted || _isNfc || _isBluetooth || _checkingQrAvailability) return;
 
     setState(() {
       _checkingQrAvailability = true;
@@ -780,7 +802,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     });
 
     final availability = await _resolveQrCameraAvailability();
-    if (!mounted || _isNfc) return;
+    if (!mounted || _isNfc || _isBluetooth) return;
 
     setState(() {
       _checkingQrAvailability = false;
@@ -798,7 +820,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
 
     if (availability.available) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _isNfc) return;
+        if (!mounted || _isNfc || _isBluetooth) return;
         _startQrScanner();
       });
     }
@@ -824,7 +846,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Future<void> _handleQrDetect(Barcode scanData) async {
-    if (_isProcessingQrScan || _isNfc) return;
+    if (_isProcessingQrScan || _isNfc || _isBluetooth) return;
 
     final rawValue = scanData.code?.trim() ?? '';
     if (rawValue.isEmpty) {
@@ -948,7 +970,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         _handleQrDetect(scanData);
       },
       onError: (_) {
-        if (!mounted || _isNfc) return;
+        if (!mounted || _isNfc || _isBluetooth) return;
         setState(() {
           _isProcessingQrScan = false;
           _isQrScanPaused = true;
@@ -962,13 +984,13 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       },
     );
 
-    if (!_isNfc && !_qrCameraUnavailable) {
+    if (!_isNfc && !_isBluetooth && !_qrCameraUnavailable) {
       _startQrScanner();
     }
   }
 
   void _onQrPermissionSet(QRViewController controller, bool hasPermission) {
-    if (!mounted || _isNfc) return;
+    if (!mounted || _isNfc || _isBluetooth) return;
 
     if (hasPermission) {
       setState(() {
@@ -1035,9 +1057,147 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     super.dispose();
   }
 
+  Widget _buildBluetoothPlaceholderPanel() {
+    final supportMessage = kIsWeb
+        ? _tr(
+            'التحضير عبر البلوتوث سيتطلب دعم جهاز محمول في المرحلة القادمة.',
+            'Bluetooth attendance will require mobile device support in the next phase.',
+          )
+        : _tr(
+            'تأكدي من تشغيل البلوتوث عند استخدام هذه الطريقة لاحقًا.',
+            'Make sure Bluetooth is turned on when using this method later.',
+          );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 22),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 122,
+            height: 122,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white,
+              border: Border.all(color: const Color(0xFF006571), width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF006571).withValues(alpha: 0.08),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.bluetooth_rounded,
+              size: 56,
+              color: Color(0xFF006571),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            _tr('التحضير عبر البلوتوث', 'Bluetooth Attendance'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF1F2E33),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFCCE8EA)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _tr(
+                    'البلوتوث غير مفعّل في هذه المرحلة. سيتم تفعيل المسح الفعلي في المرحلة القادمة.',
+                    'Bluetooth is not enabled in this phase. Real Bluetooth scanning will be enabled in the next phase.',
+                  ),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFF35565E),
+                    fontSize: 13,
+                    fontFamily: 'Cairo',
+                    fontWeight: FontWeight.w700,
+                    height: 1.45,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  _tr(
+                    'اطلبي من المحاضر تفعيل جلسة البلوتوث عند توفر المسح لاحقًا.',
+                    'Ask your lecturer to activate Bluetooth attendance when scanning is available later.',
+                  ),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFF5F7A80),
+                    fontSize: 12,
+                    fontFamily: 'Cairo',
+                    fontWeight: FontWeight.w600,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  supportMessage,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFF5F7A80),
+                    fontSize: 12,
+                    fontFamily: 'Cairo',
+                    fontWeight: FontWeight.w600,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: 240,
+            height: 44,
+            child: FilledButton.icon(
+              onPressed: null,
+              icon: const Icon(Icons.bluetooth_searching_rounded, size: 18),
+              label: Text(
+                _tr('البحث عن إشارة المحاضرة', 'Searching for lecture signal'),
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Cairo',
+                ),
+              ),
+              style: FilledButton.styleFrom(
+                disabledBackgroundColor: const Color(0xFFB8D6D8),
+                disabledForegroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final translation = TranslationController.instance;
+    final attendanceModeTitle = _isBluetooth
+        ? _tr('التحضير عبر البلوتوث', 'Bluetooth Attendance')
+        : _isNfc
+        ? _tr('التحضير عبر NFC', 'NFC Attendance')
+        : _tr('التحضير عبر QR', 'QR Attendance');
 
     return AnimatedBuilder(
       animation: translation,
@@ -1088,20 +1248,21 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                   ],
                 ),
                 const SizedBox(height: 12),
-                const Center(
-                  child: TText(
-                    'التحضير عبر NFC',
+                Center(
+                  child: Text(
+                    attendanceModeTitle,
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF222222),
+                      fontFamily: 'Cairo',
                     ),
                   ),
                 ),
                 const SizedBox(height: 12),
                 Center(
                   child: Container(
-                    width: 140,
+                    width: 270,
                     height: 42,
                     decoration: BoxDecoration(
                       color: const Color(0xFFE1F7F7),
@@ -1113,7 +1274,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                         Expanded(
                           child: _ModeChip(
                             label: 'QR',
-                            isActive: !_isNfc,
+                            isActive: !_isNfc && !_isBluetooth,
                             onTap: () => _toggleMode(false),
                           ),
                         ),
@@ -1123,6 +1284,14 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                             label: 'NFC',
                             isActive: _isNfc,
                             onTap: () => _toggleMode(true),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: _ModeChip(
+                            label: _tr('بلوتوث', 'Bluetooth'),
+                            isActive: _isBluetooth,
+                            onTap: _toggleBluetoothMode,
                           ),
                         ),
                       ],
@@ -1274,6 +1443,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                             ),
                           ],
                         ),
+                      ] else if (_isBluetooth) ...[
+                        _buildBluetoothPlaceholderPanel(),
                       ] else ...[
                         Column(
                           mainAxisSize: MainAxisSize.min,
