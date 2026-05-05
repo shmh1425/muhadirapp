@@ -8,6 +8,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'components/notification_bell.dart';
 import 'components/custom_nav_bar_icons.dart';
+import 'components/student_back_chevron_icon.dart';
 import 'home_screen.dart';
 import 'settings_screen.dart';
 import '../../services/student_auth_service.dart';
@@ -481,11 +482,8 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
       child: Row(
         children: <Widget>[
           IconButton(
-            icon: Icon(
-              translation.translateToEnglish
-                  ? Icons.arrow_back_ios_new
-                  : Icons.arrow_forward_ios,
-              color: const Color(0xFF006571),
+            icon: StudentBackChevronIcon(
+              color: Color(0xFF006571),
               size: 16,
             ),
             padding: EdgeInsets.zero,

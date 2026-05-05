@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'components/notification_bell.dart';
 import 'components/custom_nav_bar_icons.dart';
+import 'components/student_back_chevron_icon.dart';
 import 'home_screen.dart';
 import 'settings_screen.dart';
 import 'notifications_screen.dart';
@@ -531,38 +532,39 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    final translation = TranslationController.instance;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Row(
         children: <Widget>[
           IconButton(
-            icon: Transform(
-              alignment: Alignment.center,
-              transform: translation.textDirection == TextDirection.rtl
-                  ? Matrix4.rotationY(3.14159)
-                  : Matrix4.identity(),
-              child: const Icon(
-                Icons.arrow_back_ios,
-                color: _primaryColor,
-                size: 16,
-              ),
+            icon: StudentBackChevronIcon(
+              color: _primaryColor,
+              size: 16,
             ),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
             onPressed: () => Navigator.of(context).maybePop(),
           ),
-          const Expanded(
-            child: TText(
-              'الجدول الدراسي',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: _primaryColor,
+          const SizedBox(width: 6),
+          Expanded(
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TText(
+                TranslationController.instance.translateToEnglish
+                    ? 'Class schedule'
+                    : 'الجدول الدراسي',
+                textAlign: TextAlign.start,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: _primaryColor,
+                ),
               ),
             ),
           ),
+          const SizedBox(width: 44),
           NotificationBell(
             onTap: () {
               Navigator.push(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'components/notification_bell.dart';
 import 'components/custom_nav_bar_icons.dart';
+import 'components/student_back_chevron_icon.dart';
 import 'excuse_attachment_preview_screen.dart';
 import 'home_screen.dart';
 import 'submit_excuse_screen.dart';
@@ -78,14 +79,9 @@ class RejectionDetailScreen extends StatelessWidget {
       child: Row(
         children: <Widget>[
           IconButton(
-            icon: Transform(
-              alignment: Alignment.center,
-              transform: Matrix4.rotationY(3.14159),
-              child: const Icon(
-                Icons.arrow_back_ios,
-                color: Color(0xFF006571),
-                size: 16,
-              ),
+            icon: StudentBackChevronIcon(
+              color: Color(0xFF006571),
+              size: 16,
             ),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),

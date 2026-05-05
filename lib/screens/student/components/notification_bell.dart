@@ -28,21 +28,10 @@ class NotificationBell extends StatelessWidget {
               shape: BoxShape.circle,
               color: Colors.white,
             ),
-            child: ShaderMask(
-              shaderCallback: (bounds) {
-                return const LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0xFF27A2A9), Color(0xFF006571)],
-                ).createShader(
-                  Rect.fromLTWH(0, 0, bounds.width, bounds.height),
-                );
-              },
-              child: const Icon(
-                Icons.notifications,
-                color: Colors.white,
-                size: 26,
-              ),
+            child: const Icon(
+              Icons.notifications_outlined,
+              color: Color(0xFF006571),
+              size: 26,
             ),
           ),
           if (studentId > 0)

@@ -21,6 +21,7 @@ import '../../shared/widgets/chat_fab.dart';
 import '../../shared/widgets/attendance_result_popup.dart';
 import 'components/custom_nav_bar_icons.dart';
 import 'components/notification_bell.dart';
+import 'components/student_back_chevron_icon.dart';
 import 'home_screen.dart';
 import 'notifications_screen.dart';
 import 'services_screen.dart';
@@ -1350,11 +1351,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                   children: [
                     IconButton(
                       onPressed: () => Navigator.of(context).maybePop(),
-                      icon: Icon(
-                        translation.translateToEnglish
-                            ? Icons.arrow_back_ios_new
-                            : Icons.arrow_forward_ios,
-                        color: const Color(0xFF006571),
+                      icon: StudentBackChevronIcon(
+                        color: Color(0xFF006571),
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -1381,9 +1379,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                 ),
                 const SizedBox(height: 12),
                 Center(
-                  child: Text(
+                  child: TText(
                     attendanceModeTitle,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF222222),
@@ -1964,8 +1962,11 @@ class _ModeChip extends StatelessWidget {
       borderRadius: BorderRadius.circular(18),
       child: Container(
         decoration: BoxDecoration(
-          color: isActive ? const Color(0xFF006571) : const Color(0xFF4CAEB7),
+          color: isActive ? const Color(0xFF006571) : Colors.white,
           borderRadius: BorderRadius.circular(18),
+          border: isActive
+              ? null
+              : Border.all(color: const Color(0xFF006571).withValues(alpha: 0.22)),
         ),
         child: Center(
           child: Padding(
@@ -1975,8 +1976,8 @@ class _ModeChip extends StatelessWidget {
               child: Text(
                 label,
                 maxLines: 1,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: isActive ? Colors.white : const Color(0xFF006571),
                   fontWeight: FontWeight.w600,
                   fontFamily: 'Cairo',
                 ),

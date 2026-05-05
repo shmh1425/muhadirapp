@@ -11,8 +11,19 @@ import '../../services/excuse/excuse_attendance_merge.dart';
 import 'excuse_screen.dart';
 import 'pending_detail_screen.dart';
 import 'rejection_detail_screen.dart';
+import 'components/student_back_chevron_icon.dart';
 import 'schedule_screen.dart';
 import 'submit_excuse_screen.dart';
+
+/// Visual style bucket for notification cards (Arabic-first UI spec).
+enum _NotificationVisualKind {
+  absence,
+  delay,
+  lecture,
+  excusePending,
+  excuseAccepted,
+  excuseRejected,
+}
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -34,6 +45,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   String _tr(TranslationController t, String ar, String en) =>
       t.translateToEnglish ? en : ar;
+
+  static const Color _bg = Color(0xFFF7F9FB);
+  static const Color _brand = Color(0xFF0F766E);
+  static const Color _brandAccent = Color(0xFF14B8A6);
+  static const Color _mutedTab = Color(0xFF94A3B8);
+  /// Matches other student headers (جدول، حضور، أعذار).
+  static const Color _headerPrimary = Color(0xFF006571);
+  static const Color _deleteAllRed = Color(0xFFDC2626);
 
   @override
   void dispose() {
@@ -76,6 +95,67 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         : 'تعذر حذف الإشعار. حاول مرة أخرى.';
   }
 
+  String _relativeTime(TranslationController t, DateTime at) {
+    final now = DateTime.now();
+    var diff = now.difference(at);
+    if (diff.isNegative) diff = Duration.zero;
+    final en = t.translateToEnglish;
+
+    if (diff.inSeconds < 45) {
+      return en ? 'Just now' : 'الآن';
+    }
+    final m = diff.inMinutes;
+    if (m < 1) {
+      return en ? 'Just now' : 'الآن';
+    }
+    if (m < 60) {
+      if (en) {
+        return m == 1 ? '1 minute ago' : '$m minutes ago';
+      }
+      if (m == 1) return 'قبل دقيقة';
+      if (m == 2) return 'قبل دقيقتين';
+      if (m <= 10) return 'قبل $m دقائق';
+      return 'قبل $m دقيقة';
+    }
+    final h = diff.inHours;
+    if (h < 24) {
+      if (en) {
+        return h == 1 ? '1 hour ago' : '$h hours ago';
+      }
+      if (h == 1) return 'قبل ساعة';
+      if (h == 2) return 'قبل ساعتين';
+      if (h <= 10) return 'قبل $h ساعات';
+      return 'قبل $h ساعة';
+    }
+    final d = diff.inDays;
+    if (en) {
+      return d == 1 ? 'Yesterday' : (d < 7 ? '$d days ago' : '${d ~/ 7} weeks ago');
+    }
+    if (d == 1) return 'أمس';
+    if (d == 2) return 'قبل يومين';
+    if (d < 7) return 'قبل $d أيام';
+    if (d < 30) return 'قبل ${d ~/ 7} أسابيع';
+    if (en) return '${d ~/ 30} months ago';
+    return 'قبل ${d ~/ 30} شهرًا تقريبًا';
+  }
+
+  _NotificationVisualKind _visualKind(StudentNotification n) {
+    switch (n.category) {
+      case StudentNotificationCategory.attendance:
+        return _NotificationVisualKind.absence;
+      case StudentNotificationCategory.excuses:
+        final s = n.excuseStatus.trim().toLowerCase();
+        if (s == 'accepted') return _NotificationVisualKind.excuseAccepted;
+        if (s == 'rejected') return _NotificationVisualKind.excuseRejected;
+        return _NotificationVisualKind.excusePending;
+      case StudentNotificationCategory.lectures:
+        if (n.actionType.trim().toLowerCase() == 'delay') {
+          return _NotificationVisualKind.delay;
+        }
+        return _NotificationVisualKind.lecture;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final translation = TranslationController.instance;
@@ -85,53 +165,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Directionality(
           textDirection: translation.textDirection,
           child: Scaffold(
-            backgroundColor: Colors.white,
+            backgroundColor: _bg,
             floatingActionButton: const ChatFAB(),
             body: SafeArea(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                children: [
-                  Row(
-                    children: [
-                      IconButton(
-                        onPressed: () => Navigator.of(context).maybePop(),
-                        icon: Icon(
-                          translation.textDirection == TextDirection.ltr
-                              ? Icons.arrow_back_ios_new
-                              : Icons.arrow_forward_ios,
-                          color: const Color(0xFF006571),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      const TText(
-                        'التنبيهات',
-                        textAlign: TextAlign.start,
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF006571),
-                        ),
-                      ),
-                      const Spacer(),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  if (_studentId > 0) _buildCategoryChips(translation),
-                  Align(
-                    alignment: translation.textDirection == TextDirection.ltr
-                        ? Alignment.centerRight
-                        : Alignment.centerLeft,
-                    child: TextButton(
-                      onPressed: _studentId <= 0 ? null : _confirmDeleteAll,
-                      child: TText(
-                        _tr(translation, 'حذف الكل', 'Delete all'),
-                        style: const TextStyle(color: Color(0xFFE53935)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildHeader(context, translation),
+                    if (_studentId > 0) _buildTabs(translation),
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(0, 8, 0, 24),
+                        children: _buildNotificationContent(translation),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  ..._buildNotificationContent(),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -140,10 +191,141 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
-  List<Widget> _buildNotificationContent() {
+  Widget _buildHeader(BuildContext context, TranslationController t) {
+    return Container(
+      color: Colors.white,
+      child: Row(
+        children: [
+          IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            onPressed: () => Navigator.of(context).maybePop(),
+            icon: StudentBackChevronIcon(
+              color: _headerPrimary,
+              size: 16,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TText(
+                _tr(t, 'التنبيهات', 'Notifications'),
+                textAlign: TextAlign.start,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontFamily: 'Tajawal',
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: _headerPrimary,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabs(TranslationController t) {
+    Widget tab(String value, String ar, String en) {
+      final isActive = _selectedCategory == value;
+      return Expanded(
+        child: InkWell(
+          onTap: () => setState(() => _selectedCategory = value),
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TText(
+                  _tr(t, ar, en),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Tajawal',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: isActive ? _brand : _mutedTab,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOut,
+                  height: 3,
+                  margin: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(2),
+                    gradient: isActive
+                        ? const LinearGradient(
+                            colors: <Color>[_brand, _brandAccent],
+                          )
+                        : null,
+                    color: isActive ? null : Colors.transparent,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      color: Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 8, right: 8, bottom: 4),
+            child: Row(
+              children: [
+                tab('الكل', 'الكل', 'All'),
+                tab('المحاضرات', 'المحاضرات', 'Classes'),
+                tab('الحضور', 'الحضور', 'Attendance'),
+                tab('الأعذار', 'الأعذار', 'Excuses'),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 8, end: 8, bottom: 10),
+            child: Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: TextButton(
+                onPressed: _confirmDeleteAll,
+                style: TextButton.styleFrom(
+                  foregroundColor: _deleteAllRed,
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: TText(
+                  _tr(t, 'حذف الكل', 'Delete all'),
+                  style: const TextStyle(
+                    fontFamily: 'Tajawal',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: _deleteAllRed,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildNotificationContent(TranslationController t) {
     if (_studentId <= 0) {
-      return const <Widget>[
-        _EmptyNotificationsMessage(message: 'سجّل دخولك كطالب لعرض التنبيهات.'),
+      return <Widget>[
+        _EmptyNotificationsMessage(
+          message: _tr(t, 'سجّل دخولك كطالب لعرض التنبيهات.', 'Sign in as a student to view notifications.'),
+        ),
       ];
     }
 
@@ -153,13 +335,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
-              child: Center(child: CircularProgressIndicator()),
+              padding: EdgeInsets.symmetric(vertical: 48),
+              child: Center(
+                child: SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: _brand,
+                  ),
+                ),
+              ),
             );
           }
           if (snapshot.hasError) {
-            return const _EmptyNotificationsMessage(
-              message: 'تعذر تحميل التنبيهات حالياً.',
+            return _EmptyNotificationsMessage(
+              message: _tr(t, 'تعذر تحميل التنبيهات حالياً.', 'Could not load notifications.'),
             );
           }
 
@@ -176,21 +367,28 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   .toList();
 
               if (filtered.isEmpty) {
-                return const _EmptyNotificationsMessage(message: 'لا يوجد تنبيهات');
+                return _EmptyNotificationsMessage(
+                  message: _tr(t, 'لا يوجد تنبيهات', 'No notifications'),
+                );
               }
 
               return AnimatedSwitcher(
-                duration: const Duration(milliseconds: 150),
+                duration: const Duration(milliseconds: 180),
                 switchInCurve: Curves.easeOut,
                 switchOutCurve: Curves.easeIn,
                 child: Column(
-                  key: ValueKey<int>(filtered.length),
+                  key: ValueKey<String>('${_selectedCategory}_${filtered.length}'),
                   children: filtered
-                      .map((n) => _NotificationRow(
-                            notification: n,
-                            onOpen: () => _openDetails(n),
-                            onDelete: () => _confirmDelete(n),
-                          ))
+                      .map(
+                        (n) => _NotificationCard(
+                          notification: n,
+                          visualKind: _visualKind(n),
+                          relativeTime: _relativeTime(t, n.createdAt),
+                          onOpen: () => _openDetails(n),
+                          onSwipeDelete: () => _confirmAndDeleteNotification(n),
+                          tr: _tr,
+                        ),
+                      )
                       .toList(),
                 ),
               );
@@ -199,51 +397,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         },
       ),
     ];
-  }
-
-  Widget _buildCategoryChips(TranslationController t) {
-    // Match "إدارة الأعذار" tabs style (same background + gradient active chip).
-    const tabBackground = Color(0xFFF5F5F5);
-
-    Widget tab(String value, String ar, String en) {
-      final isActive = _selectedCategory == value;
-      return Expanded(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          child: _GradientTabChip(
-            label: _tr(t, ar, en),
-            isActive: isActive,
-            onTap: () => setState(() => _selectedCategory = value),
-          ),
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Align(
-        alignment: Alignment.center,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 360),
-          child: Container(
-            height: 38,
-            decoration: BoxDecoration(
-              color: tabBackground,
-              borderRadius: BorderRadius.circular(22),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-            child: Row(
-              children: [
-                tab('الكل', 'الكل', 'All'),
-                tab('الحضور', 'الحضور', 'Attendance'),
-                tab('المحاضرات', 'المحاضرات', 'Classes'),
-                tab('الأعذار', 'الأعذار', 'Excuses'),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   List<StudentNotification> _filteredNotifications(List<StudentNotification> all) {
@@ -269,7 +422,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         notification: notification,
       );
     } on FirebaseException catch (_) {
-      // keep silent like lecturer flow; UI remains responsive
     } catch (_) {}
 
     if (!mounted) return;
@@ -328,7 +480,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       return;
     }
 
-    // Excuse notifications.
     final status = n.excuseStatus.trim().toLowerCase();
     if (status == 'pending') {
       Navigator.push<void>(
@@ -379,23 +530,52 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       return;
     }
 
-    // accepted or unknown -> open excuse list.
     Navigator.push<void>(
       context,
       MaterialPageRoute<void>(builder: (_) => const ExcuseScreen()),
     );
   }
 
-  Future<void> _deleteNotification(StudentNotification notification) async {
+  /// Shown after swipe threshold; returns whether [Dismissible] should remove the tile.
+  Future<bool> _confirmAndDeleteNotification(StudentNotification notification) async {
+    final t = TranslationController.instance;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: t.textDirection,
+        child: AlertDialog(
+          title: Text(_tr(t, 'حذف الإشعار', 'Delete notification')),
+          content: Text(
+            _tr(t, 'هل أنت متأكد من حذف هذا الإشعار؟', 'Are you sure you want to delete this notification?'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(_tr(t, 'إلغاء', 'Cancel')),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(_tr(t, 'موافق', 'OK')),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return false;
+    if (confirmed != true) return false;
+    return _deleteNotification(notification);
+  }
+
+  /// Returns `true` if the notification was removed from the server (or hidden) successfully.
+  Future<bool> _deleteNotification(StudentNotification notification) async {
     final t = TranslationController.instance;
     try {
       await _notificationsService.deleteNotification(
         studentId: _studentId,
         notification: notification,
       );
-      if (!mounted) return;
-      // Optimistic hide: attendance rows are UI-derived, so we hide immediately
-      // while prefs stream catches up.
+      if (!mounted) return false;
       final next = Set<String>.of(_optimisticHiddenIds.value)
         ..add(notification.id)
         ..add(notification.rawId);
@@ -406,42 +586,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           duration: const Duration(seconds: 2),
         ),
       );
+      return true;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(_deleteFailureMessage(t, e)),
         ),
       );
+      return false;
     }
-  }
-
-  void _confirmDelete(StudentNotification notification) {
-    final t = TranslationController.instance;
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => Directionality(
-        textDirection: t.textDirection,
-        child: AlertDialog(
-          title: Text(_tr(t, 'حذف الإشعار', 'Delete Notification')),
-          content: Text(_tr(t, 'هل أنت متأكد من حذف هذا الإشعار؟', 'Are you sure you want to delete this notification?')),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: Text(_tr(t, 'إلغاء', 'Cancel')),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFE53935)),
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                _deleteNotification(notification);
-              },
-              child: Text(_tr(t, 'حذف', 'Delete')),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   void _confirmDeleteAll() {
@@ -459,7 +613,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               child: Text(_tr(t, 'إلغاء', 'Cancel')),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFE53935)),
+              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
               onPressed: () {
                 Navigator.of(ctx).pop();
                 _deleteAll();
@@ -507,132 +661,190 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 }
 
-class _NotificationRow extends StatelessWidget {
-  const _NotificationRow({
+class _NotificationCard extends StatelessWidget {
+  const _NotificationCard({
     required this.notification,
+    required this.visualKind,
+    required this.relativeTime,
     required this.onOpen,
-    required this.onDelete,
+    required this.onSwipeDelete,
+    required this.tr,
   });
 
   final StudentNotification notification;
+  final _NotificationVisualKind visualKind;
+  final String relativeTime;
   final VoidCallback onOpen;
-  final VoidCallback onDelete;
+  /// After swipe threshold: parent shows confirm dialog, then deletes if user accepts.
+  final Future<bool> Function() onSwipeDelete;
+  final String Function(TranslationController t, String ar, String en) tr;
 
-  static const Color _appGreen = Color(0xFF006571);
-
-  String _excuseStatusTag(TranslationController t) {
-    if (notification.category != StudentNotificationCategory.excuses) return '';
-    final s = notification.excuseStatus.toLowerCase().trim();
-    if (s.isEmpty) return '';
-    if (t.translateToEnglish) {
-      switch (s) {
-        case 'pending':
-          return ' (Pending)';
-        case 'accepted':
-          return ' (Accepted)';
-        case 'rejected':
-          return ' (Rejected)';
-        default:
-          return '';
-      }
+  String _typeTitle(TranslationController t) {
+    switch (visualKind) {
+      case _NotificationVisualKind.absence:
+        return tr(t, 'إشعار غياب', 'Absence alert');
+      case _NotificationVisualKind.delay:
+        return tr(t, 'تأخير المحاضرة', 'Lecture delay');
+      case _NotificationVisualKind.lecture:
+        return tr(t, 'تحديث محاضرة', 'Lecture update');
+      case _NotificationVisualKind.excusePending:
+      case _NotificationVisualKind.excuseAccepted:
+      case _NotificationVisualKind.excuseRejected:
+        return tr(t, 'إشعار عذر', 'Excuse notice');
     }
-    switch (s) {
-      case 'pending':
-        return ' (معلق)';
-      case 'accepted':
-        return ' (مقبول)';
-      case 'rejected':
-        return ' (مرفوض)';
-      default:
-        return '';
+  }
+
+  (Color icon, Color stripe, IconData iconData) _style() {
+    switch (visualKind) {
+      case _NotificationVisualKind.absence:
+        return (
+          const Color(0xFFDC2626),
+          const Color(0xFFFEE2E2),
+          Icons.warning_amber_rounded,
+        );
+      case _NotificationVisualKind.delay:
+      case _NotificationVisualKind.excusePending:
+        return (
+          const Color(0xFFF59E0B),
+          const Color(0xFFFEF3C7),
+          Icons.notifications_active_outlined,
+        );
+      case _NotificationVisualKind.excuseAccepted:
+        return (
+          const Color(0xFF10B981),
+          const Color(0xFFD1FAE5),
+          Icons.notifications_active_outlined,
+        );
+      case _NotificationVisualKind.excuseRejected:
+        return (
+          const Color(0xFFDC2626),
+          const Color(0xFFFEE2E2),
+          Icons.notifications_active_outlined,
+        );
+      case _NotificationVisualKind.lecture:
+        return (
+          const Color(0xFF10B981),
+          const Color(0xFFD1FAE5),
+          Icons.calendar_month_rounded,
+        );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final t = TranslationController.instance;
-    final title = (t.translateToEnglish ? notification.titleEn : notification.titleAr) +
-        _excuseStatusTag(t);
-    final message =
-        t.translateToEnglish ? notification.messageEn : notification.messageAr;
-
+    final message = t.translateToEnglish ? notification.messageEn : notification.messageAr;
+    final desc = message.trim().isEmpty
+        ? (t.translateToEnglish ? notification.titleEn : notification.titleAr)
+        : message;
     final unread = !notification.isRead;
-    final bg = unread ? Colors.white : Colors.white;
-    final border = unread ? const Color(0xFF006571) : Colors.grey.shade200;
-    const iconColor = _appGreen;
+    final (iconColor, stripeColor, iconData) = _style();
 
-    final card = Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    final Widget cardFace = Container(
       decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: border, width: unread ? 2 : 1),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            notification.category == StudentNotificationCategory.attendance
-                ? Icons.warning_amber_rounded
-                : (notification.category == StudentNotificationCategory.excuses
-                    ? Icons.info_outline
-                    : Icons.notifications),
-            color: iconColor,
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Material(
+          color: Colors.transparent,
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TText(
-                  title,
-                  style: TextStyle(
-                    fontWeight: unread ? FontWeight.w800 : FontWeight.w600,
-                    color: const Color(0xFF006571),
+                Container(width: 4, color: stripeColor),
+                Expanded(
+                  child: InkWell(
+                    onTap: onOpen,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 14, 10, 14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          TText(
+                            _typeTitle(t),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontFamily: 'Tajawal',
+                              fontWeight: unread ? FontWeight.w800 : FontWeight.w700,
+                              fontSize: 15,
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          TText(
+                            desc,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontFamily: 'Tajawal',
+                              fontSize: 13.5,
+                              height: 1.35,
+                              color: Color(0xFF475569),
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TText(
+                            relativeTime,
+                            style: const TextStyle(
+                              fontFamily: 'Tajawal',
+                              fontSize: 12,
+                              color: Color(0xFF9CA3AF),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 4),
-                TText(
-                  message,
-                  style: const TextStyle(fontSize: 12, color: Colors.black87),
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(end: 12, start: 2),
+                  child: Center(
+                    child: Icon(iconData, color: iconColor, size: 26),
+                  ),
                 ),
               ],
             ),
           ),
-          IconButton(
-            onPressed: onDelete,
-            icon: const Icon(Icons.delete_outline),
-            color: _appGreen,
-            tooltip: t.translateToEnglish ? 'Delete' : 'حذف',
-          ),
-        ],
+        ),
       ),
     );
 
-    return Dismissible(
-      key: ValueKey(notification.id),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        alignment: Alignment.centerLeft,
-        decoration: BoxDecoration(
-          color: const Color(0xFFE53935),
-          borderRadius: BorderRadius.circular(10),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Dismissible(
+        key: ValueKey<String>('student_notif_${notification.id}'),
+        direction: DismissDirection.endToStart,
+        dismissThresholds: const <DismissDirection, double>{
+          DismissDirection.endToStart: 0.5,
+        },
+        confirmDismiss: (_) async => onSwipeDelete(),
+        background: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: LinearGradient(
+              begin: AlignmentDirectional.centerEnd,
+              end: AlignmentDirectional.centerStart,
+              colors: <Color>[
+                const Color(0xFFDC2626).withValues(alpha: 0.95),
+                const Color(0xFFDC2626).withValues(alpha: 0.35),
+              ],
+            ),
+          ),
         ),
-        child: const Icon(Icons.delete, color: Colors.white),
-      ),
-      confirmDismiss: (_) async {
-        onDelete();
-        return false;
-      },
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: onOpen,
-          child: card,
-        ),
+        child: cardFace,
       ),
     );
   }
@@ -647,67 +859,18 @@ class _EmptyNotificationsMessage extends StatelessWidget {
   Widget build(BuildContext context) {
     final h = MediaQuery.of(context).size.height;
     return SizedBox(
-      height: (h * 0.55).clamp(260.0, 520.0),
+      height: (h * 0.45).clamp(220.0, 420.0),
       child: Center(
         child: TText(
           message,
           textAlign: TextAlign.center,
           style: const TextStyle(
-            fontSize: 16,
-            color: Colors.black54,
-            fontWeight: FontWeight.w700,
+            fontFamily: 'Tajawal',
+            fontSize: 15,
+            color: Color(0xFF64748B),
+            fontWeight: FontWeight.w600,
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _GradientTabChip extends StatelessWidget {
-  const _GradientTabChip({
-    required this.label,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(22),
-      child: Container(
-        height: 30,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          gradient: isActive
-              ? const LinearGradient(
-                  colors: <Color>[
-                    Color(0xFF27A2A9),
-                    Color(0xFF006571),
-                  ],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                )
-              : null,
-          color: isActive ? null : Colors.white,
-        ),
-        alignment: Alignment.center,
-        child: label.isEmpty
-            ? const SizedBox.shrink()
-            : TText(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : const Color(0xFF444444),
-                ),
-              ),
       ),
     );
   }

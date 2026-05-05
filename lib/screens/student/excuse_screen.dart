@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'components/notification_bell.dart';
+import 'components/student_back_chevron_icon.dart';
 import 'rejection_detail_screen.dart';
 import 'pending_detail_screen.dart';
 import 'submit_excuse_screen.dart';
@@ -333,13 +334,60 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
                                               ),
                                       ),
                                       const SizedBox(height: 16),
-                                      ...visibleItems.map(
-                                        (item) => _ExcuseCard(
-                                          item: item,
-                                          showCourseTitle: selectedCourse == null,
-                                          translateToEnglish: translation.translateToEnglish,
+                                      if (!recordsSnap.hasData &&
+                                          recordsSnap.connectionState ==
+                                              ConnectionState.waiting)
+                                        LayoutBuilder(
+                                          builder: (context, constraints) {
+                                            final h = MediaQuery.sizeOf(context).height;
+                                            final blockH = (h * 0.38).clamp(200.0, 400.0);
+                                            return SizedBox(
+                                              height: blockH,
+                                              width: double.infinity,
+                                              child: Center(
+                                                child: SizedBox(
+                                                  width: 28,
+                                                  height: 28,
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2.5,
+                                                    color: _primaryColor,
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        )
+                                      else if (visibleItems.isEmpty)
+                                        LayoutBuilder(
+                                          builder: (context, constraints) {
+                                            final h = MediaQuery.sizeOf(context).height;
+                                            final blockH = (h * 0.38).clamp(220.0, 440.0);
+                                            return SizedBox(
+                                              height: blockH,
+                                              width: double.infinity,
+                                              child: Center(
+                                                child: TText(
+                                                  'لا توجد',
+                                                  textAlign: TextAlign.center,
+                                                  style: const TextStyle(
+                                                    fontSize: 16,
+                                                    color: Color(0xFF666666),
+                                                    height: 1.4,
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        )
+                                      else
+                                        ...visibleItems.map(
+                                          (item) => _ExcuseCard(
+                                            item: item,
+                                            showCourseTitle: selectedCourse == null,
+                                            translateToEnglish:
+                                                translation.translateToEnglish,
+                                          ),
                                         ),
-                                      ),
                                     ],
                                   );
                                 },
@@ -360,14 +408,10 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    final translation = TranslationController.instance;
     return Row(
       children: <Widget>[
         IconButton(
-          icon: Icon(
-            translation.translateToEnglish
-                ? Icons.arrow_back_ios_new
-                : Icons.arrow_forward_ios,
+          icon: StudentBackChevronIcon(
             color: _primaryColor,
             size: 16,
           ),

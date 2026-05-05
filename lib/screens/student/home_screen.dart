@@ -306,7 +306,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     child: const TText(
-                      ' عرض الغيابات >',
+                      ' إدارة الأعذار >',
                       style: TextStyle(fontWeight: FontWeight.w500),
                     ),
                   ),

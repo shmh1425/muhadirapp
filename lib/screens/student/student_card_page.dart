@@ -5,6 +5,7 @@ import '../../models/external_student.dart';
 import '../../shared/widgets/student_profile_avatar.dart';
 import '../../features/translation/translation_controller.dart';
 import '../../features/translation/widgets/t_text.dart';
+import 'components/student_back_chevron_icon.dart';
 
 class StudentCardPage extends StatelessWidget {
   const StudentCardPage({super.key});
@@ -28,14 +29,15 @@ class StudentCardPage extends StatelessWidget {
                 // Keep back arrow on the left always.
                 textDirection: TextDirection.ltr,
                 child: IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new,
-                      color: Colors.black87),
+                  icon: StudentBackChevronIcon(
+                    color: Colors.black87,
+                  ),
                   onPressed: () => Navigator.of(context).maybePop(),
                 ),
               ),
-              title: const TText(
-                'بطاقة الطالب',
-                style: TextStyle(
+              title: TText(
+                student?.isFemale == true ? 'بطاقة الطالبة' : 'بطاقة الطالب',
+                style: const TextStyle(
                   color: Color(0xFF00525D),
                   fontWeight: FontWeight.bold,
                   fontSize: 22,
@@ -158,7 +160,7 @@ class StudentCardPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       TText(
-                        'رقم الطالب : $studentId',
+                        '${student?.isFemale == true ? 'رقم الطالبة' : 'رقم الطالب'} : $studentId',
                         style: TextStyle(
                           color: Colors.black.withOpacity(0.82),
                           fontSize: 14,
@@ -332,7 +334,12 @@ class StudentCardPage extends StatelessWidget {
             valueForceRtl: true, // always show first name in Arabic direction
           ),
           _buildWalletRow(context, 'الاسم بالإنجليزي', nameEn, valueLtr: true),
-          _buildWalletRow(context, 'رقم الطالب', studentId, valueLtr: true),
+          _buildWalletRow(
+            context,
+            student?.isFemale == true ? 'رقم الطالبة' : 'رقم الطالب',
+            studentId,
+            valueLtr: true,
+          ),
           _buildWalletRow(context, 'البريد الإلكتروني', email, valueLtr: true),
         ],
       ),

@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'components/custom_nav_bar_icons.dart';
 import 'components/notification_bell.dart';
+import 'components/student_back_chevron_icon.dart';
 import 'home_screen.dart';
 import 'settings_screen.dart';
 import 'submit_excuse_screen.dart';
@@ -220,17 +221,13 @@ class PendingDetailScreen extends StatelessWidget {
   }
 
   Widget _buildHeader(BuildContext context) {
-    final translation = TranslationController.instance;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Row(
         children: <Widget>[
           IconButton(
-            icon: Icon(
-              translation.translateToEnglish
-                  ? Icons.arrow_back_ios_new
-                  : Icons.arrow_forward_ios,
-              color: const Color(0xFF006571),
+            icon: StudentBackChevronIcon(
+              color: Color(0xFF006571),
               size: 16,
             ),
             padding: EdgeInsets.zero,

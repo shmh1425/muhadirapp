@@ -208,19 +208,9 @@ class SettingsScreen extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          IconButton(
-                            icon: Icon(
-                              translation.translateToEnglish
-                                  ? Icons.arrow_back_ios_new
-                                  : Icons.arrow_forward_ios,
-                              color: const Color(0xFF006571),
-                            ),
-                            onPressed: () => Navigator.of(context).maybePop(),
-                          ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 96),
                           Expanded(
-                            child: Align(
-                              alignment: Alignment.centerRight,
+                            child: Center(
                               child: Text(
                                 translation.translateToEnglish
                                     ? 'Personal Profile'
@@ -230,24 +220,37 @@ class SettingsScreen extends StatelessWidget {
                                   fontWeight: FontWeight.bold,
                                   color: Color(0xFF006571),
                                 ),
-                                textAlign: TextAlign.right,
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ),
-                          IconButton(
-                            onPressed: translation.toggle,
-                            icon: const Icon(Icons.language, color: Color(0xFF006571)),
-                            tooltip: translation.toggleLabel,
-                          ),
-                          NotificationBell(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const NotificationsScreen(),
-                                ),
-                              );
-                            },
+                          SizedBox(
+                            width: 96,
+                            child: Align(
+                              alignment: AlignmentDirectional.centerEnd,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    onPressed: translation.toggle,
+                                    icon: const Icon(Icons.language, color: Color(0xFF006571)),
+                                    tooltip: translation.toggleLabel,
+                                  ),
+                                  NotificationBell(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => const NotificationsScreen(),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ],
                       ),

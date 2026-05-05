@@ -52,34 +52,36 @@ class ServicesScreen extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      IconButton(
-                        icon: Icon(
-                          translation.translateToEnglish
-                              ? Icons.arrow_back_ios_new
-                              : Icons.arrow_forward_ios,
-                          color: primaryColor,
-                        ),
-                        onPressed: () => Navigator.of(context).maybePop(),
-                      ),
-                      const SizedBox(width: 6),
-                      const TText(
-                        'خدمات الطالب',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: primaryColor,
-                        ),
-                      ),
-                      const Spacer(),
-                      NotificationBell(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const NotificationsScreen(),
+                      const SizedBox(width: 48),
+                      Expanded(
+                        child: Center(
+                          child: TText(
+                            translation.translateToEnglish
+                                ? 'Student Services'
+                                : 'خدمات الطالب',
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: primaryColor,
                             ),
-                          );
-                        },
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 48,
+                        child: NotificationBell(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const NotificationsScreen(),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ],
                   ),

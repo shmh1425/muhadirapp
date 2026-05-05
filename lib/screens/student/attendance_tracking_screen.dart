@@ -10,6 +10,7 @@ import '../../services/attendance/manual_attendance_service.dart';
 import '../../services/student_auth_service.dart';
 import 'components/custom_nav_bar_icons.dart';
 import 'components/notification_bell.dart';
+import 'components/student_back_chevron_icon.dart';
 import 'home_screen.dart';
 import 'notifications_screen.dart';
 import 'settings_screen.dart';
@@ -947,33 +948,33 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    final translation = TranslationController.instance;
     return Row(
       children: <Widget>[
         IconButton(
-          icon: Transform(
-            alignment: Alignment.center,
-            transform: translation.textDirection == TextDirection.rtl
-                ? Matrix4.rotationY(3.14159)
-                : Matrix4.identity(),
-            child: const Icon(
-              Icons.arrow_back_ios,
-              color: _primaryColor,
-              size: 16,
-            ),
+          icon: StudentBackChevronIcon(
+            color: _primaryColor,
+            size: 16,
           ),
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
+        const SizedBox(width: 6),
         Expanded(
-          child: TText(
-            'تتبع الحضور',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: _primaryColor,
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TText(
+              TranslationController.instance.translateToEnglish
+                  ? 'Attendance tracking'
+                  : 'تتبع الحضور',
+              textAlign: TextAlign.start,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: _primaryColor,
+              ),
             ),
           ),
         ),
