@@ -8,6 +8,8 @@ list(APPEND FLUTTER_PLUGIN_LIST
   firebase_auth
   firebase_core
   firebase_storage
+  flutter_ble_peripheral
+  permission_handler_windows
   share_plus
   syncfusion_pdfviewer_windows
   url_launcher_windows

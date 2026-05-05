@@ -28,6 +28,10 @@
 	<true/>
 	<key>NFCReaderUsageDescription</key>
 	<string>يستخدم التطبيق NFC لتسجيل حضور الطالب عبر بطاقة المحاضر.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>يستخدم التطبيق البلوتوث لاكتشاف جلسات التحضير القريبة أثناء فتح شاشة التحضير.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>يستخدم التطبيق البلوتوث لبث جلسة التحضير من جهاز المحاضر في المقدمة.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>يحتاج التطبيق إلى الكاميرا لمسح رمز QR الخاص بتسجيل الحضور.</string>
 	<key>UIApplicationSceneManifest</key>
