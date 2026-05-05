@@ -6,11 +6,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../models/attendance/bluetooth_attendance_session.dart';
 import '../../models/attendance/manual_attendance_record.dart';
 import '../../models/attendance/nfc_attendance_session.dart';
 import '../../models/attendance/qr_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../services/attendance/attendance_session_export_service.dart';
+import '../../services/attendance/bluetooth_attendance_service.dart';
 import '../../services/attendance/manual_attendance_service.dart';
 import '../../services/attendance/nfc_attendance_service.dart';
 import '../../services/attendance/qr_attendance_service.dart';
@@ -70,6 +72,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   final NfcAttendanceService _nfcAttendanceService =
       NfcAttendanceService.instance;
   final QrAttendanceService _qrAttendanceService = QrAttendanceService.instance;
+  final BluetoothAttendanceService _bluetoothAttendanceService =
+      BluetoothAttendanceService.instance;
   StreamSubscription<List<ManualAttendanceRecord>>? _recordsSubscription;
   StreamSubscription<void>? _calendarSyncSub;
   StreamSubscription<List<NfcAttendanceSession>>? _nfcSessionsSubscription;
@@ -93,10 +97,17 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   String _qrData = '';
   bool _isLoadingQr = false;
   bool _isRefreshingQrToken = false;
+  BluetoothAttendanceSession? _bluetoothSession;
+  bool _isLoadingBluetooth = false;
+  bool _isRefreshingBluetoothToken = false;
+  bool _isClosingBluetoothSession = false;
   bool _isUsingRosterFallback = false;
   Timer? _qrAutoRefreshTimer;
+  Timer? _bluetoothTokenTimer;
   static const int _qrAutoRefreshIntervalSeconds = 45;
+  static const int _bluetoothRefreshIntervalSeconds = 45;
   int _qrAutoRefreshSecondsLeft = _qrAutoRefreshIntervalSeconds;
+  int _bluetoothSecondsLeft = _bluetoothRefreshIntervalSeconds;
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
@@ -337,6 +348,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     _calendarSyncSub?.cancel();
     _nfcSessionsSubscription?.cancel();
     _stopQrAutoRefreshTimer();
+    _stopBluetoothTokenTimer();
     super.dispose();
   }
 
@@ -575,6 +587,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     if (method != AttendanceMethod.qr) {
       _stopQrAutoRefreshTimer();
     }
+    if (method != AttendanceMethod.bluetooth) {
+      _stopBluetoothTokenTimer();
+    }
 
     try {
       switch (method) {
@@ -588,6 +603,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           break;
         case AttendanceMethod.nfc:
           await _openOrConfirmNfcForCurrentLecture();
+          break;
+        case AttendanceMethod.bluetooth:
+          await _openOrConfirmBluetoothForCurrentLecture();
           break;
       }
     } finally {
@@ -771,6 +789,205 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   void _stopQrAutoRefreshTimer() {
     _qrAutoRefreshTimer?.cancel();
     _qrAutoRefreshTimer = null;
+  }
+
+  Future<void> _openOrConfirmBluetoothForCurrentLecture() async {
+    final sectionId = (_lecture.sectionId ?? '').trim();
+    if (sectionId.isEmpty) {
+      _showMethodSnack(
+        _tr(
+          'لا يمكن فتح جلسة البلوتوث لعدم توفر sectionId للمحاضرة.',
+          'Cannot start Bluetooth because sectionId is missing.',
+        ),
+        error: true,
+      );
+      return;
+    }
+
+    setState(() => _isLoadingBluetooth = true);
+    try {
+      final session = await _bluetoothAttendanceService
+          .createOrGetSessionForLecture(
+            lecture: _lecture,
+            lectureDate: _sessionDate,
+          );
+      if (!mounted) return;
+      setState(() {
+        _bluetoothSession = session;
+        _methodStatusMessage = _tr(
+          'جلسة البلوتوث نشطة لهذه المحاضرة.',
+          'Bluetooth session active for this lecture.',
+        );
+      });
+      _startBluetoothTokenTimer();
+    } on BluetoothAttendanceException catch (e) {
+      _showMethodSnack(_mapBluetoothError(e), error: true);
+    } on FirebaseException catch (e) {
+      final message = e.code == 'permission-denied'
+          ? _tr(
+              'تعذر فتح جلسة البلوتوث: لا توجد صلاحية للوصول إلى Firestore.',
+              'Failed to start Bluetooth session: Firestore permission denied.',
+            )
+          : _tr(
+              'تعذر فتح جلسة البلوتوث لهذه المحاضرة.',
+              'Failed to start Bluetooth session for this lecture.',
+            );
+      _showMethodSnack(message, error: true);
+    } catch (_) {
+      _showMethodSnack(
+        _tr(
+          'طريقة التحضير عبر البلوتوث غير متاحة حالياً.',
+          'Bluetooth attendance is currently unavailable.',
+        ),
+        error: true,
+      );
+    } finally {
+      if (mounted) setState(() => _isLoadingBluetooth = false);
+    }
+  }
+
+  Future<void> _refreshBluetoothToken({bool showErrorSnack = true}) async {
+    final session = _bluetoothSession;
+    if (_isRefreshingBluetoothToken || session == null) return;
+
+    setState(() => _isRefreshingBluetoothToken = true);
+    try {
+      final refreshed = await _bluetoothAttendanceService.refreshSessionToken(
+        session.sessionId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _bluetoothSession = refreshed;
+        _methodStatusMessage = _tr(
+          'تم تحديث رمز جلسة البلوتوث.',
+          'Bluetooth session token refreshed.',
+        );
+      });
+      _startBluetoothTokenTimer();
+    } on FirebaseException catch (e) {
+      if (showErrorSnack) {
+        final message = e.code == 'permission-denied'
+            ? _tr(
+                'تعذر تحديث رمز البلوتوث: لا توجد صلاحية للوصول إلى Firestore.',
+                'Failed to refresh Bluetooth token: Firestore permission denied.',
+              )
+            : _tr(
+                'فشل تحديث رمز البلوتوث.',
+                'Failed to refresh Bluetooth token.',
+              );
+        _showMethodSnack(message, error: true);
+      }
+    } catch (_) {
+      if (showErrorSnack) {
+        _showMethodSnack(
+          _tr(
+            'فشل تحديث رمز البلوتوث. تأكدي من الاتصال ثم حاولي مجدداً.',
+            'Failed to refresh Bluetooth token. Check your network and try again.',
+          ),
+          error: true,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isRefreshingBluetoothToken = false);
+    }
+  }
+
+  Future<void> _closeBluetoothSession() async {
+    final session = _bluetoothSession;
+    if (_isClosingBluetoothSession || session == null) return;
+
+    setState(() => _isClosingBluetoothSession = true);
+    try {
+      await _bluetoothAttendanceService.closeSession(session.sessionId);
+      if (!mounted) return;
+      _stopBluetoothTokenTimer();
+      setState(() {
+        _bluetoothSession = null;
+        _bluetoothSecondsLeft = _bluetoothRefreshIntervalSeconds;
+        _methodStatusMessage = _tr(
+          'تم إغلاق جلسة البلوتوث.',
+          'Bluetooth session closed.',
+        );
+      });
+    } on FirebaseException catch (e) {
+      final message = e.code == 'permission-denied'
+          ? _tr(
+              'تعذر إغلاق جلسة البلوتوث: لا توجد صلاحية للوصول إلى Firestore.',
+              'Failed to close Bluetooth session: Firestore permission denied.',
+            )
+          : _tr(
+              'تعذر إغلاق جلسة البلوتوث.',
+              'Failed to close Bluetooth session.',
+            );
+      _showMethodSnack(message, error: true);
+    } catch (_) {
+      _showMethodSnack(
+        _tr('تعذر إغلاق جلسة البلوتوث.', 'Failed to close Bluetooth session.'),
+        error: true,
+      );
+    } finally {
+      if (mounted) setState(() => _isClosingBluetoothSession = false);
+    }
+  }
+
+  void _startBluetoothTokenTimer() {
+    _stopBluetoothTokenTimer();
+    _bluetoothSecondsLeft = _secondsUntilBluetoothExpiry();
+    _bluetoothTokenTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted ||
+          _selectedMethod != AttendanceMethod.bluetooth ||
+          _bluetoothSession == null) {
+        _stopBluetoothTokenTimer();
+        return;
+      }
+
+      final secondsLeft = _secondsUntilBluetoothExpiry();
+      setState(() => _bluetoothSecondsLeft = secondsLeft);
+    });
+  }
+
+  void _stopBluetoothTokenTimer() {
+    _bluetoothTokenTimer?.cancel();
+    _bluetoothTokenTimer = null;
+  }
+
+  int _secondsUntilBluetoothExpiry() {
+    final session = _bluetoothSession;
+    if (session == null) return _bluetoothRefreshIntervalSeconds;
+    final remaining = session.expiresAt.difference(DateTime.now()).inSeconds;
+    return remaining < 0 ? 0 : remaining;
+  }
+
+  String _mapBluetoothError(BluetoothAttendanceException error) {
+    switch (error.code) {
+      case BluetoothAttendanceErrorCode.missingLecturerSession:
+        return _tr(
+          'انتهت جلسة المحاضر. سجّلي الدخول من جديد.',
+          'Lecturer session expired. Please log in again.',
+        );
+      case BluetoothAttendanceErrorCode.invalidInput:
+        return _tr(
+          'فشل فتح جلسة البلوتوث بسبب نقص بيانات المحاضرة.',
+          'Failed to start Bluetooth because lecture data is incomplete.',
+        );
+      case BluetoothAttendanceErrorCode.sessionNotFound:
+        return _tr(
+          'تعذر العثور على جلسة البلوتوث.',
+          'Bluetooth session was not found.',
+        );
+      case BluetoothAttendanceErrorCode.unknown:
+        return _tr(
+          'تعذر فتح جلسة البلوتوث لهذه المحاضرة.',
+          'Failed to start Bluetooth session for this lecture.',
+        );
+    }
+  }
+
+  String _maskedBluetoothToken(String token) {
+    final trimmed = token.trim();
+    if (trimmed.isEmpty) return '------';
+    if (trimmed.length <= 8) return trimmed;
+    return '${trimmed.substring(0, 4)}****${trimmed.substring(trimmed.length - 4)}';
   }
 
   String _buildQrPayload(QrAttendanceSession session) {
@@ -1009,6 +1226,11 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
                       child: _buildCompactQrActionButton(),
+                    ),
+                  if (_selectedMethod == AttendanceMethod.bluetooth)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
+                      child: _buildBluetoothSessionPanel(),
                     ),
                   _buildSyncLegend(),
                   const SizedBox(height: 14),
@@ -1282,6 +1504,10 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           value: AttendanceMethod.nfc,
           child: Text(_tr('التحضير عبر NFC', 'NFC')),
         ),
+        PopupMenuItem<AttendanceMethod>(
+          value: AttendanceMethod.bluetooth,
+          child: Text(_tr('التحضير عبر البلوتوث', 'Bluetooth Attendance')),
+        ),
       ],
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1296,7 +1522,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
             Icon(
               _selectedMethod == AttendanceMethod.nfc
                   ? Icons.nfc_rounded
-                  : Icons.qr_code_rounded,
+                  : (_selectedMethod == AttendanceMethod.bluetooth
+                        ? Icons.bluetooth_rounded
+                        : Icons.qr_code_rounded),
               size: 16,
               color: const Color(0xFF50656B),
             ),
@@ -1304,9 +1532,11 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
             Text(
               _selectedMethod == AttendanceMethod.nfc
                   ? 'NFC'
-                  : (_selectedMethod == AttendanceMethod.qr
-                        ? 'QR'
-                        : _tr('الطريقة', 'Method')),
+                  : (_selectedMethod == AttendanceMethod.bluetooth
+                        ? _tr('بلوتوث', 'Bluetooth')
+                        : (_selectedMethod == AttendanceMethod.qr
+                              ? 'QR'
+                              : _tr('الطريقة', 'Method'))),
               style: const TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 11,
@@ -1323,6 +1553,234 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildBluetoothSessionPanel() {
+    final session = _bluetoothSession;
+    final active = session?.isOpen == true;
+    final token = session == null
+        ? '------'
+        : _maskedBluetoothToken(session.bluetoothSessionToken);
+    final version = session?.tokenVersion.toString() ?? '-';
+    final secondsLeft = session == null
+        ? _bluetoothSecondsLeft
+        : _secondsUntilBluetoothExpiry();
+    final isExpired = session != null && secondsLeft == 0;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFD5E0E3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE5F4F6),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  active
+                      ? Icons.bluetooth_connected_rounded
+                      : Icons.bluetooth_rounded,
+                  color: const Color(0xFF006571),
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      active
+                          ? _tr(
+                              'جلسة البلوتوث نشطة',
+                              'Bluetooth session active',
+                            )
+                          : _tr(
+                              'جلسة البلوتوث غير نشطة',
+                              'Bluetooth session inactive',
+                            ),
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF213236),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${_lecture.courseName} · ${_tr('الشعبة', 'Section')} ${_lecture.section}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF5A6F76),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_isLoadingBluetooth)
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFF006571),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF6FAFB),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE0EAED)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildBluetoothInfoLine(
+                  _tr('رمز جلسة البلوتوث', 'Bluetooth Session Token'),
+                  token,
+                ),
+                const SizedBox(height: 4),
+                _buildBluetoothInfoLine(_tr('الإصدار', 'Version'), version),
+                const SizedBox(height: 4),
+                _buildBluetoothInfoLine(
+                  _tr('ينتهي خلال', 'Expires in'),
+                  isExpired
+                      ? _tr('انتهى الرمز', 'Expired')
+                      : '$secondsLeft ${_tr('ثانية', 's')}',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            kIsWeb
+                ? _tr(
+                    'بث البلوتوث غير مدعوم على الويب في هذه المرحلة.',
+                    'Bluetooth broadcasting is not supported on web in this phase.',
+                  )
+                : _tr(
+                    'سيتم تفعيل البث الفعلي في المرحلة القادمة.',
+                    'Real Bluetooth broadcasting will be enabled in the next phase.',
+                  ),
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF5A6F76),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed:
+                      session == null ||
+                          _isRefreshingBluetoothToken ||
+                          _isLoadingBluetooth
+                      ? null
+                      : () => _refreshBluetoothToken(),
+                  icon: _isRefreshingBluetoothToken
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh_rounded, size: 18),
+                  label: Text(_tr('تحديث الرمز', 'Refresh Token')),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed:
+                      session == null ||
+                          _isClosingBluetoothSession ||
+                          _isLoadingBluetooth
+                      ? null
+                      : _closeBluetoothSession,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFD14A4A),
+                  ),
+                  icon: _isClosingBluetoothSession
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.close_rounded, size: 18),
+                  label: Text(_tr('إغلاق الجلسة', 'Close Session')),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBluetoothInfoLine(String label, String value) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF5A6F76),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF213236),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -2461,7 +2919,7 @@ enum AttendanceStatusFilter { all, present, excused, absent, late }
 
 enum AttendanceStatus { pending, present, absent, excused, late }
 
-enum AttendanceMethod { nfc, qr, manual }
+enum AttendanceMethod { nfc, qr, bluetooth, manual }
 
 class _StudentRow {
   _StudentRow({
