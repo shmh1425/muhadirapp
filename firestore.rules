@@ -60,6 +60,37 @@ service cloud.firestore {
           );
     }
 
+    function isBluetoothLecturerOwnerById(lecturerId) {
+      let lecturer = get(
+        /databases/$(database)/documents/external_lecturers/$(lecturerId)
+      );
+      return isSignedIn() &&
+          lecturerId is string &&
+          lecturerId.size() > 0 &&
+          exists(
+            /databases/$(database)/documents/external_lecturers/$(lecturerId)
+          ) &&
+          lecturer.data.isActive == true &&
+          (
+            !(lecturer.data.role is string) ||
+            lecturer.data.role == 'lecturer'
+          ) &&
+          (
+            (
+              request.auth.token.lecturerId is string &&
+              request.auth.token.lecturerId == lecturerId
+            ) ||
+            (
+              request.auth.token.email is string &&
+              lecturer.data.email == request.auth.token.email
+            ) ||
+            (
+              lecturer.data.linkedUserUid is string &&
+              lecturer.data.linkedUserUid == request.auth.uid
+            )
+          );
+    }
+
     function isSectionAssignedToLecturer(sectionId, lecturerId) {
       // Some projects store lecturer ownership in sections. If present, enforce it.
       // If not present in schema, rely on strict lecturer identity checks above.
@@ -300,7 +331,7 @@ service cloud.firestore {
           data.attendanceCount is number &&
           data.isOpen is bool &&
           data.attendanceMethod == 'bluetooth' &&
-          isLecturerByClaimOrId(data.lecturerId) &&
+          isBluetoothLecturerOwnerById(data.lecturerId) &&
           isSectionAssignedToLecturer(data.sectionId, data.lecturerId);
     }
 
@@ -329,7 +360,7 @@ service cloud.firestore {
           data.proximityPolicy is string &&
           data.attendanceCount is number &&
           data.isOpen is bool &&
-          isLecturerByClaimOrId(old.lecturerId);
+          isBluetoothLecturerOwnerById(old.lecturerId);
     }
 
     match /admins/{uid} {

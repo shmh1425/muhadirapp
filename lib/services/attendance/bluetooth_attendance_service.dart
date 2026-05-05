@@ -1,6 +1,8 @@
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../models/attendance/bluetooth_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
@@ -98,6 +100,12 @@ class BluetoothAttendanceService {
         await refreshSessionToken(session.sessionId);
       }
 
+      _debugSessionWrite(
+        action: 'reopen',
+        lecturerId: lecturerId,
+        sectionId: sectionId,
+        sessionId: sessionId,
+      );
       await _markSessionOpen(sessionRef, lecturerId);
 
       final reopened = await sessionRef.get();
@@ -138,6 +146,12 @@ class BluetoothAttendanceService {
       'updatedAt': FieldValue.serverTimestamp(),
     };
 
+    _debugSessionWrite(
+      action: 'create',
+      lecturerId: lecturerId,
+      sectionId: sectionId,
+      sessionId: sessionId,
+    );
     await sessionRef.set(payload, SetOptions(merge: true));
     final created = await sessionRef.get();
     return BluetoothAttendanceSession.fromDocumentSnapshot(created);
@@ -170,6 +184,12 @@ class BluetoothAttendanceService {
       excluding: currentSession.bluetoothSessionToken,
     );
 
+    _debugSessionWrite(
+      action: 'refresh_token',
+      lecturerId: currentSession.lecturerId,
+      sectionId: currentSession.sectionId,
+      sessionId: currentSession.sessionId,
+    );
     await ref.set({
       'bluetoothSessionToken': newToken,
       'tokenVersion': currentSession.tokenVersion + 1,
@@ -203,6 +223,22 @@ class BluetoothAttendanceService {
     final id = sessionId.trim();
     if (id.isEmpty) return;
 
+    final existing = await _firestore
+        .collection(sessionsCollection)
+        .doc(id)
+        .get();
+    final existingSession = existing.exists && existing.data() != null
+        ? BluetoothAttendanceSession.fromDocumentSnapshot(existing)
+        : null;
+    _debugSessionWrite(
+      action: 'close',
+      lecturerId:
+          existingSession?.lecturerId ??
+          (LecturerAuthService.instance.currentLecturer?.lecturerId.trim() ??
+              ''),
+      sectionId: existingSession?.sectionId ?? '',
+      sessionId: id,
+    );
     await _firestore.collection(sessionsCollection).doc(id).set({
       'isOpen': false,
       'closedAt': FieldValue.serverTimestamp(),
@@ -236,6 +272,25 @@ class BluetoothAttendanceService {
 
   DateTime _calculateExpiresAt(DateTime generatedAt, [Duration? validity]) {
     return generatedAt.add(validity ?? defaultTokenValidity);
+  }
+
+  void _debugSessionWrite({
+    required String action,
+    required String lecturerId,
+    required String sectionId,
+    required String sessionId,
+  }) {
+    if (!kDebugMode) return;
+    final authUser = FirebaseAuth.instance.currentUser;
+    debugPrint(
+      '[BluetoothAttendance] action=$action '
+      'authUid=${authUser?.uid ?? ''} '
+      'authEmail=${authUser?.email ?? ''} '
+      'lecturerId=$lecturerId '
+      'sectionId=$sectionId '
+      'sessionId=$sessionId '
+      'path=$sessionsCollection/$sessionId',
+    );
   }
 
   String _generateSessionToken({int length = 24, String? excluding}) {
