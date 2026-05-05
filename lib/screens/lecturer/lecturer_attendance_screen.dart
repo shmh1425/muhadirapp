@@ -13,6 +13,7 @@ import '../../models/attendance/qr_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../services/attendance/attendance_session_export_service.dart';
 import '../../services/attendance/bluetooth_attendance_service.dart';
+import '../../services/attendance/bluetooth_ble_service.dart';
 import '../../services/attendance/manual_attendance_service.dart';
 import '../../services/attendance/nfc_attendance_service.dart';
 import '../../services/attendance/qr_attendance_service.dart';
@@ -74,6 +75,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   final QrAttendanceService _qrAttendanceService = QrAttendanceService.instance;
   final BluetoothAttendanceService _bluetoothAttendanceService =
       BluetoothAttendanceService.instance;
+  final BluetoothBleService _bluetoothBleService = BluetoothBleService.instance;
   StreamSubscription<List<ManualAttendanceRecord>>? _recordsSubscription;
   StreamSubscription<void>? _calendarSyncSub;
   StreamSubscription<List<NfcAttendanceSession>>? _nfcSessionsSubscription;
@@ -101,6 +103,10 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   bool _isLoadingBluetooth = false;
   bool _isRefreshingBluetoothToken = false;
   bool _isClosingBluetoothSession = false;
+  bool _isStartingBluetoothBroadcast = false;
+  BluetoothBroadcastState _bluetoothBroadcastState =
+      BluetoothBroadcastState.idle;
+  String? _bluetoothBroadcastMessage;
   bool _isUsingRosterFallback = false;
   Timer? _qrAutoRefreshTimer;
   Timer? _bluetoothTokenTimer;
@@ -349,6 +355,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     _nfcSessionsSubscription?.cancel();
     _stopQrAutoRefreshTimer();
     _stopBluetoothTokenTimer();
+    _bluetoothBleService.stopAdvertisingSession();
     super.dispose();
   }
 
@@ -814,6 +821,11 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       if (!mounted) return;
       setState(() {
         _bluetoothSession = session;
+        _bluetoothBroadcastState = BluetoothBroadcastState.idle;
+        _bluetoothBroadcastMessage ??= _tr(
+          'اضغطي بدء البث لإرسال إشارة البلوتوث.',
+          'Tap Start Broadcasting to send the Bluetooth signal.',
+        );
         _methodStatusMessage = _tr(
           'جلسة البلوتوث نشطة لهذه المحاضرة.',
           'Bluetooth session active for this lecture.',
@@ -863,6 +875,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           'Bluetooth session token refreshed.',
         );
       });
+      if (_bluetoothBroadcastState == BluetoothBroadcastState.broadcasting) {
+        await _startBluetoothBroadcast(showSnack: false);
+      }
       _startBluetoothTokenTimer();
     } on FirebaseException catch (e) {
       if (showErrorSnack) {
@@ -898,12 +913,15 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
     setState(() => _isClosingBluetoothSession = true);
     try {
+      await _stopBluetoothBroadcast();
       await _bluetoothAttendanceService.closeSession(session.sessionId);
       if (!mounted) return;
       _stopBluetoothTokenTimer();
       setState(() {
         _bluetoothSession = null;
         _bluetoothSecondsLeft = _bluetoothRefreshIntervalSeconds;
+        _bluetoothBroadcastState = BluetoothBroadcastState.idle;
+        _bluetoothBroadcastMessage = null;
         _methodStatusMessage = _tr(
           'تم إغلاق جلسة البلوتوث.',
           'Bluetooth session closed.',
@@ -928,6 +946,91 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     } finally {
       if (mounted) setState(() => _isClosingBluetoothSession = false);
     }
+  }
+
+  Future<void> _startBluetoothBroadcast({bool showSnack = true}) async {
+    final session = _bluetoothSession;
+    if (session == null || _isStartingBluetoothBroadcast) return;
+
+    setState(() {
+      _isStartingBluetoothBroadcast = true;
+      _bluetoothBroadcastState = BluetoothBroadcastState.requestingPermission;
+      _bluetoothBroadcastMessage = _tr(
+        'جاري التحقق من صلاحيات البلوتوث...',
+        'Checking Bluetooth permissions...',
+      );
+    });
+
+    final result = await _bluetoothBleService.startAdvertisingSession(session);
+    if (!mounted) return;
+    setState(() {
+      _isStartingBluetoothBroadcast = false;
+      _bluetoothBroadcastState = result.state;
+      _bluetoothBroadcastMessage = _localizedBluetoothHardwareMessage(
+        result.message,
+        broadcasting: true,
+      );
+    });
+    if (showSnack && !result.isBroadcasting) {
+      _showMethodSnack(
+        _bluetoothBroadcastMessage ?? result.message,
+        error: true,
+      );
+    }
+  }
+
+  Future<void> _stopBluetoothBroadcast() async {
+    await _bluetoothBleService.stopAdvertisingSession();
+    if (!mounted) return;
+    setState(() {
+      _bluetoothBroadcastState = BluetoothBroadcastState.idle;
+      _bluetoothBroadcastMessage = _tr(
+        'تم إيقاف بث البلوتوث.',
+        'Bluetooth broadcast stopped.',
+      );
+    });
+  }
+
+  String _localizedBluetoothHardwareMessage(
+    String message, {
+    required bool broadcasting,
+  }) {
+    final lower = message.toLowerCase();
+    if (lower.contains('web')) {
+      return broadcasting
+          ? _tr(
+              'بث البلوتوث غير مدعوم على الويب في هذه المرحلة.',
+              'Bluetooth broadcasting is not supported on web in this phase.',
+            )
+          : _tr(
+              'مسح البلوتوث يتطلب جهازًا محمولًا مدعومًا.',
+              'Bluetooth scanning requires a supported mobile device.',
+            );
+    }
+    if (lower.contains('not supported')) {
+      return broadcasting
+          ? _tr(
+              'بث البلوتوث غير مدعوم على هذا الجهاز في هذه المرحلة.',
+              'Bluetooth broadcasting is not supported on this device in this phase.',
+            )
+          : _tr(
+              'البلوتوث غير مدعوم على هذا الجهاز.',
+              'Bluetooth is not supported on this device.',
+            );
+    }
+    if (lower.contains('permission')) {
+      return _tr(
+        'يحتاج التطبيق إلى صلاحية البلوتوث للمتابعة.',
+        'Bluetooth permission is required to continue.',
+      );
+    }
+    if (lower.contains('turned off')) {
+      return _tr('البلوتوث غير مفعّل.', 'Bluetooth is turned off.');
+    }
+    if (lower.contains('active')) {
+      return _tr('بث البلوتوث نشط الآن.', 'Bluetooth broadcast is active.');
+    }
+    return message;
   }
 
   void _startBluetoothTokenTimer() {
@@ -1680,20 +1783,53 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            kIsWeb
-                ? _tr(
-                    'بث البلوتوث غير مدعوم على الويب في هذه المرحلة.',
-                    'Bluetooth broadcasting is not supported on web in this phase.',
-                  )
-                : _tr(
-                    'سيتم تفعيل البث الفعلي في المرحلة القادمة.',
-                    'Real Bluetooth broadcasting will be enabled in the next phase.',
-                  ),
+            _bluetoothBroadcastMessage ??
+                (kIsWeb
+                    ? _tr(
+                        'بث البلوتوث غير مدعوم على الويب في هذه المرحلة.',
+                        'Bluetooth broadcasting is not supported on web in this phase.',
+                      )
+                    : _tr(
+                        'يمكنك الآن بدء بث إشارة البلوتوث لاختبارها على جهاز طالبة.',
+                        'You can now start broadcasting the Bluetooth signal for student-device testing.',
+                      )),
             style: const TextStyle(
               fontFamily: 'Cairo',
               fontSize: 11,
               fontWeight: FontWeight.w700,
               color: Color(0xFF5A6F76),
+            ),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed:
+                session == null ||
+                    _isStartingBluetoothBroadcast ||
+                    _isLoadingBluetooth ||
+                    _bluetoothBroadcastState ==
+                        BluetoothBroadcastState.requestingPermission
+                ? null
+                : (_bluetoothBroadcastState ==
+                          BluetoothBroadcastState.broadcasting
+                      ? _stopBluetoothBroadcast
+                      : () => _startBluetoothBroadcast()),
+            icon: _isStartingBluetoothBroadcast
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(
+                    _bluetoothBroadcastState ==
+                            BluetoothBroadcastState.broadcasting
+                        ? Icons.bluetooth_disabled_rounded
+                        : Icons.bluetooth_searching_rounded,
+                    size: 18,
+                  ),
+            label: Text(
+              _bluetoothBroadcastState == BluetoothBroadcastState.broadcasting
+                  ? _tr('إيقاف البث', 'Stop Broadcasting')
+                  : _tr('بدء البث', 'Start Broadcasting'),
             ),
           ),
           const SizedBox(height: 10),
