@@ -358,13 +358,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           return ValueListenableBuilder<Set<String>>(
             valueListenable: _optimisticHiddenIds,
             builder: (context, optimisticHidden, _) {
-              final filtered = _filteredNotifications(all)
-                  .where(
-                    (n) =>
-                        !optimisticHidden.contains(n.id) &&
-                        !optimisticHidden.contains(n.rawId),
-                  )
-                  .toList();
+              final filtered = _sortedNotificationsForDisplay(
+                _filteredNotifications(all)
+                    .where(
+                      (n) =>
+                          !optimisticHidden.contains(n.id) &&
+                          !optimisticHidden.contains(n.rawId),
+                    )
+                    .toList(),
+              );
 
               if (filtered.isEmpty) {
                 return _EmptyNotificationsMessage(
@@ -397,6 +399,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         },
       ),
     ];
+  }
+
+  /// Unread first; within each group, newest first.
+  List<StudentNotification> _sortedNotificationsForDisplay(List<StudentNotification> items) {
+    final copy = List<StudentNotification>.from(items);
+    copy.sort((StudentNotification a, StudentNotification b) {
+      if (a.isRead != b.isRead) {
+        return a.isRead ? 1 : -1;
+      }
+      return b.createdAt.compareTo(a.createdAt);
+    });
+    return copy;
   }
 
   List<StudentNotification> _filteredNotifications(List<StudentNotification> all) {
@@ -730,6 +744,14 @@ class _NotificationCard extends StatelessWidget {
     }
   }
 
+  /// Read: keep pastel stripe. Unread: richer stripe toward accent (clearer than title weight alone).
+  static const double _unreadStripeAccentMix = 0.72;
+
+  Color _stripeEdgeColor(Color pastelStripe, Color accent, bool unread) {
+    if (!unread) return pastelStripe;
+    return Color.lerp(pastelStripe, accent, _unreadStripeAccentMix)!;
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = TranslationController.instance;
@@ -738,7 +760,8 @@ class _NotificationCard extends StatelessWidget {
         ? (t.translateToEnglish ? notification.titleEn : notification.titleAr)
         : message;
     final unread = !notification.isRead;
-    final (iconColor, stripeColor, iconData) = _style();
+    final (iconColor, stripePastel, iconData) = _style();
+    final stripeColor = _stripeEdgeColor(stripePastel, iconColor, unread);
 
     final Widget cardFace = Container(
       decoration: BoxDecoration(
