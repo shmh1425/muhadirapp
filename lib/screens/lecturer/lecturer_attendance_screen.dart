@@ -12,6 +12,7 @@ import '../../models/attendance/nfc_attendance_session.dart';
 import '../../models/attendance/qr_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../services/attendance/attendance_session_export_service.dart';
+import '../../services/attendance/attendance_status_policy.dart';
 import '../../services/attendance/bluetooth_attendance_service.dart';
 import '../../services/attendance/bluetooth_ble_service.dart';
 import '../../services/attendance/manual_attendance_service.dart';
@@ -110,10 +111,12 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   bool _isUsingRosterFallback = false;
   Timer? _qrAutoRefreshTimer;
   Timer? _bluetoothTokenTimer;
-  static const int _qrAutoRefreshIntervalSeconds = 45;
+  Timer? _pendingFinalizeTimer;
+  static const int _qrAutoRefreshIntervalSeconds = 30;
   static const int _bluetoothRefreshIntervalSeconds = 45;
   int _qrAutoRefreshSecondsLeft = _qrAutoRefreshIntervalSeconds;
   int _bluetoothSecondsLeft = _bluetoothRefreshIntervalSeconds;
+  String? _autoActivatedQrSessionId;
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
@@ -355,6 +358,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     _nfcSessionsSubscription?.cancel();
     _stopQrAutoRefreshTimer();
     _stopBluetoothTokenTimer();
+    _pendingFinalizeTimer?.cancel();
     _bluetoothBleService.stopAdvertisingSession();
     super.dispose();
   }
@@ -450,6 +454,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       if (!mounted) return;
       _attachSessionStream(sessionId);
       _refreshNfcStatusFromSessionId();
+      await _maybeAutoActivateQrForScheduledLecture(sessionId);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -462,6 +467,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   void _attachSessionStream(String sessionId) {
     _recordsSubscription?.cancel();
     _sessionId = sessionId;
+    _startPendingFinalizeTimer(sessionId);
     _recordsSubscription = _manualAttendanceService
         .watchSessionRecords(sessionId)
         .listen(
@@ -495,6 +501,20 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
             });
           },
         );
+  }
+
+  void _startPendingFinalizeTimer(String sessionId) {
+    _pendingFinalizeTimer?.cancel();
+    unawaited(
+      _manualAttendanceService.finalizeSessionPendingAsAbsent(sessionId),
+    );
+    _pendingFinalizeTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      final current = _sessionId?.trim() ?? '';
+      if (current.isEmpty || current != sessionId) return;
+      unawaited(
+        _manualAttendanceService.finalizeSessionPendingAsAbsent(current),
+      );
+    });
   }
 
   Future<void> _loadFallbackRosterForSection(String sessionId) async {
@@ -601,9 +621,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     try {
       switch (method) {
         case AttendanceMethod.manual:
-          setState(() {
-            _methodStatusMessage = null;
-          });
+          await _startManualAttendanceMode();
           break;
         case AttendanceMethod.qr:
           await _loadQrForCurrentLecture();
@@ -622,6 +640,71 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         });
       }
     }
+  }
+
+  Future<void> _startManualAttendanceMode() async {
+    final sessionId = _sessionId?.trim() ?? '';
+    if (sessionId.isEmpty) {
+      setState(() {
+        _methodStatusMessage = _tr(
+          'تعذر بدء التحضير اليدوي قبل تحميل الجلسة.',
+          'Cannot start manual attendance before loading session.',
+        );
+      });
+      return;
+    }
+
+    try {
+      final changed = await _manualAttendanceService
+          .markPendingAsPresentForManual(sessionId);
+      if (!mounted) return;
+      setState(() {
+        _methodStatusMessage = changed > 0
+            ? _tr(
+                'التحضير اليدوي فعّال: تم اعتبار جميع الطلاب حاضرين افتراضياً.',
+                'Manual attendance active: all students are marked present by default.',
+              )
+            : _tr('التحضير اليدوي فعّال.', 'Manual attendance is active.');
+      });
+    } catch (_) {
+      if (!mounted) return;
+      _showMethodSnack(
+        _tr(
+          'تعذر تفعيل التحضير اليدوي حالياً.',
+          'Unable to activate manual attendance right now.',
+        ),
+        error: true,
+      );
+    }
+  }
+
+  Future<void> _maybeAutoActivateQrForScheduledLecture(String sessionId) async {
+    if (_effectiveViewOnly) return;
+    if (_autoActivatedQrSessionId == sessionId) return;
+
+    final now = DateTime.now();
+    final sessionDate = _sessionDate;
+    final today = DateTime(now.year, now.month, now.day);
+    final targetDate = DateTime(
+      sessionDate.year,
+      sessionDate.month,
+      sessionDate.day,
+    );
+    if (targetDate != today) return;
+
+    final withinWindow = AttendanceStatusPolicy.isSessionWithinAttendanceWindow(
+      lectureDate: targetDate,
+      lectureStartTime: _lecture.startTime,
+      lectureEndTime: _lecture.endTime,
+      currentTime: now,
+    );
+    if (!withinWindow) return;
+
+    _autoActivatedQrSessionId = sessionId;
+    if (mounted && _selectedMethod != AttendanceMethod.qr) {
+      setState(() => _selectedMethod = AttendanceMethod.qr);
+    }
+    await _loadQrForCurrentLecture();
   }
 
   Future<void> _loadQrForCurrentLecture({bool refreshToken = false}) async {
@@ -1044,6 +1127,12 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         return;
       }
 
+      final sessionWindowLeft = _secondsUntilBluetoothSessionWindowClose();
+      if (sessionWindowLeft <= 0) {
+        unawaited(_closeBluetoothSession());
+        return;
+      }
+
       final secondsLeft = _secondsUntilBluetoothExpiry();
       setState(() => _bluetoothSecondsLeft = secondsLeft);
     });
@@ -1057,7 +1146,29 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   int _secondsUntilBluetoothExpiry() {
     final session = _bluetoothSession;
     if (session == null) return _bluetoothRefreshIntervalSeconds;
-    final remaining = session.expiresAt.difference(DateTime.now()).inSeconds;
+    final tokenRemaining = session.expiresAt
+        .difference(DateTime.now())
+        .inSeconds;
+    final sessionRemaining = _secondsUntilBluetoothSessionWindowClose();
+    final remaining = tokenRemaining < sessionRemaining
+        ? tokenRemaining
+        : sessionRemaining;
+    return remaining < 0 ? 0 : remaining;
+  }
+
+  int _secondsUntilBluetoothSessionWindowClose() {
+    final session = _bluetoothSession;
+    if (session == null) {
+      return BluetoothAttendanceService.manualSessionOpenWindow.inSeconds;
+    }
+    final openedAt = session.openedAt ?? session.sessionOpenedAt;
+    if (openedAt == null) {
+      return BluetoothAttendanceService.manualSessionOpenWindow.inSeconds;
+    }
+    final closeAt = openedAt.add(
+      BluetoothAttendanceService.manualSessionOpenWindow,
+    );
+    final remaining = closeAt.difference(DateTime.now()).inSeconds;
     return remaining < 0 ? 0 : remaining;
   }
 
@@ -1974,72 +2085,80 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   Widget _buildAttendanceTableContainer() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        clipBehavior: Clip.hardEdge,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFDDE6E8)),
-        ),
-        child: _filteredStudents.isEmpty
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    _allStudents.isEmpty
-                        ? _tr(
-                            'لا يوجد طلاب مسجلون في هذه الشعبة حتى الآن.',
-                            'No enrolled students found for this section yet.',
-                          )
-                        : _tr(
-                            'لا يوجد طلاب في هذا الفلتر.',
-                            'No students in this filter.',
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final layout = _resolveStudentsTableLayout(constraints.maxWidth);
+          return Container(
+            clipBehavior: Clip.hardEdge,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFDDE6E8)),
+            ),
+            child: _filteredStudents.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        _allStudents.isEmpty
+                            ? _tr(
+                                'لا يوجد طلاب مسجلون في هذه الشعبة حتى الآن.',
+                                'No enrolled students found for this section yet.',
+                              )
+                            : _tr(
+                                'لا يوجد طلاب في هذا الفلتر.',
+                                'No students in this filter.',
+                              ),
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          color: Color(0xFF666666),
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  )
+                : Column(
+                    children: [
+                      _buildStudentsTableHeader(layout),
+                      Expanded(
+                        child: ListView.separated(
+                          padding: EdgeInsets.zero,
+                          itemCount: _filteredStudents.length,
+                          separatorBuilder: (_, __) => const Divider(
+                            height: 1,
+                            color: Color(0xFFE8EFF1),
                           ),
-                    style: const TextStyle(
-                      fontFamily: 'Cairo',
-                      color: Color(0xFF666666),
-                      fontWeight: FontWeight.w600,
-                    ),
-                    textAlign: TextAlign.center,
+                          itemBuilder: (context, index) {
+                            final student = _filteredStudents[index];
+                            final statusStyle = _statusStyle(
+                              _effectiveStatus(student),
+                            );
+                            return _buildStudentTableRow(
+                              student: student,
+                              statusStyle: statusStyle,
+                              index: index,
+                              layout: layout,
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              )
-            : Column(
-                children: [
-                  _buildStudentsTableHeader(),
-                  Expanded(
-                    child: ListView.separated(
-                      padding: EdgeInsets.zero,
-                      itemCount: _filteredStudents.length,
-                      separatorBuilder: (_, __) =>
-                          const Divider(height: 1, color: Color(0xFFE8EFF1)),
-                      itemBuilder: (context, index) {
-                        final student = _filteredStudents[index];
-                        final statusStyle = _statusStyle(
-                          _effectiveStatus(student),
-                        );
-                        return _buildStudentTableRow(
-                          student: student,
-                          statusStyle: statusStyle,
-                          index: index,
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildStudentsTableHeader() {
+  Widget _buildStudentsTableHeader(_StudentsTableLayout layout) {
     return Container(
       color: const Color(0xFFF1F6F7),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       child: Row(
         children: [
           SizedBox(
-            width: 34,
+            width: layout.indexWidth,
             child: Text(
               '#',
               textAlign: TextAlign.center,
@@ -2051,10 +2170,13 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
               ),
             ),
           ),
-          Expanded(
-            flex: 4,
+          SizedBox(width: layout.columnGap),
+          SizedBox(
+            width: layout.studentWidth,
             child: Text(
               _tr('الطالب', 'Student'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 11,
@@ -2063,22 +2185,13 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
               ),
             ),
           ),
-          Expanded(
-            flex: 3,
+          SizedBox(width: layout.columnGap),
+          SizedBox(
+            width: layout.idWidth,
             child: Text(
               _tr('الرقم', 'ID'),
-              style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF4A6066),
-              ),
-            ),
-          ),
-          SizedBox(
-            width: 50,
-            child: Text(
-              _tr('الوقت', 'Time'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontFamily: 'Cairo',
@@ -2088,8 +2201,25 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
               ),
             ),
           ),
+          SizedBox(width: layout.columnGap),
           SizedBox(
-            width: 44,
+            width: layout.timeWidth,
+            child: Text(
+              _tr('الوقت', 'Time'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF4A6066),
+              ),
+            ),
+          ),
+          SizedBox(width: layout.columnGap),
+          SizedBox(
+            width: layout.percentageWidth,
             child: Text(
               '%',
               textAlign: TextAlign.center,
@@ -2101,10 +2231,13 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
               ),
             ),
           ),
+          SizedBox(width: layout.columnGap),
           SizedBox(
-            width: 112,
+            width: layout.statusWidth,
             child: Text(
               _tr('الحالة', 'Status'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontFamily: 'Cairo',
@@ -2123,6 +2256,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     required _StudentRow student,
     required _StatusStyle statusStyle,
     required int index,
+    required _StudentsTableLayout layout,
   }) {
     final timeText = student.attendanceTime.trim().isEmpty
         ? '--'
@@ -2136,7 +2270,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       child: Row(
         children: [
           SizedBox(
-            width: 34,
+            width: layout.indexWidth,
             child: Text(
               '${index + 1}',
               textAlign: TextAlign.center,
@@ -2148,8 +2282,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
               ),
             ),
           ),
-          Expanded(
-            flex: 4,
+          SizedBox(width: layout.columnGap),
+          SizedBox(
+            width: layout.studentWidth,
             child: Text(
               student.name,
               maxLines: 1,
@@ -2162,33 +2297,43 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
               ),
             ),
           ),
-          Expanded(
-            flex: 3,
-            child: Text(
-              student.academicNumber,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11.5,
-                color: Color(0xFF4E6268),
+          SizedBox(width: layout.columnGap),
+          SizedBox(
+            width: layout.idWidth,
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: Text(
+                student.academicNumber,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 11.5,
+                  color: Color(0xFF4E6268),
+                ),
               ),
             ),
           ),
+          SizedBox(width: layout.columnGap),
           SizedBox(
-            width: 50,
-            child: Text(
-              timeText,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11,
-                color: Color(0xFF4E6268),
+            width: layout.timeWidth,
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: Text(
+                timeText,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 11,
+                  color: Color(0xFF4E6268),
+                ),
               ),
             ),
           ),
+          SizedBox(width: layout.columnGap),
           SizedBox(
-            width: 44,
+            width: layout.percentageWidth,
             child: Text(
               _formatPercentage(student.percentage),
               textAlign: TextAlign.center,
@@ -2200,12 +2345,55 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
               ),
             ),
           ),
+          SizedBox(width: layout.columnGap),
           SizedBox(
-            width: 112,
+            width: layout.statusWidth,
             child: _buildStatusChipCell(student, statusStyle),
           ),
         ],
       ),
+    );
+  }
+
+  _StudentsTableLayout _resolveStudentsTableLayout(double containerWidth) {
+    const rowHorizontalPadding = 20.0;
+    const gapsCount = 5;
+    final availableContentWidth = (containerWidth - rowHorizontalPadding).clamp(
+      0.0,
+      double.infinity,
+    );
+    final isTight = availableContentWidth < 325;
+    final columnGap = isTight ? 3.0 : 4.0;
+    final indexWidth = isTight ? 22.0 : 24.0;
+    final timeWidth = isTight ? 40.0 : 44.0;
+    final percentageWidth = isTight ? 28.0 : 30.0;
+    final statusWidth = isTight ? 64.0 : 70.0;
+    final fixedNonText =
+        indexWidth +
+        timeWidth +
+        percentageWidth +
+        statusWidth +
+        (columnGap * gapsCount);
+    final availableForText = (availableContentWidth - fixedNonText).clamp(
+      0.0,
+      double.infinity,
+    );
+    final minStudentWidth = isTight ? 78.0 : 90.0;
+    final minIdWidth = isTight ? 54.0 : 62.0;
+    final textTotalMin = minStudentWidth + minIdWidth;
+    final textTotal = availableForText < textTotalMin
+        ? textTotalMin
+        : availableForText;
+    final studentWidth = (textTotal * 0.62).clamp(minStudentWidth, 190.0);
+    final idWidth = (textTotal - studentWidth).clamp(minIdWidth, 120.0);
+    return _StudentsTableLayout(
+      columnGap: columnGap,
+      indexWidth: indexWidth,
+      studentWidth: studentWidth,
+      idWidth: idWidth,
+      timeWidth: timeWidth,
+      percentageWidth: percentageWidth,
+      statusWidth: statusWidth,
     );
   }
 
@@ -2498,10 +2686,41 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                                 ),
                               ],
                             )
-                          : QrImageView(
-                              data: _qrData,
-                              size: 220,
-                              backgroundColor: Colors.white,
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                QrImageView(
+                                  data: _qrData,
+                                  size: 220,
+                                  backgroundColor: Colors.white,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _tr('رمز الحضور', 'Attendance Code'),
+                                  style: const TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF5A6F76),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Directionality(
+                                  textDirection: TextDirection.ltr,
+                                  child: Text(
+                                    _qrSession!.numericCode.isNotEmpty
+                                        ? _qrSession!.numericCode
+                                        : '------',
+                                    style: const TextStyle(
+                                      fontFamily: 'Cairo',
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 4,
+                                      color: Color(0xFF00474F),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                     ),
                     const SizedBox(height: 8),
@@ -3104,4 +3323,24 @@ class _StatusStyle {
 
   /// لون خلفية الفلتر عند التفعيل (للتباين مع النص الأبيض)
   final Color activeBg;
+}
+
+class _StudentsTableLayout {
+  const _StudentsTableLayout({
+    required this.columnGap,
+    required this.indexWidth,
+    required this.studentWidth,
+    required this.idWidth,
+    required this.timeWidth,
+    required this.percentageWidth,
+    required this.statusWidth,
+  });
+
+  final double columnGap;
+  final double indexWidth;
+  final double studentWidth;
+  final double idWidth;
+  final double timeWidth;
+  final double percentageWidth;
+  final double statusWidth;
 }

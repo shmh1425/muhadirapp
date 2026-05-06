@@ -10,6 +10,7 @@ import '../../models/attendance/nfc_attendance_session.dart';
 import '../../models/attendance/bluetooth_attendance_session.dart';
 import '../../models/attendance/qr_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
+import '../../services/attendance/attendance_status_policy.dart';
 import '../../services/attendance/bluetooth_attendance_service.dart';
 import '../../services/attendance/bluetooth_ble_service.dart';
 import '../../services/attendance/nfc_attendance_service.dart';
@@ -61,10 +62,16 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
   _QrDisplayMode _qrDisplayMode = _QrDisplayMode.qrCode;
   Timer? _codeRefreshTimer;
   Timer? _bluetoothTokenTimer;
-  static const int _codeRefreshIntervalSeconds = 45;
+  Timer? _activeLectureSyncTimer;
+  static const int _codeRefreshIntervalSeconds = 30;
   static const int _bluetoothRefreshIntervalSeconds = 45;
+  static const Duration _activeLectureSyncInterval = Duration(seconds: 20);
   int _codeRefreshSecondsLeft = _codeRefreshIntervalSeconds;
   int _bluetoothSecondsLeft = _bluetoothRefreshIntervalSeconds;
+  bool _isSyncingLectureAndCode = false;
+  DateTime? _lastLecturesReloadAt;
+  bool _isReloadingLectures = false;
+  bool _didRunBuildBootstrap = false;
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
@@ -84,6 +91,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
             _recomputeNfcActiveForCurrentLecture();
           });
         });
+    _startActiveLectureSyncTimer();
     _loadLectures();
   }
 
@@ -93,6 +101,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
     _nfcSessionsSub?.cancel();
     _stopCodeRefreshTimer();
     _stopBluetoothTokenTimer();
+    _stopActiveLectureSyncTimer();
     _bluetoothBleService.stopAdvertisingSession();
     super.dispose();
   }
@@ -100,12 +109,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
   Future<void> _loadLectures() async {
     try {
       await _calendarRepository.refreshAcademicCalendar();
-      final list = await LecturerSectionsService.instance
-          .getLecturesForCurrentLecturer();
-      if (!mounted) return;
-      setState(() {
-        _allLectures = list;
-      });
+      await _reloadLecturesFromSource(force: true);
       await _syncLectureAndCode();
     } catch (_) {
       if (!mounted) return;
@@ -118,7 +122,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
     _isSyncRefreshing = true;
     try {
       await _calendarRepository.refreshAcademicCalendar();
-      if (!mounted) return;
+      await _reloadLecturesFromSource(force: true);
       await _syncLectureAndCode();
     } catch (_) {
       // Ignore transient realtime listener errors.
@@ -128,115 +132,325 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
   }
 
   Future<void> _syncLectureAndCode() async {
-    final lecture = _resolveCurrentLecture();
-    if (mounted) {
-      setState(() {
-        _activeLecture = lecture;
-        _sessionErrorMessage = null;
-        _recomputeNfcActiveForCurrentLecture();
-      });
-    }
-
-    if (lecture == null) {
-      if (!mounted) return;
-      setState(() {
-        _qrSession = null;
-        _qrData = '';
-      });
-      _stopCodeRefreshTimer();
-      return;
-    }
-
-    final missingFields = <String>[];
-    if ((lecture.sectionId ?? '').trim().isEmpty) {
-      missingFields.add('sectionId');
-    }
-    if (lecture.startTime.trim().isEmpty) {
-      missingFields.add('startTime');
-    }
-
-    if (missingFields.isNotEmpty) {
-      if (!mounted) return;
-      setState(() {
-        _qrSession = null;
-        _qrData = '';
-        _sessionErrorMessage =
-            'تعذر إنشاء جلسة QR: بيانات المحاضرة ناقصة (${missingFields.join(', ')}).';
-      });
-      _stopCodeRefreshTimer();
-      return;
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _isLoadingSession = true;
-    });
-
+    if (_isSyncingLectureAndCode) return;
+    _isSyncingLectureAndCode = true;
     try {
-      final session = await _qrAttendanceService.createOrGetSessionForLecture(
-        lecture: lecture,
-      );
-      if (!mounted) return;
-      setState(() {
-        _qrSession = session;
-        _qrData = _buildQrPayload(session);
-        _sessionErrorMessage = null;
-      });
-      _startCodeRefreshTimer();
-    } on FirebaseException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _qrSession = null;
-        _qrData = '';
-        if (e.code == 'permission-denied') {
-          _sessionErrorMessage =
-              'فشل إنشاء جلسة QR: لا توجد صلاحية للوصول إلى Firestore.';
-        } else {
-          _sessionErrorMessage = 'فشل إنشاء/جلب جلسة QR من Firestore.';
-        }
-      });
-      _stopCodeRefreshTimer();
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _qrSession = null;
-        _qrData = '';
-        _sessionErrorMessage = 'فشل إنشاء/جلب جلسة QR من Firestore.';
-      });
-      _stopCodeRefreshTimer();
-    } finally {
-      if (mounted) {
+      await _reloadLecturesFromSource();
+      final lecture = _resolveCurrentLecture();
+      final lectureChanged = !_isSameLecture(_activeLecture, lecture);
+      if (lecture == null) {
+        final now = _effectiveNowForLectureWindow();
+        final weekdays = _candidateWeekdaysForLectureWindow();
+        final todayCount = _allLectures
+            .where((l) => weekdays.contains(l.dayOfWeek))
+            .length;
+        debugPrint(
+          '[LecturerQrScreen] No active lecture. now=$now weekday=${now.weekday} '
+          'calendarWeekday=${_calendarRepository.currentDateTime.weekday} '
+          'candidateWeekdays=$weekdays '
+          'allLectures=${_allLectures.length} candidateLectures=$todayCount',
+        );
+      }
+      if (mounted && (lectureChanged || _sessionErrorMessage != null)) {
         setState(() {
-          _isLoadingSession = false;
+          _activeLecture = lecture;
+          _sessionErrorMessage = null;
+          _recomputeNfcActiveForCurrentLecture();
+          if (lectureChanged) {
+            _bluetoothSession = null;
+            _bluetoothBroadcastState = BluetoothBroadcastState.idle;
+            _bluetoothBroadcastMessage = null;
+          }
         });
       }
+
+      if (lecture == null) {
+        if (!mounted) return;
+        setState(() {
+          _qrSession = null;
+          _qrData = '';
+        });
+        _stopCodeRefreshTimer();
+        _stopBluetoothTokenTimer();
+        return;
+      }
+
+      if (!lectureChanged && _qrSession != null) {
+        return;
+      }
+
+      final missingFields = <String>[];
+      if ((lecture.sectionId ?? '').trim().isEmpty) {
+        missingFields.add('sectionId');
+      }
+      if (lecture.startTime.trim().isEmpty) {
+        missingFields.add('startTime');
+      }
+
+      if (missingFields.isNotEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _qrSession = null;
+          _qrData = '';
+          _sessionErrorMessage =
+              'تعذر إنشاء جلسة QR: بيانات المحاضرة ناقصة (${missingFields.join(', ')}).';
+        });
+        _stopCodeRefreshTimer();
+        return;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _isLoadingSession = true;
+      });
+
+      try {
+        final session = await _qrAttendanceService.createOrGetSessionForLecture(
+          lecture: lecture,
+          lectureDate: _effectiveNowForLectureWindow(),
+        );
+        if (!mounted) return;
+        setState(() {
+          _qrSession = session;
+          _qrData = _buildQrPayload(session);
+          _sessionErrorMessage = null;
+        });
+        _startCodeRefreshTimer();
+      } on FirebaseException catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _qrSession = null;
+          _qrData = '';
+          if (e.code == 'permission-denied') {
+            _sessionErrorMessage =
+                'فشل إنشاء جلسة QR: لا توجد صلاحية للوصول إلى Firestore.';
+          } else {
+            _sessionErrorMessage = 'فشل إنشاء/جلب جلسة QR من Firestore.';
+          }
+        });
+        _stopCodeRefreshTimer();
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _qrSession = null;
+          _qrData = '';
+          _sessionErrorMessage = 'فشل إنشاء/جلب جلسة QR من Firestore.';
+        });
+        _stopCodeRefreshTimer();
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoadingSession = false;
+          });
+        }
+      }
+    } finally {
+      _isSyncingLectureAndCode = false;
     }
+  }
+
+  Future<void> _reloadLecturesFromSource({bool force = false}) async {
+    if (_isReloadingLectures) return;
+    final now = DateTime.now();
+    final shouldReload =
+        force ||
+        _allLectures.isEmpty ||
+        _lastLecturesReloadAt == null ||
+        now.difference(_lastLecturesReloadAt!) > const Duration(minutes: 2);
+    if (!shouldReload) return;
+
+    _isReloadingLectures = true;
+    try {
+      final list = await LecturerSectionsService.instance
+          .getLecturesForCurrentLecturer();
+      final fallback = LecturerSectionsService.instance.cachedLectures;
+      final effectiveList = list.isEmpty && fallback.isNotEmpty
+          ? fallback
+          : list;
+      if (!mounted) return;
+      setState(() {
+        _allLectures = effectiveList;
+        _lastLecturesReloadAt = DateTime.now();
+      });
+      debugPrint(
+        '[LecturerQrScreen] reload lectures fetched=${list.length} '
+        'effective=${effectiveList.length} cached=${fallback.length}',
+      );
+    } catch (_) {
+      // Keep current in-memory list on transient errors.
+    } finally {
+      _isReloadingLectures = false;
+    }
+  }
+
+  bool _isSameLecture(LectureItem? a, LectureItem? b) {
+    if (a == null || b == null) return a == b;
+    final aSectionId = (a.sectionId ?? '').trim();
+    final bSectionId = (b.sectionId ?? '').trim();
+    return aSectionId == bSectionId &&
+        a.dayOfWeek == b.dayOfWeek &&
+        a.startTime.trim() == b.startTime.trim() &&
+        a.endTime.trim() == b.endTime.trim() &&
+        a.crn.trim() == b.crn.trim();
+  }
+
+  void _startActiveLectureSyncTimer() {
+    _stopActiveLectureSyncTimer();
+    _activeLectureSyncTimer = Timer.periodic(_activeLectureSyncInterval, (_) {
+      if (!mounted) return;
+      _syncLectureAndCode();
+    });
+  }
+
+  void _stopActiveLectureSyncTimer() {
+    _activeLectureSyncTimer?.cancel();
+    _activeLectureSyncTimer = null;
   }
 
   LectureItem? _resolveCurrentLecture() {
     if (widget.lecture != null) return widget.lecture;
 
-    final now = _calendarRepository.currentDateTime;
-    final dayLectures = TimeUtils.sortLecturesByTime(
-      _allLectures.where((l) => l.dayOfWeek == now.weekday).toList(),
-      (l) => l.startTime,
-    );
-    for (final lecture in dayLectures) {
-      if (_isCurrentLecture(lecture, now)) {
-        return lecture;
+    final now = _effectiveNowForLectureWindow();
+    final weekdays = _candidateWeekdaysForLectureWindow();
+    for (final weekday in weekdays) {
+      final dayLectures = TimeUtils.sortLecturesByTime(
+        _allLectures.where((l) => l.dayOfWeek == weekday).toList(),
+        (l) => l.startTime,
+      );
+      for (final lecture in dayLectures) {
+        if (_isCurrentLecture(lecture, now)) {
+          return lecture;
+        }
       }
     }
+
+    // Fallback: if strict detection fails due time-format mismatch, pick the
+    // nearest lecture from today's schedule within a reasonable window.
+    return _resolveNearestTodayLecture(now, weekdays);
+  }
+
+  LectureItem? _resolveNearestTodayLecture(DateTime now, List<int> weekdays) {
+    Duration? bestDistance;
+    LectureItem? bestLecture;
+
+    final dayLectures = _allLectures.where(
+      (l) => weekdays.contains(l.dayOfWeek),
+    );
+    for (final lecture in dayLectures) {
+      final (startH, startM) = TimeUtils.parseTimeString(lecture.startTime);
+      final (endH, endM) = TimeUtils.parseTimeString(lecture.endTime);
+      final ranges = _buildLectureRangesForCurrentDay(
+        now: now,
+        startH: startH,
+        startM: startM,
+        endH: endH,
+        endM: endM,
+      );
+      for (final range in ranges) {
+        final start = range.$1;
+        final end = range.$2;
+        final openWindowStart = start.subtract(
+          AttendanceStatusPolicy.attendanceEarlyWindow,
+        );
+        final openWindowEnd = end.add(
+          AttendanceStatusPolicy.attendanceLateWindow,
+        );
+
+        // If now is within the attendance window for this lecture, prefer it
+        // immediately even if strict exact range check failed.
+        final inAttendanceWindow =
+            (now.isAfter(openWindowStart) ||
+                now.isAtSameMomentAs(openWindowStart)) &&
+            (now.isBefore(openWindowEnd) ||
+                now.isAtSameMomentAs(openWindowEnd));
+        if (inAttendanceWindow) {
+          return lecture;
+        }
+
+        final distance = _distanceToRange(now, start, end);
+        if (bestDistance == null || distance < bestDistance) {
+          bestDistance = distance;
+          bestLecture = lecture;
+        }
+      }
+    }
+
+    // Guard against selecting far-away lectures when there is no nearby slot.
+    if (bestDistance != null && bestDistance <= const Duration(hours: 2)) {
+      return bestLecture;
+    }
     return null;
+  }
+
+  Duration _distanceToRange(DateTime now, DateTime start, DateTime end) {
+    if (now.isBefore(start)) return start.difference(now);
+    if (now.isAfter(end)) return now.difference(end);
+    return Duration.zero;
+  }
+
+  List<int> _candidateWeekdaysForLectureWindow() {
+    final calendarWeekday = _calendarRepository.currentDateTime.weekday;
+    final deviceWeekday = DateTime.now().weekday;
+    final values = <int>[calendarWeekday];
+    if (!values.contains(deviceWeekday)) {
+      values.add(deviceWeekday);
+    }
+    return values;
+  }
+
+  DateTime _effectiveNowForLectureWindow() {
+    return DateTime.now();
   }
 
   bool _isCurrentLecture(LectureItem lecture, DateTime now) {
     final (startH, startM) = TimeUtils.parseTimeString(lecture.startTime);
     final (endH, endM) = TimeUtils.parseTimeString(lecture.endTime);
-    final start = DateTime(now.year, now.month, now.day, startH, startM);
-    final end = DateTime(now.year, now.month, now.day, endH, endM);
-    final isAfterStart = now.isAfter(start) || now.isAtSameMomentAs(start);
-    final isBeforeEnd = now.isBefore(end) || now.isAtSameMomentAs(end);
-    return isAfterStart && isBeforeEnd;
+    final ranges = _buildLectureRangesForCurrentDay(
+      now: now,
+      startH: startH,
+      startM: startM,
+      endH: endH,
+      endM: endM,
+    );
+    for (final range in ranges) {
+      final start = range.$1;
+      final end = range.$2;
+      final isAfterStart = now.isAfter(start) || now.isAtSameMomentAs(start);
+      final isBeforeEnd = now.isBefore(end) || now.isAtSameMomentAs(end);
+      if (isAfterStart && isBeforeEnd) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  List<(DateTime, DateTime)> _buildLectureRangesForCurrentDay({
+    required DateTime now,
+    required int startH,
+    required int startM,
+    required int endH,
+    required int endM,
+  }) {
+    final ranges = <(DateTime, DateTime)>[];
+    void addRange(int sH, int sM, int eH, int eM) {
+      var start = DateTime(now.year, now.month, now.day, sH, sM);
+      var end = DateTime(now.year, now.month, now.day, eH, eM);
+      if (end.isBefore(start)) {
+        end = end.add(const Duration(days: 1));
+      }
+      ranges.add((start, end));
+    }
+
+    addRange(startH, startM, endH, endM);
+
+    // Some schedules are stored as 12-hour values without AM/PM (e.g. 03:00
+    // meaning 3 PM). In that case, also test a PM-shifted candidate.
+    final canShiftToPm = startH >= 1 && startH <= 7 && endH >= 1 && endH <= 7;
+    if (canShiftToPm) {
+      addRange(startH + 12, startM, endH + 12, endM);
+    }
+
+    return ranges;
   }
 
   String _buildQrPayload(QrAttendanceSession session) {
@@ -262,7 +476,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
       return;
     }
 
-    final now = _calendarRepository.currentDateTime;
+    final now = _effectiveNowForLectureWindow();
     final today = DateTime(now.year, now.month, now.day);
     _isNfcActiveForLecture = _openNfcSessions.any((session) {
       return session.isOpen &&
@@ -390,7 +604,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
       final session = await _bluetoothAttendanceService
           .createOrGetSessionForLecture(
             lecture: lecture,
-            lectureDate: _calendarRepository.currentDateTime,
+            lectureDate: _effectiveNowForLectureWindow(),
           );
       if (!mounted) return;
       setState(() {
@@ -634,6 +848,11 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
         _stopBluetoothTokenTimer();
         return;
       }
+      final sessionWindowLeft = _secondsUntilBluetoothSessionWindowClose();
+      if (sessionWindowLeft <= 0) {
+        unawaited(_closeBluetoothSession());
+        return;
+      }
       setState(() => _bluetoothSecondsLeft = _secondsUntilBluetoothExpiry());
     });
   }
@@ -646,7 +865,29 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
   int _secondsUntilBluetoothExpiry() {
     final session = _bluetoothSession;
     if (session == null) return _bluetoothRefreshIntervalSeconds;
-    final remaining = session.expiresAt.difference(DateTime.now()).inSeconds;
+    final tokenRemaining = session.expiresAt
+        .difference(DateTime.now())
+        .inSeconds;
+    final sessionRemaining = _secondsUntilBluetoothSessionWindowClose();
+    final remaining = tokenRemaining < sessionRemaining
+        ? tokenRemaining
+        : sessionRemaining;
+    return remaining < 0 ? 0 : remaining;
+  }
+
+  int _secondsUntilBluetoothSessionWindowClose() {
+    final session = _bluetoothSession;
+    if (session == null) {
+      return BluetoothAttendanceService.manualSessionOpenWindow.inSeconds;
+    }
+    final openedAt = session.openedAt ?? session.sessionOpenedAt;
+    if (openedAt == null) {
+      return BluetoothAttendanceService.manualSessionOpenWindow.inSeconds;
+    }
+    final closeAt = openedAt.add(
+      BluetoothAttendanceService.manualSessionOpenWindow,
+    );
+    final remaining = closeAt.difference(DateTime.now()).inSeconds;
     return remaining < 0 ? 0 : remaining;
   }
 
@@ -713,7 +954,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
     try {
       await _nfcAttendanceService.openSessionForLecture(
         lecture: lecture,
-        lectureDate: _calendarRepository.currentDateTime,
+        lectureDate: _effectiveNowForLectureWindow(),
       );
       if (!mounted) return;
       setState(() => _isNfcActiveForLecture = true);
@@ -774,6 +1015,15 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_didRunBuildBootstrap) {
+      _didRunBuildBootstrap = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _startActiveLectureSyncTimer();
+        unawaited(_syncLectureAndCode());
+      });
+    }
+
     const primaryColor = Color(0xFF006571);
     final lecture = _activeLecture;
 
@@ -1327,6 +1577,32 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
                                   ),
                                 ),
                               ),
+                            const SizedBox(height: 10),
+                            Text(
+                              _tr('رمز الحضور: ', 'Attendance code: '),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF5F7A80),
+                                fontFamily: 'Cairo',
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Directionality(
+                              textDirection: TextDirection.ltr,
+                              child: Text(
+                                _qrSession?.numericCode.isNotEmpty == true
+                                    ? _qrSession!.numericCode
+                                    : '------',
+                                style: const TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 5,
+                                  color: Color(0xFF00474F),
+                                  fontFamily: 'Cairo',
+                                ),
+                              ),
+                            ),
                             const SizedBox(height: 10),
                             Text(
                               _tr(

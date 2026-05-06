@@ -1304,6 +1304,9 @@ PODS:
     - GoogleUtilities/Environment (~> 8.1)
     - GTMSessionFetcher/Core (< 6.0, >= 3.4)
   - Flutter (1.0.0)
+  - flutter_ble_peripheral (2.0.1):
+    - Flutter
+    - FlutterMacOS
   - GoogleUtilities/AppDelegateSwizzler (8.1.0):
     - GoogleUtilities/Environment
     - GoogleUtilities/Logger
@@ -1431,14 +1434,23 @@ PODS:
   - path_provider_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
+  - permission_handler_apple (9.3.0):
+    - Flutter
+  - Protobuf (3.29.6)
   - qr_code_scanner_plus (0.2.6):
     - Flutter
+  - reactive_ble_mobile (0.0.1):
+    - Flutter
+    - FlutterMacOS
+    - Protobuf (~> 3.5)
+    - SwiftProtobuf (~> 1.0)
   - RecaptchaInterop (101.0.0)
   - SDWebImage (5.21.7):
     - SDWebImage/Core (= 5.21.7)
   - SDWebImage/Core (5.21.7)
   - share_plus (0.0.1):
     - Flutter
+  - SwiftProtobuf (1.37.0)
   - SwiftyGif (5.4.5)
   - syncfusion_flutter_pdfviewer (0.0.1):
     - Flutter
@@ -1453,10 +1465,13 @@ DEPENDENCIES:
   - firebase_core (from `.symlinks/plugins/firebase_core/ios`)
   - firebase_storage (from `.symlinks/plugins/firebase_storage/ios`)
   - Flutter (from `Flutter`)
+  - flutter_ble_peripheral (from `.symlinks/plugins/flutter_ble_peripheral/darwin`)
   - image_picker_ios (from `.symlinks/plugins/image_picker_ios/ios`)
   - nfc_manager (from `.symlinks/plugins/nfc_manager/ios`)
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
+  - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
   - qr_code_scanner_plus (from `.symlinks/plugins/qr_code_scanner_plus/ios`)
+  - reactive_ble_mobile (from `.symlinks/plugins/reactive_ble_mobile/darwin`)
   - share_plus (from `.symlinks/plugins/share_plus/ios`)
   - syncfusion_flutter_pdfviewer (from `.symlinks/plugins/syncfusion_flutter_pdfviewer/ios`)
   - url_launcher_ios (from `.symlinks/plugins/url_launcher_ios/ios`)
@@ -1484,8 +1499,10 @@ SPEC REPOS:
     - GTMSessionFetcher
     - leveldb-library
     - nanopb
+    - Protobuf
     - RecaptchaInterop
     - SDWebImage
+    - SwiftProtobuf
     - SwiftyGif
 
 EXTERNAL SOURCES:
@@ -1503,14 +1520,20 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/firebase_storage/ios"
   Flutter:
     :path: Flutter
+  flutter_ble_peripheral:
+    :path: ".symlinks/plugins/flutter_ble_peripheral/darwin"
   image_picker_ios:
     :path: ".symlinks/plugins/image_picker_ios/ios"
   nfc_manager:
     :path: ".symlinks/plugins/nfc_manager/ios"
   path_provider_foundation:
     :path: ".symlinks/plugins/path_provider_foundation/darwin"
+  permission_handler_apple:
+    :path: ".symlinks/plugins/permission_handler_apple/ios"
   qr_code_scanner_plus:
     :path: ".symlinks/plugins/qr_code_scanner_plus/ios"
+  reactive_ble_mobile:
+    :path: ".symlinks/plugins/reactive_ble_mobile/darwin"
   share_plus:
     :path: ".symlinks/plugins/share_plus/ios"
   syncfusion_flutter_pdfviewer:
@@ -1541,6 +1564,7 @@ SPEC CHECKSUMS:
   FirebaseSharedSwift: bccaff90721d14bafc14be34f28b77fdd7c91dc9
   FirebaseStorage: b3682c96ae7016420c1f6eb43d45057a0e909c9f
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  flutter_ble_peripheral: ad8683182faaefcb597124368fc3532aaac5585e
   GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1
   "gRPC-C++": cc207623316fb041a7a3e774c252cf68a058b9e8
   gRPC-Core: 860978b7db482de8b4f5e10677216309b5ff6330
@@ -1550,14 +1574,18 @@ SPEC CHECKSUMS:
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   nfc_manager: d7da7cb781f7744b94df5fe9dbca904ac4a0939e
   path_provider_foundation: 0b743cbb62d8e47eab856f09262bb8c1ddcfe6ba
+  permission_handler_apple: 9878588469a2b0d0fc1e048d9f43605f92e6cec2
+  Protobuf: 8d5596f7468be5400861a6bbfb2dfe9d0d1cde34
   qr_code_scanner_plus: 92b556a924f8e0ce42649fe27af8bdb93c3c18da
+  reactive_ble_mobile: 856183aeda09f2a676bbaecbea8915c3cb1d33df
   RecaptchaInterop: 11e0b637842dfb48308d242afc3f448062325aba
   SDWebImage: e9fc87c1aab89a8ab1bbd74eba378c6f53be8abf
   share_plus: 8b6f8b3447e494cca5317c8c3073de39b3600d1f
+  SwiftProtobuf: 3fafd1b2fb97e6d95ad9c8adb2215da9afec7c83
   SwiftyGif: 706c60cf65fa2bc5ee0313beece843c8eb8194d4
   syncfusion_flutter_pdfviewer: cfcf23c03816192575902e615fa50adc9f95b724
   url_launcher_ios: bb13df5870e8c4234ca12609d04010a21be43dfa
 
-PODFILE CHECKSUM: 3b6db858c2ca83af82c9b1a2a6874fcbed345aaa
+PODFILE CHECKSUM: 91ed994bad84fe53cef31e9c89dcf424b9963b8c
 
 COCOAPODS: 1.15.2

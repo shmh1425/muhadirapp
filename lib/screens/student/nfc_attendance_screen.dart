@@ -1351,9 +1351,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                   children: [
                     IconButton(
                       onPressed: () => Navigator.of(context).maybePop(),
-                      icon: StudentBackChevronIcon(
-                        color: Color(0xFF006571),
-                      ),
+                      icon: StudentBackChevronIcon(color: Color(0xFF006571)),
                     ),
                     const SizedBox(width: 6),
                     const TText(
@@ -1784,6 +1782,107 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                                 ),
                               ),
                             ),
+                            const SizedBox(height: 12),
+                            Container(
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                              ),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(0xFFCCE8EA),
+                                ),
+                              ),
+                              child: Column(
+                                children: [
+                                  TextField(
+                                    controller: _attendanceCodeController,
+                                    keyboardType: TextInputType.number,
+                                    textAlign: TextAlign.center,
+                                    maxLength: 6,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.digitsOnly,
+                                    ],
+                                    style: const TextStyle(
+                                      fontFamily: 'Cairo',
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 2,
+                                      color: Color(0xFF1F2E33),
+                                    ),
+                                    decoration: InputDecoration(
+                                      counterText: '',
+                                      labelText: _tr(
+                                        'أدخلي رمز الحضور (6 أرقام)',
+                                        'Enter attendance code (6 digits)',
+                                      ),
+                                      labelStyle: const TextStyle(
+                                        fontFamily: 'Cairo',
+                                        color: Color(0xFF5F7A80),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: const BorderSide(
+                                          color: Color(0xFFCCE8EA),
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: const BorderSide(
+                                          color: Color(0xFF006571),
+                                          width: 2,
+                                        ),
+                                      ),
+                                    ),
+                                    onSubmitted: (_) => _submitAttendanceCode(),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 42,
+                                    child: OutlinedButton.icon(
+                                      onPressed: _isSubmittingAttendanceCode
+                                          ? null
+                                          : _submitAttendanceCode,
+                                      icon: _isSubmittingAttendanceCode
+                                          ? const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : const Icon(
+                                              Icons.pin_rounded,
+                                              size: 18,
+                                            ),
+                                      label: Text(
+                                        _tr('تحقق من الرمز', 'Verify Code'),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontFamily: 'Cairo',
+                                        ),
+                                      ),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: const Color(
+                                          0xFF006571,
+                                        ),
+                                        side: const BorderSide(
+                                          color: Color(0xFF006571),
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            22,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                             const SizedBox(height: 14),
                             SizedBox(
                               width: 210,
@@ -1966,7 +2065,9 @@ class _ModeChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(18),
           border: isActive
               ? null
-              : Border.all(color: const Color(0xFF006571).withValues(alpha: 0.22)),
+              : Border.all(
+                  color: const Color(0xFF006571).withValues(alpha: 0.22),
+                ),
         ),
         child: Center(
           child: Padding(

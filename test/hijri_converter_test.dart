@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:muhadirapp/utils/hijri_converter.dart';
+import 'package:muhadir/utils/hijri_converter.dart';
 
 /// اختبار التحويل الهجري: اليوم + تاريخين ثابتين معروفين
 /// إذا ظهر فرق يوم عن أم القرى يُعدّل الخوارزم

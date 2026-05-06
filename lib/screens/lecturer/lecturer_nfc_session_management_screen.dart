@@ -75,7 +75,7 @@ class _LecturerNfcSessionManagementScreenState
 
     try {
       await _lectureRepository.refreshAcademicCalendar();
-      final now = _lectureRepository.currentDateTime;
+      final now = DateTime.now();
       final lectures = await LecturerSectionsService.instance
           .getLecturesForCurrentLecturer();
       final courseOptions = _extractUniqueCourseNames(lectures);

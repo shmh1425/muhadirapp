@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -37,6 +38,7 @@ class BluetoothAttendanceService {
   static const String sessionsCollection = 'bluetooth_attendance_sessions';
   static const String recordsCollection = 'bluetooth_attendance_records';
   static const Duration defaultTokenValidity = Duration(seconds: 45);
+  static const Duration manualSessionOpenWindow = Duration(minutes: 15);
   static const int defaultMinRssi = -85;
   static const String defaultProximityPolicy = 'rssi_threshold';
 
@@ -95,6 +97,7 @@ class BluetoothAttendanceService {
     final existing = await sessionRef.get();
     if (existing.exists && existing.data() != null) {
       final session = BluetoothAttendanceSession.fromDocumentSnapshot(existing);
+      await _closeSessionIfExpired(session);
       if (session.bluetoothSessionToken.isEmpty ||
           now.isAfter(session.expiresAt)) {
         await refreshSessionToken(session.sessionId);
@@ -179,6 +182,14 @@ class BluetoothAttendanceService {
     }
 
     final currentSession = BluetoothAttendanceSession.fromDocumentSnapshot(doc);
+    if (currentSession.isOpen &&
+        !_isWithinManualOpenWindow(currentSession, DateTime.now())) {
+      await closeSession(currentSession.sessionId);
+      throw BluetoothAttendanceException(
+        code: BluetoothAttendanceErrorCode.sessionNotFound,
+        message: 'Bluetooth session window ended. Reopen the session.',
+      );
+    }
     final now = DateTime.now();
     final newToken = _generateSessionToken(
       excluding: currentSession.bluetoothSessionToken,
@@ -210,9 +221,11 @@ class BluetoothAttendanceService {
     DocumentReference<Map<String, dynamic>> sessionRef,
     String lecturerId,
   ) {
+    final now = DateTime.now();
     return sessionRef.set({
       'isOpen': true,
       'openedAt': FieldValue.serverTimestamp(),
+      'sessionOpenedAt': Timestamp.fromDate(now),
       'openedBy': lecturerId,
       'closedAt': FieldValue.delete(),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -257,7 +270,12 @@ class BluetoothAttendanceService {
       snapshot,
     ) {
       if (!snapshot.exists || snapshot.data() == null) return null;
-      return BluetoothAttendanceSession.fromDocumentSnapshot(snapshot);
+      final session = BluetoothAttendanceSession.fromDocumentSnapshot(snapshot);
+      if (session.isOpen &&
+          !_isWithinManualOpenWindow(session, DateTime.now())) {
+        unawaited(_closeSessionIfExpired(session));
+      }
+      return session;
     });
   }
 
@@ -267,7 +285,17 @@ class BluetoothAttendanceService {
 
     final doc = await _firestore.collection(sessionsCollection).doc(id).get();
     if (!doc.exists || doc.data() == null) return null;
-    return BluetoothAttendanceSession.fromDocumentSnapshot(doc);
+    final session = BluetoothAttendanceSession.fromDocumentSnapshot(doc);
+    if (session.isOpen && !_isWithinManualOpenWindow(session, DateTime.now())) {
+      await _closeSessionIfExpired(session);
+      final refreshed = await _firestore
+          .collection(sessionsCollection)
+          .doc(id)
+          .get();
+      if (!refreshed.exists || refreshed.data() == null) return null;
+      return BluetoothAttendanceSession.fromDocumentSnapshot(refreshed);
+    }
+    return session;
   }
 
   DateTime _calculateExpiresAt(DateTime generatedAt, [Duration? validity]) {
@@ -327,5 +355,25 @@ class BluetoothAttendanceService {
     return '${d.year.toString().padLeft(4, '0')}'
         '${d.month.toString().padLeft(2, '0')}'
         '${d.day.toString().padLeft(2, '0')}';
+  }
+
+  bool _isWithinManualOpenWindow(
+    BluetoothAttendanceSession session,
+    DateTime now,
+  ) {
+    final openedAt = session.openedAt ?? session.sessionOpenedAt;
+    if (openedAt == null) return true;
+    final closeAt = openedAt.add(manualSessionOpenWindow);
+    return now.isBefore(closeAt);
+  }
+
+  Future<void> _closeSessionIfExpired(
+    BluetoothAttendanceSession session,
+  ) async {
+    final now = DateTime.now();
+    if (!session.isOpen || _isWithinManualOpenWindow(session, now)) {
+      return;
+    }
+    await closeSession(session.sessionId);
   }
 }

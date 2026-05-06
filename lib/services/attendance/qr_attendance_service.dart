@@ -68,8 +68,8 @@ class QrAttendanceService {
   static const String _manualSessionsCollection = 'manual_attendance_sessions';
   static const String _manualRecordsCollection = 'manual_attendance_records';
   static const String _enrollmentsCollection = 'student_section_enrollments';
-  static const Duration defaultQrValidity = Duration(seconds: 45);
-  static const Duration numericCodeValidity = Duration(seconds: 45);
+  static const Duration defaultQrValidity = Duration(seconds: 30);
+  static const Duration numericCodeValidity = Duration(seconds: 30);
 
   void _debugLog(String message) {
     if (kDebugMode) {
