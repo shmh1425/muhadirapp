@@ -67,6 +67,13 @@ class LecturerAttendanceScreen extends StatefulWidget {
 
 class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   static const Color _primary = Color(0xFF006571);
+  static const List<AttendanceStatusFilter> _filterMenuOrder = [
+    AttendanceStatusFilter.all,
+    AttendanceStatusFilter.present,
+    AttendanceStatusFilter.absent,
+    AttendanceStatusFilter.excused,
+    AttendanceStatusFilter.late,
+  ];
 
   final ManualAttendanceService _manualAttendanceService =
       ManualAttendanceService.instance;
@@ -102,9 +109,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   bool _isRefreshingQrToken = false;
   BluetoothAttendanceSession? _bluetoothSession;
   bool _isLoadingBluetooth = false;
-  bool _isRefreshingBluetoothToken = false;
   bool _isClosingBluetoothSession = false;
   bool _isStartingBluetoothBroadcast = false;
+  bool _isStoppingBluetoothBroadcast = false;
   BluetoothBroadcastState _bluetoothBroadcastState =
       BluetoothBroadcastState.idle;
   String? _bluetoothBroadcastMessage;
@@ -113,9 +120,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   Timer? _bluetoothTokenTimer;
   Timer? _pendingFinalizeTimer;
   static const int _qrAutoRefreshIntervalSeconds = 30;
-  static const int _bluetoothRefreshIntervalSeconds = 45;
   int _qrAutoRefreshSecondsLeft = _qrAutoRefreshIntervalSeconds;
-  int _bluetoothSecondsLeft = _bluetoothRefreshIntervalSeconds;
   String? _autoActivatedQrSessionId;
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
@@ -941,55 +946,6 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     }
   }
 
-  Future<void> _refreshBluetoothToken({bool showErrorSnack = true}) async {
-    final session = _bluetoothSession;
-    if (_isRefreshingBluetoothToken || session == null) return;
-
-    setState(() => _isRefreshingBluetoothToken = true);
-    try {
-      final refreshed = await _bluetoothAttendanceService.refreshSessionToken(
-        session.sessionId,
-      );
-      if (!mounted) return;
-      setState(() {
-        _bluetoothSession = refreshed;
-        _methodStatusMessage = _tr(
-          'تم تحديث رمز جلسة البلوتوث.',
-          'Bluetooth session token refreshed.',
-        );
-      });
-      if (_bluetoothBroadcastState == BluetoothBroadcastState.broadcasting) {
-        await _startBluetoothBroadcast(showSnack: false);
-      }
-      _startBluetoothTokenTimer();
-    } on FirebaseException catch (e) {
-      if (showErrorSnack) {
-        final message = e.code == 'permission-denied'
-            ? _tr(
-                'تعذر تحديث رمز البلوتوث: لا توجد صلاحية للوصول إلى Firestore.',
-                'Failed to refresh Bluetooth token: Firestore permission denied.',
-              )
-            : _tr(
-                'فشل تحديث رمز البلوتوث.',
-                'Failed to refresh Bluetooth token.',
-              );
-        _showMethodSnack(message, error: true);
-      }
-    } catch (_) {
-      if (showErrorSnack) {
-        _showMethodSnack(
-          _tr(
-            'فشل تحديث رمز البلوتوث. تأكدي من الاتصال ثم حاولي مجدداً.',
-            'Failed to refresh Bluetooth token. Check your network and try again.',
-          ),
-          error: true,
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isRefreshingBluetoothToken = false);
-    }
-  }
-
   Future<void> _closeBluetoothSession() async {
     final session = _bluetoothSession;
     if (_isClosingBluetoothSession || session == null) return;
@@ -1002,7 +958,6 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       _stopBluetoothTokenTimer();
       setState(() {
         _bluetoothSession = null;
-        _bluetoothSecondsLeft = _bluetoothRefreshIntervalSeconds;
         _bluetoothBroadcastState = BluetoothBroadcastState.idle;
         _bluetoothBroadcastMessage = null;
         _methodStatusMessage = _tr(
@@ -1033,7 +988,12 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
   Future<void> _startBluetoothBroadcast({bool showSnack = true}) async {
     final session = _bluetoothSession;
-    if (session == null || _isStartingBluetoothBroadcast) return;
+    if (session == null ||
+        _isStartingBluetoothBroadcast ||
+        _isStoppingBluetoothBroadcast ||
+        _bluetoothBroadcastState == BluetoothBroadcastState.broadcasting) {
+      return;
+    }
 
     setState(() {
       _isStartingBluetoothBroadcast = true;
@@ -1044,34 +1004,89 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       );
     });
 
-    final result = await _bluetoothBleService.startAdvertisingSession(session);
-    if (!mounted) return;
-    setState(() {
-      _isStartingBluetoothBroadcast = false;
-      _bluetoothBroadcastState = result.state;
-      _bluetoothBroadcastMessage = _localizedBluetoothHardwareMessage(
-        result.message,
-        broadcasting: true,
+    try {
+      final result = await _bluetoothBleService.startAdvertisingSession(
+        session,
       );
-    });
-    if (showSnack && !result.isBroadcasting) {
-      _showMethodSnack(
-        _bluetoothBroadcastMessage ?? result.message,
-        error: true,
-      );
+      if (!mounted) return;
+      setState(() {
+        _isStartingBluetoothBroadcast = false;
+        _bluetoothBroadcastState = result.state;
+        _bluetoothBroadcastMessage = _localizedBluetoothHardwareMessage(
+          result.message,
+          broadcasting: true,
+        );
+      });
+      if (showSnack && !result.isBroadcasting) {
+        _showMethodSnack(
+          _bluetoothBroadcastMessage ?? result.message,
+          error: true,
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isStartingBluetoothBroadcast = false;
+        _bluetoothBroadcastState = BluetoothBroadcastState.error;
+        _bluetoothBroadcastMessage = _tr(
+          'تعذر بدء البث',
+          'Failed to start broadcast',
+        );
+      });
+      if (showSnack) {
+        _showMethodSnack(_bluetoothBroadcastMessage!, error: true);
+      }
     }
   }
 
   Future<void> _stopBluetoothBroadcast() async {
-    await _bluetoothBleService.stopAdvertisingSession();
-    if (!mounted) return;
-    setState(() {
-      _bluetoothBroadcastState = BluetoothBroadcastState.idle;
-      _bluetoothBroadcastMessage = _tr(
-        'تم إيقاف بث البلوتوث.',
-        'Bluetooth broadcast stopped.',
+    if (_isStoppingBluetoothBroadcast || _isStartingBluetoothBroadcast) return;
+    setState(() => _isStoppingBluetoothBroadcast = true);
+    try {
+      await _bluetoothBleService.stopAdvertisingSession();
+      if (!mounted) return;
+      setState(() {
+        _bluetoothBroadcastState = BluetoothBroadcastState.idle;
+        _bluetoothBroadcastMessage = _tr('تم إيقاف البث', 'Broadcast stopped');
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _bluetoothBroadcastMessage = _tr(
+          'تعذر إيقاف البث',
+          'Failed to stop broadcast',
+        );
+      });
+      _showMethodSnack(_bluetoothBroadcastMessage!, error: true);
+    } finally {
+      if (mounted) {
+        setState(() => _isStoppingBluetoothBroadcast = false);
+      } else {
+        _isStoppingBluetoothBroadcast = false;
+      }
+    }
+  }
+
+  String _bluetoothBroadcastStatusLabel() {
+    if (_isStartingBluetoothBroadcast ||
+        _bluetoothBroadcastState ==
+            BluetoothBroadcastState.requestingPermission) {
+      return _tr('جاري بدء البث...', 'Starting broadcast...');
+    }
+    if (_isStoppingBluetoothBroadcast) {
+      return _tr('جاري إيقاف البث...', 'Stopping broadcast...');
+    }
+    if (_bluetoothBroadcastMessage != null &&
+        _bluetoothBroadcastMessage!.trim().isNotEmpty) {
+      return _bluetoothBroadcastMessage!;
+    }
+    if (_bluetoothBroadcastState == BluetoothBroadcastState.broadcasting) {
+      return _tr(
+        'يتم بث إشارة البلوتوث الآن',
+        'Bluetooth signal is broadcasting now',
       );
-    });
+    }
+    return _tr('جلسة البلوتوث غير نشطة', 'Bluetooth session inactive');
   }
 
   String _localizedBluetoothHardwareMessage(
@@ -1110,6 +1125,13 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     if (lower.contains('turned off')) {
       return _tr('البلوتوث غير مفعّل.', 'Bluetooth is turned off.');
     }
+    if (lower.contains('still getting ready') ||
+        lower.contains('unable to start bluetooth broadcast')) {
+      return _tr(
+        'تعذر بدء بث البلوتوث. تأكدي من تشغيل البلوتوث ثم حاولي مرة أخرى.',
+        'Unable to start Bluetooth broadcast. Make sure Bluetooth is on and try again.',
+      );
+    }
     if (lower.contains('active')) {
       return _tr('بث البلوتوث نشط الآن.', 'Bluetooth broadcast is active.');
     }
@@ -1118,7 +1140,6 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
   void _startBluetoothTokenTimer() {
     _stopBluetoothTokenTimer();
-    _bluetoothSecondsLeft = _secondsUntilBluetoothExpiry();
     _bluetoothTokenTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted ||
           _selectedMethod != AttendanceMethod.bluetooth ||
@@ -1130,30 +1151,13 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       final sessionWindowLeft = _secondsUntilBluetoothSessionWindowClose();
       if (sessionWindowLeft <= 0) {
         unawaited(_closeBluetoothSession());
-        return;
       }
-
-      final secondsLeft = _secondsUntilBluetoothExpiry();
-      setState(() => _bluetoothSecondsLeft = secondsLeft);
     });
   }
 
   void _stopBluetoothTokenTimer() {
     _bluetoothTokenTimer?.cancel();
     _bluetoothTokenTimer = null;
-  }
-
-  int _secondsUntilBluetoothExpiry() {
-    final session = _bluetoothSession;
-    if (session == null) return _bluetoothRefreshIntervalSeconds;
-    final tokenRemaining = session.expiresAt
-        .difference(DateTime.now())
-        .inSeconds;
-    final sessionRemaining = _secondsUntilBluetoothSessionWindowClose();
-    final remaining = tokenRemaining < sessionRemaining
-        ? tokenRemaining
-        : sessionRemaining;
-    return remaining < 0 ? 0 : remaining;
   }
 
   int _secondsUntilBluetoothSessionWindowClose() {
@@ -1189,19 +1193,21 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           'تعذر العثور على جلسة البلوتوث.',
           'Bluetooth session was not found.',
         );
+      case BluetoothAttendanceErrorCode.sessionClosed:
+        return _tr('جلسة البلوتوث مغلقة', 'Bluetooth session is closed');
+      case BluetoothAttendanceErrorCode.sessionExpired:
+      case BluetoothAttendanceErrorCode.attendanceWindowClosed:
+      case BluetoothAttendanceErrorCode.tokenMismatch:
+        return _tr('انتهت صلاحية جلسة البلوتوث.', 'Bluetooth session expired.');
+      case BluetoothAttendanceErrorCode.weakSignal:
+      case BluetoothAttendanceErrorCode.studentNotEnrolled:
+      case BluetoothAttendanceErrorCode.alreadyMarked:
       case BluetoothAttendanceErrorCode.unknown:
         return _tr(
           'تعذر فتح جلسة البلوتوث لهذه المحاضرة.',
           'Failed to start Bluetooth session for this lecture.',
         );
     }
-  }
-
-  String _maskedBluetoothToken(String token) {
-    final trimmed = token.trim();
-    if (trimmed.isEmpty) return '------';
-    if (trimmed.length <= 8) return trimmed;
-    return '${trimmed.substring(0, 4)}****${trimmed.substring(trimmed.length - 4)}';
   }
 
   String _buildQrPayload(QrAttendanceSession session) {
@@ -1416,42 +1422,52 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
               child: Column(
                 children: [
                   _buildHeader(),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-                    child: _buildFilterBar(),
-                  ),
-                  if (_methodStatusMessage != null)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                      child: Align(
-                        alignment: AlignmentDirectional.centerStart,
-                        child: Text(
-                          _methodStatusMessage!,
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF496169),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                            child: _buildFilterBar(),
                           ),
-                        ),
+                          if (_methodStatusMessage != null)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                              child: Align(
+                                alignment: AlignmentDirectional.centerStart,
+                                child: Text(
+                                  _methodStatusMessage!,
+                                  style: const TextStyle(
+                                    fontFamily: 'Cairo',
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF496169),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          if (_selectedMethod == AttendanceMethod.qr)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
+                              child: _buildCompactQrActionButton(),
+                            ),
+                          if (_selectedMethod == AttendanceMethod.bluetooth)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
+                              child: _buildBluetoothSessionPanel(),
+                            ),
+                          _buildSyncLegend(),
+                          const SizedBox(height: 14),
+                          _buildTableSection(),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                            child: _buildBottomButtons(),
+                          ),
+                        ],
                       ),
                     ),
-                  if (_selectedMethod == AttendanceMethod.qr)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
-                      child: _buildCompactQrActionButton(),
-                    ),
-                  if (_selectedMethod == AttendanceMethod.bluetooth)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
-                      child: _buildBluetoothSessionPanel(),
-                    ),
-                  _buildSyncLegend(),
-                  const SizedBox(height: 14),
-                  Expanded(child: _buildTableSection()),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                    child: _buildBottomButtons(),
                   ),
                 ],
               ),
@@ -1655,52 +1671,114 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   }
 
   Widget _buildFilterBar() {
-    final filters = [
-      AttendanceStatusFilter.all,
-      AttendanceStatusFilter.present,
-      AttendanceStatusFilter.excused,
-      AttendanceStatusFilter.absent,
-      AttendanceStatusFilter.late,
-    ];
+    final selectedStyle = _filterStyle(_statusFilter);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFDCE6E8)),
       ),
       child: Row(
-        children: filters.map((filter) {
-          final active = _statusFilter == filter;
-          final style = _filterStyle(filter);
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => _statusFilter = filter),
-              child: Container(
-                height: 34,
-                margin: const EdgeInsets.symmetric(horizontal: 3),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: active ? style.activeBg : const Color(0xFFF2F5F6),
-                  borderRadius: BorderRadius.circular(8),
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                Icon(
+                  Icons.filter_alt_rounded,
+                  size: 18,
+                  color: selectedStyle.fg,
                 ),
-                child: Text(
-                  style.label,
-                  style: TextStyle(
+                const SizedBox(width: 8),
+                Text(
+                  _tr('الفلتر:', 'Filter:'),
+                  style: const TextStyle(
                     fontFamily: 'Cairo',
-                    fontSize: 10.5,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: active ? Colors.white : const Color(0xFF516166),
+                    color: Color(0xFF516166),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
                 ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: selectedStyle.bg,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: selectedStyle.fg.withValues(alpha: 0.28),
+                      ),
+                    ),
+                    child: Text(
+                      selectedStyle.chipLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        color: selectedStyle.fg,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          PopupMenuButton<AttendanceStatusFilter>(
+            tooltip: _tr('تغيير الفلتر', 'Change filter'),
+            initialValue: _statusFilter,
+            onSelected: (filter) => setState(() => _statusFilter = filter),
+            itemBuilder: (context) => _filterMenuOrder.map((filter) {
+              final style = _filterStyle(filter);
+              return PopupMenuItem<AttendanceStatusFilter>(
+                value: filter,
+                child: Row(
+                  children: [
+                    Icon(
+                      _statusFilter == filter
+                          ? Icons.check_rounded
+                          : Icons.circle_outlined,
+                      size: 18,
+                      color: _statusFilter == filter
+                          ? style.fg
+                          : const Color(0xFF8AA0A6),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        style.label,
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF2F7F8),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFD5E0E3)),
+              ),
+              child: const Icon(
+                Icons.tune_rounded,
+                size: 20,
+                color: Color(0xFF006571),
               ),
             ),
-          );
-        }).toList(),
+          ),
+        ],
       ),
     );
   }
@@ -1772,28 +1850,27 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
   Widget _buildBluetoothSessionPanel() {
     final session = _bluetoothSession;
-    final active = session?.isOpen == true;
-    final token = session == null
-        ? '------'
-        : _maskedBluetoothToken(session.bluetoothSessionToken);
-    final version = session?.tokenVersion.toString() ?? '-';
-    final secondsLeft = session == null
-        ? _bluetoothSecondsLeft
-        : _secondsUntilBluetoothExpiry();
-    final isExpired = session != null && secondsLeft == 0;
+    final isBroadcasting =
+        _bluetoothBroadcastState == BluetoothBroadcastState.broadcasting;
+    final busy =
+        _isLoadingBluetooth ||
+        _isStartingBluetoothBroadcast ||
+        _isStoppingBluetoothBroadcast ||
+        _bluetoothBroadcastState ==
+            BluetoothBroadcastState.requestingPermission;
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFD5E0E3)),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFDCE8EA)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -1806,11 +1883,13 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE5F4F6),
+                  color: isBroadcasting
+                      ? const Color(0xFFE5F4F6)
+                      : const Color(0xFFF1F6F7),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
-                  active
+                  isBroadcasting
                       ? Icons.bluetooth_connected_rounded
                       : Icons.bluetooth_rounded,
                   color: const Color(0xFF006571),
@@ -1823,10 +1902,10 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      active
+                      isBroadcasting
                           ? _tr(
-                              'جلسة البلوتوث نشطة',
-                              'Bluetooth session active',
+                              'يتم بث إشارة البلوتوث الآن',
+                              'Bluetooth signal is broadcasting now',
                             )
                           : _tr(
                               'جلسة البلوتوث غير نشطة',
@@ -1841,7 +1920,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${_lecture.courseName} · ${_tr('الشعبة', 'Section')} ${_lecture.section}',
+                      _bluetoothBroadcastStatusLabel(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -1854,7 +1933,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                   ],
                 ),
               ),
-              if (_isLoadingBluetooth)
+              if (busy)
                 const SizedBox(
                   width: 20,
                   height: 20,
@@ -1866,180 +1945,67 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
             ],
           ),
           const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF6FAFB),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFE0EAED)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildBluetoothInfoLine(
-                  _tr('رمز جلسة البلوتوث', 'Bluetooth Session Token'),
-                  token,
-                ),
-                const SizedBox(height: 4),
-                _buildBluetoothInfoLine(_tr('الإصدار', 'Version'), version),
-                const SizedBox(height: 4),
-                _buildBluetoothInfoLine(
-                  _tr('ينتهي خلال', 'Expires in'),
-                  isExpired
-                      ? _tr('انتهى الرمز', 'Expired')
-                      : '$secondsLeft ${_tr('ثانية', 's')}',
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _bluetoothBroadcastMessage ??
-                (kIsWeb
-                    ? _tr(
-                        'بث البلوتوث غير مدعوم على الويب في هذه المرحلة.',
-                        'Bluetooth broadcasting is not supported on web in this phase.',
-                      )
-                    : _tr(
-                        'يمكنك الآن بدء بث إشارة البلوتوث لاختبارها على جهاز طالبة.',
-                        'You can now start broadcasting the Bluetooth signal for student-device testing.',
-                      )),
-            style: const TextStyle(
-              fontFamily: 'Cairo',
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF5A6F76),
-            ),
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            onPressed:
-                session == null ||
-                    _isStartingBluetoothBroadcast ||
-                    _isLoadingBluetooth ||
-                    _bluetoothBroadcastState ==
-                        BluetoothBroadcastState.requestingPermission
+          FilledButton.icon(
+            onPressed: session == null || busy
                 ? null
-                : (_bluetoothBroadcastState ==
-                          BluetoothBroadcastState.broadcasting
+                : (isBroadcasting
                       ? _stopBluetoothBroadcast
                       : () => _startBluetoothBroadcast()),
-            icon: _isStartingBluetoothBroadcast
+            style: FilledButton.styleFrom(
+              backgroundColor: isBroadcasting
+                  ? const Color(0xFFD14A4A)
+                  : const Color(0xFF006571),
+              disabledBackgroundColor: const Color(0xFFB9C9CC),
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(44),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            icon: busy
                 ? const SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 : Icon(
-                    _bluetoothBroadcastState ==
-                            BluetoothBroadcastState.broadcasting
+                    isBroadcasting
                         ? Icons.bluetooth_disabled_rounded
                         : Icons.bluetooth_searching_rounded,
                     size: 18,
                   ),
             label: Text(
-              _bluetoothBroadcastState == BluetoothBroadcastState.broadcasting
-                  ? _tr('إيقاف البث', 'Stop Broadcasting')
-                  : _tr('بدء البث', 'Start Broadcasting'),
+              isBroadcasting
+                  ? _tr('إيقاف البث', 'Stop Broadcast')
+                  : _tr('بدء البث', 'Start Broadcast'),
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.w800,
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed:
-                      session == null ||
-                          _isRefreshingBluetoothToken ||
-                          _isLoadingBluetooth
-                      ? null
-                      : () => _refreshBluetoothToken(),
-                  icon: _isRefreshingBluetoothToken
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.refresh_rounded, size: 18),
-                  label: Text(_tr('تحديث الرمز', 'Refresh Token')),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed:
-                      session == null ||
-                          _isClosingBluetoothSession ||
-                          _isLoadingBluetooth
-                      ? null
-                      : _closeBluetoothSession,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFD14A4A),
-                  ),
-                  icon: _isClosingBluetoothSession
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.close_rounded, size: 18),
-                  label: Text(_tr('إغلاق الجلسة', 'Close Session')),
-                ),
-              ),
-            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildBluetoothInfoLine(String label, String value) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontFamily: 'Cairo',
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF5A6F76),
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Flexible(
-          child: Directionality(
-            textDirection: TextDirection.ltr,
-            child: Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF213236),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   /// عنصر سكرول واحد: CustomScrollView مع هيدر الجدول + قائمة الطلاب كـ Slivers (لا فراغ بين الهيدر وأول صف).
   Widget _buildTableSection() {
     if (_isLoadingAttendance) {
-      return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF006571)),
+      return const SizedBox(
+        height: 220,
+        child: Center(
+          child: CircularProgressIndicator(color: Color(0xFF006571)),
+        ),
       );
     }
     if (_attendanceLoadError != null) {
-      return Center(
+      return SizedBox(
+        height: 260,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
@@ -2119,30 +2085,25 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                     ),
                   )
                 : Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       _buildStudentsTableHeader(layout),
-                      Expanded(
-                        child: ListView.separated(
-                          padding: EdgeInsets.zero,
-                          itemCount: _filteredStudents.length,
-                          separatorBuilder: (_, __) => const Divider(
-                            height: 1,
-                            color: Color(0xFFE8EFF1),
+                      for (
+                        var index = 0;
+                        index < _filteredStudents.length;
+                        index++
+                      ) ...[
+                        if (index > 0)
+                          const Divider(height: 1, color: Color(0xFFE8EFF1)),
+                        _buildStudentTableRow(
+                          student: _filteredStudents[index],
+                          statusStyle: _statusStyle(
+                            _effectiveStatus(_filteredStudents[index]),
                           ),
-                          itemBuilder: (context, index) {
-                            final student = _filteredStudents[index];
-                            final statusStyle = _statusStyle(
-                              _effectiveStatus(student),
-                            );
-                            return _buildStudentTableRow(
-                              student: student,
-                              statusStyle: statusStyle,
-                              index: index,
-                              layout: layout,
-                            );
-                          },
+                          index: index,
+                          layout: layout,
                         ),
-                      ),
+                      ],
                     ],
                   ),
           );
