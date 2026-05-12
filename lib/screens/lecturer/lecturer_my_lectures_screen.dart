@@ -1,56 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/lecturer/lecture_item.dart';
-import '../../services/lecturer/lecturer_sections_service.dart';
+import '../../providers/lecturer_catalog_providers.dart';
 import 'lecturer_language.dart';
 import 'widgets/modern_popup_dialog.dart';
 import 'widgets/profile_back_button.dart';
 
-class LecturerMyLecturesScreen extends StatefulWidget {
+class LecturerMyLecturesScreen extends ConsumerStatefulWidget {
   const LecturerMyLecturesScreen({super.key});
 
   @override
-  State<LecturerMyLecturesScreen> createState() =>
+  ConsumerState<LecturerMyLecturesScreen> createState() =>
       _LecturerMyLecturesScreenState();
 }
 
-class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
+class _LecturerMyLecturesScreenState
+    extends ConsumerState<LecturerMyLecturesScreen> {
   static const Color _primaryColor = Color(0xFF006571);
 
-  List<LectureItem> _allLectures = [];
-  bool _isLoadingLectures = true;
-  String? _loadError;
-
   final List<int> _dayOrder = const [7, 1, 2, 3, 4];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadLectures();
-  }
-
-  Future<void> _loadLectures() async {
-    setState(() {
-      _isLoadingLectures = true;
-      _loadError = null;
-    });
-    try {
-      final list = await LecturerSectionsService.instance
-          .getLecturesForCurrentLecturer();
-      if (!mounted) return;
-      setState(() {
-        _allLectures = list;
-        _isLoadingLectures = false;
-        _loadError = null;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoadingLectures = false;
-        _loadError = e.toString();
-      });
-    }
-  }
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
@@ -68,15 +37,23 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final catalogAsync = ref.watch(lecturerUnifiedCatalogProvider);
     return ValueListenableBuilder<LecturerLanguage>(
       valueListenable: LecturerLanguageController.notifier,
-      builder: (context, _, __) {
+      builder: (context, lang, __) {
+        final isArabic = lang == LecturerLanguage.arabic;
+        final allLectures = catalogAsync.maybeWhen(
+          data: (c) => c.toLectureItems(isArabic: isArabic),
+          orElse: () => <LectureItem>[],
+        );
+        final loading = catalogAsync.isLoading && allLectures.isEmpty;
+        final err = catalogAsync.hasError && allLectures.isEmpty;
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
           child: Scaffold(
             backgroundColor: const Color(0xFFF8FBFB),
             body: SafeArea(
-              child: _isLoadingLectures
+              child: loading
                   ? const Center(
                       child: Padding(
                         padding: EdgeInsets.all(24),
@@ -85,7 +62,7 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
                         ),
                       ),
                     )
-                  : _loadError != null
+                  : err
                   ? Center(
                       child: Padding(
                         padding: const EdgeInsets.all(24),
@@ -98,18 +75,11 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
                                 'Failed to load lectures',
                               ),
                             ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _loadError!,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
                             const SizedBox(height: 16),
                             TextButton.icon(
-                              onPressed: _loadLectures,
+                              onPressed: () => ref.invalidate(
+                                lecturerUnifiedCatalogProvider,
+                              ),
                               icon: const Icon(Icons.refresh),
                               label: Text(_tr('إعادة المحاولة', 'Retry')),
                             ),
@@ -132,7 +102,7 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
                           const SizedBox(height: 12),
                           _buildModernHeaderCard(),
                           const SizedBox(height: 12),
-                          Expanded(child: _buildLectureCardsList()),
+                          Expanded(child: _buildLectureCardsList(allLectures)),
                         ],
                       ),
                     ),
@@ -204,8 +174,8 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
     );
   }
 
-  Widget _buildLectureCardsList() {
-    final sorted = [..._allLectures]
+  Widget _buildLectureCardsList(List<LectureItem> allLectures) {
+    final sorted = [...allLectures]
       ..sort((a, b) {
         final dayCompare = _dayOrder
             .indexOf(a.dayOfWeek)
@@ -241,7 +211,10 @@ class _LecturerMyLecturesScreenState extends State<LecturerMyLecturesScreen> {
 
     return RefreshIndicator(
       color: _primaryColor,
-      onRefresh: _loadLectures,
+      onRefresh: () async {
+        ref.invalidate(lecturerUnifiedCatalogProvider);
+        await ref.read(lecturerUnifiedCatalogProvider.future);
+      },
       child: ListView(
         physics: const BouncingScrollPhysics(
           parent: AlwaysScrollableScrollPhysics(),

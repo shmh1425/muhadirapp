@@ -1,30 +1,32 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/calendar_day.dart';
 import '../../models/attendance/nfc_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
+import '../../models/lecturer/unified_lecturer_catalog.dart';
+import '../../providers/lecturer_catalog_providers.dart';
 import '../../services/attendance/attendance_status_policy.dart';
 import '../../services/attendance/manual_attendance_service.dart';
 import '../../services/attendance/nfc_attendance_service.dart';
 import '../../services/lecturer/calendar_service.dart';
 import '../../services/lecturer/lecture_repository.dart';
-import '../../services/lecturer/lecturer_sections_service.dart';
 import '../../widgets/monthly_calendar.dart';
 import 'lecturer_language.dart';
 import 'widgets/profile_back_button.dart';
 
-class LecturerNfcSessionManagementScreen extends StatefulWidget {
+class LecturerNfcSessionManagementScreen extends ConsumerStatefulWidget {
   const LecturerNfcSessionManagementScreen({super.key});
 
   @override
-  State<LecturerNfcSessionManagementScreen> createState() =>
+  ConsumerState<LecturerNfcSessionManagementScreen> createState() =>
       _LecturerNfcSessionManagementScreenState();
 }
 
 class _LecturerNfcSessionManagementScreenState
-    extends State<LecturerNfcSessionManagementScreen> {
+    extends ConsumerState<LecturerNfcSessionManagementScreen> {
   static const Color _primary = Color(0xFF006571);
   static const Color _danger = Color(0xFFD32F2F);
 
@@ -38,7 +40,8 @@ class _LecturerNfcSessionManagementScreenState
   int _selectedDayOfWeek = DateTime.now().weekday;
   String? _selectedCourse;
 
-  bool _isLoading = true;
+  bool _isLoading = false;
+  bool _catalogRefreshing = false;
   String? _loadError;
 
   String? _lecturerCardId;
@@ -54,44 +57,93 @@ class _LecturerNfcSessionManagementScreenState
   void initState() {
     super.initState();
     _calendarService = CalendarService(_lectureRepository);
+    LecturerLanguageController.notifier.addListener(_onLecturerLanguageChanged);
+    final cat = ref.read(lecturerUnifiedCatalogProvider).valueOrNull;
+    if (cat != null && !cat.isEmpty) {
+      final lectures =
+          cat.toLectureItems(isArabic: LecturerLanguageController.isArabic);
+      final courseOptions = _extractUniqueCourseNames(lectures);
+      _allLectures = lectures;
+      final now = DateTime.now();
+      _selectedDate = DateTime(now.year, now.month, now.day);
+      _selectedDayOfWeek = _selectedDate.weekday;
+      _currentCalendarMonth = DateTime(now.year, now.month, 1);
+      _selectedCourse = courseOptions.isNotEmpty ? courseOptions.first : null;
+    }
     _loadPageData();
     _attachOpenSessionsStream();
   }
 
   @override
   void dispose() {
+    LecturerLanguageController.notifier.removeListener(_onLecturerLanguageChanged);
     _openSessionsSub?.cancel();
     super.dispose();
+  }
+
+  void _onLecturerLanguageChanged() {
+    final cat = ref.read(lecturerUnifiedCatalogProvider).valueOrNull;
+    if (cat == null || !mounted) return;
+    final lectures =
+        cat.toLectureItems(isArabic: LecturerLanguageController.isArabic);
+    final courseOptions = _extractUniqueCourseNames(lectures);
+    setState(() {
+      _allLectures = lectures;
+      if (_selectedCourse != null &&
+          !courseOptions.any((n) => n == _selectedCourse)) {
+        _selectedCourse =
+            courseOptions.isNotEmpty ? courseOptions.first : null;
+      }
+    });
   }
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
   Future<void> _loadPageData() async {
+    final hadLectures = _allLectures.isNotEmpty;
     setState(() {
-      _isLoading = true;
       _loadError = null;
+      if (!hadLectures) {
+        _isLoading = true;
+      }
       _loadingCard = true;
     });
 
     try {
-      await _lectureRepository.refreshAcademicCalendar();
-      final now = _lectureRepository.currentDateTime;
-      final lectures = await LecturerSectionsService.instance
-          .getLecturesForCurrentLecturer();
-      final courseOptions = _extractUniqueCourseNames(lectures);
-      final cardId = await _nfcAttendance.getCurrentLecturerCardId();
+      if (!hadLectures) {
+        final results = await Future.wait<dynamic>([
+          _lectureRepository.refreshAcademicCalendar(),
+          ref.read(lecturerUnifiedCatalogProvider.future),
+          _nfcAttendance.getCurrentLecturerCardId(),
+        ]);
+        final now = _lectureRepository.currentDateTime;
+        final cat = results[1] as UnifiedLecturerCatalog;
+        final lectures =
+            cat.toLectureItems(isArabic: LecturerLanguageController.isArabic);
+        final courseOptions = _extractUniqueCourseNames(lectures);
+        final cardId = results[2] as String?;
 
-      if (!mounted) return;
-      setState(() {
-        _allLectures = lectures;
-        _selectedDate = DateTime(now.year, now.month, now.day);
-        _selectedDayOfWeek = _selectedDate.weekday;
-        _currentCalendarMonth = DateTime(now.year, now.month, 1);
-        _selectedCourse = courseOptions.isNotEmpty ? courseOptions.first : null;
-        _lecturerCardId = cardId;
-        _isLoading = false;
-        _loadingCard = false;
-      });
+        if (!mounted) return;
+        setState(() {
+          _allLectures = lectures;
+          _selectedDate = DateTime(now.year, now.month, now.day);
+          _selectedDayOfWeek = _selectedDate.weekday;
+          _currentCalendarMonth = DateTime(now.year, now.month, 1);
+          _selectedCourse =
+              courseOptions.isNotEmpty ? courseOptions.first : null;
+          _lecturerCardId = cardId;
+          _isLoading = false;
+          _loadingCard = false;
+        });
+      } else {
+        final cardId = await _nfcAttendance.getCurrentLecturerCardId();
+        if (!mounted) return;
+        setState(() {
+          _lecturerCardId = cardId;
+          _loadingCard = false;
+        });
+        unawaited(_refreshNfcPageCatalogAndCalendar());
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -99,6 +151,38 @@ class _LecturerNfcSessionManagementScreenState
         _loadingCard = false;
         _loadError = e.toString();
       });
+    }
+  }
+
+  Future<void> _refreshNfcPageCatalogAndCalendar() async {
+    if (!mounted) return;
+    setState(() => _catalogRefreshing = true);
+    try {
+      await Future.wait<Object?>([
+        _lectureRepository.refreshAcademicCalendar(),
+        ref.read(lecturerUnifiedCatalogProvider.future),
+      ]);
+      if (!mounted) return;
+      final now = _lectureRepository.currentDateTime;
+      final cat = ref.read(lecturerUnifiedCatalogProvider).requireValue;
+      final lectures =
+          cat.toLectureItems(isArabic: LecturerLanguageController.isArabic);
+      final courseOptions = _extractUniqueCourseNames(lectures);
+      setState(() {
+        _allLectures = lectures;
+        _selectedDate = DateTime(now.year, now.month, now.day);
+        _selectedDayOfWeek = _selectedDate.weekday;
+        _currentCalendarMonth = DateTime(now.year, now.month, 1);
+        if (_selectedCourse != null &&
+            !courseOptions.any((n) => n == _selectedCourse)) {
+          _selectedCourse =
+              courseOptions.isNotEmpty ? courseOptions.first : null;
+        }
+      });
+    } catch (_) {
+      // Keep hydrated lectures; silent refresh failure.
+    } finally {
+      if (mounted) setState(() => _catalogRefreshing = false);
     }
   }
 
@@ -289,6 +373,24 @@ class _LecturerNfcSessionManagementScreenState
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AsyncValue<UnifiedLecturerCatalog>>(
+      lecturerUnifiedCatalogProvider,
+      (prev, next) {
+        next.whenData((cat) {
+          if (!mounted) return;
+          final lectures = cat.toLectureItems(
+            isArabic: LecturerLanguageController.isArabic,
+          );
+          final courseOptions = _extractUniqueCourseNames(lectures);
+          setState(() {
+            _allLectures = lectures;
+            _selectedCourse = courseOptions.isNotEmpty
+                ? courseOptions.first
+                : _selectedCourse;
+          });
+        });
+      },
+    );
     return ValueListenableBuilder<LecturerLanguage>(
       valueListenable: LecturerLanguageController.notifier,
       builder: (context, _, __) {
@@ -325,7 +427,7 @@ class _LecturerNfcSessionManagementScreenState
               ],
             ),
             body: SafeArea(
-              child: _isLoading
+              child: (_isLoading && _allLectures.isEmpty)
                   ? const Center(
                       child: Padding(
                         padding: EdgeInsets.all(24),
@@ -337,6 +439,15 @@ class _LecturerNfcSessionManagementScreenState
                   : ListView(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                       children: [
+                        if (_isLoading || _catalogRefreshing)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 12),
+                            child: LinearProgressIndicator(
+                              minHeight: 3,
+                              color: _primary,
+                              backgroundColor: Color(0xFFE6F1F2),
+                            ),
+                          ),
                         _buildLecturerCardStatus(),
                         const SizedBox(height: 16),
                         _buildCourseSelector(),

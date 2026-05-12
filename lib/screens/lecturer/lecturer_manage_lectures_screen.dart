@@ -3,28 +3,32 @@ import 'dart:math' show min;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/lecturer/lecture_item.dart';
+import '../../models/lecturer/unified_lecturer_catalog.dart';
+import '../../providers/lecturer_catalog_providers.dart';
 import '../../services/lecturer/lecture_repository.dart';
 import '../../services/lecturer/calendar_sync_service.dart';
-import '../../services/lecturer/lecturer_sections_service.dart';
+import '../../services/lecturer_auth_service.dart';
 import '../../services/notifications/lecture_action_notification_service.dart';
 import '../../utils/shared/time_utils.dart';
 import 'lecturer_language.dart';
+import 'lecturer_screen_session_memory.dart';
 import 'widgets/modern_popup_dialog.dart';
 import 'widgets/profile_back_button.dart';
 
 /// شاشة إدارة المحاضرات: فلترة، إشعار تأخير، إشعار إلغاء
-class LecturerManageLecturesScreen extends StatefulWidget {
+class LecturerManageLecturesScreen extends ConsumerStatefulWidget {
   const LecturerManageLecturesScreen({super.key});
 
   @override
-  State<LecturerManageLecturesScreen> createState() =>
+  ConsumerState<LecturerManageLecturesScreen> createState() =>
       _LecturerManageLecturesScreenState();
 }
 
 class _LecturerManageLecturesScreenState
-    extends State<LecturerManageLecturesScreen> {
+    extends ConsumerState<LecturerManageLecturesScreen> {
   static const Color _primary = Color(0xFF006571);
   static const Color _delayYellow = Color(0xFFF9A825);
   static const Color _cancelRed = Color(0xFFD32F2F);
@@ -34,6 +38,7 @@ class _LecturerManageLecturesScreenState
   final LectureActionNotificationService _notificationService =
       LectureActionNotificationService.instance;
   bool _isLoadingLectures = true;
+  bool _bgRefreshing = false;
   String? _loadError;
   StreamSubscription<void>? _calendarSyncSub;
   bool _isSyncRefreshing = false;
@@ -49,28 +54,112 @@ class _LecturerManageLecturesScreenState
   @override
   void initState() {
     super.initState();
+    LecturerLanguageController.notifier.addListener(_onLecturerLanguageChanged);
     _calendarSyncSub = CalendarSyncService.instance.watchChanges().listen(
       (_) => _handleRealtimeCalendarChange(),
     );
-    _loadLectures();
+    _bootstrapLecturesScreen();
   }
 
   @override
   void dispose() {
+    final lecturerId =
+        LecturerAuthService.instance.currentLecturer?.lecturerId.trim() ?? '';
+    if (lecturerId.isNotEmpty && _allLectures.isNotEmpty) {
+      LecturerManageScreenSessionMemory.save(
+        lecturerId: lecturerId,
+        lectures: _allLectures,
+        selectedWeekNumber: _selectedWeekNumber,
+        selectedDate: _selectedDate,
+        selectedCourseCode: _selectedCourseCode,
+        selectedLectureKeys: Set<String>.from(_selectedLectureKeys),
+      );
+    }
+    LecturerLanguageController.notifier.removeListener(_onLecturerLanguageChanged);
     _calendarSyncSub?.cancel();
     super.dispose();
   }
 
-  Future<void> _loadLectures() async {
+  void _bootstrapLecturesScreen() {
+    final lecturerId =
+        LecturerAuthService.instance.currentLecturer?.lecturerId.trim() ?? '';
+    final restored = lecturerId.isNotEmpty
+        ? LecturerManageScreenSessionMemory.takeRestore(lecturerId)
+        : null;
+
+    if (restored != null) {
+      _allLectures = restored.lectures;
+      _selectedWeekNumber = restored.selectedWeekNumber;
+      _selectedDate = restored.selectedDate;
+      _selectedCourseCode = restored.selectedCourseCode;
+      _selectedLectureKeys
+        ..clear()
+        ..addAll(restored.selectedLectureKeys);
+      _isLoadingLectures = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _applyFilters();
+        unawaited(_refreshLecturesInBackground());
+      });
+      return;
+    }
+
+    final cat = ref.read(lecturerUnifiedCatalogProvider).valueOrNull;
+    if (cat != null && !cat.isEmpty) {
+      _allLectures = cat.toLectureItems(
+        isArabic: LecturerLanguageController.isArabic,
+      );
+      _selectedWeekNumber ??= _currentWeekNumber;
+      _isLoadingLectures = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _applyFilters();
+        unawaited(_refreshLecturesInBackground());
+      });
+      return;
+    }
+
+    unawaited(_awaitInitialLectureLoad());
+  }
+
+  void _onLecturerLanguageChanged() {
+    final cat = ref.read(lecturerUnifiedCatalogProvider).valueOrNull;
+    if (cat == null || !mounted) return;
+    setState(() {
+      _allLectures = cat.toLectureItems(
+        isArabic: LecturerLanguageController.isArabic,
+      );
+    });
+  }
+
+  Future<void> _loadLectures({bool forceRefreshCatalog = false}) async {
+    if (_allLectures.isEmpty) {
+      await _awaitInitialLectureLoad(forceRefreshCatalog: forceRefreshCatalog);
+    } else {
+      await _refreshLecturesInBackground(forceRefreshCatalog: forceRefreshCatalog);
+    }
+  }
+
+  Future<void> _awaitInitialLectureLoad({bool forceRefreshCatalog = false}) async {
     setState(() {
       _isLoadingLectures = true;
       _loadError = null;
     });
     try {
-      await _calendarRepository.refreshAcademicCalendar();
-      final list = await LecturerSectionsService.instance
-          .getLecturesForCurrentLecturer();
+      if (forceRefreshCatalog) {
+        ref.invalidate(lecturerUnifiedCatalogProvider);
+      }
+      await Future.wait<Object?>([
+        _calendarRepository.refreshAcademicCalendar().timeout(
+          const Duration(seconds: 4),
+          onTimeout: () {},
+        ),
+        ref.read(lecturerUnifiedCatalogProvider.future),
+      ]);
       if (!mounted) return;
+      final cat = ref.read(lecturerUnifiedCatalogProvider).requireValue;
+      final list =
+          cat.toLectureItems(isArabic: LecturerLanguageController.isArabic);
       setState(() {
         _allLectures = list;
         _selectedWeekNumber = _currentWeekNumber;
@@ -90,11 +179,51 @@ class _LecturerManageLecturesScreenState
     }
   }
 
+  Future<void> _refreshLecturesInBackground({
+    bool forceRefreshCatalog = false,
+  }) async {
+    if (_bgRefreshing) return;
+    _bgRefreshing = true;
+    if (mounted) setState(() {});
+    try {
+      if (forceRefreshCatalog) {
+        ref.invalidate(lecturerUnifiedCatalogProvider);
+      }
+      await Future.wait<Object?>([
+        _calendarRepository.refreshAcademicCalendar().timeout(
+          const Duration(seconds: 4),
+          onTimeout: () {},
+        ),
+        ref.read(lecturerUnifiedCatalogProvider.future),
+      ]);
+      if (!mounted) return;
+      final cat = ref.read(lecturerUnifiedCatalogProvider).requireValue;
+      final list =
+          cat.toLectureItems(isArabic: LecturerLanguageController.isArabic);
+      setState(() {
+        _allLectures = list;
+        _loadError = null;
+        _applyFilters();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      if (_allLectures.isEmpty) {
+        setState(() => _loadError = e.toString());
+      }
+    } finally {
+      _bgRefreshing = false;
+      if (mounted) setState(() {});
+    }
+  }
+
   Future<void> _handleRealtimeCalendarChange() async {
     if (!mounted || _isSyncRefreshing) return;
     _isSyncRefreshing = true;
     try {
-      await _calendarRepository.refreshAcademicCalendar();
+      await _calendarRepository.refreshAcademicCalendar().timeout(
+        const Duration(seconds: 4),
+        onTimeout: () {},
+      );
       if (!mounted) return;
       setState(() {
         _applyFilters();
@@ -853,6 +982,20 @@ class _LecturerManageLecturesScreenState
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AsyncValue<UnifiedLecturerCatalog>>(
+      lecturerUnifiedCatalogProvider,
+      (prev, next) {
+        next.whenData((cat) {
+          if (!mounted) return;
+          setState(() {
+            _allLectures = cat.toLectureItems(
+              isArabic: LecturerLanguageController.isArabic,
+            );
+            _applyFilters();
+          });
+        });
+      },
+    );
     return ValueListenableBuilder<LecturerLanguage>(
       valueListenable: LecturerLanguageController.notifier,
       builder: (context, _, __) {
@@ -861,7 +1004,7 @@ class _LecturerManageLecturesScreenState
           child: Scaffold(
             backgroundColor: const Color(0xFFF8FBFB),
             body: SafeArea(
-              child: _isLoadingLectures
+              child: (_isLoadingLectures && _allLectures.isEmpty)
                   ? const Center(
                       child: Padding(
                         padding: EdgeInsets.all(24),
@@ -894,7 +1037,8 @@ class _LecturerManageLecturesScreenState
                             ),
                             const SizedBox(height: 16),
                             TextButton.icon(
-                              onPressed: _loadLectures,
+                              onPressed: () =>
+                                  _loadLectures(forceRefreshCatalog: true),
                               icon: const Icon(Icons.refresh),
                               label: Text(_tr('إعادة المحاولة', 'Retry')),
                             ),
@@ -913,6 +1057,15 @@ class _LecturerManageLecturesScreenState
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
+                              if (_isLoadingLectures || _bgRefreshing)
+                                const Padding(
+                                  padding: EdgeInsets.only(bottom: 10),
+                                  child: LinearProgressIndicator(
+                                    minHeight: 3,
+                                    color: Color(0xFF006571),
+                                    backgroundColor: Color(0xFFE6F1F2),
+                                  ),
+                                ),
                               const SizedBox(height: 6),
                               Align(
                                 alignment: AlignmentDirectional.centerStart,

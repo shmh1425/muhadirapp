@@ -142,84 +142,104 @@ class ModernPopupSheet extends StatelessWidget {
         (subtitle != null && subtitle!.trim().isNotEmpty) ||
         onClose != null;
 
-    return Container(
-      margin: margin,
-      padding: padding,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: accentColor.withValues(alpha: 0.16)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 22,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (showHandle)
-            Center(
-              child: Container(
-                width: 42,
-                height: 4,
-                margin: EdgeInsets.only(bottom: hasHeader ? 12 : 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD6DDE0),
-                  borderRadius: BorderRadius.circular(10),
-                ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxH = constraints.maxHeight;
+        // Bottom sheets pass a finite max height; keep header visible and scroll body.
+        const reservedForChrome = 140.0;
+        Widget body = child;
+        if (maxH.isFinite && maxH < double.infinity) {
+          final cap = (maxH - reservedForChrome).clamp(0.0, maxH);
+          if (cap > 0) {
+            body = ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: cap),
+              child: SingleChildScrollView(
+                child: child,
               ),
-            ),
-          if (hasHeader) ...[
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (title != null && title!.trim().isNotEmpty)
-                        Text(
-                          title!,
-                          style: TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                            color: accentColor,
-                          ),
-                        ),
-                      if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          subtitle!,
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF60757A),
-                            height: 1.35,
-                          ),
-                        ),
-                      ],
-                    ],
+            );
+          }
+        }
+
+        return Container(
+          margin: margin,
+          padding: padding,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: accentColor.withValues(alpha: 0.16)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 22,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (showHandle)
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    margin: EdgeInsets.only(bottom: hasHeader ? 12 : 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD6DDE0),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
-                if (onClose != null)
-                  IconButton(
-                    onPressed: onClose,
-                    icon: const Icon(Icons.close_rounded),
-                    color: const Color(0xFF60757A),
-                    tooltip: 'Close',
-                  ),
+              if (hasHeader) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (title != null && title!.trim().isNotEmpty)
+                            Text(
+                              title!,
+                              style: TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                                color: accentColor,
+                              ),
+                            ),
+                          if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              subtitle!,
+                              style: const TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF60757A),
+                                height: 1.35,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (onClose != null)
+                      IconButton(
+                        onPressed: onClose,
+                        icon: const Icon(Icons.close_rounded),
+                        color: const Color(0xFF60757A),
+                        tooltip: 'Close',
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
               ],
-            ),
-            const SizedBox(height: 10),
-          ],
-          child,
-        ],
-      ),
+              body,
+            ],
+          ),
+        );
+      },
     );
   }
 }

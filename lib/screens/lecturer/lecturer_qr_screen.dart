@@ -4,32 +4,34 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../models/attendance/nfc_attendance_session.dart';
 import '../../models/attendance/bluetooth_attendance_session.dart';
 import '../../models/attendance/qr_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
+import '../../models/lecturer/unified_lecturer_catalog.dart';
+import '../../providers/lecturer_catalog_providers.dart';
 import '../../services/attendance/bluetooth_attendance_service.dart';
 import '../../services/attendance/bluetooth_ble_service.dart';
 import '../../services/attendance/nfc_attendance_service.dart';
 import '../../services/attendance/qr_attendance_service.dart';
 import '../../services/lecturer/lecture_repository.dart';
 import '../../services/lecturer/calendar_sync_service.dart';
-import '../../services/lecturer/lecturer_sections_service.dart';
 import '../../utils/shared/time_utils.dart';
 import 'lecturer_language.dart';
 
-class LecturerQrScreen extends StatefulWidget {
+class LecturerQrScreen extends ConsumerStatefulWidget {
   const LecturerQrScreen({super.key, this.lecture});
 
   final LectureItem? lecture;
 
   @override
-  State<LecturerQrScreen> createState() => _LecturerQrScreenState();
+  ConsumerState<LecturerQrScreen> createState() => _LecturerQrScreenState();
 }
 
-class _LecturerQrScreenState extends State<LecturerQrScreen> {
+class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
   List<LectureItem> _allLectures = [];
   final LectureRepository _calendarRepository = LectureRepository();
   final QrAttendanceService _qrAttendanceService = QrAttendanceService.instance;
@@ -72,6 +74,7 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
   void initState() {
     super.initState();
     _qrData = '';
+    LecturerLanguageController.notifier.addListener(_onLecturerLanguageChanged);
     _calendarSyncSub = CalendarSyncService.instance.watchChanges().listen(
       (_) => _handleRealtimeCalendarChange(),
     );
@@ -84,33 +87,61 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
             _recomputeNfcActiveForCurrentLecture();
           });
         });
-    _loadLectures();
+    unawaited(_bootstrapQr());
+  }
+
+  void _onLecturerLanguageChanged() {
+    final cat = ref.read(lecturerUnifiedCatalogProvider).valueOrNull;
+    if (cat == null || !mounted) return;
+    setState(() {
+      _allLectures = cat.toLectureItems(
+        isArabic: LecturerLanguageController.isArabic,
+      );
+    });
+    unawaited(_syncLectureAndCode());
+  }
+
+  Future<void> _bootstrapQr() async {
+    final cat = ref.read(lecturerUnifiedCatalogProvider).valueOrNull;
+    if (cat != null && !cat.isEmpty && mounted) {
+      setState(() {
+        _allLectures = cat.toLectureItems(
+          isArabic: LecturerLanguageController.isArabic,
+        );
+      });
+    }
+    await _syncLectureAndCode();
+    unawaited(_refreshQrCatalogAndCalendarInBackground());
+  }
+
+  Future<void> _refreshQrCatalogAndCalendarInBackground() async {
+    try {
+      await Future.wait<Object?>([
+        _calendarRepository.refreshAcademicCalendar(),
+        ref.read(lecturerUnifiedCatalogProvider.future),
+      ]);
+      if (!mounted) return;
+      final cat = ref.read(lecturerUnifiedCatalogProvider).requireValue;
+      setState(() {
+        _allLectures = cat.toLectureItems(
+          isArabic: LecturerLanguageController.isArabic,
+        );
+      });
+      await _syncLectureAndCode();
+    } catch (_) {
+      // Keep hydrated lectures list if already shown.
+    }
   }
 
   @override
   void dispose() {
+    LecturerLanguageController.notifier.removeListener(_onLecturerLanguageChanged);
     _calendarSyncSub?.cancel();
     _nfcSessionsSub?.cancel();
     _stopCodeRefreshTimer();
     _stopBluetoothTokenTimer();
     _bluetoothBleService.stopAdvertisingSession();
     super.dispose();
-  }
-
-  Future<void> _loadLectures() async {
-    try {
-      await _calendarRepository.refreshAcademicCalendar();
-      final list = await LecturerSectionsService.instance
-          .getLecturesForCurrentLecturer();
-      if (!mounted) return;
-      setState(() {
-        _allLectures = list;
-      });
-      await _syncLectureAndCode();
-    } catch (_) {
-      if (!mounted) return;
-      await _syncLectureAndCode();
-    }
   }
 
   Future<void> _handleRealtimeCalendarChange() async {
@@ -774,6 +805,20 @@ class _LecturerQrScreenState extends State<LecturerQrScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AsyncValue<UnifiedLecturerCatalog>>(
+      lecturerUnifiedCatalogProvider,
+      (prev, next) {
+        next.whenData((cat) {
+          if (!mounted) return;
+          setState(() {
+            _allLectures = cat.toLectureItems(
+              isArabic: LecturerLanguageController.isArabic,
+            );
+          });
+          unawaited(_syncLectureAndCode());
+        });
+      },
+    );
     const primaryColor = Color(0xFF006571);
     final lecture = _activeLecture;
 

@@ -1,5 +1,9 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../services/lecturer/lecturer_cold_start_warmup.dart';
 import 'lecturer_nav_bar.dart';
 import 'lecturer_home_screen.dart';
 import 'lecturer_qr_screen.dart';
@@ -8,7 +12,7 @@ import 'lecturer_profile_screen.dart';
 /// Shell واحد للتنقل: يحتوي على الـ Bottom Nav وثلاثة تبويبات (Profile, QR, Home).
 /// التنقل بين التبويبات بتغيير الـ index فقط — لا push للتبويبات.
 /// الصفحات الفرعية (مثل التحضير، التقارير) تُفتح داخل نفس التبويب عبر الـ Navigator المخصص لكل تبويب.
-class LecturerMainShell extends StatefulWidget {
+class LecturerMainShell extends ConsumerStatefulWidget {
   const LecturerMainShell({super.key, this.initialIndex = 2, this.profile});
 
   /// 0 = Profile, 1 = QR, 2 = Home. افتراضي 2 (Home).
@@ -16,16 +20,24 @@ class LecturerMainShell extends StatefulWidget {
   final LecturerProfile? profile;
 
   @override
-  State<LecturerMainShell> createState() => _LecturerMainShellState();
+  ConsumerState<LecturerMainShell> createState() => _LecturerMainShellState();
 }
 
-class _LecturerMainShellState extends State<LecturerMainShell> {
+class _LecturerMainShellState extends ConsumerState<LecturerMainShell> {
   late int _selectedIndex;
 
   @override
   void initState() {
     super.initState();
     _selectedIndex = widget.initialIndex.clamp(0, 2);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(
+        LecturerColdStartWarmup.run(
+          ProviderScope.containerOf(context, listen: false),
+        ),
+      );
+    });
   }
 
   Widget _buildTabNavigator(int index, Widget screen) {

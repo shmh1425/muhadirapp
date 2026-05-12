@@ -168,13 +168,18 @@ class ManualAttendanceService {
     final sections = sectionIds.where((s) => s.trim().isNotEmpty).toList();
     if (sections.isEmpty) return const <ManualAttendanceSession>[];
 
+    final chunks = _chunk(sections, 10);
+    final snapshots = await Future.wait(
+      chunks.map(
+        (chunk) => _firestore
+            .collection(_sessionsCollection)
+            .where('sectionId', whereIn: chunk)
+            .get(),
+      ),
+    );
     final sessions = <ManualAttendanceSession>[];
-    for (final chunk in _chunk(sections, 10)) {
-      final snapshot = await _firestore
-          .collection(_sessionsCollection)
-          .where('sectionId', whereIn: chunk)
-          .get();
-      sessions.addAll(snapshot.docs.map(ManualAttendanceSession.fromDoc));
+    for (final snap in snapshots) {
+      sessions.addAll(snap.docs.map(ManualAttendanceSession.fromDoc));
     }
     sessions.sort((a, b) {
       final byDate = b.lectureDate.compareTo(a.lectureDate);
@@ -193,17 +198,27 @@ class ManualAttendanceService {
     final ids = sessionIds.where((s) => s.trim().isNotEmpty).toList();
     if (ids.isEmpty) return const <String, List<ManualAttendanceRecord>>{};
 
-    for (final id in ids) {
-      await finalizeSessionPendingAsAbsent(id);
+    // finalizeSessionPendingAsAbsent does I/O per session; run in small parallel
+    // batches so attendance reports don't block on dozens of sequential awaits.
+    const finalizeBatchSize = 8;
+    for (final batch in _chunk(ids, finalizeBatchSize)) {
+      await Future.wait(
+        batch.map((id) => finalizeSessionPendingAsAbsent(id)),
+      );
     }
 
+    final recordChunks = _chunk(ids, 10);
+    final recordSnaps = await Future.wait(
+      recordChunks.map(
+        (chunk) => _firestore
+            .collection(_recordsCollection)
+            .where('sessionId', whereIn: chunk)
+            .get(),
+      ),
+    );
     final records = <ManualAttendanceRecord>[];
-    for (final chunk in _chunk(ids, 10)) {
-      final snapshot = await _firestore
-          .collection(_recordsCollection)
-          .where('sessionId', whereIn: chunk)
-          .get();
-      records.addAll(snapshot.docs.map(ManualAttendanceRecord.fromDoc));
+    for (final snap in recordSnaps) {
+      records.addAll(snap.docs.map(ManualAttendanceRecord.fromDoc));
     }
 
     final grouped = <String, List<ManualAttendanceRecord>>{};
