@@ -23,6 +23,9 @@ class AttendanceSessionExportService {
   /// Loads [manual_attendance_sessions] + [manual_attendance_records] for [sessionId],
   /// verifies the current lecturer owns [session.sectionId], builds UTF-8 CSV with BOM,
   /// and opens the system share sheet ([XFile.fromData] — works on web without `dart:io`).
+  ///
+  /// iOS note: when sharing XFile.fromData, file name must be passed via
+  /// fileNameOverrides (the `name` in XFile.fromData is ignored on most platforms).
   Future<void> exportSessionCsvAndShare(String sessionId) async {
     final sid = sessionId.trim();
     if (sid.isEmpty) {
@@ -53,19 +56,20 @@ class AttendanceSessionExportService {
     bytes[2] = 0xBF;
     bytes.setRange(3, bytes.length, raw);
 
-    final xFile = XFile.fromData(
-      bytes,
-      name: filename,
-      mimeType: 'text/csv',
-    );
+    final xFile = XFile.fromData(bytes, mimeType: 'text/csv');
 
     try {
-      await Share.shareXFiles([xFile], subject: filename);
+      await Share.shareXFiles(
+        [xFile],
+        subject: filename,
+        fileNameOverrides: [filename],
+      );
     } catch (e) {
       // share_plus may call path_provider for temp files; channel can be missing after
       // hot reload or until a full native rebuild. Some embedders wrap as PlatformException.
       if (kIsWeb) rethrow;
-      final usePlainShare = e is MissingPluginException ||
+      final usePlainShare =
+          e is MissingPluginException ||
           (e is PlatformException &&
               (e.code == 'channel-error' ||
                   (e.message?.contains('No implementation found') ?? false) ||
@@ -95,15 +99,23 @@ class AttendanceSessionExportService {
     final startKey = session.lectureStartTime.replaceAll(RegExp(r'[^\d]'), '');
     final cc = _sanitizeFilePart(session.courseCode ?? 'course');
     final sec = _sanitizeFilePart(session.sectionLabel);
-    final shortSid =
-        session.sessionId.length > 8 ? session.sessionId.substring(0, 8) : session.sessionId;
+    final shortSid = session.sessionId.length > 8
+        ? session.sessionId.substring(0, 8)
+        : session.sessionId;
     return 'Attendance_${cc}_${sec}_${dateKey}_${startKey}_$shortSid.csv';
   }
 
   String _sanitizeFilePart(String raw) {
-    final s = raw.trim().replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    if (s.isEmpty) return 'na';
-    return s.length > 32 ? s.substring(0, 32) : s;
+    final withoutInvalidFsChars = raw.trim().replaceAll(
+      RegExp(r'[\\/:*?"<>|]'),
+      '_',
+    );
+    final asciiSafe = withoutInvalidFsChars
+        .replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+    if (asciiSafe.isEmpty) return 'na';
+    return asciiSafe.length > 32 ? asciiSafe.substring(0, 32) : asciiSafe;
   }
 
   String _buildCsv({
@@ -126,8 +138,10 @@ class AttendanceSessionExportService {
       meta('courseCode', session.courseCode!);
     }
     meta('sectionLabel', session.sectionLabel);
-    meta('lectureDate',
-        '${session.lectureDate.year}-${session.lectureDate.month.toString().padLeft(2, '0')}-${session.lectureDate.day.toString().padLeft(2, '0')}');
+    meta(
+      'lectureDate',
+      '${session.lectureDate.year}-${session.lectureDate.month.toString().padLeft(2, '0')}-${session.lectureDate.day.toString().padLeft(2, '0')}',
+    );
     meta('lectureStartTime', session.lectureStartTime);
     meta('lectureEndTime', session.lectureEndTime);
     meta('dayOfWeek', '${session.dayOfWeek}');

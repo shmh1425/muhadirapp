@@ -296,6 +296,65 @@ class ManualAttendanceService {
     return true;
   }
 
+  /// Manual mode policy:
+  /// when lecturer starts manual attendance, any remaining pending students are
+  /// considered present by default unless lecturer marks them absent later.
+  Future<int> markPendingAsPresentForManual(
+    String sessionId, {
+    DateTime? markTime,
+  }) async {
+    final id = sessionId.trim();
+    if (id.isEmpty) return 0;
+
+    final session = await getSessionById(id);
+    final attendanceTime =
+        (session?.lectureStartTime.trim().isNotEmpty ?? false)
+        ? session!.lectureStartTime.trim()
+        : _hhmm(markTime ?? DateTime.now());
+    final updater =
+        LecturerAuthService.instance.currentLecturer?.lecturerId ?? '';
+
+    final pendingSnapshot = await _firestore
+        .collection(_recordsCollection)
+        .where('sessionId', isEqualTo: id)
+        .where(
+          'status',
+          isEqualTo: ManualAttendanceRecord.statusToString(
+            ManualAttendanceStatus.pending,
+          ),
+        )
+        .get();
+    if (pendingSnapshot.docs.isEmpty) {
+      await _firestore.collection(_sessionsCollection).doc(id).set({
+        'attendanceMethod': 'manual',
+        'updatedAt': FieldValue.serverTimestamp(),
+        'updatedBy': updater,
+      }, SetOptions(merge: true));
+      return 0;
+    }
+
+    final batch = _firestore.batch();
+    for (final doc in pendingSnapshot.docs) {
+      batch.set(doc.reference, {
+        'status': ManualAttendanceRecord.statusToString(
+          ManualAttendanceStatus.present,
+        ),
+        'attendanceTime': attendanceTime,
+        'attendanceMethod': 'manual',
+        'updatedBy': updater,
+        'updatedByRole': 'lecturer',
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
+    batch.set(_firestore.collection(_sessionsCollection).doc(id), {
+      'attendanceMethod': 'manual',
+      'updatedAt': FieldValue.serverTimestamp(),
+      'updatedBy': updater,
+    }, SetOptions(merge: true));
+    await batch.commit();
+    return pendingSnapshot.docs.length;
+  }
+
   Future<bool> finalizeSessionPendingAsAbsent(
     String sessionId, {
     DateTime? currentTime,
@@ -575,6 +634,10 @@ class ManualAttendanceService {
     if (value is int) return value;
     if (value is num) return value.toInt();
     return int.tryParse((value ?? '').toString()) ?? 0;
+  }
+
+  static String _hhmm(DateTime value) {
+    return '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
   }
 
   String _attendanceTimeForStatus(ManualAttendanceStatus status) {

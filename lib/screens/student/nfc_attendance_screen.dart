@@ -12,6 +12,7 @@ import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 
 import '../../features/translation/translation_controller.dart';
 import '../../features/translation/widgets/t_text.dart';
+import '../../services/attendance/bluetooth_attendance_service.dart';
 import '../../services/attendance/bluetooth_ble_service.dart';
 import '../../services/attendance/nfc_attendance_service.dart';
 import '../../services/attendance/qr_attendance_service.dart';
@@ -38,6 +39,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     with SingleTickerProviderStateMixin {
   final NfcAttendanceService _nfcAttendance = NfcAttendanceService.instance;
   final QrAttendanceService _qrAttendance = QrAttendanceService.instance;
+  final BluetoothAttendanceService _bluetoothAttendance =
+      BluetoothAttendanceService.instance;
   final BluetoothBleService _bluetoothBleService = BluetoothBleService.instance;
   final GlobalKey _qrViewKey = GlobalKey(debugLabel: 'student-qr-scanner');
   final TextEditingController _attendanceCodeController =
@@ -66,6 +69,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   bool _isEnteringQrCode = false;
   bool _isSubmittingAttendanceCode = false;
   bool _isBluetoothScanning = false;
+  bool _isSubmittingBluetoothAttendance = false;
   BluetoothScanResult? _bluetoothScanResult;
   StreamSubscription<BluetoothScanResult>? _bluetoothScanSub;
 
@@ -194,6 +198,111 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     await _bluetoothBleService.stopScanning();
     if (!mounted) return;
     setState(() => _isBluetoothScanning = false);
+  }
+
+  Future<void> _submitBluetoothAttendance() async {
+    if (_isSubmittingBluetoothAttendance) return;
+    final detection = _bluetoothScanResult?.detection;
+    if (detection == null) {
+      await AttendanceResultPopup.show(
+        context,
+        success: false,
+        message: _tr(
+          'لم يتم العثور على جلسة بلوتوث صالحة',
+          'No valid Bluetooth session found',
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSubmittingBluetoothAttendance = true);
+    try {
+      final result = await _bluetoothAttendance
+          .submitAttendanceFromBluetoothSignal(
+            sessionIdHash: detection.sessionIdHash,
+            tokenFragment: detection.tokenFragment,
+            tokenVersion: detection.tokenVersion,
+            detectedSignalStrength: detection.rssi,
+            detectedSignalId: detection.sessionIdHash ?? detection.deviceName,
+            rawPayload: detection.rawPayload,
+            currentTime: DateTime.now(),
+          );
+
+      await _stopBluetoothScan();
+      if (!mounted) return;
+      setState(() {
+        _bluetoothScanResult = BluetoothScanResult(
+          state: BluetoothScanState.detected,
+          message: result.message,
+          detection: detection,
+        );
+      });
+
+      try {
+        final student = StudentAuthService.instance.currentStudent;
+        if (student != null) {
+          await StudentNotificationsService.instance
+              .addAttendanceSuccessNotification(
+                studentId: student.studentId,
+                attendanceMethod: 'bluetooth',
+                courseName: result.session.courseName,
+                section: result.session.section,
+                sectionId: result.session.sectionId,
+                sessionId: result.session.sessionId,
+                lectureDate: result.session.lectureDate,
+                lectureStartTime: result.session.lectureStartTime,
+                lectureEndTime: result.session.lectureEndTime,
+              );
+        }
+      } catch (_) {}
+
+      if (!mounted) return;
+      await AttendanceResultPopup.show(
+        context,
+        success: true,
+        message: _tr(
+          'تم تسجيل الحضور عبر البلوتوث بنجاح',
+          'Bluetooth attendance recorded successfully',
+        ),
+      );
+    } on BluetoothAttendanceException catch (e) {
+      if (!mounted) return;
+      final message = _localizedBluetoothSubmitError(e);
+      setState(() {
+        _bluetoothScanResult = BluetoothScanResult(
+          state: BluetoothScanState.error,
+          message: message,
+          detection: detection,
+        );
+      });
+      await AttendanceResultPopup.show(
+        context,
+        success: false,
+        message: message,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      final message = _tr(
+        'تعذر تسجيل الحضور عبر البلوتوث حالياً.',
+        'Unable to record Bluetooth attendance right now.',
+      );
+      setState(() {
+        _bluetoothScanResult = BluetoothScanResult(
+          state: BluetoothScanState.error,
+          message: message,
+          detection: detection,
+        );
+      });
+      await AttendanceResultPopup.show(
+        context,
+        success: false,
+        message: message,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmittingBluetoothAttendance = false);
+      }
+    }
   }
 
   Future<void> _onItemTapped(int index) async {
@@ -1223,10 +1332,19 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                     value: '${detection.rssi} dBm',
                   ),
                   const SizedBox(height: 6),
-                  _BluetoothDetectionLine(
-                    label: _tr('إصدار الرمز', 'Token version'),
-                    value: detection.tokenVersion?.toString() ?? '-',
-                  ),
+                  if (detection.tokenVersion != null)
+                    _BluetoothDetectionLine(
+                      label: _tr('إصدار الرمز', 'Token version'),
+                      value: detection.tokenVersion.toString(),
+                    )
+                  else
+                    _BluetoothDetectionLine(
+                      label: _tr('حالة الجلسة', 'Session status'),
+                      value: _tr(
+                        'تم العثور على إشارة المحاضرة، سيتم التحقق من الجلسة النشطة',
+                        'Lecture signal found. The active session will be verified.',
+                      ),
+                    ),
                   const SizedBox(height: 6),
                   _BluetoothDetectionLine(
                     label: _tr('معرّف الإشارة', 'Signal ID'),
@@ -1241,7 +1359,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
             width: 240,
             height: 44,
             child: FilledButton.icon(
-              onPressed: _isBluetoothScanning
+              onPressed: _isSubmittingBluetoothAttendance
+                  ? null
+                  : _isBluetoothScanning
                   ? _stopBluetoothScan
                   : _startBluetoothScan,
               icon: _isBluetoothScanning
@@ -1272,6 +1392,49 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
               ),
             ),
           ),
+          if (detection != null) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: 280,
+              height: 46,
+              child: FilledButton.icon(
+                onPressed:
+                    _isSubmittingBluetoothAttendance || _isBluetoothScanning
+                    ? null
+                    : _submitBluetoothAttendance,
+                icon: _isSubmittingBluetoothAttendance
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.how_to_reg_rounded, size: 18),
+                label: Text(
+                  _isSubmittingBluetoothAttendance
+                      ? _tr('جاري التسجيل...', 'Submitting...')
+                      : _tr(
+                          'تسجيل الحضور عبر البلوتوث',
+                          'Submit Bluetooth Attendance',
+                        ),
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF2B9E56),
+                  disabledBackgroundColor: const Color(0xFFB6C7C9),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1287,8 +1450,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         );
       case BluetoothScanState.detected:
         return _tr(
-          'تم العثور على إشارة المحاضرة. سيتم التحقق وتسجيل الحضور في المرحلة القادمة.',
-          'Lecture signal found. Validation and attendance recording will be enabled in the next phase.',
+          'تم العثور على إشارة المحاضرة. اضغطي تسجيل الحضور للمتابعة.',
+          'Lecture signal found. Tap Submit Bluetooth Attendance to continue.',
         );
       case BluetoothScanState.notFound:
         return _tr(
@@ -1323,6 +1486,54 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     }
   }
 
+  String _localizedBluetoothSubmitError(BluetoothAttendanceException error) {
+    final lower = error.message.toLowerCase();
+    if (lower.contains('أكثر من جلسة') ||
+        lower.contains('multiple active bluetooth sessions')) {
+      return _tr(
+        'توجد أكثر من جلسة بلوتوث نشطة، يرجى اختيار المحاضرة أو استخدام QR',
+        'Multiple active Bluetooth sessions were found. Please use QR or select the lecture.',
+      );
+    }
+    if (lower.contains('جلسة بلوتوث نشطة') ||
+        lower.contains('active bluetooth session')) {
+      return _tr(
+        'لم يتم العثور على جلسة بلوتوث نشطة لهذه المحاضرة',
+        'No active Bluetooth session was found for this lecture.',
+      );
+    }
+    switch (error.code) {
+      case BluetoothAttendanceErrorCode.sessionNotFound:
+      case BluetoothAttendanceErrorCode.tokenMismatch:
+      case BluetoothAttendanceErrorCode.weakSignal:
+        return _tr(
+          'لم يتم العثور على جلسة بلوتوث صالحة',
+          'No valid Bluetooth session found',
+        );
+      case BluetoothAttendanceErrorCode.sessionClosed:
+        return _tr('جلسة البلوتوث مغلقة', 'Bluetooth session is closed');
+      case BluetoothAttendanceErrorCode.sessionExpired:
+      case BluetoothAttendanceErrorCode.attendanceWindowClosed:
+        return _tr('انتهت صلاحية جلسة البلوتوث', 'Bluetooth session expired');
+      case BluetoothAttendanceErrorCode.studentNotEnrolled:
+        return _tr(
+          'الطالبة غير مسجلة في هذه الشعبة',
+          'You are not enrolled in this section',
+        );
+      case BluetoothAttendanceErrorCode.alreadyMarked:
+        return _tr('تم تسجيل الحضور مسبقًا', 'Attendance already recorded');
+      case BluetoothAttendanceErrorCode.invalidInput:
+      case BluetoothAttendanceErrorCode.missingLecturerSession:
+      case BluetoothAttendanceErrorCode.unknown:
+        return error.message.trim().isNotEmpty
+            ? error.message
+            : _tr(
+                'تعذر تسجيل الحضور عبر البلوتوث حالياً.',
+                'Unable to record Bluetooth attendance right now.',
+              );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final translation = TranslationController.instance;
@@ -1351,9 +1562,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                   children: [
                     IconButton(
                       onPressed: () => Navigator.of(context).maybePop(),
-                      icon: StudentBackChevronIcon(
-                        color: Color(0xFF006571),
-                      ),
+                      icon: StudentBackChevronIcon(color: Color(0xFF006571)),
                     ),
                     const SizedBox(width: 6),
                     const TText(
@@ -1784,6 +1993,107 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                                 ),
                               ),
                             ),
+                            const SizedBox(height: 12),
+                            Container(
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                              ),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(0xFFCCE8EA),
+                                ),
+                              ),
+                              child: Column(
+                                children: [
+                                  TextField(
+                                    controller: _attendanceCodeController,
+                                    keyboardType: TextInputType.number,
+                                    textAlign: TextAlign.center,
+                                    maxLength: 6,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.digitsOnly,
+                                    ],
+                                    style: const TextStyle(
+                                      fontFamily: 'Cairo',
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 2,
+                                      color: Color(0xFF1F2E33),
+                                    ),
+                                    decoration: InputDecoration(
+                                      counterText: '',
+                                      labelText: _tr(
+                                        'أدخلي رمز الحضور (6 أرقام)',
+                                        'Enter attendance code (6 digits)',
+                                      ),
+                                      labelStyle: const TextStyle(
+                                        fontFamily: 'Cairo',
+                                        color: Color(0xFF5F7A80),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: const BorderSide(
+                                          color: Color(0xFFCCE8EA),
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: const BorderSide(
+                                          color: Color(0xFF006571),
+                                          width: 2,
+                                        ),
+                                      ),
+                                    ),
+                                    onSubmitted: (_) => _submitAttendanceCode(),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 42,
+                                    child: OutlinedButton.icon(
+                                      onPressed: _isSubmittingAttendanceCode
+                                          ? null
+                                          : _submitAttendanceCode,
+                                      icon: _isSubmittingAttendanceCode
+                                          ? const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : const Icon(
+                                              Icons.pin_rounded,
+                                              size: 18,
+                                            ),
+                                      label: Text(
+                                        _tr('تحقق من الرمز', 'Verify Code'),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontFamily: 'Cairo',
+                                        ),
+                                      ),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: const Color(
+                                          0xFF006571,
+                                        ),
+                                        side: const BorderSide(
+                                          color: Color(0xFF006571),
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            22,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                             const SizedBox(height: 14),
                             SizedBox(
                               width: 210,
@@ -1931,6 +2241,7 @@ class _BluetoothDetectionLine extends StatelessWidget {
             value,
             textAlign: TextAlign.end,
             overflow: TextOverflow.ellipsis,
+            maxLines: 2,
             style: const TextStyle(
               color: Color(0xFF1F2E33),
               fontSize: 12,
@@ -1966,7 +2277,9 @@ class _ModeChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(18),
           border: isActive
               ? null
-              : Border.all(color: const Color(0xFF006571).withValues(alpha: 0.22)),
+              : Border.all(
+                  color: const Color(0xFF006571).withValues(alpha: 0.22),
+                ),
         ),
         child: Center(
           child: Padding(

@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
-import 'dart:typed_data';
 
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_ble_peripheral/flutter_ble_peripheral.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -112,6 +112,7 @@ class BluetoothBleService {
   Future<BluetoothBleSupportResult> checkPlatformSupport(
     BluetoothBleRole role,
   ) async {
+    _debugLog('support_check platform=$_platformLabel role=$role');
     if (!Platform.isAndroid && !Platform.isIOS) {
       return BluetoothBleSupportResult(
         status: BluetoothBleSupportStatus.unsupported,
@@ -123,6 +124,9 @@ class BluetoothBleService {
 
     if (role == BluetoothBleRole.broadcaster) {
       final supported = await _peripheral.isSupported;
+      _debugLog(
+        'broadcast_support platform=$_platformLabel supported=$supported',
+      );
       if (!supported) {
         return const BluetoothBleSupportResult(
           status: BluetoothBleSupportStatus.unsupported,
@@ -131,10 +135,20 @@ class BluetoothBleService {
         );
       }
       final isOn = await _peripheral.isBluetoothOn;
+      _debugLog(
+        'broadcast_support platform=$_platformLabel isBluetoothOn=$isOn',
+      );
       if (!isOn) {
         return const BluetoothBleSupportResult(
           status: BluetoothBleSupportStatus.off,
           message: 'Bluetooth is turned off.',
+        );
+      }
+      if (Platform.isIOS) {
+        final stableStatus = await _waitForStableBleStatus();
+        _debugLog(
+          'broadcast_support platform=$_platformLabel stableBleStatus=$stableStatus '
+          'allowUnknown=${stableStatus == BleStatus.unknown}',
         );
       }
       return const BluetoothBleSupportResult(
@@ -183,6 +197,9 @@ class BluetoothBleService {
 
     if (Platform.isIOS) {
       final status = await Permission.bluetooth.request();
+      _debugLog(
+        'permission_check platform=$_platformLabel role=$role status=$status',
+      );
       if (!status.isGranted && !status.isLimited) {
         return const BluetoothBleSupportResult(
           status: BluetoothBleSupportStatus.permissionDenied,
@@ -238,6 +255,13 @@ class BluetoothBleService {
     }
 
     final data = _buildAdvertiseData(session);
+    final stableStatus = _scanner.status;
+    final attemptedDespiteUnknown =
+        Platform.isIOS && stableStatus == BleStatus.unknown;
+    _debugLog(
+      'advertising_attempt platform=$_platformLabel bleStatus=$stableStatus '
+      'attemptedDespiteUnknown=$attemptedDespiteUnknown',
+    );
     try {
       await _peripheral.stop();
     } catch (_) {
@@ -246,24 +270,55 @@ class BluetoothBleService {
 
     try {
       final state = await _peripheral.start(advertiseData: data);
+      _debugLog(
+        'advertising_start_return platform=$_platformLabel state=$state',
+      );
       if (_isPeripheralPermissionReady(state) ||
           state == BluetoothPeripheralState.ready) {
         _broadcastState = BluetoothBroadcastState.broadcasting;
+        _debugLog(
+          'advertising_start_success platform=$_platformLabel state=$state',
+        );
         return const BluetoothBroadcastResult(
           state: BluetoothBroadcastState.broadcasting,
           message: 'Bluetooth broadcast is active.',
         );
       }
+      if (Platform.isIOS && state == BluetoothPeripheralState.unknown) {
+        final isAdvertising = await _waitForAdvertisingState();
+        _debugLog(
+          'advertising_unknown_result platform=$_platformLabel '
+          'isAdvertising=$isAdvertising',
+        );
+        if (isAdvertising) {
+          _broadcastState = BluetoothBroadcastState.broadcasting;
+          _debugLog(
+            'advertising_start_success platform=$_platformLabel '
+            'source=isAdvertising',
+          );
+          return const BluetoothBroadcastResult(
+            state: BluetoothBroadcastState.broadcasting,
+            message: 'Bluetooth broadcast is active.',
+          );
+        }
+      }
       _broadcastState = BluetoothBroadcastState.error;
+      _debugLog(
+        'advertising_start_failure platform=$_platformLabel state=$state',
+      );
       return BluetoothBroadcastResult(
         state: BluetoothBroadcastState.error,
         message: _messageForPeripheralState(state),
       );
     } catch (e) {
       _broadcastState = BluetoothBroadcastState.error;
+      _debugLog(
+        'advertising_start_exception platform=$_platformLabel error=$e',
+      );
       return BluetoothBroadcastResult(
         state: BluetoothBroadcastState.error,
-        message: 'Failed to start Bluetooth broadcast: $e',
+        message:
+            'Unable to start Bluetooth broadcast. Make sure Bluetooth is on and try again.',
       );
     }
   }
@@ -475,6 +530,79 @@ class BluetoothBleService {
         state == BluetoothPeripheralState.ready;
   }
 
+  Future<BleStatus> _waitForStableBleStatus({
+    Duration timeout = const Duration(seconds: 3),
+  }) async {
+    final initial = _scanner.status;
+    _debugLog(
+      'ble_status platform=$_platformLabel source=initial raw=$initial',
+    );
+    if (initial != BleStatus.unknown) return initial;
+
+    final completer = Completer<BleStatus>();
+    late final StreamSubscription<BleStatus> subscription;
+    Timer? timer;
+    var latest = initial;
+
+    subscription = _scanner.statusStream.listen(
+      (status) {
+        latest = status;
+        _debugLog(
+          'ble_status platform=$_platformLabel source=stream raw=$status',
+        );
+        if (status != BleStatus.unknown && !completer.isCompleted) {
+          completer.complete(status);
+        }
+      },
+      onError: (Object error) {
+        _debugLog('ble_status_error platform=$_platformLabel error=$error');
+      },
+    );
+    timer = Timer(timeout, () {
+      if (!completer.isCompleted) completer.complete(latest);
+    });
+
+    try {
+      final status = await completer.future;
+      _debugLog('ble_status_stable platform=$_platformLabel raw=$status');
+      return status;
+    } finally {
+      timer.cancel();
+      await subscription.cancel();
+    }
+  }
+
+  Future<bool> _waitForAdvertisingState({
+    Duration timeout = const Duration(seconds: 3),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      final isAdvertising = await _peripheral.isAdvertising;
+      _debugLog(
+        'advertising_state platform=$_platformLabel isAdvertising=$isAdvertising',
+      );
+      if (isAdvertising) return true;
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    final isAdvertising = await _peripheral.isAdvertising;
+    _debugLog(
+      'advertising_state platform=$_platformLabel final=$isAdvertising',
+    );
+    return isAdvertising;
+  }
+
+  String get _platformLabel {
+    if (Platform.isIOS) return 'ios';
+    if (Platform.isAndroid) return 'android';
+    return 'other';
+  }
+
+  void _debugLog(String message) {
+    if (kDebugMode) {
+      debugPrint('[BluetoothBleService] $message');
+    }
+  }
+
   String _messageForPeripheralState(BluetoothPeripheralState state) {
     switch (state) {
       case BluetoothPeripheralState.granted:
@@ -490,7 +618,7 @@ class BluetoothBleService {
       case BluetoothPeripheralState.unsupported:
         return 'Bluetooth broadcasting is not supported on this device in this phase.';
       case BluetoothPeripheralState.unknown:
-        return 'Bluetooth state is unknown.';
+        return 'Bluetooth is still getting ready. Make sure Bluetooth is on and try again.';
     }
   }
 

@@ -363,6 +363,36 @@ service cloud.firestore {
           isBluetoothLecturerOwnerById(old.lecturerId);
     }
 
+    function isValidBluetoothRecordWrite(recordId) {
+      let data = request.resource.data;
+      return isSignedIn() &&
+          recordId.matches('^.+_[0-9]+$') &&
+          data.keys().hasAll([
+            'recordId',
+            'sessionId',
+            'sectionId',
+            'studentId',
+            'studentDocId',
+            'studentName',
+            'studentEmail',
+            'attendanceMethod',
+            'status',
+            'attendanceTime',
+            'proximityStatus',
+            'tokenVersion',
+            'submittedAt',
+            'createdAt',
+            'updatedAt',
+          ]) &&
+          data.recordId == recordId &&
+          data.attendanceMethod == 'bluetooth' &&
+          (data.status == 'present' || data.status == 'late') &&
+          data.studentId is number &&
+          data.sessionId is string &&
+          data.sectionId is string &&
+          data.tokenVersion is number;
+    }
+
     match /admins/{uid} {
       allow read: if isSignedIn() && request.auth.uid == uid;
       allow write: if false;
@@ -508,11 +538,21 @@ service cloud.firestore {
     }
 
     // Bluetooth attendance sessions: lecturer-owned session/token lifecycle.
-    // No BLE scan/record writes are enabled in Phase 1.
     match /bluetooth_attendance_sessions/{sessionId} {
       allow read: if isSignedIn();
       allow create: if isValidBluetoothSessionCreate(sessionId);
       allow update: if isValidBluetoothSessionUpdate();
+      allow delete: if false;
+    }
+
+    // Bluetooth attendance audit records; canonical status remains in
+    // manual_attendance_records/{sessionId}_{studentId}.
+    match /bluetooth_attendance_records/{recordId} {
+      allow read: if true;
+      allow create: if isValidBluetoothRecordWrite(recordId);
+      allow update: if isValidBluetoothRecordWrite(recordId) &&
+          request.resource.data.studentId == resource.data.studentId &&
+          request.resource.data.sessionId == resource.data.sessionId;
       allow delete: if false;
     }
 

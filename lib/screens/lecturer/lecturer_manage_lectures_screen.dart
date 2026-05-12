@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:math' show min;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1215,7 +1213,7 @@ class _LecturerManageLecturesScreenState
               _tr('لا توجد مقررات متاحة حالياً.', 'No courses available now.'),
             )
           else
-            _buildManageCourseScroller(courses),
+            _buildManageCourseDropdown(courses),
           const SizedBox(height: 12),
           _buildManageFilterSectionTitle(
             icon: Icons.view_week_rounded,
@@ -1331,150 +1329,50 @@ class _LecturerManageLecturesScreenState
   bool get _isCourseSelectedForManage =>
       _selectedCourseCode != null && _selectedCourseCode!.trim().isNotEmpty;
 
-  Widget _buildManageCourseScroller(
+  Widget _buildManageCourseDropdown(
     List<({String code, String name})> courses,
   ) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final cardWidth = min(420.0, screenWidth - 56);
-    return SizedBox(
-      height: 90,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: courses.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (_, index) {
-          final course = courses[index];
-          return SizedBox(
-            width: cardWidth,
-            child: _buildManageCoursePillCard(
-              title: course.name,
-              subtitle: course.code,
-              selected: _selectedCourseCode == course.code,
-              onTap: () {
-                setState(() {
-                  _selectedCourseCode = course.code;
-                  _selectedWeekNumber = null;
-                  _selectedDate = null;
-                  _selectedLectureKeys.clear();
-                  _applyFilters();
-                });
-              },
-            ),
-          );
-        },
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFD6E5E8)),
       ),
-    );
-  }
-
-  Widget _buildManageCoursePillCard({
-    required String title,
-    required String subtitle,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: AnimatedScale(
-          scale: selected ? 1.01 : 1,
-          duration: const Duration(milliseconds: 140),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: selected
-                    ? const Color(0xFF0A7E88)
-                    : const Color(0xFFD9E8EB),
-                width: selected ? 1.6 : 1.1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: selected ? 0.06 : 0.03),
-                  blurRadius: 12,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 6,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: selected
-                          ? const [Color(0xFF0B8793), Color(0xFF0A6A74)]
-                          : const [Color(0xFFCFE4E7), Color(0xFFC2DCE0)],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                    ),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 14.4,
-                          color: selected
-                              ? const Color(0xFF11464E)
-                              : const Color(0xFF2F464C),
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      if (subtitle.trim().isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 11.4,
-                            color: selected
-                                ? const Color(0xFF19606B)
-                                : const Color(0xFF69858B),
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Icon(
-                  selected
-                      ? Icons.check_circle_rounded
-                      : Icons.radio_button_unchecked_rounded,
-                  size: 18,
-                  color: selected
-                      ? const Color(0xFF0A7A84)
-                      : const Color(0xFF9EB4BA),
-                ),
-                const SizedBox(width: 2),
-                Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 12,
-                  color: selected
-                      ? const Color(0xFF0A7A84)
-                      : const Color(0xFF96ACB2),
-                ),
-              ],
-            ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String?>(
+          isExpanded: true,
+          value: _selectedCourseCode,
+          hint: Text(_tr('اختاري المقرر', 'Select course')),
+          icon: const Icon(Icons.keyboard_arrow_down_rounded),
+          borderRadius: BorderRadius.circular(12),
+          style: const TextStyle(
+            fontFamily: 'Cairo',
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF2B4B52),
           ),
+          items: courses
+              .map(
+                (course) => DropdownMenuItem<String?>(
+                  value: course.code,
+                  child: Text(
+                    '${course.name} (${course.code})',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              )
+              .toList(),
+          onChanged: (courseCode) {
+            setState(() {
+              _selectedCourseCode = courseCode;
+              _selectedWeekNumber = null;
+              _selectedDate = null;
+              _selectedLectureKeys.clear();
+              _applyFilters();
+            });
+          },
         ),
       ),
     );

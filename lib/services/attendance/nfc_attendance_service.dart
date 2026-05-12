@@ -292,8 +292,7 @@ class NfcAttendanceService {
     }
 
     final rawSectionId = activeSession.sectionId.trim();
-    final normalizedSectionId =
-        rawSectionId.replaceAll(RegExp(r'\s+'), '');
+    final normalizedSectionId = rawSectionId.replaceAll(RegExp(r'\s+'), '');
 
     final enrollmentSnaps = <QuerySnapshot<Map<String, dynamic>>>[];
     enrollmentSnaps.add(
@@ -337,9 +336,12 @@ class NfcAttendanceService {
     final studentProfile = await _loadStudentProfile(studentId);
     final enrollmentData = enrollmentDocs
         .map((d) => d.data())
-        .firstWhere((d) => d['isActive'] != false, orElse: () {
-      return enrollmentDocs.first.data();
-    });
+        .firstWhere(
+          (d) => d['isActive'] != false,
+          orElse: () {
+            return enrollmentDocs.first.data();
+          },
+        );
     final studentName = studentProfile.name.isNotEmpty
         ? studentProfile.name
         : (enrollmentData['studentName'] ?? '').toString().trim();
@@ -452,7 +454,8 @@ class NfcAttendanceService {
         }
         final existingManualRecord = await transaction.get(manualRecordRef);
         if (existingManualRecord.exists) {
-          final existingData = existingManualRecord.data() ?? <String, dynamic>{};
+          final existingData =
+              existingManualRecord.data() ?? <String, dynamic>{};
           final existingStatus = (existingData['status'] ?? '')
               .toString()
               .trim()
@@ -507,8 +510,6 @@ class NfcAttendanceService {
       }
     }
 
-    // If no session matches the lecture time window, still allow the latest
-    // open session. This keeps NFC behavior aligned with manual QR activation.
     return sessions.isNotEmpty ? sessions.first : null;
   }
 

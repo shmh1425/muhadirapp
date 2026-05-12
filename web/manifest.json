@@ -1,6 +1,6 @@
 {
-    "name": "muhadirapp",
-    "short_name": "muhadirapp",
+    "name": "muhadir",
+    "short_name": "muhadir",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FFFFFF",

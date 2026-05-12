@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -13,12 +12,14 @@ import '../../models/attendance/qr_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../models/lecturer/unified_lecturer_catalog.dart';
 import '../../providers/lecturer_catalog_providers.dart';
+import '../../services/attendance/attendance_status_policy.dart';
 import '../../services/attendance/bluetooth_attendance_service.dart';
 import '../../services/attendance/bluetooth_ble_service.dart';
 import '../../services/attendance/nfc_attendance_service.dart';
 import '../../services/attendance/qr_attendance_service.dart';
 import '../../services/lecturer/lecture_repository.dart';
 import '../../services/lecturer/calendar_sync_service.dart';
+import '../../services/lecturer/lecturer_sections_service.dart';
 import '../../utils/shared/time_utils.dart';
 import 'lecturer_language.dart';
 
@@ -51,9 +52,9 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
   bool _isLoadingSession = false;
   bool _isLoadingNfcAction = false;
   bool _isLoadingBluetoothAction = false;
-  bool _isRefreshingBluetoothToken = false;
   bool _isClosingBluetoothSession = false;
   bool _isStartingBluetoothBroadcast = false;
+  bool _isStoppingBluetoothBroadcast = false;
   BluetoothBroadcastState _bluetoothBroadcastState =
       BluetoothBroadcastState.idle;
   String? _bluetoothBroadcastMessage;
@@ -63,10 +64,13 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
   _QrDisplayMode _qrDisplayMode = _QrDisplayMode.qrCode;
   Timer? _codeRefreshTimer;
   Timer? _bluetoothTokenTimer;
-  static const int _codeRefreshIntervalSeconds = 45;
-  static const int _bluetoothRefreshIntervalSeconds = 45;
+  Timer? _activeLectureSyncTimer;
+  static const int _codeRefreshIntervalSeconds = 30;
+  static const Duration _activeLectureSyncInterval = Duration(seconds: 20);
   int _codeRefreshSecondsLeft = _codeRefreshIntervalSeconds;
-  int _bluetoothSecondsLeft = _bluetoothRefreshIntervalSeconds;
+  bool _isSyncingLectureAndCode = false;
+  DateTime? _lastLecturesReloadAt;
+  bool _isReloadingLectures = false;
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
@@ -88,6 +92,7 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
           });
         });
     unawaited(_bootstrapQr());
+    _startActiveLectureSyncTimer();
   }
 
   void _onLecturerLanguageChanged() {
@@ -140,6 +145,7 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
     _nfcSessionsSub?.cancel();
     _stopCodeRefreshTimer();
     _stopBluetoothTokenTimer();
+    _stopActiveLectureSyncTimer();
     _bluetoothBleService.stopAdvertisingSession();
     super.dispose();
   }
@@ -149,7 +155,7 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
     _isSyncRefreshing = true;
     try {
       await _calendarRepository.refreshAcademicCalendar();
-      if (!mounted) return;
+      await _reloadLecturesFromSource(force: true);
       await _syncLectureAndCode();
     } catch (_) {
       // Ignore transient realtime listener errors.
@@ -159,115 +165,325 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
   }
 
   Future<void> _syncLectureAndCode() async {
-    final lecture = _resolveCurrentLecture();
-    if (mounted) {
-      setState(() {
-        _activeLecture = lecture;
-        _sessionErrorMessage = null;
-        _recomputeNfcActiveForCurrentLecture();
-      });
-    }
-
-    if (lecture == null) {
-      if (!mounted) return;
-      setState(() {
-        _qrSession = null;
-        _qrData = '';
-      });
-      _stopCodeRefreshTimer();
-      return;
-    }
-
-    final missingFields = <String>[];
-    if ((lecture.sectionId ?? '').trim().isEmpty) {
-      missingFields.add('sectionId');
-    }
-    if (lecture.startTime.trim().isEmpty) {
-      missingFields.add('startTime');
-    }
-
-    if (missingFields.isNotEmpty) {
-      if (!mounted) return;
-      setState(() {
-        _qrSession = null;
-        _qrData = '';
-        _sessionErrorMessage =
-            'تعذر إنشاء جلسة QR: بيانات المحاضرة ناقصة (${missingFields.join(', ')}).';
-      });
-      _stopCodeRefreshTimer();
-      return;
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _isLoadingSession = true;
-    });
-
+    if (_isSyncingLectureAndCode) return;
+    _isSyncingLectureAndCode = true;
     try {
-      final session = await _qrAttendanceService.createOrGetSessionForLecture(
-        lecture: lecture,
-      );
-      if (!mounted) return;
-      setState(() {
-        _qrSession = session;
-        _qrData = _buildQrPayload(session);
-        _sessionErrorMessage = null;
-      });
-      _startCodeRefreshTimer();
-    } on FirebaseException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _qrSession = null;
-        _qrData = '';
-        if (e.code == 'permission-denied') {
-          _sessionErrorMessage =
-              'فشل إنشاء جلسة QR: لا توجد صلاحية للوصول إلى Firestore.';
-        } else {
-          _sessionErrorMessage = 'فشل إنشاء/جلب جلسة QR من Firestore.';
-        }
-      });
-      _stopCodeRefreshTimer();
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _qrSession = null;
-        _qrData = '';
-        _sessionErrorMessage = 'فشل إنشاء/جلب جلسة QR من Firestore.';
-      });
-      _stopCodeRefreshTimer();
-    } finally {
-      if (mounted) {
+      await _reloadLecturesFromSource();
+      final lecture = _resolveCurrentLecture();
+      final lectureChanged = !_isSameLecture(_activeLecture, lecture);
+      if (lecture == null) {
+        final now = _effectiveNowForLectureWindow();
+        final weekdays = _candidateWeekdaysForLectureWindow();
+        final todayCount = _allLectures
+            .where((l) => weekdays.contains(l.dayOfWeek))
+            .length;
+        debugPrint(
+          '[LecturerQrScreen] No active lecture. now=$now weekday=${now.weekday} '
+          'calendarWeekday=${_calendarRepository.currentDateTime.weekday} '
+          'candidateWeekdays=$weekdays '
+          'allLectures=${_allLectures.length} candidateLectures=$todayCount',
+        );
+      }
+      if (mounted && (lectureChanged || _sessionErrorMessage != null)) {
         setState(() {
-          _isLoadingSession = false;
+          _activeLecture = lecture;
+          _sessionErrorMessage = null;
+          _recomputeNfcActiveForCurrentLecture();
+          if (lectureChanged) {
+            _bluetoothSession = null;
+            _bluetoothBroadcastState = BluetoothBroadcastState.idle;
+            _bluetoothBroadcastMessage = null;
+          }
         });
       }
+
+      if (lecture == null) {
+        if (!mounted) return;
+        setState(() {
+          _qrSession = null;
+          _qrData = '';
+        });
+        _stopCodeRefreshTimer();
+        _stopBluetoothTokenTimer();
+        return;
+      }
+
+      if (!lectureChanged && _qrSession != null) {
+        return;
+      }
+
+      final missingFields = <String>[];
+      if ((lecture.sectionId ?? '').trim().isEmpty) {
+        missingFields.add('sectionId');
+      }
+      if (lecture.startTime.trim().isEmpty) {
+        missingFields.add('startTime');
+      }
+
+      if (missingFields.isNotEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _qrSession = null;
+          _qrData = '';
+          _sessionErrorMessage =
+              'تعذر إنشاء جلسة QR: بيانات المحاضرة ناقصة (${missingFields.join(', ')}).';
+        });
+        _stopCodeRefreshTimer();
+        return;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _isLoadingSession = true;
+      });
+
+      try {
+        final session = await _qrAttendanceService.createOrGetSessionForLecture(
+          lecture: lecture,
+          lectureDate: _effectiveNowForLectureWindow(),
+        );
+        if (!mounted) return;
+        setState(() {
+          _qrSession = session;
+          _qrData = _buildQrPayload(session);
+          _sessionErrorMessage = null;
+        });
+        _startCodeRefreshTimer();
+      } on FirebaseException catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _qrSession = null;
+          _qrData = '';
+          if (e.code == 'permission-denied') {
+            _sessionErrorMessage =
+                'فشل إنشاء جلسة QR: لا توجد صلاحية للوصول إلى Firestore.';
+          } else {
+            _sessionErrorMessage = 'فشل إنشاء/جلب جلسة QR من Firestore.';
+          }
+        });
+        _stopCodeRefreshTimer();
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _qrSession = null;
+          _qrData = '';
+          _sessionErrorMessage = 'فشل إنشاء/جلب جلسة QR من Firestore.';
+        });
+        _stopCodeRefreshTimer();
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoadingSession = false;
+          });
+        }
+      }
+    } finally {
+      _isSyncingLectureAndCode = false;
     }
+  }
+
+  Future<void> _reloadLecturesFromSource({bool force = false}) async {
+    if (_isReloadingLectures) return;
+    final now = DateTime.now();
+    final shouldReload =
+        force ||
+        _allLectures.isEmpty ||
+        _lastLecturesReloadAt == null ||
+        now.difference(_lastLecturesReloadAt!) > const Duration(minutes: 2);
+    if (!shouldReload) return;
+
+    _isReloadingLectures = true;
+    try {
+      final list = await LecturerSectionsService.instance
+          .getLecturesForCurrentLecturer();
+      final fallback = LecturerSectionsService.instance.cachedLectures;
+      final effectiveList = list.isEmpty && fallback.isNotEmpty
+          ? fallback
+          : list;
+      if (!mounted) return;
+      setState(() {
+        _allLectures = effectiveList;
+        _lastLecturesReloadAt = DateTime.now();
+      });
+      debugPrint(
+        '[LecturerQrScreen] reload lectures fetched=${list.length} '
+        'effective=${effectiveList.length} cached=${fallback.length}',
+      );
+    } catch (_) {
+      // Keep current in-memory list on transient errors.
+    } finally {
+      _isReloadingLectures = false;
+    }
+  }
+
+  bool _isSameLecture(LectureItem? a, LectureItem? b) {
+    if (a == null || b == null) return a == b;
+    final aSectionId = (a.sectionId ?? '').trim();
+    final bSectionId = (b.sectionId ?? '').trim();
+    return aSectionId == bSectionId &&
+        a.dayOfWeek == b.dayOfWeek &&
+        a.startTime.trim() == b.startTime.trim() &&
+        a.endTime.trim() == b.endTime.trim() &&
+        a.crn.trim() == b.crn.trim();
+  }
+
+  void _startActiveLectureSyncTimer() {
+    _stopActiveLectureSyncTimer();
+    _activeLectureSyncTimer = Timer.periodic(_activeLectureSyncInterval, (_) {
+      if (!mounted) return;
+      _syncLectureAndCode();
+    });
+  }
+
+  void _stopActiveLectureSyncTimer() {
+    _activeLectureSyncTimer?.cancel();
+    _activeLectureSyncTimer = null;
   }
 
   LectureItem? _resolveCurrentLecture() {
     if (widget.lecture != null) return widget.lecture;
 
-    final now = _calendarRepository.currentDateTime;
-    final dayLectures = TimeUtils.sortLecturesByTime(
-      _allLectures.where((l) => l.dayOfWeek == now.weekday).toList(),
-      (l) => l.startTime,
-    );
-    for (final lecture in dayLectures) {
-      if (_isCurrentLecture(lecture, now)) {
-        return lecture;
+    final now = _effectiveNowForLectureWindow();
+    final weekdays = _candidateWeekdaysForLectureWindow();
+    for (final weekday in weekdays) {
+      final dayLectures = TimeUtils.sortLecturesByTime(
+        _allLectures.where((l) => l.dayOfWeek == weekday).toList(),
+        (l) => l.startTime,
+      );
+      for (final lecture in dayLectures) {
+        if (_isCurrentLecture(lecture, now)) {
+          return lecture;
+        }
       }
     }
+
+    // Fallback: if strict detection fails due time-format mismatch, pick the
+    // nearest lecture from today's schedule within a reasonable window.
+    return _resolveNearestTodayLecture(now, weekdays);
+  }
+
+  LectureItem? _resolveNearestTodayLecture(DateTime now, List<int> weekdays) {
+    Duration? bestDistance;
+    LectureItem? bestLecture;
+
+    final dayLectures = _allLectures.where(
+      (l) => weekdays.contains(l.dayOfWeek),
+    );
+    for (final lecture in dayLectures) {
+      final (startH, startM) = TimeUtils.parseTimeString(lecture.startTime);
+      final (endH, endM) = TimeUtils.parseTimeString(lecture.endTime);
+      final ranges = _buildLectureRangesForCurrentDay(
+        now: now,
+        startH: startH,
+        startM: startM,
+        endH: endH,
+        endM: endM,
+      );
+      for (final range in ranges) {
+        final start = range.$1;
+        final end = range.$2;
+        final openWindowStart = start.subtract(
+          AttendanceStatusPolicy.attendanceEarlyWindow,
+        );
+        final openWindowEnd = end.add(
+          AttendanceStatusPolicy.attendanceLateWindow,
+        );
+
+        // If now is within the attendance window for this lecture, prefer it
+        // immediately even if strict exact range check failed.
+        final inAttendanceWindow =
+            (now.isAfter(openWindowStart) ||
+                now.isAtSameMomentAs(openWindowStart)) &&
+            (now.isBefore(openWindowEnd) ||
+                now.isAtSameMomentAs(openWindowEnd));
+        if (inAttendanceWindow) {
+          return lecture;
+        }
+
+        final distance = _distanceToRange(now, start, end);
+        if (bestDistance == null || distance < bestDistance) {
+          bestDistance = distance;
+          bestLecture = lecture;
+        }
+      }
+    }
+
+    // Guard against selecting far-away lectures when there is no nearby slot.
+    if (bestDistance != null && bestDistance <= const Duration(hours: 2)) {
+      return bestLecture;
+    }
     return null;
+  }
+
+  Duration _distanceToRange(DateTime now, DateTime start, DateTime end) {
+    if (now.isBefore(start)) return start.difference(now);
+    if (now.isAfter(end)) return now.difference(end);
+    return Duration.zero;
+  }
+
+  List<int> _candidateWeekdaysForLectureWindow() {
+    final calendarWeekday = _calendarRepository.currentDateTime.weekday;
+    final deviceWeekday = DateTime.now().weekday;
+    final values = <int>[calendarWeekday];
+    if (!values.contains(deviceWeekday)) {
+      values.add(deviceWeekday);
+    }
+    return values;
+  }
+
+  DateTime _effectiveNowForLectureWindow() {
+    return DateTime.now();
   }
 
   bool _isCurrentLecture(LectureItem lecture, DateTime now) {
     final (startH, startM) = TimeUtils.parseTimeString(lecture.startTime);
     final (endH, endM) = TimeUtils.parseTimeString(lecture.endTime);
-    final start = DateTime(now.year, now.month, now.day, startH, startM);
-    final end = DateTime(now.year, now.month, now.day, endH, endM);
-    final isAfterStart = now.isAfter(start) || now.isAtSameMomentAs(start);
-    final isBeforeEnd = now.isBefore(end) || now.isAtSameMomentAs(end);
-    return isAfterStart && isBeforeEnd;
+    final ranges = _buildLectureRangesForCurrentDay(
+      now: now,
+      startH: startH,
+      startM: startM,
+      endH: endH,
+      endM: endM,
+    );
+    for (final range in ranges) {
+      final start = range.$1;
+      final end = range.$2;
+      final isAfterStart = now.isAfter(start) || now.isAtSameMomentAs(start);
+      final isBeforeEnd = now.isBefore(end) || now.isAtSameMomentAs(end);
+      if (isAfterStart && isBeforeEnd) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  List<(DateTime, DateTime)> _buildLectureRangesForCurrentDay({
+    required DateTime now,
+    required int startH,
+    required int startM,
+    required int endH,
+    required int endM,
+  }) {
+    final ranges = <(DateTime, DateTime)>[];
+    void addRange(int sH, int sM, int eH, int eM) {
+      var start = DateTime(now.year, now.month, now.day, sH, sM);
+      var end = DateTime(now.year, now.month, now.day, eH, eM);
+      if (end.isBefore(start)) {
+        end = end.add(const Duration(days: 1));
+      }
+      ranges.add((start, end));
+    }
+
+    addRange(startH, startM, endH, endM);
+
+    // Some schedules are stored as 12-hour values without AM/PM (e.g. 03:00
+    // meaning 3 PM). In that case, also test a PM-shifted candidate.
+    final canShiftToPm = startH >= 1 && startH <= 7 && endH >= 1 && endH <= 7;
+    if (canShiftToPm) {
+      addRange(startH + 12, startM, endH + 12, endM);
+    }
+
+    return ranges;
   }
 
   String _buildQrPayload(QrAttendanceSession session) {
@@ -293,7 +509,7 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
       return;
     }
 
-    final now = _calendarRepository.currentDateTime;
+    final now = _effectiveNowForLectureWindow();
     final today = DateTime(now.year, now.month, now.day);
     _isNfcActiveForLecture = _openNfcSessions.any((session) {
       return session.isOpen &&
@@ -421,7 +637,7 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
       final session = await _bluetoothAttendanceService
           .createOrGetSessionForLecture(
             lecture: lecture,
-            lectureDate: _calendarRepository.currentDateTime,
+            lectureDate: _effectiveNowForLectureWindow(),
           );
       if (!mounted) return;
       setState(() {
@@ -474,50 +690,6 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
     }
   }
 
-  Future<void> _refreshBluetoothToken() async {
-    final session = _bluetoothSession;
-    if (_isRefreshingBluetoothToken || session == null) return;
-
-    setState(() => _isRefreshingBluetoothToken = true);
-    try {
-      final refreshed = await _bluetoothAttendanceService.refreshSessionToken(
-        session.sessionId,
-      );
-      if (!mounted) return;
-      setState(() {
-        _bluetoothSession = refreshed;
-        _sessionErrorMessage = null;
-      });
-      if (_bluetoothBroadcastState == BluetoothBroadcastState.broadcasting) {
-        await _startBluetoothBroadcast(showSnack: false);
-      }
-      _startBluetoothTokenTimer();
-    } on FirebaseException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _sessionErrorMessage = e.code == 'permission-denied'
-            ? _tr(
-                'تعذر تحديث رمز البلوتوث: لا توجد صلاحية للوصول إلى Firestore.',
-                'Failed to refresh Bluetooth token: Firestore permission denied.',
-              )
-            : _tr(
-                'فشل تحديث رمز البلوتوث.',
-                'Failed to refresh Bluetooth token.',
-              );
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _sessionErrorMessage = _tr(
-          'فشل تحديث رمز البلوتوث. تأكدي من الاتصال ثم حاولي مجدداً.',
-          'Failed to refresh Bluetooth token. Check your network and try again.',
-        );
-      });
-    } finally {
-      if (mounted) setState(() => _isRefreshingBluetoothToken = false);
-    }
-  }
-
   Future<void> _closeBluetoothSession() async {
     final session = _bluetoothSession;
     if (_isClosingBluetoothSession || session == null) return;
@@ -530,7 +702,6 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
       _stopBluetoothTokenTimer();
       setState(() {
         _bluetoothSession = null;
-        _bluetoothSecondsLeft = _bluetoothRefreshIntervalSeconds;
         _sessionErrorMessage = null;
         _bluetoothBroadcastState = BluetoothBroadcastState.idle;
         _bluetoothBroadcastMessage = null;
@@ -570,7 +741,12 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
 
   Future<void> _startBluetoothBroadcast({bool showSnack = true}) async {
     final session = _bluetoothSession;
-    if (session == null || _isStartingBluetoothBroadcast) return;
+    if (session == null ||
+        _isStartingBluetoothBroadcast ||
+        _isStoppingBluetoothBroadcast ||
+        _bluetoothBroadcastState == BluetoothBroadcastState.broadcasting) {
+      return;
+    }
 
     setState(() {
       _isStartingBluetoothBroadcast = true;
@@ -581,36 +757,101 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
       );
     });
 
-    final result = await _bluetoothBleService.startAdvertisingSession(session);
-    if (!mounted) return;
-    setState(() {
-      _isStartingBluetoothBroadcast = false;
-      _bluetoothBroadcastState = result.state;
-      _bluetoothBroadcastMessage = _localizedBluetoothHardwareMessage(
-        result.message,
-        broadcasting: true,
+    try {
+      final result = await _bluetoothBleService.startAdvertisingSession(
+        session,
       );
-    });
-    if (showSnack && !result.isBroadcasting) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        SnackBar(
-          content: Text(_bluetoothBroadcastMessage ?? result.message),
-          backgroundColor: const Color(0xFFD14A4A),
-        ),
-      );
+      if (!mounted) return;
+      setState(() {
+        _isStartingBluetoothBroadcast = false;
+        _bluetoothBroadcastState = result.state;
+        _bluetoothBroadcastMessage = _localizedBluetoothHardwareMessage(
+          result.message,
+          broadcasting: true,
+        );
+      });
+      if (showSnack && !result.isBroadcasting) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text(_bluetoothBroadcastMessage ?? result.message),
+            backgroundColor: const Color(0xFFD14A4A),
+          ),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isStartingBluetoothBroadcast = false;
+        _bluetoothBroadcastState = BluetoothBroadcastState.error;
+        _bluetoothBroadcastMessage = _tr(
+          'تعذر بدء البث',
+          'Failed to start broadcast',
+        );
+      });
+      if (showSnack) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text(_bluetoothBroadcastMessage!),
+            backgroundColor: const Color(0xFFD14A4A),
+          ),
+        );
+      }
     }
   }
 
   Future<void> _stopBluetoothBroadcast() async {
-    await _bluetoothBleService.stopAdvertisingSession();
-    if (!mounted) return;
-    setState(() {
-      _bluetoothBroadcastState = BluetoothBroadcastState.idle;
-      _bluetoothBroadcastMessage = _tr(
-        'تم إيقاف بث البلوتوث.',
-        'Bluetooth broadcast stopped.',
+    if (_isStoppingBluetoothBroadcast || _isStartingBluetoothBroadcast) return;
+    setState(() => _isStoppingBluetoothBroadcast = true);
+    try {
+      await _bluetoothBleService.stopAdvertisingSession();
+      if (!mounted) return;
+      setState(() {
+        _bluetoothBroadcastState = BluetoothBroadcastState.idle;
+        _bluetoothBroadcastMessage = _tr('تم إيقاف البث', 'Broadcast stopped');
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _bluetoothBroadcastMessage = _tr(
+          'تعذر إيقاف البث',
+          'Failed to stop broadcast',
+        );
+      });
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: Text(_bluetoothBroadcastMessage!),
+          backgroundColor: const Color(0xFFD14A4A),
+        ),
       );
-    });
+    } finally {
+      if (mounted) {
+        setState(() => _isStoppingBluetoothBroadcast = false);
+      } else {
+        _isStoppingBluetoothBroadcast = false;
+      }
+    }
+  }
+
+  String _bluetoothBroadcastStatusLabel() {
+    if (_isStartingBluetoothBroadcast ||
+        _bluetoothBroadcastState ==
+            BluetoothBroadcastState.requestingPermission) {
+      return _tr('جاري بدء البث...', 'Starting broadcast...');
+    }
+    if (_isStoppingBluetoothBroadcast) {
+      return _tr('جاري إيقاف البث...', 'Stopping broadcast...');
+    }
+    if (_bluetoothBroadcastMessage != null &&
+        _bluetoothBroadcastMessage!.trim().isNotEmpty) {
+      return _bluetoothBroadcastMessage!;
+    }
+    if (_bluetoothBroadcastState == BluetoothBroadcastState.broadcasting) {
+      return _tr(
+        'يتم بث إشارة البلوتوث الآن',
+        'Bluetooth signal is broadcasting now',
+      );
+    }
+    return _tr('جلسة البلوتوث غير نشطة', 'Bluetooth session inactive');
   }
 
   String _localizedBluetoothHardwareMessage(
@@ -649,6 +890,13 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
     if (lower.contains('turned off')) {
       return _tr('البلوتوث غير مفعّل.', 'Bluetooth is turned off.');
     }
+    if (lower.contains('still getting ready') ||
+        lower.contains('unable to start bluetooth broadcast')) {
+      return _tr(
+        'تعذر بدء بث البلوتوث. تأكدي من تشغيل البلوتوث ثم حاولي مرة أخرى.',
+        'Unable to start Bluetooth broadcast. Make sure Bluetooth is on and try again.',
+      );
+    }
     if (lower.contains('active')) {
       return _tr('بث البلوتوث نشط الآن.', 'Bluetooth broadcast is active.');
     }
@@ -657,7 +905,6 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
 
   void _startBluetoothTokenTimer() {
     _stopBluetoothTokenTimer();
-    _bluetoothSecondsLeft = _secondsUntilBluetoothExpiry();
     _bluetoothTokenTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted ||
           _selectedMethod != _CheckInMethod.bluetooth ||
@@ -665,7 +912,10 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
         _stopBluetoothTokenTimer();
         return;
       }
-      setState(() => _bluetoothSecondsLeft = _secondsUntilBluetoothExpiry());
+      final sessionWindowLeft = _secondsUntilBluetoothSessionWindowClose();
+      if (sessionWindowLeft <= 0) {
+        unawaited(_closeBluetoothSession());
+      }
     });
   }
 
@@ -674,10 +924,19 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
     _bluetoothTokenTimer = null;
   }
 
-  int _secondsUntilBluetoothExpiry() {
+  int _secondsUntilBluetoothSessionWindowClose() {
     final session = _bluetoothSession;
-    if (session == null) return _bluetoothRefreshIntervalSeconds;
-    final remaining = session.expiresAt.difference(DateTime.now()).inSeconds;
+    if (session == null) {
+      return BluetoothAttendanceService.manualSessionOpenWindow.inSeconds;
+    }
+    final openedAt = session.openedAt ?? session.sessionOpenedAt;
+    if (openedAt == null) {
+      return BluetoothAttendanceService.manualSessionOpenWindow.inSeconds;
+    }
+    final closeAt = openedAt.add(
+      BluetoothAttendanceService.manualSessionOpenWindow,
+    );
+    final remaining = closeAt.difference(DateTime.now()).inSeconds;
     return remaining < 0 ? 0 : remaining;
   }
 
@@ -698,19 +957,21 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
           'تعذر العثور على جلسة البلوتوث.',
           'Bluetooth session was not found.',
         );
+      case BluetoothAttendanceErrorCode.sessionClosed:
+        return _tr('جلسة البلوتوث مغلقة', 'Bluetooth session is closed');
+      case BluetoothAttendanceErrorCode.sessionExpired:
+      case BluetoothAttendanceErrorCode.attendanceWindowClosed:
+      case BluetoothAttendanceErrorCode.tokenMismatch:
+        return _tr('انتهت صلاحية جلسة البلوتوث.', 'Bluetooth session expired.');
+      case BluetoothAttendanceErrorCode.weakSignal:
+      case BluetoothAttendanceErrorCode.studentNotEnrolled:
+      case BluetoothAttendanceErrorCode.alreadyMarked:
       case BluetoothAttendanceErrorCode.unknown:
         return _tr(
           'تعذر فتح جلسة البلوتوث لهذه المحاضرة.',
           'Failed to start Bluetooth session for this lecture.',
         );
     }
-  }
-
-  String _maskedBluetoothToken(String token) {
-    final trimmed = token.trim();
-    if (trimmed.isEmpty) return '------';
-    if (trimmed.length <= 8) return trimmed;
-    return '${trimmed.substring(0, 4)}****${trimmed.substring(trimmed.length - 4)}';
   }
 
   Future<void> _onEnableNfcPressed() async {
@@ -744,7 +1005,7 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
     try {
       await _nfcAttendanceService.openSessionForLecture(
         lecture: lecture,
-        lectureDate: _calendarRepository.currentDateTime,
+        lectureDate: _effectiveNowForLectureWindow(),
       );
       if (!mounted) return;
       setState(() => _isNfcActiveForLecture = true);
@@ -1374,6 +1635,32 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
                               ),
                             const SizedBox(height: 10),
                             Text(
+                              _tr('رمز الحضور: ', 'Attendance code: '),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF5F7A80),
+                                fontFamily: 'Cairo',
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Directionality(
+                              textDirection: TextDirection.ltr,
+                              child: Text(
+                                _qrSession?.numericCode.isNotEmpty == true
+                                    ? _qrSession!.numericCode
+                                    : '------',
+                                style: const TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 5,
+                                  color: Color(0xFF00474F),
+                                  fontFamily: 'Cairo',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
                               _tr(
                                 'الجلسة متصلة بـ Firestore',
                                 'Session is connected to Firestore',
@@ -1465,80 +1752,47 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
 
   Widget _buildBluetoothSessionPanel() {
     final session = _bluetoothSession;
-    final active = session?.isOpen == true;
-    final token = session == null
-        ? '------'
-        : _maskedBluetoothToken(session.bluetoothSessionToken);
-    final version = session?.tokenVersion.toString() ?? '-';
-    final secondsLeft = session == null
-        ? _bluetoothSecondsLeft
-        : _secondsUntilBluetoothExpiry();
-    final isExpired = session != null && secondsLeft == 0;
+    final isBroadcasting =
+        _bluetoothBroadcastState == BluetoothBroadcastState.broadcasting;
+    final busy =
+        _isLoadingBluetoothAction ||
+        _isStartingBluetoothBroadcast ||
+        _isStoppingBluetoothBroadcast ||
+        _bluetoothBroadcastState ==
+            BluetoothBroadcastState.requestingPermission;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(
-          active ? Icons.bluetooth_connected_rounded : Icons.bluetooth_rounded,
-          size: 64,
+          isBroadcasting
+              ? Icons.bluetooth_connected_rounded
+              : Icons.bluetooth_rounded,
+          size: 48,
           color: const Color(0xFF006571),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         Text(
-          active
-              ? _tr('جلسة البلوتوث نشطة', 'Bluetooth session active')
+          isBroadcasting
+              ? _tr(
+                  'يتم بث إشارة البلوتوث الآن',
+                  'Bluetooth signal is broadcasting now',
+                )
               : _tr('جلسة البلوتوث غير نشطة', 'Bluetooth session inactive'),
           textAlign: TextAlign.center,
           style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
             color: Color(0xFF465A5F),
             fontFamily: 'Cairo',
           ),
         ),
-        const SizedBox(height: 10),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF7FBFC),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFD9E5E8)),
-          ),
-          child: Column(
-            children: [
-              _BluetoothInfoLine(
-                label: _tr('رمز جلسة البلوتوث', 'Bluetooth Session Token'),
-                value: token,
-              ),
-              const SizedBox(height: 6),
-              _BluetoothInfoLine(
-                label: _tr('الإصدار', 'Version'),
-                value: version,
-              ),
-              const SizedBox(height: 6),
-              _BluetoothInfoLine(
-                label: _tr('ينتهي خلال', 'Expires in'),
-                value: isExpired
-                    ? _tr('انتهى الرمز', 'Expired')
-                    : '$secondsLeft ${_tr('ثانية', 's')}',
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
         Text(
-          _bluetoothBroadcastMessage ??
-              (kIsWeb
-                  ? _tr(
-                      'بث البلوتوث غير مدعوم على الويب في هذه المرحلة.',
-                      'Bluetooth broadcasting is not supported on web in this phase.',
-                    )
-                  : _tr(
-                      'يمكنك الآن بدء بث إشارة البلوتوث لاختبارها على جهاز طالبة.',
-                      'You can now start broadcasting the Bluetooth signal for student-device testing.',
-                    )),
+          _bluetoothBroadcastStatusLabel(),
           textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             fontSize: 12,
             color: Color(0xFF5F7A80),
@@ -1547,84 +1801,51 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed:
-              session == null ||
-                  _isStartingBluetoothBroadcast ||
-                  _isLoadingBluetoothAction ||
-                  _bluetoothBroadcastState ==
-                      BluetoothBroadcastState.requestingPermission
-              ? null
-              : (_bluetoothBroadcastState ==
-                        BluetoothBroadcastState.broadcasting
-                    ? _stopBluetoothBroadcast
-                    : () => _startBluetoothBroadcast()),
-          icon: _isStartingBluetoothBroadcast
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(
-                  _bluetoothBroadcastState ==
-                          BluetoothBroadcastState.broadcasting
-                      ? Icons.bluetooth_disabled_rounded
-                      : Icons.bluetooth_searching_rounded,
-                  size: 18,
-                ),
-          label: Text(
-            _bluetoothBroadcastState == BluetoothBroadcastState.broadcasting
-                ? _tr('إيقاف البث', 'Stop Broadcasting')
-                : _tr('بدء البث', 'Start Broadcasting'),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: session == null || busy
+                ? null
+                : (isBroadcasting
+                      ? _stopBluetoothBroadcast
+                      : () => _startBluetoothBroadcast()),
+            style: FilledButton.styleFrom(
+              backgroundColor: isBroadcasting
+                  ? const Color(0xFFD14A4A)
+                  : const Color(0xFF006571),
+              disabledBackgroundColor: const Color(0xFFB9C9CC),
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(44),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            icon: busy
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : Icon(
+                    isBroadcasting
+                        ? Icons.bluetooth_disabled_rounded
+                        : Icons.bluetooth_searching_rounded,
+                    size: 18,
+                  ),
+            label: Text(
+              isBroadcasting
+                  ? _tr('إيقاف البث', 'Stop Broadcast')
+                  : _tr('بدء البث', 'Start Broadcast'),
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed:
-                    session == null ||
-                        _isRefreshingBluetoothToken ||
-                        _isLoadingBluetoothAction
-                    ? null
-                    : _refreshBluetoothToken,
-                icon: _isRefreshingBluetoothToken
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.refresh_rounded, size: 18),
-                label: Text(_tr('تحديث الرمز', 'Refresh Token')),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: FilledButton.icon(
-                onPressed:
-                    session == null ||
-                        _isClosingBluetoothSession ||
-                        _isLoadingBluetoothAction
-                    ? null
-                    : _closeBluetoothSession,
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFFD14A4A),
-                ),
-                icon: _isClosingBluetoothSession
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.close_rounded, size: 18),
-                label: Text(_tr('إغلاق الجلسة', 'Close Session')),
-              ),
-            ),
-          ],
         ),
       ],
     );
@@ -1666,49 +1887,6 @@ class _QrDisplayChip extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _BluetoothInfoLine extends StatelessWidget {
-  const _BluetoothInfoLine({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontFamily: 'Cairo',
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF5A6F76),
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Flexible(
-          child: Directionality(
-            textDirection: TextDirection.ltr,
-            child: Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF213236),
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
