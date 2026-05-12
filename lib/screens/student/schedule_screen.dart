@@ -1,5 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../mappers/course_model_to_schedule.dart';
+import '../../models/course_schedule.dart';
+import '../../providers/courses_providers.dart';
 import 'components/notification_bell.dart';
 import 'components/custom_nav_bar_icons.dart';
 import 'components/student_back_chevron_icon.dart';
@@ -11,298 +15,14 @@ import '../../shared/widgets/chat_fab.dart';
 import '../../features/translation/translation_controller.dart';
 import '../../features/translation/widgets/t_text.dart';
 
-DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
-
-DateTime? _parseFirestoreDate(dynamic value) {
-  if (value is Timestamp) return value.toDate().toLocal();
-  if (value is DateTime) return value.isUtc ? value.toLocal() : value;
-  if (value is String) {
-    final parsed = DateTime.tryParse(value.trim());
-    return parsed?.toLocal();
-  }
-  if (value is int) {
-    if (value <= 0) return null;
-    return DateTime.fromMillisecondsSinceEpoch(value).toLocal();
-  }
-  if (value is num) {
-    final ms = value.toInt();
-    if (ms <= 0) return null;
-    return DateTime.fromMillisecondsSinceEpoch(ms).toLocal();
-  }
-  return null;
-}
-
-bool _isDateInRange({
-  required DateTime date,
-  required DateTime start,
-  required DateTime end,
-}) {
-  final d = _dateOnly(date);
-  final s = _dateOnly(start);
-  final e = _dateOnly(end);
-  return (d.isAfter(s) || d.isAtSameMomentAs(s)) &&
-      (d.isBefore(e) || d.isAtSameMomentAs(e));
-}
-
-bool _isDateWithinTermData(Map<String, dynamic> data, DateTime date) {
-  final start = _parseFirestoreDate(
-    data['startDate'] ?? data['semesterStartDate'],
-  );
-  final end = _parseFirestoreDate(data['endDate'] ?? data['semesterEndDate']);
-  if (start == null || end == null) return false;
-  return _isDateInRange(date: date, start: start, end: end);
-}
-
-Future<String?> _resolveStudentTermIdForDate(DateTime date) async {
-  final firestore = FirebaseFirestore.instance;
-  String? preferredTermId;
-
-  try {
-    final currentDoc = await firestore
-        .collection('academic_calendar')
-        .doc('current')
-        .get();
-    if (currentDoc.exists) {
-      final current = currentDoc.data() ?? <String, dynamic>{};
-      preferredTermId =
-          (current['activeTermId'] ??
-                  current['termId'] ??
-                  current['currentTermId'] ??
-                  '')
-              .toString()
-              .trim();
-    }
-  } catch (_) {
-    // Ignore and fallback to active terms.
-  }
-
-  if (preferredTermId != null && preferredTermId.isNotEmpty) {
-    try {
-      final preferredDoc = await firestore
-          .collection('academic_terms')
-          .doc(preferredTermId)
-          .get();
-      if (preferredDoc.exists) {
-        final data = preferredDoc.data() ?? <String, dynamic>{};
-        final isActive = data['isActive'] == true;
-        if (isActive || _isDateWithinTermData(data, date)) {
-          return preferredDoc.id;
-        }
-      }
-    } catch (_) {
-      // Ignore and fallback.
-    }
-  }
-
-  try {
-    final activeTerms = await firestore
-        .collection('academic_terms')
-        .where('isActive', isEqualTo: true)
-        .get();
-    if (activeTerms.docs.isEmpty) return preferredTermId;
-
-    for (final doc in activeTerms.docs) {
-      if (_isDateWithinTermData(doc.data(), date)) {
-        return doc.id;
-      }
-    }
-    return activeTerms.docs.first.id;
-  } catch (_) {
-    return preferredTermId;
-  }
-}
-
-Future<bool> _isHolidayForStudent(DateTime date) async {
-  final termId = await _resolveStudentTermIdForDate(date);
-  if (termId == null || termId.trim().isEmpty) return false;
-
-  try {
-    final snap = await FirebaseFirestore.instance
-        .collection('academic_terms')
-        .doc(termId)
-        .collection('calendar_exceptions')
-        .get();
-    final d = _dateOnly(date);
-    for (final doc in snap.docs) {
-      final data = doc.data();
-      final start = _parseFirestoreDate(data['startDate']);
-      final end = _parseFirestoreDate(data['endDate']) ?? start;
-      if (start == null || end == null) continue;
-      final exclude = data['excludeFromAttendance'] == true;
-      final type = (data['type'] ?? '').toString().trim().toLowerCase();
-      final holidayLike =
-          exclude ||
-          type == 'holiday' ||
-          type == 'break' ||
-          type == 'suspension' ||
-          type == 'other';
-      if (!holidayLike) continue;
-      if (_isDateInRange(date: d, start: start, end: end)) {
-        return true;
-      }
-    }
-  } catch (_) {
-    // If fetch fails, fallback to showing schedule.
-  }
-  return false;
-}
-
-/// جلب محاضرات اليوم للطالب (للاستخدام من الصفحة الرئيسية)
-Future<List<CourseSchedule>> fetchTodayCoursesForStudent(int studentId) async {
-  if (studentId <= 0) return <CourseSchedule>[];
-  if (await _isHolidayForStudent(DateTime.now())) {
-    return <CourseSchedule>[];
-  }
-  final enrollmentsRef = FirebaseFirestore.instance.collection(
-    'student_section_enrollments',
-  );
-  final enrollSnap = await enrollmentsRef
-      .where('studentId', isEqualTo: studentId)
-      .get();
-  final sectionIds = (enrollSnap.docs)
-      .map((d) => (d.data()['sectionId'] ?? '').toString())
-      .where((id) => id.isNotEmpty)
-      .toSet()
-      .toList();
-  final todayWeekday = DateTime.now().weekday;
-  final courses = await _fetchTodayCoursesFromSectionIds(
-    sectionIds,
-    filterDayOfWeek: todayWeekday,
-  );
-  courses.sort((a, b) => a.startTime.compareTo(b.startTime));
-  return courses;
-}
-
-const List<Color> _todayCourseColors = <Color>[
-  Color(0xFF4CAF50),
-  Color(0xFF2196F3),
-  Color(0xFF03A9F4),
-  Color(0xFF673AB7),
-  Color(0xFFE91E63),
-  Color(0xFFFF9800),
-  Color(0xFF009688),
-];
-
-String _activityLabelFromCourseType(String? courseType) {
-  final t = (courseType ?? '').toString().trim().toLowerCase();
-  switch (t) {
-    case 'theoretical':
-      return 'نظري';
-    case 'practical':
-      return 'عملي';
-    case 'graduation_project':
-      return 'مشروع التخرج';
-    default:
-      return 'نظري';
-  }
-}
-
-Future<List<CourseSchedule>> _fetchTodayCoursesFromSectionIds(
-  List<String> sectionIds, {
-  int? filterDayOfWeek,
-}) async {
-  if (sectionIds.isEmpty) return <CourseSchedule>[];
-  final sectionsRef = FirebaseFirestore.instance.collection('sections');
-  final coursesRef = FirebaseFirestore.instance.collection('courses');
-  const days = ['الأحد', 'الأثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
-  const dayOfWeekToName = <int, String>{
-    7: 'الأحد',
-    1: 'الأثنين',
-    2: 'الثلاثاء',
-    3: 'الأربعاء',
-    4: 'الخميس',
-  };
-  final List<CourseSchedule> courses = <CourseSchedule>[];
-  int colorIndex = 0;
-  for (final sectionId in sectionIds) {
-    final sectionSnap = await sectionsRef.doc(sectionId).get();
-    if (!sectionSnap.exists) continue;
-    final data = sectionSnap.data() ?? <String, dynamic>{};
-    final courseName = (data['courseName'] ?? '').toString();
-    final courseCode = (data['courseCode'] ?? '').toString();
-    final lecturerName = (data['lecturerName'] ?? '').toString();
-    String courseNameAr = (data['courseName_Ar'] ?? '').toString().trim();
-    String creditHours = '';
-    String? courseType = (data['courseType'] ?? '').toString().trim();
-    if (courseType.isEmpty) {
-      courseType = null;
-    }
-    if (courseCode.isNotEmpty) {
-      final courseSnap = await coursesRef.doc(courseCode).get();
-      if (courseSnap.exists) {
-        final courseData = courseSnap.data() ?? <String, dynamic>{};
-        if (courseNameAr.isEmpty) {
-          courseNameAr = (courseData['courseName_Ar'] ?? '').toString().trim();
-        }
-        if (courseType == null || courseType.isEmpty) {
-          courseType = (courseData['courseType'] ?? '').toString().trim();
-          if (courseType.isEmpty) {
-            courseType = null;
-          }
-        }
-        final ch = courseData['creditHours'];
-        if (ch is int) {
-          creditHours = ch.toString();
-        } else if (ch is num) {
-          creditHours = ch.toInt().toString();
-        }
-      }
-    }
-    final displayName = courseNameAr.isNotEmpty
-        ? courseNameAr
-        : (courseName.isNotEmpty ? courseName : courseCode);
-    final schedule = data['schedule'] as List<dynamic>?;
-    final color = _todayCourseColors[colorIndex % _todayCourseColors.length];
-    colorIndex++;
-    if (schedule == null || schedule.isEmpty) continue;
-    for (final e in schedule) {
-      final m = Map<String, dynamic>.from(e is Map ? e : <String, dynamic>{});
-      final dayOfWeek = m['dayOfWeek'] is int
-          ? m['dayOfWeek'] as int
-          : int.tryParse((m['dayOfWeek'] ?? '').toString()) ?? 0;
-      if (filterDayOfWeek != null && dayOfWeek != filterDayOfWeek) continue;
-      String startTime = (m['startTime'] ?? '08:00').toString();
-      if (startTime.length == 4 && startTime[0] != '0') {
-        startTime = '0$startTime';
-      }
-      String endTime = (m['endTime'] ?? '10:00').toString();
-      if (endTime.length == 4 && endTime[0] != '0') endTime = '0$endTime';
-      final hall = (m['hall'] ?? '').toString();
-      final location = (m['location'] ?? m['مقر'] ?? '').toString().trim();
-      final dayName = dayOfWeekToName[dayOfWeek] ?? '$dayOfWeek';
-      if (!days.contains(dayName)) continue;
-      final sectionNum = sectionId.contains('-')
-          ? sectionId.split('-').last
-          : '1';
-      courses.add(
-        CourseSchedule(
-          courseName: displayName,
-          day: dayName,
-          startTime: startTime,
-          endTime: endTime,
-          color: color,
-          courseCode: courseCode,
-          activity: _activityLabelFromCourseType(courseType),
-          section: sectionNum,
-          hours: creditHours.isNotEmpty ? creditHours : '—',
-          lecturer: lecturerName,
-          location: location.isNotEmpty ? location : '—',
-          room: hall.isNotEmpty ? hall : '—',
-        ),
-      );
-    }
-  }
-  return courses;
-}
-
-class ScheduleScreen extends StatefulWidget {
+class ScheduleScreen extends ConsumerStatefulWidget {
   const ScheduleScreen({super.key});
 
   @override
-  State<ScheduleScreen> createState() => _ScheduleScreenState();
+  ConsumerState<ScheduleScreen> createState() => _ScheduleScreenState();
 }
 
-class _ScheduleScreenState extends State<ScheduleScreen> {
+class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   static const Color _primaryColor = Color(0xFF006571);
   static const Color _gridBorderColor = Color(0xFFE6E6E6);
   static const Color _headerCellColor = Color(0xFFF3F5F6);
@@ -361,133 +81,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     TimeSlot(start: '22:00', end: '23:00'),
     TimeSlot(start: '23:00', end: '24:00'),
   ];
-
-  static const Map<int, String> _dayOfWeekToName = <int, String>{
-    7: 'الأحد',
-    1: 'الأثنين',
-    2: 'الثلاثاء',
-    3: 'الأربعاء',
-    4: 'الخميس',
-  };
-
-  /// تحويل courseType من الداتابيس إلى عرض عربي للنشاط
-  static String _activityFromCourseType(String? courseType) {
-    final t = (courseType ?? '').toString().trim().toLowerCase();
-    switch (t) {
-      case 'theoretical':
-        return 'نظري';
-      case 'practical':
-        return 'عملي';
-      case 'graduation_project':
-        return 'مشروع التخرج';
-      default:
-        return 'نظري';
-    }
-  }
-
-  static const List<Color> _courseColors = <Color>[
-    Color(0xFF4CAF50),
-    Color(0xFF2196F3),
-    Color(0xFF03A9F4),
-    Color(0xFF673AB7),
-    Color(0xFFE91E63),
-    Color(0xFFFF9800),
-    Color(0xFF009688),
-  ];
-
-  String _dayNameFromDayOfWeek(int dayOfWeek) {
-    return _dayOfWeekToName[dayOfWeek] ?? '$dayOfWeek';
-  }
-
-  Future<List<CourseSchedule>> _fetchCoursesFromSectionIds(
-    List<String> sectionIds,
-  ) async {
-    if (sectionIds.isEmpty) return <CourseSchedule>[];
-    final sectionsRef = FirebaseFirestore.instance.collection('sections');
-    final coursesRef = FirebaseFirestore.instance.collection('courses');
-    final List<CourseSchedule> courses = <CourseSchedule>[];
-    int colorIndex = 0;
-    for (final sectionId in sectionIds) {
-      final sectionSnap = await sectionsRef.doc(sectionId).get();
-      if (!sectionSnap.exists) continue;
-      final data = sectionSnap.data() ?? <String, dynamic>{};
-      final courseName = (data['courseName'] ?? '').toString();
-      final courseCode = (data['courseCode'] ?? '').toString();
-      final lecturerName = (data['lecturerName'] ?? '').toString();
-      String courseNameAr = (data['courseName_Ar'] ?? '').toString().trim();
-      String creditHours = '';
-      String? courseType = (data['courseType'] ?? '').toString().trim();
-      if (courseType.isEmpty) {
-        courseType = null;
-      }
-      if (courseCode.isNotEmpty) {
-        final courseSnap = await coursesRef.doc(courseCode).get();
-        if (courseSnap.exists) {
-          final courseData = courseSnap.data() ?? <String, dynamic>{};
-          if (courseNameAr.isEmpty) {
-            courseNameAr = (courseData['courseName_Ar'] ?? '')
-                .toString()
-                .trim();
-          }
-          if (courseType == null || courseType.isEmpty) {
-            courseType = (courseData['courseType'] ?? '').toString().trim();
-            if (courseType.isEmpty) {
-              courseType = null;
-            }
-          }
-          final ch = courseData['creditHours'];
-          if (ch is int) {
-            creditHours = ch.toString();
-          } else if (ch is num) {
-            creditHours = ch.toInt().toString();
-          }
-        }
-      }
-      final displayName = courseNameAr.isNotEmpty
-          ? courseNameAr
-          : (courseName.isNotEmpty ? courseName : courseCode);
-      final schedule = data['schedule'] as List<dynamic>?;
-      final color = _courseColors[colorIndex % _courseColors.length];
-      colorIndex++;
-      if (schedule == null || schedule.isEmpty) continue;
-      for (final e in schedule) {
-        final m = Map<String, dynamic>.from(e is Map ? e : <String, dynamic>{});
-        final dayOfWeek = m['dayOfWeek'] is int
-            ? m['dayOfWeek'] as int
-            : int.tryParse((m['dayOfWeek'] ?? '').toString()) ?? 0;
-        String startTime = (m['startTime'] ?? '08:00').toString();
-        if (startTime.length == 4 && startTime[0] != '0') {
-          startTime = '0$startTime';
-        }
-        String endTime = (m['endTime'] ?? '10:00').toString();
-        if (endTime.length == 4 && endTime[0] != '0') endTime = '0$endTime';
-        final hall = (m['hall'] ?? '').toString();
-        final location = (m['location'] ?? m['مقر'] ?? '').toString().trim();
-        final dayName = _dayNameFromDayOfWeek(dayOfWeek);
-        if (!_days.contains(dayName)) continue;
-        final sectionNum = sectionId.contains('-')
-            ? sectionId.split('-').last
-            : '1';
-        courses.add(
-          CourseSchedule(
-            courseName: displayName,
-            day: dayName,
-            startTime: startTime,
-            endTime: endTime,
-            color: color,
-            courseCode: courseCode,
-            activity: _activityFromCourseType(courseType),
-            section: sectionNum,
-            hours: creditHours.isNotEmpty ? creditHours : '—',
-            lecturer: lecturerName,
-            location: location.isNotEmpty ? location : '—',
-            room: hall.isNotEmpty ? hall : '—',
-          ),
-        );
-      }
-    }
-    return courses;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -585,49 +178,45 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         child: TText('سجّل دخولك لعرض جدولك', style: TextStyle(fontSize: 16)),
       );
     }
-    final enrollmentsRef = FirebaseFirestore.instance.collection(
-      'student_section_enrollments',
-    );
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: enrollmentsRef
-          .where('studentId', isEqualTo: student.studentId)
-          .snapshots(),
-      builder: (context, enrollSnap) {
-        if (enrollSnap.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: _primaryColor),
-          );
-        }
-        final sectionIds = (enrollSnap.data?.docs ?? [])
-            .map((d) => (d.data()['sectionId'] ?? '').toString())
-            .where((id) => id.isNotEmpty)
-            .toSet()
-            .toList();
-        return FutureBuilder<List<CourseSchedule>>(
-          future: _fetchCoursesFromSectionIds(sectionIds),
-          builder: (context, courseSnap) {
-            if (courseSnap.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: CircularProgressIndicator(color: _primaryColor),
-              );
-            }
-            final courses = courseSnap.data ?? [];
-            if (courses.isEmpty) {
-              return Center(
-                child: TText(
-                  sectionIds.isEmpty
-                      ? 'لا توجد تسجيلات في مقررات لهذا الفصل'
-                      : 'لا يوجد جدول معرّف للسكاشن المسجّل فيها',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 16),
-                ),
-              );
-            }
-            return _buildSchedule(courses);
-          },
-        );
-      },
-    );
+    final sid = student.studentId.toString();
+    final unifiedAsync = ref.watch(studentUnifiedCoursesProvider(sid));
+
+    if (unifiedAsync.isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: _primaryColor),
+      );
+    }
+    if (unifiedAsync.hasError) {
+      return const Center(
+        child: TText(
+          'تعذر تحميل الجدول.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 16),
+        ),
+      );
+    }
+    final unified = unifiedAsync.value!;
+    final models = unified.allCourses;
+    final courses = courseModelsToScheduleGrid(unified.scheduleCourses);
+    if (models.isEmpty) {
+      return const Center(
+        child: TText(
+          'لا توجد تسجيلات في مقررات لهذا الفصل',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 16),
+        ),
+      );
+    }
+    if (courses.isEmpty) {
+      return const Center(
+        child: TText(
+          'لا يوجد جدول معرّف للسكاشن المسجّل فيها',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 16),
+        ),
+      );
+    }
+    return _buildSchedule(courses);
   }
 
   Widget _buildSchedule(List<CourseSchedule> courses) {
@@ -1062,41 +651,4 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       ),
     );
   }
-}
-
-class TimeSlot {
-  const TimeSlot({required this.start, required this.end});
-
-  final String start;
-  final String end;
-}
-
-class CourseSchedule {
-  const CourseSchedule({
-    required this.courseName,
-    required this.day,
-    required this.startTime,
-    required this.endTime,
-    required this.color,
-    required this.courseCode,
-    required this.activity,
-    required this.section,
-    required this.hours,
-    required this.lecturer,
-    required this.location,
-    required this.room,
-  });
-
-  final String courseName;
-  final String day;
-  final String startTime;
-  final String endTime;
-  final Color color;
-  final String courseCode;
-  final String activity;
-  final String section;
-  final String hours;
-  final String lecturer;
-  final String location;
-  final String room;
 }

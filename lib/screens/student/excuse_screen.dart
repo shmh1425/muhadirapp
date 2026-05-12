@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../models/course_model.dart';
+import '../../providers/courses_providers.dart';
 import 'components/notification_bell.dart';
 import 'components/student_back_chevron_icon.dart';
 import 'rejection_detail_screen.dart';
@@ -16,14 +18,14 @@ import '../../services/student_auth_service.dart';
 import '../../features/translation/translation_controller.dart';
 import '../../features/translation/widgets/t_text.dart';
 
-class ExcuseScreen extends StatefulWidget {
+class ExcuseScreen extends ConsumerStatefulWidget {
   const ExcuseScreen({super.key});
 
   @override
-  State<ExcuseScreen> createState() => _ExcuseScreenState();
+  ConsumerState<ExcuseScreen> createState() => _ExcuseScreenState();
 }
 
-class _ExcuseScreenState extends State<ExcuseScreen> {
+class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
   static const Color _primaryColor = Color(0xFF006571);
   static const Color _tabBackground = Color(0xFFF5F5F5);
 
@@ -42,41 +44,26 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
   String? _selectedCourse;
   String _selectedFilter = 'الكل';
 
-  Future<List<String>> _fetchStudentCourses(int studentId) async {
-    if (studentId <= 0) return <String>[];
-    final enrollSnap = await FirebaseFirestore.instance
-        .collection('student_section_enrollments')
-        .where('studentId', isEqualTo: studentId)
-        .get();
-
-    final sectionIds = enrollSnap.docs
-        .map((d) => (d.data()['sectionId'] ?? '').toString())
-        .where((id) => id.trim().isNotEmpty)
-        .toSet()
-        .toList();
-    if (sectionIds.isEmpty) return <String>[];
-
-    final sectionsRef = FirebaseFirestore.instance.collection('sections');
-    final coursesRef = FirebaseFirestore.instance.collection('courses');
-    final names = <String>{};
-    for (final sectionId in sectionIds) {
-      final sectionSnap = await sectionsRef.doc(sectionId).get();
-      if (!sectionSnap.exists) continue;
-      final data = sectionSnap.data() ?? <String, dynamic>{};
-      final code = (data['courseCode'] ?? '').toString().trim();
-      String ar = (data['courseName_Ar'] ?? '').toString().trim();
-      if (ar.isEmpty && code.isNotEmpty) {
-        final courseSnap = await coursesRef.doc(code).get();
-        if (courseSnap.exists) {
-          final courseData = courseSnap.data() ?? <String, dynamic>{};
-          ar = (courseData['courseName_Ar'] ?? '').toString().trim();
-        }
-      }
-      final name = ar.isNotEmpty ? ar : code;
-      if (name.trim().isNotEmpty) names.add(name.trim());
+  static Map<String, String> _sectionIdToCourseNameAr(List<CourseModel> models) {
+    final out = <String, String>{};
+    for (final c in models) {
+      final sid = c.sectionId.trim();
+      if (sid.isEmpty) continue;
+      final ar = c.courseNameAr.trim();
+      if (ar.isNotEmpty) out[sid] = ar;
     }
-    final list = names.toList()..sort();
-    return list;
+    return out;
+  }
+
+  List<String> _courseTabLabelsFromModels(List<CourseModel> models) {
+    final names = <String>{};
+    for (final c in models) {
+      final ar = c.courseNameAr.trim();
+      final code = c.courseCode.trim();
+      final label = ar.isNotEmpty ? ar : code;
+      if (label.isNotEmpty) names.add(label);
+    }
+    return names.toList()..sort();
   }
 
   List<_ExcuseItem> _mapRecordsToExcuseItems(
@@ -189,32 +176,6 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
     }
   }
 
-  Future<Map<String, String>> _fetchCourseNameArForSectionIds(
-    Set<String> sectionIds,
-  ) async {
-    final cleaned = sectionIds.map((s) => s.trim()).where((s) => s.isNotEmpty).toSet();
-    if (cleaned.isEmpty) return <String, String>{};
-    final sectionsRef = FirebaseFirestore.instance.collection('sections');
-    final coursesRef = FirebaseFirestore.instance.collection('courses');
-    final map = <String, String>{};
-    for (final id in cleaned) {
-      final snap = await sectionsRef.doc(id).get();
-      if (!snap.exists) continue;
-      final data = snap.data() ?? <String, dynamic>{};
-      final code = (data['courseCode'] ?? '').toString().trim();
-      String ar = (data['courseName_Ar'] ?? '').toString().trim();
-      if (ar.isEmpty && code.isNotEmpty) {
-        final courseSnap = await coursesRef.doc(code).get();
-        if (courseSnap.exists) {
-          final courseData = courseSnap.data() ?? <String, dynamic>{};
-          ar = (courseData['courseName_Ar'] ?? '').toString().trim();
-        }
-      }
-      if (ar.isNotEmpty) map[id] = ar;
-    }
-    return map;
-  }
-
   @override
   Widget build(BuildContext context) {
     final student = StudentAuthService.instance.currentStudent;
@@ -255,142 +216,146 @@ class _ExcuseScreenState extends State<ExcuseScreen> {
           child: Scaffold(
             backgroundColor: Colors.white,
             body: SafeArea(
-              child: FutureBuilder<List<String>>(
-                future: _fetchStudentCourses(student.studentId),
-                builder: (context, courseSnap) {
-                  final courses = courseSnap.data ?? <String>[];
+              child: Builder(
+                builder: (context) {
+                  final coursesAsync = ref.watch(
+                    studentUnifiedCoursesProvider(student.studentId.toString()),
+                  );
+                  final courses = coursesAsync.when(
+                    data: (u) => _courseTabLabelsFromModels(u.allCourses),
+                    loading: () => <String>[],
+                    error: (_, __) => <String>[],
+                  );
+                  final sectionIdToNameAr = coursesAsync.maybeWhen(
+                    data: (u) => _sectionIdToCourseNameAr(u.allCourses),
+                    orElse: () => <String, String>{},
+                  );
                   final selectedCourse = _selectedCourse; // null = الكل
 
                   return StreamBuilder<List<ManualAttendanceRecord>>(
                     stream: _attendance.watchStudentRecords(student.studentId),
                     builder: (context, recordsSnap) {
                       final records = recordsSnap.data ?? <ManualAttendanceRecord>[];
-                      final sectionIds = records.map((r) => r.sectionId).toSet();
-                      return FutureBuilder<Map<String, String>>(
-                        future: _fetchCourseNameArForSectionIds(sectionIds),
-                        builder: (context, namesSnap) {
-                          final sectionIdToNameAr = namesSnap.data ?? <String, String>{};
-                          final baseItems = _mapRecordsToExcuseItems(records, sectionIdToNameAr);
-                          return StreamBuilder<List<ExcuseRequest>>(
-                            stream: _excuses.watchStudentRequests(student.studentId),
-                            builder: (context, reqSnap) {
-                              return StreamBuilder<Set<String>>(
-                                stream: _excuses.watchPendingExcuseAttendanceRecordIds(
-                                  student.studentId,
-                                ),
-                                builder: (context, pendingSnap) {
-                                  final piped = _applyExcusePipeline(
-                                    records: records,
-                                    baseItems: baseItems,
-                                    requests: reqSnap.data ?? <ExcuseRequest>[],
-                                    pendingAttendanceRecordIds:
-                                        pendingSnap.data ?? <String>{},
-                                  );
+                      final baseItems =
+                          _mapRecordsToExcuseItems(records, sectionIdToNameAr);
+                      return StreamBuilder<List<ExcuseRequest>>(
+                        stream: _excuses.watchStudentRequests(student.studentId),
+                        builder: (context, reqSnap) {
+                          return StreamBuilder<Set<String>>(
+                            stream: _excuses.watchPendingExcuseAttendanceRecordIds(
+                              student.studentId,
+                            ),
+                            builder: (context, pendingSnap) {
+                              final piped = _applyExcusePipeline(
+                                records: records,
+                                baseItems: baseItems,
+                                requests: reqSnap.data ?? <ExcuseRequest>[],
+                                pendingAttendanceRecordIds:
+                                    pendingSnap.data ?? <String>{},
+                              );
 
-                                  final List<_ExcuseItem> visibleItems = piped.where((item) {
-                                    final bool matchCourse =
-                                        selectedCourse == null || item.course == selectedCourse;
-                                    final String filterStatus =
-                                        _selectedFilter == 'رفع عذر' ? 'معلقة' : _selectedFilter;
-                                    final bool matchFilter =
-                                        _selectedFilter == 'الكل' || item.status == filterStatus;
-                                    return matchCourse && matchFilter;
-                                  }).toList();
+                              final List<_ExcuseItem> visibleItems = piped.where((item) {
+                                final bool matchCourse =
+                                    selectedCourse == null || item.course == selectedCourse;
+                                final String filterStatus =
+                                    _selectedFilter == 'رفع عذر' ? 'معلقة' : _selectedFilter;
+                                final bool matchFilter =
+                                    _selectedFilter == 'الكل' || item.status == filterStatus;
+                                return matchCourse && matchFilter;
+                              }).toList();
 
-                                  return ListView(
-                                    padding:
-                                        const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                                    children: <Widget>[
-                                      _buildHeader(context),
-                                      const SizedBox(height: 16),
-                                      _buildCourseTabs(courses),
-                                      const SizedBox(height: 12),
-                                      _buildStatusFilters(),
-                                      const SizedBox(height: 24),
-                                      Align(
-                                        alignment: AlignmentDirectional.centerStart,
-                                        child: selectedCourse == null
-                                            ? TText(
-                                                'الكل',
-                                                style: const TextStyle(
-                                                  fontSize: 21,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Color(0xFF1A1A1A),
-                                                ),
-                                                textAlign: TextAlign.start,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              )
-                                            : TText(
-                                                selectedCourse,
-                                                style: const TextStyle(
-                                                  fontSize: 21,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Color(0xFF1A1A1A),
-                                                ),
-                                                textAlign: TextAlign.start,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                      ),
-                                      const SizedBox(height: 16),
-                                      if (!recordsSnap.hasData &&
-                                          recordsSnap.connectionState ==
-                                              ConnectionState.waiting)
-                                        LayoutBuilder(
-                                          builder: (context, constraints) {
-                                            final h = MediaQuery.sizeOf(context).height;
-                                            final blockH = (h * 0.38).clamp(200.0, 400.0);
-                                            return SizedBox(
-                                              height: blockH,
-                                              width: double.infinity,
-                                              child: Center(
-                                                child: SizedBox(
-                                                  width: 28,
-                                                  height: 28,
-                                                  child: CircularProgressIndicator(
-                                                    strokeWidth: 2.5,
-                                                    color: _primaryColor,
-                                                  ),
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        )
-                                      else if (visibleItems.isEmpty)
-                                        LayoutBuilder(
-                                          builder: (context, constraints) {
-                                            final h = MediaQuery.sizeOf(context).height;
-                                            final blockH = (h * 0.38).clamp(220.0, 440.0);
-                                            return SizedBox(
-                                              height: blockH,
-                                              width: double.infinity,
-                                              child: Center(
-                                                child: TText(
-                                                  'لا توجد',
-                                                  textAlign: TextAlign.center,
-                                                  style: const TextStyle(
-                                                    fontSize: 16,
-                                                    color: Color(0xFF666666),
-                                                    height: 1.4,
-                                                  ),
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        )
-                                      else
-                                        ...visibleItems.map(
-                                          (item) => _ExcuseCard(
-                                            item: item,
-                                            showCourseTitle: selectedCourse == null,
-                                            translateToEnglish:
-                                                translation.translateToEnglish,
+                              return ListView(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                                children: <Widget>[
+                                  _buildHeader(context),
+                                  const SizedBox(height: 16),
+                                  _buildCourseTabs(courses),
+                                  const SizedBox(height: 12),
+                                  _buildStatusFilters(),
+                                  const SizedBox(height: 24),
+                                  Align(
+                                    alignment: AlignmentDirectional.centerStart,
+                                    child: selectedCourse == null
+                                        ? TText(
+                                            'الكل',
+                                            style: const TextStyle(
+                                              fontSize: 21,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF1A1A1A),
+                                            ),
+                                            textAlign: TextAlign.start,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          )
+                                        : TText(
+                                            selectedCourse,
+                                            style: const TextStyle(
+                                              fontSize: 21,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF1A1A1A),
+                                            ),
+                                            textAlign: TextAlign.start,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                        ),
-                                    ],
-                                  );
-                                },
+                                  ),
+                                  const SizedBox(height: 16),
+                                  if (!recordsSnap.hasData &&
+                                      recordsSnap.connectionState ==
+                                          ConnectionState.waiting)
+                                    LayoutBuilder(
+                                      builder: (context, constraints) {
+                                        final h = MediaQuery.sizeOf(context).height;
+                                        final blockH = (h * 0.38).clamp(200.0, 400.0);
+                                        return SizedBox(
+                                          height: blockH,
+                                          width: double.infinity,
+                                          child: Center(
+                                            child: SizedBox(
+                                              width: 28,
+                                              height: 28,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2.5,
+                                                color: _primaryColor,
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    )
+                                  else if (visibleItems.isEmpty)
+                                    LayoutBuilder(
+                                      builder: (context, constraints) {
+                                        final h = MediaQuery.sizeOf(context).height;
+                                        final blockH = (h * 0.38).clamp(220.0, 440.0);
+                                        return SizedBox(
+                                          height: blockH,
+                                          width: double.infinity,
+                                          child: Center(
+                                            child: TText(
+                                              'لا توجد',
+                                              textAlign: TextAlign.center,
+                                              style: const TextStyle(
+                                                fontSize: 16,
+                                                color: Color(0xFF666666),
+                                                height: 1.4,
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    )
+                                  else
+                                    ...visibleItems.map(
+                                      (item) => _ExcuseCard(
+                                        item: item,
+                                        showCourseTitle: selectedCourse == null,
+                                        translateToEnglish:
+                                            translation.translateToEnglish,
+                                      ),
+                                    ),
+                                ],
                               );
                             },
                           );

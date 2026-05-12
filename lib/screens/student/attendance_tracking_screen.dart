@@ -1,11 +1,15 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../models/attendance_schedule_slot.dart';
 import '../../models/attendance/manual_attendance_record.dart';
+import '../../providers/courses_providers.dart';
+import '../../repositories/academic_term_context_repository.dart';
+import '../../repositories/student_attendance_meta_repository.dart';
 import '../../services/attendance/manual_attendance_service.dart';
 import '../../services/student_auth_service.dart';
 import 'components/custom_nav_bar_icons.dart';
@@ -18,15 +22,16 @@ import '../../shared/widgets/chat_fab.dart';
 import '../../features/translation/translation_controller.dart';
 import '../../features/translation/widgets/t_text.dart';
 
-class AttendanceTrackingScreen extends StatefulWidget {
+class AttendanceTrackingScreen extends ConsumerStatefulWidget {
   const AttendanceTrackingScreen({super.key});
 
   @override
-  State<AttendanceTrackingScreen> createState() =>
+  ConsumerState<AttendanceTrackingScreen> createState() =>
       _AttendanceTrackingScreenState();
 }
 
-class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
+class _AttendanceTrackingScreenState
+    extends ConsumerState<AttendanceTrackingScreen> {
   static const Color _primaryColor = Color(0xFF006571);
   static const Color _tabBackground = Color(0xFFF5F5F5);
   final ManualAttendanceService _manualAttendanceService =
@@ -91,6 +96,16 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final student = StudentAuthService.instance.currentStudent;
+      if (student == null) return;
+      // Warm unified courses so the attendance stream callback does not block
+      // on a cold Firestore path after the first snapshot.
+      unawaited(
+        ref.read(studentUnifiedCoursesProvider(student.studentId.toString()).future),
+      );
+    });
     _bootstrapAttendance();
   }
 
@@ -101,86 +116,29 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
   }
 
   Future<void> _bootstrapAttendance() async {
-    await _loadAcademicTermContext();
+    // Never block attendance records on term metadata — a stuck `academic_terms`
+    // query would leave this screen on the loading spinner forever.
+    unawaited(_loadAcademicTermContext());
     await _subscribeAttendance();
   }
 
   Future<void> _loadAcademicTermContext() async {
     try {
-      final now = DateTime.now();
-
-      final snapshot = await FirebaseFirestore.instance
-          .collection('academic_terms')
-          // Some environments may not keep isActive in sync; we select the best
-          // term by date range and fallback to the latest by startDate.
-          .orderBy('startDate', descending: true)
-          .limit(25)
-          .get();
-      if (snapshot.docs.isEmpty) return;
-
-      QueryDocumentSnapshot<Map<String, dynamic>> preferred =
-          snapshot.docs.first;
-      for (final doc in snapshot.docs) {
-        final data = doc.data();
-        final start = _readDate(data['startDate']);
-        final end = _readDate(data['endDate']);
-        if (start == null || end == null) continue;
-        final inRange =
-            (now.isAfter(start) || now.isAtSameMomentAs(start)) &&
-            (now.isBefore(end) || now.isAtSameMomentAs(end));
-        if (inRange) {
-          preferred = doc;
-          break;
-        }
-      }
-
-      if (preferred == snapshot.docs.first) {
-        final sorted = [...snapshot.docs];
-        sorted.sort((a, b) {
-          final aStart = _readDate(a.data()['startDate']) ?? DateTime(1970);
-          final bStart = _readDate(b.data()['startDate']) ?? DateTime(1970);
-          return bStart.compareTo(aStart);
-        });
-        preferred = sorted.first;
-      }
-
-      final data = preferred.data();
-      final termId = (data['termId'] ?? '').toString().trim().isNotEmpty
-          ? (data['termId'] ?? '').toString().trim()
-          : preferred.id;
+      final ctx = await AcademicTermContextRepository.instance
+          .loadCurrentWeekContext()
+          .timeout(const Duration(seconds: 8), onTimeout: () => null);
+      if (ctx == null) return;
+      if (!mounted) return;
+      setState(() {
+        _semesterWeeksCount = ctx.weeks;
+        _semesterStartDate = ctx.start ?? _semesterStartDate;
+      });
       if (kDebugMode) {
         debugPrint(
-          '[AttendanceTracking] picked termId=$termId startDate=${data['startDate']} '
-          'effectiveTeachingWeeks=${data['effectiveTeachingWeeks']} officialWeeksCount=${data['officialWeeksCount']}',
-        );
-      }
-
-      // Single source of truth for effective teaching weeks:
-      // Must come directly from admin-maintained `effectiveTeachingWeeks`.
-      final termEffectiveWeeks = _readPositiveInt(data['effectiveTeachingWeeks']);
-      if (termEffectiveWeeks != null && termEffectiveWeeks > 0) {
-        _semesterWeeksCount = termEffectiveWeeks.clamp(1, 40);
-      } else {
-        // Keep default if unavailable; do not override from any other sources.
-        _semesterWeeksCount = _semesterWeeksCount.clamp(1, 40);
-        if (kDebugMode) {
-          debugPrint(
-            '[AttendanceTracking] effectiveTeachingWeeks MISSING/INVALID; keeping weeks=$_semesterWeeksCount',
-          );
-        }
-      }
-
-      // Start date: use term startDate only; do not derive from other sources.
-      _semesterStartDate = _readDate(data['startDate']) ?? _semesterStartDate;
-
-      if (kDebugMode) {
-        debugPrint(
-          '[AttendanceTracking] weeks chosen=$_semesterWeeksCount '
-          '(effectiveTeachingWeeks=$termEffectiveWeeks) startDate=$_semesterStartDate',
+          '[AttendanceTracking] term context weeks=$_semesterWeeksCount start=$_semesterStartDate',
         );
       }
     } catch (e) {
-      // Keep defaults if term context is unavailable.
       if (kDebugMode) {
         debugPrint('[AttendanceTracking] _loadAcademicTermContext FAILED: $e');
       }
@@ -202,44 +160,62 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
         .watchStudentRecords(student.studentId)
         .listen(
           (records) async {
-            final metaMaps = await _fetchCourseMetaForRecords(records);
-            if (!mounted) return;
-            final semesterStart =
-                _semesterStartDate ??
-                (records.isEmpty
-                    ? null
-                    : records
-                          .map((r) => r.lectureDate)
-                          .reduce((a, b) => a.isBefore(b) ? a : b));
-            final mapped = records
-                .map(
-                  (r) => _toAttendanceRecord(
-                    r,
-                    metaMaps.codeToType,
-                    metaMaps.sectionIdToType,
-                    metaMaps.codeToNameAr,
-                    metaMaps.sectionIdToScheduleSlots,
-                    semesterStart,
-                  ),
-                )
-                .toList();
-            mapped.sort((a, b) => b.lectureDate.compareTo(a.lectureDate));
-            final deduped = _dedupeAttendanceRecords(mapped);
-            if (!mounted) return;
-            setState(() {
-              _records = deduped;
-              _codeToWeeklyMinutes = metaMaps.codeToWeeklyMinutes;
-              _sectionIdToWeeklyMinutes = metaMaps.sectionIdToWeeklyMinutes;
-              _isLoading = false;
-              _loadError = null;
-              _syncSelectedWeeksWithAvailable();
-              final courses = _courses;
-              if (courses.isNotEmpty &&
-                  (_selectedCourse == null ||
-                      !courses.contains(_selectedCourse))) {
-                _selectedCourse = courses.first;
+            try {
+              final unified = await ref.read(
+                studentUnifiedCoursesProvider(student.studentId.toString()).future,
+              );
+              final metaMaps =
+                  StudentAttendanceMetaRepository.instance.buildFromEnrollments(
+                unified.allCourses,
+                records,
+              );
+              if (!mounted) return;
+              final semesterStart =
+                  _semesterStartDate ??
+                  (records.isEmpty
+                      ? null
+                      : records
+                            .map((r) => r.lectureDate)
+                            .reduce((a, b) => a.isBefore(b) ? a : b));
+              final mapped = records
+                  .map(
+                    (r) => _toAttendanceRecord(
+                      r,
+                      metaMaps.codeToType,
+                      metaMaps.sectionIdToType,
+                      metaMaps.codeToNameAr,
+                      metaMaps.sectionIdToScheduleSlots,
+                      semesterStart,
+                    ),
+                  )
+                  .toList();
+              mapped.sort((a, b) => b.lectureDate.compareTo(a.lectureDate));
+              final deduped = _dedupeAttendanceRecords(mapped);
+              if (!mounted) return;
+              setState(() {
+                _records = deduped;
+                _codeToWeeklyMinutes = metaMaps.codeToWeeklyMinutes;
+                _sectionIdToWeeklyMinutes = metaMaps.sectionIdToWeeklyMinutes;
+                _isLoading = false;
+                _loadError = null;
+                _syncSelectedWeeksWithAvailable();
+                final courses = _courses;
+                if (courses.isNotEmpty &&
+                    (_selectedCourse == null ||
+                        !courses.contains(_selectedCourse))) {
+                  _selectedCourse = courses.first;
+                }
+              });
+            } catch (e, st) {
+              if (kDebugMode) {
+                debugPrint('[AttendanceTracking] stream handler error: $e\n$st');
               }
-            });
+              if (!mounted) return;
+              setState(() {
+                _isLoading = false;
+                _loadError ??= 'تعذر تحميل بيانات المقررات المرتبطة بالحضور.';
+              });
+            }
           },
           onError: (error) {
             if (!mounted) return;
@@ -265,251 +241,12 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
     }
   }
 
-  /// جلب بيانات المقرر من courses ثم sections (نوع المقرر + الاسم العربي).
-  Future<
-    ({
-      Map<String, String> codeToType,
-      Map<String, String> sectionIdToType,
-      Map<String, String> codeToNameAr,
-      Map<String, int> codeToWeeklyMinutes,
-      Map<String, int> sectionIdToWeeklyMinutes,
-      Map<String, List<_ScheduleSlot>> sectionIdToScheduleSlots,
-    })
-  >
-  _fetchCourseMetaForRecords(List<ManualAttendanceRecord> records) async {
-    // Always read course weekly *scheduled* hours from DB first.
-    final codes = records
-        .where((r) => (r.courseCode ?? '').trim().isNotEmpty)
-        .map((r) => r.courseCode!.trim())
-        .toSet()
-        .toList();
-
-    // We always need section schedules (weekly minutes) for any record that has sectionId.
-    final sectionIds = records
-        .map((r) => r.sectionId.trim())
-        .where((id) => id.isNotEmpty)
-        .toSet()
-        .toList();
-
-    // We only need section type when courseType is missing in the record.
-    final needSectionType = records
-        .where((r) => (r.courseType ?? '').trim().isEmpty)
-        .map((r) => r.sectionId.trim())
-        .where((id) => id.isNotEmpty)
-        .toSet()
-        .toList();
-
-    if (codes.isEmpty && sectionIds.isEmpty) {
-      return (
-        codeToType: <String, String>{},
-        sectionIdToType: <String, String>{},
-        codeToNameAr: <String, String>{},
-        codeToWeeklyMinutes: <String, int>{},
-        sectionIdToWeeklyMinutes: <String, int>{},
-        sectionIdToScheduleSlots: <String, List<_ScheduleSlot>>{},
-      );
-    }
-
-    final firestore = FirebaseFirestore.instance;
-    final codeToType = <String, String>{};
-    final sectionIdToType = <String, String>{};
-    final codeToNameAr = <String, String>{};
-    final codeToWeeklyMinutes = <String, int>{};
-    final sectionIdToWeeklyMinutes = <String, int>{};
-    final sectionIdToScheduleSlots = <String, List<_ScheduleSlot>>{};
-
-    int? hmToMinutes(String? s) {
-      final raw = (s ?? '').trim();
-      if (raw.isEmpty) return null;
-      final parts = raw.split(':');
-      if (parts.length < 2) return null;
-      final h = int.tryParse(parts[0].trim());
-      final m = int.tryParse(parts[1].trim());
-      if (h == null || m == null) return null;
-      return (h.clamp(0, 23) * 60) + m.clamp(0, 59);
-    }
-
-    int scheduleMinutes(dynamic schedule) {
-      if (schedule is! List || schedule.isEmpty) return 0;
-      var total = 0;
-      for (final row in schedule) {
-        if (row is! Map) continue;
-        final start = hmToMinutes(
-          (row['startTime'] ?? row['start_time'] ?? row['from'] ?? row['start'])
-              ?.toString(),
-        );
-        final end = hmToMinutes(
-          (row['endTime'] ?? row['end_time'] ?? row['to'] ?? row['end'])
-              ?.toString(),
-        );
-        if (start == null || end == null) continue;
-        final diff = end - start;
-        final minutes = diff >= 0 ? diff : (diff + 24 * 60);
-        if (minutes > 0 && minutes <= 12 * 60) total += minutes;
-      }
-      return total;
-    }
-
-    List<_ScheduleSlot> scheduleSlots(dynamic schedule) {
-      if (schedule is! List || schedule.isEmpty) return const <_ScheduleSlot>[];
-      final out = <_ScheduleSlot>[];
-      for (final row in schedule) {
-        if (row is! Map) continue;
-        final dayRaw = row['dayOfWeek'] ?? row['day_of_week'] ?? row['day'];
-        final day = (dayRaw is int)
-            ? dayRaw
-            : (dayRaw is num)
-                ? dayRaw.toInt()
-                : int.tryParse((dayRaw ?? '').toString().trim());
-        final start = (row['startTime'] ??
-                row['start_time'] ??
-                row['from'] ??
-                row['start'])
-            ?.toString()
-            .trim();
-        final end =
-            (row['endTime'] ?? row['end_time'] ?? row['to'] ?? row['end'])
-                ?.toString()
-                .trim();
-        if (day == null || day <= 0) continue;
-        if ((start ?? '').isEmpty || (end ?? '').isEmpty) continue;
-        out.add(_ScheduleSlot(dayOfWeek: day, startTime: start!, endTime: end!));
-      }
-      return out;
-    }
-
-    String typeFromMap(Map<String, dynamic>? d) {
-      if (d == null) return '';
-      final v = d['courseType'] ?? d['course_type'] ?? d['CourseType'] ?? '';
-      return (v ?? '').toString().trim();
-    }
-    String nameArFromMap(Map<String, dynamic>? d) {
-      if (d == null) return '';
-      final v = d['courseName_Ar'] ?? d['courseNameAr'] ?? '';
-      return (v ?? '').toString().trim();
-    }
-    int weeklyMinutesFromMap(Map<String, dynamic>? d) {
-      if (d == null) return 0;
-      int? hmToMinutes(String? s) {
-        final raw = (s ?? '').trim();
-        if (raw.isEmpty) return null;
-        final parts = raw.split(':');
-        if (parts.length < 2) return null;
-        final h = int.tryParse(parts[0].trim());
-        final m = int.tryParse(parts[1].trim());
-        if (h == null || m == null) return null;
-        return (h.clamp(0, 23) * 60) + m.clamp(0, 59);
-      }
-
-      int readHours(dynamic raw) {
-        if (raw is int) return raw;
-        if (raw is num) return raw.toInt();
-        final s = (raw ?? '').toString().trim();
-        if (s.isEmpty) return 0;
-        final direct = int.tryParse(s);
-        if (direct != null) return direct;
-        final m = RegExp(r'(\\d{1,3})').firstMatch(s);
-        if (m == null) return 0;
-        return int.tryParse(m.group(1)!) ?? 0;
-      }
-
-      // Absence must be based on actual scheduled weekly contact hours.
-      // Prefer explicit weekly fields; do NOT use creditHours (academic credits)
-      // because it can differ from real weekly contact hours.
-      // In production data, `weeklyHours` is sometimes filled with a broader
-      // definition (e.g. combined lecture+lab). We prefer `hoursPerWeek` when
-      // present because it matches the “hours per week” used by the academic rules.
-      final weeklyHours =
-          readHours(d['hoursPerWeek'] ?? d['weeklyHours'] ?? d['contactHours']);
-      if (weeklyHours > 0) return weeklyHours * 60;
-
-      // Fallback (only if weekly hours fields are missing): derive from schedule.
-      final schedule = d['schedule'];
-      if (schedule is List && schedule.isNotEmpty) {
-        int total = 0;
-        for (final row in schedule) {
-          if (row is! Map) continue;
-          final start = hmToMinutes(
-            (row['startTime'] ?? row['start_time'] ?? row['from'] ?? row['start'])
-                ?.toString(),
-          );
-          final end = hmToMinutes(
-            (row['endTime'] ?? row['end_time'] ?? row['to'] ?? row['end'])
-                ?.toString(),
-          );
-          if (start == null || end == null) continue;
-          final diff = end - start;
-          final minutes = diff >= 0 ? diff : (diff + 24 * 60);
-          if (minutes > 0 && minutes <= 12 * 60) {
-            total += minutes;
-          }
-        }
-        if (total > 0) return total;
-      }
-
-      return 0;
-    }
-
-    for (final code in codes) {
-      final doc = await firestore.collection('courses').doc(code).get();
-      if (doc.exists) {
-        final type = typeFromMap(doc.data());
-        if (type.isNotEmpty) codeToType[code] = type;
-        final nameAr = nameArFromMap(doc.data());
-        if (nameAr.isNotEmpty) codeToNameAr[code] = nameAr;
-        // Priority: course.schedule, then explicit weekly hours fields.
-        final fromCourseSchedule = scheduleMinutes(doc.data()?['schedule']);
-        if (fromCourseSchedule > 0) {
-          codeToWeeklyMinutes[code] = fromCourseSchedule;
-        } else {
-          final weekly = weeklyMinutesFromMap(doc.data());
-          if (weekly > 0) codeToWeeklyMinutes[code] = weekly;
-        }
-      }
-    }
-
-    // Read section schedules for ALL sectionIds (priority source for weekly minutes).
-    for (final sectionId in sectionIds) {
-      final doc = await firestore.collection('sections').doc(sectionId).get();
-      if (doc.exists) {
-        // Priority source for weekly minutes: section.schedule
-        final fromSectionSchedule = scheduleMinutes(doc.data()?['schedule']);
-        if (fromSectionSchedule > 0) {
-          sectionIdToWeeklyMinutes[sectionId] = fromSectionSchedule;
-        }
-        final slots = scheduleSlots(doc.data()?['schedule']);
-        if (slots.isNotEmpty) sectionIdToScheduleSlots[sectionId] = slots;
-        // Only fill section type when needed.
-        if (!sectionIdToType.containsKey(sectionId) &&
-            needSectionType.contains(sectionId)) {
-          final type = typeFromMap(doc.data());
-          if (type.isNotEmpty) sectionIdToType[sectionId] = type;
-        }
-      }
-    }
-
-    if (kDebugMode) {
-      debugPrint(
-        '[AttendanceTracking] sectionIdToWeeklyMinutes=$sectionIdToWeeklyMinutes',
-      );
-    }
-
-    return (
-      codeToType: codeToType,
-      sectionIdToType: sectionIdToType,
-      codeToNameAr: codeToNameAr,
-      codeToWeeklyMinutes: codeToWeeklyMinutes,
-      sectionIdToWeeklyMinutes: sectionIdToWeeklyMinutes,
-      sectionIdToScheduleSlots: sectionIdToScheduleSlots,
-    );
-  }
-
   _AttendanceRecord _toAttendanceRecord(
     ManualAttendanceRecord record,
     Map<String, String> codeToType,
     Map<String, String> sectionIdToType,
     Map<String, String> codeToNameAr,
-    Map<String, List<_ScheduleSlot>> sectionIdToScheduleSlots,
+    Map<String, List<AttendanceScheduleSlot>> sectionIdToScheduleSlots,
     DateTime? semesterStart,
   ) {
     final status = switch (record.status) {
@@ -544,7 +281,9 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
     final weekday = lectureDate.weekday; // Dart: Mon=1..Sun=7
     String startTime = record.lectureStartTime;
     String endTime = record.lectureEndTime;
-    final slots = sectionIdToScheduleSlots[record.sectionId.trim()] ?? const <_ScheduleSlot>[];
+    final slots =
+        sectionIdToScheduleSlots[record.sectionId.trim()] ??
+            const <AttendanceScheduleSlot>[];
     if (slots.isNotEmpty) {
       final daySlots = slots.where((s) => s.dayOfWeek == weekday).toList();
       if (daySlots.isNotEmpty) {
@@ -659,36 +398,6 @@ class _AttendanceTrackingScreenState extends State<AttendanceTrackingScreen> {
       default:
         return 'الأحد';
     }
-  }
-
-  DateTime? _readDate(dynamic value) {
-    if (value is Timestamp) {
-      final d = value.toDate();
-      return DateTime(d.year, d.month, d.day);
-    }
-    if (value is DateTime) {
-      return DateTime(value.year, value.month, value.day);
-    }
-    if (value is String) {
-      final d = DateTime.tryParse(value.trim());
-      if (d == null) return null;
-      return DateTime(d.year, d.month, d.day);
-    }
-    return null;
-  }
-
-  int? _readPositiveInt(dynamic value) {
-    if (value is int && value > 0) return value;
-    if (value is num && value > 0) return value.toInt();
-    final raw = (value ?? '').toString().trim();
-    if (raw.isEmpty) return null;
-    final direct = int.tryParse(raw);
-    if (direct != null && direct > 0) return direct;
-    final m = RegExp(r'(\\d{1,3})').firstMatch(raw);
-    if (m == null) return null;
-    final parsed = int.tryParse(m.group(1)!);
-    if (parsed == null || parsed <= 0) return null;
-    return parsed;
   }
 
   List<_AttendanceRecord> get _filteredRecordsForSummary {
@@ -1956,16 +1665,4 @@ class _LegendRow extends StatelessWidget {
       ],
     );
   }
-}
-
-class _ScheduleSlot {
-  const _ScheduleSlot({
-    required this.dayOfWeek,
-    required this.startTime,
-    required this.endTime,
-  });
-
-  final int dayOfWeek;
-  final String startTime;
-  final String endTime;
 }

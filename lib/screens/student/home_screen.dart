@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../models/course_model.dart';
+import '../../models/unified_student_courses.dart';
 import 'student_card_page.dart';
 import 'components/custom_nav_bar_icons.dart';
 import 'notifications_screen.dart';
@@ -8,6 +12,7 @@ import 'services_screen.dart';
 import 'nfc_attendance_screen.dart';
 import 'schedule_screen.dart';
 import 'excuse_screen.dart';
+import '../../providers/courses_providers.dart';
 import 'pending_detail_screen.dart';
 import 'submit_excuse_screen.dart';
 import 'rejection_detail_screen.dart';
@@ -22,14 +27,14 @@ import '../../shared/widgets/chat_fab.dart';
 import '../../features/translation/translation_controller.dart';
 import '../../features/translation/widgets/t_text.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> {
   static const _textStrong = Color(0xFF111827);
   static const _textMuted = Color(0xFF6B7280);
   int selectedIndex = 2; // Start with Home selected (index 2 for Home)
@@ -269,7 +274,10 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 12),
 
-              _buildTodayLecturesSection(context),
+              _TodayLecturesStrip(
+                studentId:
+                    StudentAuthService.instance.currentStudent?.studentId ?? 0,
+              ),
 
               const SizedBox(height: 8),
 
@@ -478,66 +486,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTodayLecturesSection(BuildContext context) {
-    final studentId = StudentAuthService.instance.currentStudent?.studentId ?? 0;
-    return SizedBox(
-      height: 150,
-      child: FutureBuilder<List<CourseSchedule>>(
-        future: studentId <= 0
-            ? Future.value(<CourseSchedule>[])
-            : fetchTodayCoursesForStudent(studentId),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: CircularProgressIndicator(color: Color(0xFF006571)),
-              ),
-            );
-          }
-          final courses = snapshot.data ?? [];
-          if (courses.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: TText(
-                  'لا توجد محاضرات اليوم',
-                  style: TextStyle(fontSize: 15, color: Colors.grey[600]),
-                ),
-              ),
-            );
-          }
-          return ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: courses.length,
-            itemBuilder: (context, index) {
-              final course = courses[index];
-              return Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: InkWell(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ScheduleScreen(),
-                      ),
-                    );
-                  },
-                  borderRadius: BorderRadius.circular(16),
-                  child: buildLectureCard(
-                    course.courseName,
-                    course.section,
-                    course.room,
-                  ),
-                ),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-
   Widget buildStudentCard(BuildContext context) {
     return Column(
       children: [
@@ -729,6 +677,138 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Separate [ConsumerWidget] so Riverpod rebuilds when [studentUnifiedCoursesProvider]
+/// completes even though the parent [HomeScreen] body is inside [AnimatedBuilder].
+class _TodayLecturesStrip extends ConsumerWidget {
+  const _TodayLecturesStrip({required this.studentId});
+
+  final int studentId;
+
+  static String _title(CourseModel m) {
+    final ar = m.courseNameAr.trim();
+    final en = m.courseNameEn.trim();
+    final code = m.courseCode.trim();
+    if (ar.isNotEmpty) return ar;
+    if (en.isNotEmpty) return en;
+    return code;
+  }
+
+  static String _section(CourseModel m) {
+    final label = m.sectionLabel.trim();
+    if (label.isNotEmpty) return label;
+    final sid = m.sectionId.trim();
+    if (sid.contains('-')) return sid.split('-').last;
+    return '1';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (studentId <= 0) {
+      return SizedBox(
+        height: 150,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: TText(
+              'لا توجد محاضرات اليوم',
+              style: TextStyle(fontSize: 15, color: Colors.grey[600]),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final sid = studentId.toString();
+    final repo = ref.watch(studentRepositoryProvider);
+    final unifiedAsync = ref.watch(studentUnifiedCoursesProvider(sid));
+
+    UnifiedStudentCourses? unified;
+    if (unifiedAsync.hasValue) {
+      unified = unifiedAsync.requireValue;
+    } else {
+      final cached = repo.getCachedCourses(sid);
+      if (cached != null && cached.isNotEmpty) {
+        // Instant UI from Hive while async provider (holiday + refresh) finishes.
+        unified = UnifiedStudentCourses.fromCourses(cached, isHoliday: false);
+      }
+    }
+
+    if (unified != null) {
+      return SizedBox(height: 150, child: _lecturesFromUnified(context, unified));
+    }
+
+    if (unifiedAsync.hasError) {
+      return SizedBox(
+        height: 150,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: TText(
+              'لا توجد محاضرات اليوم',
+              style: TextStyle(fontSize: 15, color: Colors.grey[600]),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return const SizedBox(
+      height: 150,
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: CircularProgressIndicator(color: Color(0xFF006571)),
+        ),
+      ),
+    );
+  }
+
+  static Widget _lecturesFromUnified(
+    BuildContext context,
+    UnifiedStudentCourses unified,
+  ) {
+    final rows = unified.todaySlotRows();
+    if (rows.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: TText(
+            'لا توجد محاضرات اليوم',
+            style: TextStyle(fontSize: 15, color: Colors.grey[600]),
+          ),
+        ),
+      );
+    }
+    return ListView.builder(
+      scrollDirection: Axis.horizontal,
+      itemCount: rows.length,
+      itemBuilder: (context, index) {
+        final row = rows[index];
+        final room = row.slot.hall.trim().isNotEmpty ? row.slot.hall : '—';
+        return Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ScheduleScreen(),
+                ),
+              );
+            },
+            borderRadius: BorderRadius.circular(16),
+            child: _HomeScreenState.buildLectureCard(
+              _title(row.model),
+              _section(row.model),
+              room,
+            ),
+          ),
+        );
+      },
     );
   }
 }
