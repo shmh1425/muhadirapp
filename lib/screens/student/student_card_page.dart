@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/student_auth_service.dart';
 import '../../models/external_student.dart';
-import '../../shared/widgets/student_profile_avatar.dart';
 import '../../features/translation/translation_controller.dart';
 import '../../features/translation/widgets/t_text.dart';
 import 'components/student_back_chevron_icon.dart';
+import 'widgets/student_digital_id_card.dart';
+import 'widgets/student_gate_hce_banner.dart';
 
 class StudentCardPage extends StatelessWidget {
   const StudentCardPage({super.key});
@@ -56,7 +58,32 @@ class StudentCardPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _buildStudentCard(student),
+                      if (student != null)
+                        StudentDigitalIdCard(student: student)
+                      else
+                        _buildMissingStudentCard(),
+                      if (student != null && student.studentId > 0) ...[
+                        const SizedBox(height: 16),
+                        StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                          stream: StudentAuthService.instance
+                              .watchCurrentStudentDoc(),
+                          builder: (context, snap) {
+                            final rev = (snap.data?.data()?['gateCardRev'] as num?)
+                                    ?.toInt() ??
+                                int.tryParse(
+                                  snap.data
+                                          ?.data()?['gateCardRev']
+                                          ?.toString() ??
+                                      '',
+                                ) ??
+                                0;
+                            return StudentGateHceBanner(
+                              studentId: student.studentId,
+                              gateCardRev: rev,
+                            );
+                          },
+                        ),
+                      ],
                       const SizedBox(height: 20),
                       _buildElectronicWalletSection(context, student),
                     ],
@@ -70,201 +97,23 @@ class StudentCardPage extends StatelessWidget {
     );
   }
 
-  Widget _buildStudentCard(ExternalStudent? student) {
-    final nameAr = student?.nameAr ?? '';
-    final nameEn = student?.name ?? '';
-    final studentId = student?.studentId.toString() ?? '-';
-    final collegeAr = (student?.collegeArSafe ?? '').trim();
-    final collegeEn = (student?.collegeSafe ?? '').trim();
-    final departmentAr = (student?.departmentArSafe ?? '').trim();
-    final departmentEn = (student?.departmentSafe ?? '').trim();
-    final majorAr = (student?.majorArSafe ?? '').trim();
-    final majorEn = (student?.major ?? '').trim();
-
-    String normalizeMajorAr(String rawAr, String rawEn) {
-      final ar = rawAr.trim();
-      final en = rawEn.trim().toLowerCase();
-      if (ar == 'ايكونومك' || ar.contains('ايكونوم')) return 'اقتصاد';
-      if (en == 'economics' || en == 'economic') return 'اقتصاد';
-      return ar;
-    }
-
-    final majorArNormalized = normalizeMajorAr(majorAr, majorEn);
-
-    final collegeArDisplay =
-        collegeAr.isNotEmpty ? collegeAr : (collegeEn.isNotEmpty ? collegeEn : '—');
-    final collegeEnDisplay =
-        collegeEn.isNotEmpty ? collegeEn : (collegeAr.isNotEmpty ? collegeAr : '—');
-
-    final departmentArDisplay =
-        departmentAr.isNotEmpty
-            ? departmentAr
-            : (majorArNormalized.isNotEmpty ? majorArNormalized : 'هندسة البرمجيات');
-    final departmentEnDisplay =
-        departmentEn.isNotEmpty ? departmentEn : (majorEn.isNotEmpty ? majorEn : 'Software Engineering');
-    final majorArDisplay =
-        majorArNormalized.isNotEmpty
-            ? majorArNormalized
-            : (majorEn.isNotEmpty ? majorEn : 'هندسة البرمجيات');
-    final majorEnDisplay =
-        majorEn.isNotEmpty ? majorEn : (majorAr.isNotEmpty ? majorAr : 'Software Engineering');
+  Widget _buildMissingStudentCard() {
     return Container(
       width: double.infinity,
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(11),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0x3F000000),
-            blurRadius: 0,
-            offset: const Offset(0, 4),
-            spreadRadius: -24,
-          ),
-        ],
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade300),
       ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        children: [
-          // 👇 Row مع اتجاه RTL عشان الصورة يمين والمعلومات يسار
-          Directionality(
-            // Keep avatar + names on the right always (stable order).
-            textDirection: TextDirection.ltr,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      // Keep Arabic name always Arabic (no translation).
-                      Text(
-                        nameAr.isNotEmpty ? nameAr : nameEn,
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontSize: 16,
-                          fontFamily: 'Cairo',
-                          fontWeight: FontWeight.w700,
-                        ),
-                        textAlign: TextAlign.right,
-                      ),
-                      const SizedBox(height: 4),
-                      // Keep English name as-is.
-                      Text(
-                        nameEn.isNotEmpty ? nameEn : nameAr,
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 14,
-                          fontFamily: 'Cairo',
-                          fontWeight: FontWeight.w400,
-                        ),
-                        textAlign: TextAlign.right,
-                      ),
-                      const SizedBox(height: 8),
-                      TText(
-                        '${student?.isFemale == true ? 'رقم الطالبة' : 'رقم الطالب'} : $studentId',
-                        style: TextStyle(
-                          color: Colors.black.withOpacity(0.82),
-                          fontSize: 14,
-                          fontFamily: 'Tajawal',
-                          fontWeight: FontWeight.w500,
-                        ),
-                        textAlign: TextAlign.right,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                const StudentProfileAvatar(size: 46),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // Show Arabic + English info together (two columns).
-          // Keep columns stable: English left, Arabic right (regardless of page RTL/LTR).
-          Directionality(
-            textDirection: TextDirection.ltr,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Directionality(
-                    textDirection: TextDirection.ltr,
-                    child: Text(
-                      'Faculty: $collegeEnDisplay\nDepartment: $departmentEnDisplay\nMajor: $majorEnDisplay',
-                      textAlign: TextAlign.left,
-                      style: TextStyle(
-                        color: Colors.black.withOpacity(0.88),
-                        fontSize: 12,
-                        fontFamily: 'Cairo',
-                        fontWeight: FontWeight.w500,
-                        height: 1.70,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 20),
-                Expanded(
-                  child: Directionality(
-                    textDirection: TextDirection.rtl,
-                    child: Text(
-                      'الكلية: $collegeArDisplay\nالقسم: $departmentArDisplay\nالتخصص: $majorArDisplay',
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        color: Colors.black.withOpacity(0.88),
-                        fontSize: 12,
-                        fontFamily: 'Tajawal',
-                        fontWeight: FontWeight.w500,
-                        height: 1.70,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Issue date in both languages (stable columns).
-          Directionality(
-            textDirection: TextDirection.ltr,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Directionality(
-                    textDirection: TextDirection.ltr,
-                    child: Text(
-                      'Issue Date: 05/2025',
-                      textAlign: TextAlign.left,
-                      style: TextStyle(
-                        color: Colors.black.withOpacity(0.88),
-                        fontSize: 12,
-                        fontFamily: 'Cairo',
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 20),
-                Expanded(
-                  child: Directionality(
-                    textDirection: TextDirection.rtl,
-                    child: Text(
-                      'تاريخ الإصدار: 05/2025',
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        color: Colors.black.withOpacity(0.88),
-                        fontSize: 12,
-                        fontFamily: 'Tajawal',
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+      child: const TText(
+        'لا توجد بيانات بطاقة',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontFamily: 'Cairo',
+          fontSize: 16,
+          color: Color(0xFF757575),
+        ),
       ),
     );
   }
@@ -280,7 +129,7 @@ class StudentCardPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -314,7 +163,7 @@ class StudentCardPage extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Icon(
@@ -372,7 +221,7 @@ class StudentCardPage extends StatelessWidget {
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: Colors.grey.withOpacity(0.1),
+              color: Colors.grey.withValues(alpha: 0.1),
               width: 1,
             ),
           ),
@@ -450,7 +299,7 @@ class StudentCardPage extends StatelessWidget {
                 width: 27,
                 height: 27,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF006571).withOpacity(0.1),
+                  color: const Color(0xFF006571).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: const Icon(

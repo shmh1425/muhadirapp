@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:hive_flutter/hive_flutter.dart';
 
+import '../services/attendance/nfc_attendance_service.dart';
 import '../services/female_security/security_gate_scan_service.dart';
 
 /// Central API for security staff: realtime scans stay as streams; metadata may be cached.
@@ -31,12 +32,46 @@ class SecurityRepository {
       _gate.getActiveRejectionReasons();
 
   /// Cache-first profile lookup for repeated verification of the same id.
+  ///
+  /// Set [bypassCache] true when verifying gate payloads that include `rev`, so
+  /// Hive never returns a stale [SecurityStudentProfile.gateCardRev].
   Future<SecurityStudentProfile?> findStudentByUniversityId(
-    String universityId,
-  ) async {
+    String universityId, {
+    bool bypassCache = false,
+  }) async {
     final norm = universityId.trim();
     if (norm.isEmpty) return null;
     final cacheKey = 'ext_stu_$norm';
+    if (!bypassCache) {
+      try {
+        if (_box.isOpen) {
+          final hit = _box.get(cacheKey);
+          if (hit is Map) {
+            final m = Map<String, dynamic>.from(
+              hit.map((k, v) => MapEntry(k.toString(), v)),
+            );
+            final docId = (m.remove('_docId') ?? norm).toString();
+            unawaited(_refreshStudentCache(norm, cacheKey));
+            return SecurityStudentProfile.fromMap(m, docId);
+          }
+        }
+      } catch (_) {}
+    }
+
+    final profile = await _gate.findStudentByUniversityId(norm);
+    if (profile != null) {
+      await _putStudentProfile(cacheKey, profile, docIdForCache: norm);
+    }
+    return profile;
+  }
+
+  /// NFC gate card UID → student profile (Hive cache, same pattern as university id).
+  Future<SecurityStudentProfile?> findStudentBySecurityNfcUid(
+    String uid,
+  ) async {
+    final norm = NfcAttendanceService.normalizeLecturerCardId(uid.trim());
+    if (norm.isEmpty) return null;
+    final cacheKey = 'nfc_uid_$norm';
     try {
       if (_box.isOpen) {
         final hit = _box.get(cacheKey);
@@ -45,17 +80,30 @@ class SecurityRepository {
             hit.map((k, v) => MapEntry(k.toString(), v)),
           );
           final docId = (m.remove('_docId') ?? norm).toString();
-          unawaited(_refreshStudentCache(norm, cacheKey));
+          unawaited(_refreshNfcStudentCache(norm, cacheKey));
           return SecurityStudentProfile.fromMap(m, docId);
         }
       }
     } catch (_) {}
 
-    final profile = await _gate.findStudentByUniversityId(norm);
+    final profile = await _gate.findStudentBySecurityNfcUid(norm);
     if (profile != null) {
-      await _putStudentProfile(cacheKey, profile, docIdForCache: norm);
+      await _putStudentProfile(
+        cacheKey,
+        profile,
+        docIdForCache: profile.universityId,
+      );
     }
     return profile;
+  }
+
+  Future<void> _refreshNfcStudentCache(String uid, String cacheKey) async {
+    try {
+      final profile = await _gate.findStudentBySecurityNfcUid(uid);
+      if (profile != null) {
+        await _putStudentProfile(cacheKey, profile, docIdForCache: uid);
+      }
+    } catch (_) {}
   }
 
   Future<void> _putStudentProfile(
@@ -79,6 +127,7 @@ class SecurityRepository {
         'attendanceStatus': p.attendanceStatus,
         'studentAcademicStatus': p.studentAcademicStatus,
         'studentCardStatus': p.studentCardStatus,
+        'gateCardRev': p.gateCardRev,
       });
     } catch (_) {}
   }

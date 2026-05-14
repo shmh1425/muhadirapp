@@ -34,6 +34,8 @@
 	<string>يستخدم التطبيق البلوتوث لبث جلسة التحضير من جهاز المحاضر في المقدمة.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>يحتاج التطبيق إلى الكاميرا لمسح رمز QR الخاص بتسجيل الحضور.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>يُستخدم الموقع للتحقق من أن جهاز البوابة داخل نطاق الحرم الجامعي قبل قراءة بطاقة NFC.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -139,36 +139,19 @@ class SecurityCardPreviewScreen extends StatelessWidget {
           ),
           child: _buildCardContent(),
         ),
-        _buildAvatar(),
+        _buildGateIconBadge(),
       ],
     );
   }
 
-  Widget _buildAvatar() {
-    final size = 78.0;
-    Widget image = student.photoUrl != null && student.photoUrl!.isNotEmpty
-        ? Image.network(
-            student.photoUrl!,
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _avatarPlaceholder(size),
-          )
-        : (student.photoAsset != null && student.photoAsset!.isNotEmpty
-              ? Image.asset(
-                  student.photoAsset!,
-                  width: size,
-                  height: size,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => _avatarPlaceholder(size),
-                )
-              : _avatarPlaceholder(size));
-
+  Widget _buildGateIconBadge() {
+    const size = 78.0;
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
+        color: _kTealLight.withValues(alpha: 0.1),
         border: Border.all(color: _kTealLight, width: 2.5),
         boxShadow: [
           BoxShadow(
@@ -178,24 +161,10 @@ class SecurityCardPreviewScreen extends StatelessWidget {
           ),
         ],
       ),
-      clipBehavior: Clip.antiAlias,
-      child: image,
-    );
-  }
-
-  Widget _avatarPlaceholder(double size) {
-    return Container(
-      color: _kTextMuted.withValues(alpha: 0.15),
-      child: Center(
-        child: Text(
-          student.fullName.isNotEmpty ? student.fullName[0] : '?',
-          style: const TextStyle(
-            fontSize: 32,
-            fontWeight: FontWeight.bold,
-            color: _kTealLight,
-            fontFamily: 'Cairo',
-          ),
-        ),
+      child: const Icon(
+        Icons.badge_outlined,
+        size: 38,
+        color: _kTealLight,
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../../features/translation/translation_controller.dart';
+import '../../services/geo/geo_fence_outcome.dart';
 
 class SecurityLocalization {
   SecurityLocalization._();
@@ -106,6 +107,129 @@ class SecurityLocalization {
   static String get thisStudentAlreadyAcceptedToday => tr(
     'تم قبول هذه الطالبة مسبقًا عند هذه البوابة اليوم',
     'This student has already been accepted at this gate today.',
+  );
+
+  static String get priorRejectionAlertTitle =>
+      tr('تنبيه: رفض سابق', 'Alert: prior rejection');
+  static String get priorRejectionAlertLead => tr(
+    'تم رفض الطالبة مسبقاً اليوم عند هذه البوابة للسبب التالي:',
+    'This student was already rejected at this gate today for the following reason:',
+  );
+  static String get priorRejectionAlertFooter => tr(
+    'اضغطي «تأكيد ودخول» للمتابعة إلى نافذة التحقق، أو «إلغاء» للعودة.',
+    'Tap “Confirm entry” to open the verification screen, or “Cancel” to go back.',
+  );
+  static String get priorRejectionAlertContinue => tr(
+    'تأكيد ودخول',
+    'Confirm entry',
+  );
+  static String get priorRejectionAlertCancel => tr('إلغاء', 'Cancel');
+
+  static String get nfcGateVerificationTitle =>
+      tr('التحقق عبر NFC أو QR', 'NFC or QR gate verification');
+  static String get gateCardVerificationTitle =>
+      tr('التحقق من البطاقة', 'Card verification');
+  static String get cardDataSectionTitle =>
+      tr('بيانات البطاقة', 'Card details');
+  static String get confirmEntry =>
+      tr('تأكيد الدخول', 'Confirm entry');
+  static String get rejectEntry =>
+      tr('رفض الدخول', 'Reject entry');
+  static String get nfcGateVerificationSubtitle => tr(
+    'امسحي بطاقة الطالبة (NFC) أو رمز QR المعروض على بطاقتها في التطبيق.',
+    'Scan the student card (NFC) or the QR code shown on her card in the app.',
+  );
+  static String get nfcStartScan =>
+      tr('بدء قراءة البطاقة', 'Start card scan');
+  static String get nfcScanningHint => tr(
+    'قرّبي البطاقة أو الجهاز من أعلى الهاتف…',
+    'Hold the card or phone near the top of this device…',
+  );
+  static String get nfcNotAvailableWeb => tr(
+    'NFC غير مدعوم على المتصفح. استخدمي التطبيق على iOS/Android في جهاز حقيقي.',
+    'NFC is not supported in the browser. Use the iOS/Android app on a real device.',
+  );
+  static String get nfcNotAvailableDevice => tr(
+    'NFC غير متاح على هذا الجهاز',
+    'NFC is not available on this device',
+  );
+  static String get nfcReadFailed => tr(
+    'تعذرت قراءة البطاقة',
+    'Could not read the card',
+  );
+  static String get nfcUnknownStudent => tr(
+    'لم يُعثر على طالبة مطابقة لهذا المعرّف',
+    'No student matched this identifier',
+  );
+  static String get nfcUidLabel => tr('معرّف القراءة', 'Read identifier');
+  static String get nfcContinueHumanVerification => tr(
+    'متابعة التحقق البصري',
+    'Continue to visual verification',
+  );
+  static String get nfcScanAgain =>
+      tr('مسح جديد', 'Scan again');
+  static String get nfcHintFirestoreField => tr(
+    'يتم البحث في الحقل securityGateNfcUid أو الرقم الجامعي أو رقم البطاقة من QR/NFC',
+    'Lookup uses securityGateNfcUid, university ID, or card number from QR/NFC',
+  );
+
+  static String get gateReaderModeNfc => tr('NFC', 'NFC');
+  static String get gateReaderModeQr => tr('QR', 'QR');
+  static String get qrScanHint => tr(
+    'وجّهي الكاميرا نحو رمز QR على البطاقة.',
+    'Point the camera at the QR on the card.',
+  );
+  static String get qrInvalidGatePayload => tr(
+    'رمز QR غير صالح لهذه البوابة',
+    'This QR code is not valid for this gate',
+  );
+  static String get qrCameraPermissionDenied => tr(
+    'لم يتم السماح باستخدام الكاميرا. فعّلي صلاحية الكاميرا لمسح رمز QR.',
+    'Camera permission is not granted. Enable camera access to scan the QR code.',
+  );
+  static String get qrNotOnWeb => tr(
+    'مسح QR غير متاح في المتصفح. استخدمي تطبيق الأمن على الهاتف.',
+    'QR scanning is not available in the browser. Use the security app on a phone.',
+  );
+  static String get qrProcessing => tr('جاري التحقق…', 'Verifying…');
+  static String get qrResumeScanning =>
+      tr('متابعة المسح', 'Continue scanning');
+  static String get gateCardRevStale => tr(
+    'رمز البطاقة لم يعد صالحاً (مثلاً بعد انسحاب أو تحديث وضع الطالبة). يُرجى فتح بطاقة الطالبة من جديد لتحديث الرمز.',
+    'This gate card code is no longer valid (e.g. after withdrawal or status update). Ask the student to open the card screen to refresh the code.',
+  );
+
+  /// Maps [GeoFenceOutcome] to localized text (service returns codes only).
+  static String geoFenceOutcomeMessage(GeoFenceOutcome outcome) {
+    switch (outcome) {
+      case GeoFenceOutcome.inside:
+        return '';
+      case GeoFenceOutcome.outsideCampus:
+        return tr(
+          'أنتِ خارج نطاق الجامعة، لا يمكن إكمال عملية التحقق.',
+          'You are outside the university area. Verification cannot continue.',
+        );
+      case GeoFenceOutcome.permissionDenied:
+        return tr(
+          'يرجى تفعيل إذن الموقع لإكمال عملية التحقق.',
+          'Please enable location permission to continue verification.',
+        );
+      case GeoFenceOutcome.locationServiceDisabled:
+        return tr(
+          'يرجى تفعيل خدمة الموقع من إعدادات الجهاز.',
+          'Please enable location services from device settings.',
+        );
+      case GeoFenceOutcome.locationUnavailable:
+        return tr(
+          'تعذر تحديد موقعك الحالي. يرجى المحاولة مرة أخرى.',
+          'Unable to determine your current location. Please try again.',
+        );
+    }
+  }
+
+  static String get securityGateGeoLayerHint => tr(
+    'تُتحقق أولاً من أن الجهاز داخل نطاق الحرم (جيوفنس)، ثم تُفعّل قراءة NFC أو مسح QR.',
+    'Campus boundary is checked first (geo-fence), then NFC or QR scanning runs.',
   );
 
   static String dayName(DateTime date) {

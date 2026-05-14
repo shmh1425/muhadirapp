@@ -7,6 +7,7 @@ import 'female_security_nav_bar.dart';
 import 'rejected_students_screen.dart';
 import 'security_card_preview_screen.dart';
 import 'security_localization.dart';
+import 'security_nfc_verification_screen.dart';
 import 'security_prefs.dart';
 import 'security_settings_screen.dart';
 import 'widgets/security_date_picker_dialog.dart';
@@ -87,6 +88,14 @@ class _AcceptedScreenState extends ConsumerState<AcceptedScreen> {
         _dateUpdated = true;
       });
     }
+  }
+
+  void _openSecurityNfcVerification() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const SecurityNfcVerificationScreen(),
+      ),
+    );
   }
 
   List<SecurityGateScanRecord> _filterScans(
@@ -185,6 +194,7 @@ class _AcceptedScreenState extends ConsumerState<AcceptedScreen> {
                                   onPickDate: _openDatePicker,
                                   formattedDate: formattedDate,
                                   isDateActive: _dateUpdated,
+                                  onOpenNfcVerification: _openSecurityNfcVerification,
                                 ),
                                 const SizedBox(height: 12),
                                 const _AcceptedStatusBanner(),
@@ -220,6 +230,7 @@ class _AcceptedScreenState extends ConsumerState<AcceptedScreen> {
                                   onPickDate: _openDatePicker,
                                   formattedDate: formattedDate,
                                   isDateActive: _dateUpdated,
+                                  onOpenNfcVerification: _openSecurityNfcVerification,
                                 ),
                                 const SizedBox(height: 12),
                                 const _AcceptedStatusBanner(),
@@ -245,6 +256,7 @@ class _AcceptedScreenState extends ConsumerState<AcceptedScreen> {
                                 onPickDate: _openDatePicker,
                                 formattedDate: formattedDate,
                                 isDateActive: _dateUpdated,
+                                onOpenNfcVerification: _openSecurityNfcVerification,
                               ),
                               const SizedBox(height: 12),
                               const _AcceptedStatusBanner(),
@@ -298,12 +310,14 @@ class HeaderSection extends StatelessWidget {
     required this.onPickDate,
     required this.formattedDate,
     this.isDateActive = true,
+    this.onOpenNfcVerification,
   });
 
   final VoidCallback onRefresh;
   final VoidCallback onPickDate;
   final String formattedDate;
   final bool isDateActive;
+  final VoidCallback? onOpenNfcVerification;
 
   @override
   Widget build(BuildContext context) {
@@ -402,6 +416,31 @@ class HeaderSection extends StatelessWidget {
             ),
           ],
         ),
+        if (onOpenNfcVerification != null) ...[
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 44,
+            child: OutlinedButton.icon(
+              onPressed: onOpenNfcVerification,
+              icon: const Icon(Icons.nfc_rounded, color: _kTealLight, size: 22),
+              label: Text(
+                SecurityLocalization.nfcGateVerificationTitle,
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.w600,
+                  color: _kTealLight,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _kTealLight,
+                side: const BorderSide(color: _kTealLight, width: 1.2),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

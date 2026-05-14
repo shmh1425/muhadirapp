@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../screens/female_security/models/student_card_info.dart';
+import '../attendance/nfc_attendance_service.dart';
 
 class SecurityGateOption {
   const SecurityGateOption({
@@ -79,6 +80,17 @@ class SecurityRejectionReason {
   }
 }
 
+/// Shown in a pop-up before card verification when the student was rejected
+/// earlier the same day at this gate (and entry is not already finalized as
+/// accepted).
+class PriorGateRejectionHint {
+  const PriorGateRejectionHint({required this.lastRejectionReasonText});
+
+  /// From Firestore `rejectionReasonText` on the latest rejected scan; may be
+  /// empty if not recorded.
+  final String lastRejectionReasonText;
+}
+
 class SecurityStudentProfile {
   const SecurityStudentProfile({
     required this.studentId,
@@ -95,6 +107,7 @@ class SecurityStudentProfile {
     this.studentAcademicStatus = 'active',
     this.studentCardStatus = 'active',
     this.cardExpiryDate,
+    this.gateCardRev = 0,
   });
 
   final int studentId;
@@ -111,6 +124,9 @@ class SecurityStudentProfile {
   final String studentAcademicStatus;
   final String studentCardStatus;
   final Timestamp? cardExpiryDate;
+
+  /// Bumped in Firestore when the gate QR/NFC payload must invalidate (e.g. withdrawal).
+  final int gateCardRev;
 
   factory SecurityStudentProfile.fromMap(
     Map<String, dynamic> data,
@@ -138,6 +154,7 @@ class SecurityStudentProfile {
           .toString(),
       studentCardStatus: (data['studentCardStatus'] ?? 'active').toString(),
       cardExpiryDate: data['cardExpiryDate'] as Timestamp?,
+      gateCardRev: _safeInt(data['gateCardRev']) ?? 0,
     );
   }
 }
@@ -414,6 +431,37 @@ class FemaleSecurityGateScanService {
     return null;
   }
 
+  /// Lookup by NFC UID stored on the student record (`securityGateNfcUid`),
+  /// normalized like lecturer card ids (alphanumeric uppercase).
+  Future<SecurityStudentProfile?> findStudentBySecurityNfcUid(
+    String rawUid,
+  ) async {
+    final normalized = NfcAttendanceService.normalizeLecturerCardId(rawUid);
+    if (normalized.isEmpty) return null;
+
+    try {
+      final snapshot = await _firestore
+          .collection('external_students')
+          .where('securityGateNfcUid', isEqualTo: normalized)
+          .limit(1)
+          .get();
+      if (snapshot.docs.isEmpty) return null;
+      final doc = snapshot.docs.first;
+      return SecurityStudentProfile.fromMap(doc.data(), doc.id);
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[FemaleSecurityGateScanService] findStudentBySecurityNfcUid failed: '
+        '$error',
+      );
+      debugPrintStack(
+        label:
+            '[FemaleSecurityGateScanService] findStudentBySecurityNfcUid stack',
+        stackTrace: stackTrace,
+      );
+      return null;
+    }
+  }
+
   Future<List<SecurityRejectionReason>> getActiveRejectionReasons() async {
     try {
       final snapshot = await _firestore
@@ -448,6 +496,11 @@ class FemaleSecurityGateScanService {
       SecurityRejectionReason(
         reasonId: 'not_registered_in_system',
         titleAr: 'غير مسجلة في النظام',
+      ),
+      SecurityRejectionReason(
+        reasonId: 'academically_irregular',
+        titleAr: 'الطالبة غير منتظمة أكاديميًا',
+        titleEn: 'Student is not academically regular',
       ),
       SecurityRejectionReason(
         reasonId: 'invalid_card',
@@ -551,6 +604,9 @@ class FemaleSecurityGateScanService {
     }, SetOptions(merge: true));
   }
 
+  /// True when the **latest** gate scan for this student/gate/day is still
+  /// `accepted`, so another accept should be blocked. A later `rejected`
+  /// record clears the block (guard can accept again the same day).
   Future<bool> hasAcceptedScanForToday({
     required String studentId,
     required String gateId,
@@ -567,11 +623,117 @@ class FemaleSecurityGateScanService {
         .where('studentId', isEqualTo: normalizedStudentId)
         .where('gateId', isEqualTo: gateId)
         .where('scanDateKey', isEqualTo: scanDateKey)
-        .where('status', isEqualTo: 'accepted')
-        .limit(1)
         .get();
 
-    return snapshot.docs.isNotEmpty;
+    if (snapshot.docs.isEmpty) return false;
+
+    DocumentSnapshot<Map<String, dynamic>>? latestDoc;
+    DateTime? latestTime;
+
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      final raw = data['scanTime'] ?? data['decisionAt'] ?? data['createdAt'];
+      DateTime? dt;
+      if (raw is Timestamp) {
+        dt = raw.toDate();
+      }
+      if (dt == null) continue;
+      if (latestTime == null || dt.isAfter(latestTime)) {
+        latestTime = dt;
+        latestDoc = doc;
+      }
+    }
+
+    if (latestDoc == null) return false;
+    final status = (latestDoc.data()?['status'] ?? '').toString();
+    return status == 'accepted';
+  }
+
+  /// When non-null, security should show the prior-rejection pop-up before
+  /// the main verify dialog. Suppressed when the latest scan for the day is
+  /// already `accepted` (duplicate-entry handling covers that case).
+  Future<PriorGateRejectionHint?> loadPriorRejectionVerificationHint({
+    required String studentId,
+    required String gateId,
+    required String scanDateKey,
+  }) async {
+    final parsedStudentId = _safeInt(studentId);
+    final normalizedStudentId = parsedStudentId ?? studentId.trim();
+    if (normalizedStudentId.toString().isEmpty || gateId.trim().isEmpty) {
+      return null;
+    }
+
+    final snapshot = await _firestore
+        .collection('student_gate_scans')
+        .where('studentId', isEqualTo: normalizedStudentId)
+        .where('gateId', isEqualTo: gateId)
+        .where('scanDateKey', isEqualTo: scanDateKey)
+        .get();
+
+    if (snapshot.docs.isEmpty) return null;
+
+    var anyRejected = false;
+    for (final doc in snapshot.docs) {
+      if ((doc.data()['status'] ?? '').toString() == 'rejected') {
+        anyRejected = true;
+        break;
+      }
+    }
+    if (!anyRejected) return null;
+
+    DocumentSnapshot<Map<String, dynamic>>? latestDoc;
+    DateTime? latestTime;
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      final raw = data['scanTime'] ?? data['decisionAt'] ?? data['createdAt'];
+      DateTime? dt;
+      if (raw is Timestamp) {
+        dt = raw.toDate();
+      }
+      if (dt == null) continue;
+      if (latestTime == null || dt.isAfter(latestTime)) {
+        latestTime = dt;
+        latestDoc = doc;
+      }
+    }
+
+    if (latestDoc != null) {
+      final status = (latestDoc.data()?['status'] ?? '').toString();
+      if (status == 'accepted') return null;
+    }
+
+    DocumentSnapshot<Map<String, dynamic>>? latestRejected;
+    DateTime? latestRejectedTime;
+    for (final doc in snapshot.docs) {
+      if ((doc.data()['status'] ?? '').toString() != 'rejected') continue;
+      final data = doc.data();
+      final raw = data['scanTime'] ?? data['decisionAt'] ?? data['createdAt'];
+      DateTime? dt;
+      if (raw is Timestamp) {
+        dt = raw.toDate();
+      }
+      if (dt == null) continue;
+      if (latestRejectedTime == null || dt.isAfter(latestRejectedTime)) {
+        latestRejectedTime = dt;
+        latestRejected = doc;
+      }
+    }
+
+    var reasonText = '';
+    if (latestRejected != null) {
+      reasonText =
+          (latestRejected.data()?['rejectionReasonText'] ?? '').toString().trim();
+    }
+    if (reasonText.isEmpty) {
+      for (final doc in snapshot.docs) {
+        if ((doc.data()['status'] ?? '').toString() != 'rejected') continue;
+        final t =
+            (doc.data()['rejectionReasonText'] ?? '').toString().trim();
+        if (t.isNotEmpty) reasonText = t;
+      }
+    }
+
+    return PriorGateRejectionHint(lastRejectionReasonText: reasonText);
   }
 
   Future<void> recordGateScanDecision({

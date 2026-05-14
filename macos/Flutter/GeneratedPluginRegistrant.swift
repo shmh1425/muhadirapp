@@ -13,6 +13,7 @@ import firebase_auth
 import firebase_core
 import firebase_storage
 import flutter_ble_peripheral
+import geolocator_apple
 import path_provider_foundation
 import reactive_ble_mobile
 import share_plus
@@ -28,6 +29,7 @@ func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   FLTFirebaseCorePlugin.register(with: registry.registrar(forPlugin: "FLTFirebaseCorePlugin"))
   FLTFirebaseStoragePlugin.register(with: registry.registrar(forPlugin: "FLTFirebaseStoragePlugin"))
   FlutterBlePeripheralPlugin.register(with: registry.registrar(forPlugin: "FlutterBlePeripheralPlugin"))
+  GeolocatorPlugin.register(with: registry.registrar(forPlugin: "GeolocatorPlugin"))
   PathProviderPlugin.register(with: registry.registrar(forPlugin: "PathProviderPlugin"))
   ReactiveBlePlugin.register(with: registry.registrar(forPlugin: "ReactiveBlePlugin"))
   SharePlusMacosPlugin.register(with: registry.registrar(forPlugin: "SharePlusMacosPlugin"))

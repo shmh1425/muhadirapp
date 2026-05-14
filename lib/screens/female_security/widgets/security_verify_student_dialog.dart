@@ -97,9 +97,20 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _buildHeader(context),
+                  const SizedBox(height: 12),
+                  _buildCardIcon(),
                   const SizedBox(height: 10),
-                  _buildAvatar(),
-                  const SizedBox(height: 14),
+                  Text(
+                    SecurityLocalization.cardDataSectionTitle,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: _kTealLight,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   _buildStudentInfo(),
                   const SizedBox(height: 12),
                   _buildRejectionReasonField(),
@@ -115,95 +126,55 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    return Align(
-      alignment: Alignment.topLeft,
-      child: IconButton(
-        onPressed: () => Navigator.of(context).pop(),
-        icon: const Icon(Icons.close, color: _kTextDark, size: 24),
-        style: IconButton.styleFrom(
-          backgroundColor: Colors.white,
-          side: const BorderSide(color: _kTextMuted, width: 1),
-          shape: const CircleBorder(),
-          minimumSize: const Size(36, 36),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAvatar() {
-    return Stack(
-      alignment: Alignment.center,
-      clipBehavior: Clip.none,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Positioned(
-          right: 8,
-          top: 0,
-          child: _decorationDot(_kTealLight.withValues(alpha: 0.4)),
-        ),
-        Positioned(
-          left: 4,
-          top: 12,
-          child: _decorationDot(_kTextMuted.withValues(alpha: 0.3)),
-        ),
-        Positioned(
-          left: 20,
-          bottom: 8,
-          child: _decorationDot(_kTealLight.withValues(alpha: 0.35)),
-        ),
-        Positioned(
-          right: 16,
-          bottom: 4,
-          child: _decorationDot(_kTextMuted.withValues(alpha: 0.25)),
-        ),
-        Container(
-          width: 86,
-          height: 86,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: _kTealLight, width: 2.5),
-            boxShadow: [
-              BoxShadow(
-                color: _kTealLight.withValues(alpha: 0.2),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+        const SizedBox(width: 40, height: 40),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              SecurityLocalization.gateCardVerificationTitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: _kTextDark,
               ),
-            ],
+            ),
           ),
-          clipBehavior: Clip.antiAlias,
-          child:
-              widget.result.photoUrl != null &&
-                  widget.result.photoUrl!.isNotEmpty
-              ? Image.network(
-                  widget.result.photoUrl!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => _avatarPlaceholder(),
-                )
-              : _avatarPlaceholder(),
+        ),
+        IconButton(
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.close, color: _kTextDark, size: 22),
+          style: IconButton.styleFrom(
+            backgroundColor: Colors.white,
+            side: const BorderSide(color: _kTextMuted, width: 1),
+            shape: const CircleBorder(),
+            minimumSize: const Size(40, 40),
+            padding: EdgeInsets.zero,
+          ),
         ),
       ],
     );
   }
 
-  Widget _decorationDot(Color color) {
-    return Container(
-      width: 10,
-      height: 10,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-    );
-  }
-
-  Widget _avatarPlaceholder() {
-    return Container(
-      color: _kTextMuted.withValues(alpha: 0.15),
-      child: Center(
-        child: Text(
-          widget.result.fullName.isNotEmpty ? widget.result.fullName[0] : '?',
-          style: const TextStyle(
-            fontSize: 32,
-            fontWeight: FontWeight.bold,
-            color: _kTealLight,
-            fontFamily: 'Cairo',
-          ),
+  /// No student photo for security (privacy); generic gate icon only.
+  Widget _buildCardIcon() {
+    return Center(
+      child: Container(
+        width: 72,
+        height: 72,
+        decoration: BoxDecoration(
+          color: _kTealLight.withValues(alpha: 0.1),
+          shape: BoxShape.circle,
+          border: Border.all(color: _kTealLight, width: 2),
+        ),
+        child: const Icon(
+          Icons.badge_outlined,
+          size: 36,
+          color: _kTealLight,
         ),
       ),
     );
@@ -228,7 +199,7 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
     );
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _infoRow(
           '${SecurityLocalization.studentNameFemale}:',
@@ -300,21 +271,20 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
     required TextStyle valueStyle,
   }) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.start,
-      textDirection: SecurityLocalization.direction,
       children: [
-        Expanded(
+        Text(label, style: labelStyle),
+        const SizedBox(width: 6),
+        Flexible(
+          fit: FlexFit.loose,
           child: Text(
             value,
-            textAlign: SecurityLocalization.isEnglish
-                ? TextAlign.left
-                : TextAlign.right,
+            textAlign: TextAlign.start,
             style: valueStyle,
           ),
         ),
-        const SizedBox(width: 8),
-        Text(label, style: labelStyle),
       ],
     );
   }
@@ -336,7 +306,7 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
               ),
             ),
             child: Text(
-              SecurityLocalization.confirm,
+              SecurityLocalization.confirmEntry,
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
@@ -371,7 +341,7 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
               ),
             ),
             child: Text(
-              SecurityLocalization.reject,
+              SecurityLocalization.rejectEntry,
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.bold,

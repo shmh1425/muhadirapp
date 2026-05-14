@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="servicedesc">Muhaḍir student gate card emulation</string>
+    <string name="aiddescription">NDEF HCE for campus gate verification</string>
+</resources>
