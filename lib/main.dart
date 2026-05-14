@@ -3,13 +3,22 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'firebase_options.dart';
+import 'repositories/lecturer_catalog_repository.dart';
+import 'repositories/security_repository.dart';
+import 'repositories/student_repository.dart';
 import 'screens/splash_screen.dart';
 import 'theme/app_theme_controller.dart';
 import 'features/translation/translation_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Hive.initFlutter();
+  await Hive.openBox<dynamic>(StudentRepository.coursesBoxName);
+  await Hive.openBox<dynamic>(LecturerCatalogRepository.boxName);
+  await Hive.openBox<dynamic>(SecurityRepository.metadataBoxName);
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   // App uses a non-Firebase login (studentId/email), but Firestore/Storage rules
   // require an authenticated Firebase session for writes. Anonymous auth keeps
@@ -26,7 +35,7 @@ Future<void> main() async {
   } catch (_) {
     // .env missing — copy .env.example to .env and add OPENAI_KEY
   }
-  runApp(const MyApp());
+  runApp(const ProviderScope(child: MyApp()));
 }
 
 class MyApp extends StatelessWidget {

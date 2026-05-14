@@ -1,17 +1,20 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../providers/lecturer_catalog_providers.dart';
 import '../student/components/notification_bell.dart';
 import 'lecturer_notifications_screen.dart';
 import 'lecturer_language.dart';
 import '../../widgets/monthly_calendar.dart';
 import '../../models/lecturer/lecture_item.dart';
+import '../../models/lecturer/unified_lecturer_catalog.dart';
 import '../../models/calendar_day.dart';
 import '../../services/lecturer/lecture_repository.dart';
 import '../../services/lecturer/calendar_service.dart';
 import '../../services/lecturer/calendar_sync_service.dart';
 import '../../services/lecturer/filter_service.dart';
-import '../../services/lecturer/lecturer_sections_service.dart';
 import '../../services/notifications/lecture_action_notification_service.dart';
 import '../../widgets/lecturer/lecturer_home_header.dart';
 import '../../widgets/lecturer/lecture_timeline.dart';
@@ -19,30 +22,32 @@ import '../../widgets/lecturer/day_tap_handler.dart';
 import 'lecturer_navigation.dart';
 import 'widgets/modern_popup_dialog.dart';
 
-class LecturerHomeScreen extends StatefulWidget {
+class LecturerHomeScreen extends ConsumerStatefulWidget {
   const LecturerHomeScreen({super.key, this.lecturerName});
 
   final String? lecturerName;
 
   @override
-  State<LecturerHomeScreen> createState() => _LecturerHomeScreenState();
+  ConsumerState<LecturerHomeScreen> createState() => _LecturerHomeScreenState();
 }
 
-class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
+class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
   final LectureRepository _repository = LectureRepository();
   final LectureActionNotificationService _lectureActionService =
       LectureActionNotificationService.instance;
   late final CalendarService _calendarService;
   late final DayTapHandler _dayTapHandler;
 
-  List<LectureItem> _allLectures = [];
-  bool _isLoadingLectures = true;
-  String? _loadError;
+  bool _isLoadingCalendar = false;
+  String? _calendarLoadError;
   DateTime _currentCalendarMonth = DateTime.now();
 
   StreamSubscription<void>? _calendarSyncSub;
   bool _isSyncRefreshing = false;
   bool _isDispatchingLectureAction = false;
+
+  /// Last non-empty catalog lectures (survives provider reload / invalidate).
+  List<LectureItem> _lastNonEmptyCatalogLectures = <LectureItem>[];
 
   @override
   void initState() {
@@ -52,7 +57,8 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
     _calendarSyncSub = CalendarSyncService.instance.watchChanges().listen(
       (_) => _handleRealtimeCalendarChange(),
     );
-    _loadHomeData();
+    // Render immediately; refresh calendar metadata in background.
+    unawaited(_loadCalendarOnly());
   }
 
   @override
@@ -61,31 +67,36 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
     super.dispose();
   }
 
-  Future<void> _loadHomeData() async {
-    setState(() {
-      _isLoadingLectures = true;
-      _loadError = null;
-    });
+  Future<void> _loadCalendarOnly() async {
+    final showCalendarProgress = _calendarLoadError != null || _isLoadingCalendar;
+    if (showCalendarProgress) {
+      setState(() {
+        _isLoadingCalendar = true;
+        _calendarLoadError = null;
+      });
+    } else {
+      setState(() => _calendarLoadError = null);
+    }
     try {
-      await _repository.refreshAcademicCalendar();
-      final list = await LecturerSectionsService.instance
-          .getLecturesForCurrentLecturer();
+      await _repository.refreshAcademicCalendar().timeout(
+        const Duration(seconds: 4),
+        onTimeout: () {},
+      );
       if (!mounted) return;
       setState(() {
-        _allLectures = list;
         _currentCalendarMonth = DateTime(
           _repository.currentDateTime.year,
           _repository.currentDateTime.month,
           1,
         );
-        _isLoadingLectures = false;
-        _loadError = null;
+        _isLoadingCalendar = false;
+        _calendarLoadError = null;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _isLoadingLectures = false;
-        _loadError = e.toString();
+        _isLoadingCalendar = false;
+        _calendarLoadError = e.toString();
       });
     }
   }
@@ -94,7 +105,18 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
     if (!mounted || _isSyncRefreshing) return;
     _isSyncRefreshing = true;
     try {
-      await _loadHomeData();
+      await _repository.refreshAcademicCalendar().timeout(
+        const Duration(seconds: 4),
+        onTimeout: () {},
+      );
+      if (!mounted) return;
+      setState(() {
+        _currentCalendarMonth = DateTime(
+          _repository.currentDateTime.year,
+          _repository.currentDateTime.month,
+          1,
+        );
+      });
     } finally {
       _isSyncRefreshing = false;
     }
@@ -110,19 +132,19 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
     return DateTime(tomorrow.year, tomorrow.month, tomorrow.day);
   }
 
-  List<LectureItem> _todayLectures() {
+  List<LectureItem> _todayLectures(List<LectureItem> all) {
     return FilterService.filterLectures(
-      _allLectures,
+      all,
       'اليوم',
       baseDate: _repository.currentDateTime,
     );
   }
 
-  List<LectureItem> _tomorrowLectures() {
+  List<LectureItem> _tomorrowLectures(List<LectureItem> all) {
     final tomorrow = _normalizedTomorrow();
     if (_repository.isHoliday(tomorrow)) return [];
     return FilterService.filterLectures(
-      _allLectures,
+      all,
       'غدًا',
       baseDate: _repository.currentDateTime,
     );
@@ -358,8 +380,8 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
     }
   }
 
-  void _handleDayTap(CalendarDay day) {
-    _dayTapHandler.handleDayTap(context, day, _allLectures);
+  void _handleDayTap(CalendarDay day, List<LectureItem> allLectures) {
+    _dayTapHandler.handleDayTap(context, day, allLectures);
   }
 
   void _handleMonthChanged(DateTime newMonth) {
@@ -406,7 +428,7 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
     );
   }
 
-  Widget _buildAllCalendarSection() {
+  Widget _buildAllCalendarSection(List<LectureItem> allLectures) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -415,9 +437,9 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
           currentMonth: _currentCalendarMonth,
           calendarDays: _calendarService.buildCalendarDays(
             _currentCalendarMonth,
-            _allLectures,
+            allLectures,
           ),
-          onDayTap: _handleDayTap,
+          onDayTap: (day) => _handleDayTap(day, allLectures),
           onMonthChanged: _handleMonthChanged,
         ),
       ],
@@ -426,15 +448,48 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AsyncValue<UnifiedLecturerCatalog>>(
+      lecturerUnifiedCatalogProvider,
+      (prev, next) {
+        next.whenData((cat) {
+          if (!mounted) return;
+          final isArabic = LecturerLanguageController.isArabic;
+          final items = cat.toLectureItems(isArabic: isArabic);
+          if (items.isNotEmpty) {
+            setState(() => _lastNonEmptyCatalogLectures = items);
+          }
+        });
+      },
+    );
+    final catalogAsync = ref.watch(lecturerUnifiedCatalogProvider);
     return ValueListenableBuilder<LecturerLanguage>(
       valueListenable: LecturerLanguageController.notifier,
-      builder: (context, _, __) {
+      builder: (context, lang, __) {
+        final isArabic = lang == LecturerLanguage.arabic;
+        final fromState = catalogAsync.maybeWhen(
+          data: (c) => c.toLectureItems(isArabic: isArabic),
+          orElse: () => <LectureItem>[],
+        );
+        final cached = catalogAsync.valueOrNull;
+        final fromCachedValue = (cached != null && !cached.isEmpty)
+            ? cached.toLectureItems(isArabic: isArabic)
+            : <LectureItem>[];
+        final allLectures = fromState.isNotEmpty
+            ? fromState
+            : (fromCachedValue.isNotEmpty
+                ? fromCachedValue
+                : _lastNonEmptyCatalogLectures);
+        final catalogLoading = catalogAsync.isLoading;
+        final catalogErr = catalogAsync.hasError ? catalogAsync.error : null;
+        final blockFullScreenSpinner =
+            catalogLoading && allLectures.isEmpty && !catalogAsync.hasValue;
+
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
           child: Scaffold(
             backgroundColor: Colors.white,
             body: SafeArea(
-              child: _isLoadingLectures
+              child: blockFullScreenSpinner
                   ? const Center(
                       child: Padding(
                         padding: EdgeInsets.all(24),
@@ -443,7 +498,7 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
                         ),
                       ),
                     )
-                  : _loadError != null
+                  : catalogErr != null && allLectures.isEmpty
                   ? Center(
                       child: Padding(
                         padding: const EdgeInsets.all(24),
@@ -456,18 +511,11 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
                                 'Failed to load lectures',
                               ),
                             ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _loadError!,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
                             const SizedBox(height: 16),
                             TextButton.icon(
-                              onPressed: _loadHomeData,
+                              onPressed: () => ref.invalidate(
+                                lecturerUnifiedCatalogProvider,
+                              ),
                               icon: const Icon(Icons.refresh),
                               label: Text(
                                 LecturerLanguageController.tr(
@@ -486,6 +534,54 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
                         vertical: 20,
                       ),
                       children: [
+                        if (catalogLoading && allLectures.isNotEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 10),
+                            child: LinearProgressIndicator(
+                              minHeight: 3,
+                              color: Color(0xFF006571),
+                              backgroundColor: Color(0xFFE6F1F2),
+                            ),
+                          ),
+                        if (_isLoadingCalendar)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 10),
+                            child: LinearProgressIndicator(
+                              minHeight: 3,
+                              color: Color(0xFF006571),
+                              backgroundColor: Color(0xFFE6F1F2),
+                            ),
+                          ),
+                        if (_calendarLoadError != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    LecturerLanguageController.tr(
+                                      'تعذر تحديث التقويم الآن.',
+                                      'Calendar refresh failed.',
+                                    ),
+                                    style: const TextStyle(
+                                      fontFamily: 'Cairo',
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: _loadCalendarOnly,
+                                  child: Text(
+                                    LecturerLanguageController.tr(
+                                      'إعادة المحاولة',
+                                      'Retry',
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -514,7 +610,7 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
                         _buildLectureSection(
                           titleAr: 'محاضرات اليوم',
                           titleEn: "Today's Lectures",
-                          lectures: _todayLectures(),
+                          lectures: _todayLectures(allLectures),
                           actionDateResolver: (_) => _normalizedToday(),
                           onAttendTap: _openAttendanceForToday,
                         ),
@@ -522,12 +618,12 @@ class _LecturerHomeScreenState extends State<LecturerHomeScreen> {
                         _buildLectureSection(
                           titleAr: 'محاضرات الغد',
                           titleEn: "Tomorrow's Lectures",
-                          lectures: _tomorrowLectures(),
+                          lectures: _tomorrowLectures(allLectures),
                           actionDateResolver: (_) => _normalizedTomorrow(),
                           onAttendTap: _openAttendanceForTomorrowViewOnly,
                         ),
                         const SizedBox(height: 30),
-                        _buildAllCalendarSection(),
+                        _buildAllCalendarSection(allLectures),
                         const SizedBox(height: 20),
                       ],
                     ),

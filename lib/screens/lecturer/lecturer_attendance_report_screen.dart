@@ -1,30 +1,71 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/attendance/manual_attendance_record.dart';
 import '../../models/attendance/manual_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
+import '../../models/lecturer/unified_lecturer_catalog.dart';
+import '../../providers/lecturer_catalog_providers.dart';
 import '../../services/attendance/attendance_session_export_service.dart';
 import '../../services/attendance/manual_attendance_service.dart';
 import '../../services/lecturer/calendar_sync_service.dart';
 import '../../services/lecturer/lecture_repository.dart';
-import '../../services/lecturer/lecturer_sections_service.dart';
+import '../../services/lecturer/lecturer_attendance_sessions_warm_cache.dart';
+import '../../services/lecturer_auth_service.dart';
 import '../../utils/shared/time_utils.dart';
 import 'lecturer_language.dart';
 import 'lecturer_navigation.dart';
 import 'widgets/modern_popup_dialog.dart';
 import 'widgets/profile_back_button.dart';
 
-class LecturerAttendanceReportScreen extends StatefulWidget {
+class _AttendanceReportNavCache {
+  _AttendanceReportNavCache({
+    required this.lecturerId,
+    required this.groups,
+    required this.calendarNow,
+    required this.calendarSelectedDate,
+    required this.weekIsAuto,
+    required this.selectedWeekNumber,
+    required this.selectedDayOfWeek,
+    required this.selectedCourseCode,
+    required this.selectedSessionId,
+    required this.statusFilter,
+    required this.loadedRecordSessionIds,
+    required this.selectedLectureForCalendar,
+  });
+
+  final String lecturerId;
+  final List<_LectureAttendanceGroup> groups;
+  final DateTime calendarNow;
+  final DateTime calendarSelectedDate;
+  final bool weekIsAuto;
+  final int? selectedWeekNumber;
+  final int selectedDayOfWeek;
+  final String? selectedCourseCode;
+  final String? selectedSessionId;
+  final _StatusFilter statusFilter;
+  final Set<String> loadedRecordSessionIds;
+  final LectureItem? selectedLectureForCalendar;
+}
+
+_AttendanceReportNavCache? _gAttendanceReportNavCache;
+
+/// Cleared on lecturer logout.
+void clearLecturerAttendanceReportNavCache() {
+  _gAttendanceReportNavCache = null;
+}
+
+class LecturerAttendanceReportScreen extends ConsumerStatefulWidget {
   const LecturerAttendanceReportScreen({super.key});
 
   @override
-  State<LecturerAttendanceReportScreen> createState() =>
+  ConsumerState<LecturerAttendanceReportScreen> createState() =>
       _LecturerAttendanceReportScreenState();
 }
 
 class _LecturerAttendanceReportScreenState
-    extends State<LecturerAttendanceReportScreen> {
+    extends ConsumerState<LecturerAttendanceReportScreen> {
   static const Color _primary = Color(0xFF006571);
   static const List<int> _defaultWeekdayOrder = [7, 1, 2, 3, 4];
   static const List<int> _allWeekdayOrder = [7, 1, 2, 3, 4, 5, 6];
@@ -39,7 +80,9 @@ class _LecturerAttendanceReportScreenState
   DateTime _calendarSelectedDate = DateTime.now();
 
   List<_LectureAttendanceGroup> _groups = <_LectureAttendanceGroup>[];
-  bool _isLoading = true;
+  bool _isRefreshingReport = false;
+  bool _isLoadingRecords = false;
+  Set<String> _loadedRecordSessionIds = <String>{};
   bool _isSaving = false;
   bool _isExporting = false;
   String? _loadError;
@@ -63,16 +106,205 @@ class _LecturerAttendanceReportScreenState
   void initState() {
     super.initState();
     _selectedDayOfWeek = DateTime.now().weekday;
+    LecturerLanguageController.notifier.addListener(_onLecturerLanguageChanged);
     _calendarSyncSub = CalendarSyncService.instance.watchChanges().listen(
       (_) => _handleRealtimeCalendarChange(),
     );
-    _loadReportData();
+    final lecturerId =
+        LecturerAuthService.instance.currentLecturer?.lecturerId.trim() ?? '';
+    final cached = _gAttendanceReportNavCache;
+    if (lecturerId.isNotEmpty &&
+        cached != null &&
+        cached.lecturerId == lecturerId &&
+        cached.groups.isNotEmpty) {
+      _applyAttendanceReportNavCache(cached);
+    } else {
+      _loadReportData();
+    }
   }
 
   @override
   void dispose() {
+    _saveAttendanceReportNavCache();
+    LecturerLanguageController.notifier.removeListener(_onLecturerLanguageChanged);
     _calendarSyncSub?.cancel();
     super.dispose();
+  }
+
+  void _applyAttendanceReportNavCache(_AttendanceReportNavCache c) {
+    _calendarNow = c.calendarNow;
+    _calendarSelectedDate = c.calendarSelectedDate;
+    _weekIsAuto = c.weekIsAuto;
+    _selectedWeekNumber = c.selectedWeekNumber;
+    _selectedDayOfWeek = c.selectedDayOfWeek;
+    _selectedCourseCode = c.selectedCourseCode;
+    _selectedSessionId = c.selectedSessionId;
+    _statusFilter = c.statusFilter;
+    _selectedLectureForCalendar = c.selectedLectureForCalendar;
+    _groups = c.groups.map((g) => g.deepCopy()).toList();
+    _loadedRecordSessionIds = Set<String>.from(c.loadedRecordSessionIds);
+    _isRefreshingReport = false;
+    _isLoadingRecords = false;
+    _loadError = null;
+    _isEditMode = false;
+    _hasPendingChanges = false;
+    _draftStatuses = <String, _AttendanceStatus>{};
+  }
+
+  void _saveAttendanceReportNavCache() {
+    final lecturerId =
+        LecturerAuthService.instance.currentLecturer?.lecturerId.trim() ?? '';
+    if (lecturerId.isEmpty || _groups.isEmpty) return;
+    _gAttendanceReportNavCache = _AttendanceReportNavCache(
+      lecturerId: lecturerId,
+      groups: _groups.map((g) => g.deepCopy()).toList(),
+      calendarNow: _calendarNow,
+      calendarSelectedDate: _calendarSelectedDate,
+      weekIsAuto: _weekIsAuto,
+      selectedWeekNumber: _selectedWeekNumber,
+      selectedDayOfWeek: _selectedDayOfWeek,
+      selectedCourseCode: _selectedCourseCode,
+      selectedSessionId: _selectedSessionId,
+      statusFilter: _statusFilter,
+      loadedRecordSessionIds: Set<String>.from(_loadedRecordSessionIds),
+      selectedLectureForCalendar: _selectedLectureForCalendar,
+    );
+  }
+
+  void _onLecturerLanguageChanged() {
+    unawaited(_syncReportLabelsFromCatalog());
+  }
+
+  Future<void> _syncReportLabelsFromCatalog() async {
+    try {
+      final asyncCat = ref.read(lecturerUnifiedCatalogProvider);
+      final UnifiedLecturerCatalog catalog = asyncCat.hasValue
+          ? asyncCat.requireValue
+          : await ref.read(lecturerUnifiedCatalogProvider.future);
+      if (!mounted || _groups.isEmpty) return;
+      final lectures = catalog.toLectureItems(
+        isArabic: LecturerLanguageController.isArabic,
+      );
+      final bySection = <String, LectureItem>{};
+      for (final lecture in lectures) {
+        final sectionId = (lecture.sectionId ?? '').trim();
+        if (sectionId.isEmpty) continue;
+        bySection[sectionId] = lecture;
+      }
+      setState(() {
+        _groups = _groups.map((g) {
+          final sid = g.sectionId.trim();
+          final lec = sid.isNotEmpty ? bySection[sid] : null;
+          final nextLecture = lec ?? g.lecture;
+          final courseName =
+              (nextLecture?.courseName.trim().isNotEmpty ?? false)
+                  ? nextLecture!.courseName
+                  : g.courseName;
+          final courseCode = (nextLecture?.crn.trim().isNotEmpty ?? false)
+              ? nextLecture!.crn.trim()
+              : g.courseCode;
+          final section = (nextLecture?.section.trim().isNotEmpty ?? false)
+              ? nextLecture!.section
+              : g.section;
+          return _LectureAttendanceGroup(
+            sessionId: g.sessionId,
+            lecture: nextLecture,
+            courseName: courseName,
+            courseCode: courseCode,
+            section: section,
+            sectionId: g.sectionId,
+            dayOfWeek: g.dayOfWeek,
+            weekNumber: g.weekNumber,
+            lectureDate: g.lectureDate,
+            startTime: g.startTime,
+            timeRange: g.timeRange,
+            students: g.students,
+          );
+        }).toList();
+      });
+      _saveAttendanceReportNavCache();
+    } catch (_) {
+      // Keep cached sessions; labels fall back to last loaded values.
+    }
+  }
+
+  Set<String> _targetSessionIdsForRecordsLoad() {
+    final sid = _selectedSessionId?.trim() ?? '';
+    if (sid.isNotEmpty) return {sid};
+    // No session selected yet: don't eagerly load all records (can be huge).
+    // We only load records when user narrows by selecting a course/week or picks a session.
+    return const <String>{};
+  }
+
+  Future<void> _ensureRecordsLoaded(Set<String> sessionIds) async {
+    final ids = sessionIds.where((e) => e.trim().isNotEmpty).toSet();
+    if (ids.isEmpty) return;
+    final want = ids.difference(_loadedRecordSessionIds);
+    if (want.isEmpty) return;
+    if (_isLoadingRecords) return;
+
+    setState(() => _isLoadingRecords = true);
+    try {
+      final recordsBySession = await _manualAttendanceService.getRecordsForSessionIds(want);
+      if (!mounted) return;
+      setState(() {
+        _loadedRecordSessionIds.addAll(want);
+        _applyRecordsToGroups(recordsBySession);
+      });
+    } catch (_) {
+      // Keep UI responsive; records can be re-attempted by changing filters/session.
+    } finally {
+      if (mounted) setState(() => _isLoadingRecords = false);
+    }
+  }
+
+  void _applyRecordsToGroups(Map<String, List<ManualAttendanceRecord>> recordsBySession) {
+    if (recordsBySession.isEmpty) return;
+    final updated = <_LectureAttendanceGroup>[];
+    for (final g in _groups) {
+      final records = recordsBySession[g.sessionId];
+      if (records == null) {
+        updated.add(g);
+        continue;
+      }
+      String timeText(ManualAttendanceRecord record) {
+        final stored = record.attendanceTime.trim();
+        if (stored.isNotEmpty) return stored;
+        if (record.isPresentLike) return g.startTime;
+        return '--';
+      }
+
+      final students = records.map((record) {
+        return _StudentAttendanceRecord(
+          id: record.recordId,
+          studentId: record.studentId,
+          name: record.studentName.trim().isNotEmpty
+              ? record.studentName
+              : record.studentId.toString(),
+          academicNumber: record.studentId.toString(),
+          time: timeText(record),
+          status: _statusFromManual(record.status),
+        );
+      }).toList();
+
+      updated.add(
+        _LectureAttendanceGroup(
+          sessionId: g.sessionId,
+          lecture: g.lecture,
+          courseName: g.courseName,
+          courseCode: g.courseCode,
+          section: g.section,
+          sectionId: g.sectionId,
+          dayOfWeek: g.dayOfWeek,
+          weekNumber: g.weekNumber,
+          lectureDate: g.lectureDate,
+          startTime: g.startTime,
+          timeRange: g.timeRange,
+          students: students,
+        ),
+      );
+    }
+    _groups = updated;
   }
 
   int get _currentWeekNumber => _calendarRepository.getWeekNumber(_calendarNow);
@@ -176,20 +408,82 @@ class _LecturerAttendanceReportScreenState
     return _draftStatuses[student.id] ?? student.status;
   }
 
+  /// Instant path: catalog already in memory + warm session list matches sections.
+  List<_LectureAttendanceGroup>? _computeHydratedGroupsFromCaches() {
+    final cat = ref.read(lecturerUnifiedCatalogProvider).valueOrNull;
+    final lecturerId =
+        LecturerAuthService.instance.currentLecturer?.lecturerId.trim() ?? '';
+    if (cat == null || cat.isEmpty || lecturerId.isEmpty) return null;
+    final lectures = cat.toLectureItems(
+      isArabic: LecturerLanguageController.isArabic,
+    );
+    final lectureBySection = <String, LectureItem>{};
+    final sectionIds = <String>{};
+    for (final lecture in lectures) {
+      final sectionId = (lecture.sectionId ?? '').trim();
+      if (sectionId.isEmpty) continue;
+      sectionIds.add(sectionId);
+      lectureBySection[sectionId] = lecture;
+    }
+    final warm =
+        LecturerAttendanceSessionsWarmCache.takeMatching(lecturerId, sectionIds);
+    if (warm == null) return null;
+    final groups = _buildGroupsFromFirestore(
+      sessions: warm,
+      recordsBySession: const <String, List<ManualAttendanceRecord>>{},
+      lectureBySection: lectureBySection,
+    );
+    if (groups.isEmpty) return null;
+    return groups;
+  }
+
   Future<void> _loadReportData() async {
+    final hadGroups = _groups.isNotEmpty;
+    if (!mounted) return;
     setState(() {
-      _isLoading = true;
       _loadError = null;
+      _isRefreshingReport = true;
     });
 
+    if (!hadGroups) {
+      final hydrated = _computeHydratedGroupsFromCaches();
+      if (hydrated != null && mounted) {
+        setState(() {
+          _calendarNow = _calendarRepository.currentDateTime;
+          if (_weekIsAuto) {
+            _selectedDayOfWeek = _calendarNow.weekday;
+          }
+          _calendarSelectedDate = DateTime(
+            _calendarNow.year,
+            _calendarNow.month,
+            _calendarNow.day,
+          );
+          _weekIsAuto = false;
+          _selectedWeekNumber = null;
+          _groups = hydrated;
+          _selectedCourseCode = null;
+          _selectedSessionId = null;
+          _statusFilter = _StatusFilter.all;
+          _normalizeLinkedSelections();
+          _normalizeSelectedSession();
+        });
+        _saveAttendanceReportNavCache();
+      }
+    }
+
     try {
-      await _calendarRepository.refreshAcademicCalendar();
+      await Future.wait<Object?>([
+        _calendarRepository.refreshAcademicCalendar(),
+        ref.read(lecturerUnifiedCatalogProvider.future),
+      ]);
       _calendarNow = _calendarRepository.currentDateTime;
       if (_weekIsAuto) {
         _selectedDayOfWeek = _calendarNow.weekday;
       }
-      final lectures = await LecturerSectionsService.instance
-          .getLecturesForCurrentLecturer();
+      final catalog = ref.read(lecturerUnifiedCatalogProvider).requireValue;
+      final lectures = catalog.toLectureItems(
+        isArabic: LecturerLanguageController.isArabic,
+      );
       final lectureBySection = <String, LectureItem>{};
       final sectionIds = <String>{};
       for (final lecture in lectures) {
@@ -199,14 +493,21 @@ class _LecturerAttendanceReportScreenState
         lectureBySection[sectionId] = lecture;
       }
 
-      final sessions = await _manualAttendanceService.getSessionsForSectionIds(
-        sectionIds,
-      );
-      final recordsBySession = await _manualAttendanceService
-          .getRecordsForSessionIds(sessions.map((s) => s.sessionId).toSet());
+      final lecturerIdForWarm =
+          LecturerAuthService.instance.currentLecturer?.lecturerId.trim() ?? '';
+      final warmSessions = lecturerIdForWarm.isNotEmpty
+          ? LecturerAttendanceSessionsWarmCache.takeMatching(
+              lecturerIdForWarm,
+              sectionIds,
+            )
+          : null;
+      final sessions = warmSessions ??
+          await _manualAttendanceService.getSessionsForSectionIds(
+            sectionIds,
+          );
       final groups = _buildGroupsFromFirestore(
         sessions: sessions,
-        recordsBySession: recordsBySession,
+        recordsBySession: const <String, List<ManualAttendanceRecord>>{},
         lectureBySection: lectureBySection,
       );
 
@@ -225,12 +526,14 @@ class _LecturerAttendanceReportScreenState
         _statusFilter = _StatusFilter.all;
         _normalizeLinkedSelections();
         _normalizeSelectedSession();
-        _isLoading = false;
+        _isRefreshingReport = false;
       });
+
+      _saveAttendanceReportNavCache();
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _isLoading = false;
+        _isRefreshingReport = false;
         _loadError = e.toString();
       });
     }
@@ -411,6 +714,7 @@ class _LecturerAttendanceReportScreenState
       _normalizeSelectedSession();
       _resetEditState();
     });
+    unawaited(_ensureRecordsLoaded(_targetSessionIdsForRecordsLoad()));
   }
 
   void _applyWeekAndDaySelectionToDate({required bool resetLinkedSelection}) {
@@ -743,6 +1047,7 @@ class _LecturerAttendanceReportScreenState
       _normalizeSelectedSession();
       _resetEditState();
     });
+    unawaited(_ensureRecordsLoaded(_targetSessionIdsForRecordsLoad()));
   }
 
   void _onWeekChanged({required bool auto, int? week}) {
@@ -754,6 +1059,7 @@ class _LecturerAttendanceReportScreenState
       _normalizeSelectedSession();
       _resetEditState();
     });
+    unawaited(_ensureRecordsLoaded(_targetSessionIdsForRecordsLoad()));
   }
 
   void _onSessionChanged(String? sessionId) {
@@ -777,6 +1083,7 @@ class _LecturerAttendanceReportScreenState
       _statusFilter = _StatusFilter.all;
       _resetEditState();
     });
+    unawaited(_ensureRecordsLoaded(_targetSessionIdsForRecordsLoad()));
   }
 
   void _enterEditMode(_LectureAttendanceGroup group) {
@@ -1288,16 +1595,7 @@ class _LecturerAttendanceReportScreenState
           child: Scaffold(
             backgroundColor: const Color(0xFFF8FBFB),
             body: SafeArea(
-              child: _isLoading
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(24),
-                        child: CircularProgressIndicator(
-                          color: Color(0xFF006571),
-                        ),
-                      ),
-                    )
-                  : _loadError != null
+              child: _loadError != null
                   ? Center(
                       child: Padding(
                         padding: const EdgeInsets.all(24),
@@ -1339,6 +1637,15 @@ class _LecturerAttendanceReportScreenState
                           ),
                           child: Column(
                             children: [
+                              if (_isLoadingRecords || _isRefreshingReport)
+                                const Padding(
+                                  padding: EdgeInsets.only(bottom: 10),
+                                  child: LinearProgressIndicator(
+                                    minHeight: 3,
+                                    color: Color(0xFF006571),
+                                    backgroundColor: Color(0xFFE6F1F2),
+                                  ),
+                                ),
                               const SizedBox(height: 6),
                               Align(
                                 alignment: AlignmentDirectional.centerStart,
@@ -3238,6 +3545,23 @@ class _LectureAttendanceGroup {
   final String startTime;
   final String timeRange;
   final List<_StudentAttendanceRecord> students;
+
+  _LectureAttendanceGroup deepCopy() {
+    return _LectureAttendanceGroup(
+      sessionId: sessionId,
+      lecture: lecture,
+      courseName: courseName,
+      courseCode: courseCode,
+      section: section,
+      sectionId: sectionId,
+      dayOfWeek: dayOfWeek,
+      weekNumber: weekNumber,
+      lectureDate: lectureDate,
+      startTime: startTime,
+      timeRange: timeRange,
+      students: students.map((s) => s.deepCopy()).toList(),
+    );
+  }
 }
 
 class _CourseOption {
@@ -3263,6 +3587,17 @@ class _StudentAttendanceRecord {
   final String academicNumber;
   String time;
   _AttendanceStatus status;
+
+  _StudentAttendanceRecord deepCopy() {
+    return _StudentAttendanceRecord(
+      id: id,
+      studentId: studentId,
+      name: name,
+      academicNumber: academicNumber,
+      time: time,
+      status: status,
+    );
+  }
 }
 
 class _StatusStyle {

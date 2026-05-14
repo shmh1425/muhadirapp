@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/translation/translation_controller.dart';
 import '../features/translation/widgets/t_text.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,8 +11,11 @@ import 'lecturer/lecturer_main_shell.dart';
 import 'lecturer/lecturer_profile_screen.dart';
 import 'admin/admin_dashboard_screen.dart';
 import 'female_security/female_security_home_screen.dart';
+import '../providers/courses_providers.dart';
+import '../providers/lecturer_catalog_providers.dart';
 import '../services/student_auth_service.dart';
 import '../services/lecturer_auth_service.dart';
+import '../services/lecturer/lecturer_cold_start_warmup.dart';
 import '../features/chatbot/providers/chatbot_provider.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -122,6 +128,10 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         ChatbotProvider.instance.clearChat();
         if (!mounted) return;
+        final container = ProviderScope.containerOf(context);
+        container.invalidate(lecturerUnifiedCatalogProvider);
+        unawaited(LecturerColdStartWarmup.run(container));
+        if (!mounted) return;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (_) =>
@@ -135,6 +145,18 @@ class _LoginScreenState extends State<LoginScreen> {
           .verifyEmailAndGetStudent(normalizedEmail);
       if (student != null) {
         ChatbotProvider.instance.clearChat();
+        if (!mounted) return;
+        try {
+          final container = ProviderScope.containerOf(context);
+          await container
+              .read(
+                studentUnifiedCoursesProvider(student.studentId.toString())
+                    .future,
+              )
+              .timeout(const Duration(seconds: 12));
+        } catch (e) {
+          debugPrint('[Login] prefetch studentUnifiedCoursesProvider: $e');
+        }
         if (!mounted) return;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const HomeScreen()),

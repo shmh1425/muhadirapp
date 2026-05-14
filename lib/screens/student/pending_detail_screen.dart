@@ -11,7 +11,7 @@ import 'submit_excuse_screen.dart';
 import '../../features/translation/translation_controller.dart';
 import '../../features/translation/widgets/t_text.dart';
 
-class PendingDetailScreen extends StatelessWidget {
+class PendingDetailScreen extends StatefulWidget {
   final int studentId;
   final String attendanceRecordId;
   final String course;
@@ -27,11 +27,30 @@ class PendingDetailScreen extends StatelessWidget {
     required this.timeRange,
   });
 
+  @override
+  State<PendingDetailScreen> createState() => _PendingDetailScreenState();
+}
+
+class _PendingDetailScreenState extends State<PendingDetailScreen> {
+  late final Future<
+      ({
+        String sectionId,
+        String sessionId,
+        DateTime lectureDate,
+        String timeRange
+      })?> _attendanceMetaFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _attendanceMetaFuture = _fetchAttendanceMeta();
+  }
+
   Stream<Map<String, dynamic>?> _watchLatestPendingSubmission() {
     return FirebaseFirestore.instance
         .collection('student_notifications')
-        .where('studentId', isEqualTo: studentId)
-        .where('attendanceRecordId', isEqualTo: attendanceRecordId)
+        .where('studentId', isEqualTo: widget.studentId)
+        .where('attendanceRecordId', isEqualTo: widget.attendanceRecordId)
         .where('isExcuseSubmission', isEqualTo: true)
         .snapshots()
         .map((snap) {
@@ -68,7 +87,7 @@ class PendingDetailScreen extends StatelessWidget {
 
   Future<({String sectionId, String sessionId, DateTime lectureDate, String timeRange})?>
       _fetchAttendanceMeta() async {
-    final rid = attendanceRecordId.trim();
+    final rid = widget.attendanceRecordId.trim();
     if (rid.isEmpty) return null;
     try {
       final snap = await FirebaseFirestore.instance
@@ -94,7 +113,7 @@ class PendingDetailScreen extends StatelessWidget {
 
       final start = (data['lectureStartTime'] ?? '').toString().trim();
       final end = (data['lectureEndTime'] ?? '').toString().trim();
-      final range = (start.isNotEmpty && end.isNotEmpty) ? '$start-$end' : timeRange;
+      final range = (start.isNotEmpty && end.isNotEmpty) ? '$start-$end' : widget.timeRange;
 
       if (sectionId.isEmpty || sessionId.isEmpty) return null;
       return (
@@ -270,7 +289,7 @@ class PendingDetailScreen extends StatelessWidget {
         ),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -301,7 +320,7 @@ class PendingDetailScreen extends StatelessWidget {
           Align(
             alignment: AlignmentDirectional.centerStart,
             child: TText(
-              course,
+              widget.course,
               style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -314,7 +333,7 @@ class PendingDetailScreen extends StatelessWidget {
           Align(
             alignment: AlignmentDirectional.centerStart,
             child: TText(
-              dateText,
+              widget.dateText,
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
@@ -327,7 +346,7 @@ class PendingDetailScreen extends StatelessWidget {
           Align(
             alignment: AlignmentDirectional.centerStart,
             child: Text(
-              timeRange,
+              widget.timeRange,
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -447,7 +466,7 @@ class PendingDetailScreen extends StatelessWidget {
                 DateTime lectureDate,
                 String timeRange
               })?>(
-            future: _fetchAttendanceMeta(),
+            future: _attendanceMetaFuture,
             builder: (context, metaSnap) {
               final meta = metaSnap.data;
               final bool loading = metaSnap.connectionState == ConnectionState.waiting;
@@ -481,13 +500,13 @@ class PendingDetailScreen extends StatelessWidget {
                             context,
                             MaterialPageRoute<void>(
                               builder: (_) => SubmitExcuseScreen(
-                                course: course,
-                                dateText: dateText,
+                                course: widget.course,
+                                dateText: widget.dateText,
                                 timeRange: picked.timeRange,
                                 sectionId: picked.sectionId,
                                 lectureDate: picked.lectureDate,
                                 sessionId: picked.sessionId,
-                                attendanceRecordId: attendanceRecordId,
+                                attendanceRecordId: widget.attendanceRecordId,
                               ),
                             ),
                           );

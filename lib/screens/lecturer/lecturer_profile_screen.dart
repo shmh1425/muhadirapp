@@ -4,12 +4,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../welcome_screen.dart';
-import 'lecturer_attendance_report_screen.dart';
+import 'lecturer_attendance_report_screen.dart'
+    show LecturerAttendanceReportScreen, clearLecturerAttendanceReportNavCache;
 import 'lecturer_language.dart';
 import 'lecturer_my_lectures_screen.dart';
 import 'lecturer_navigation.dart';
 import 'lecturer_notifications_screen.dart';
 import '../../services/lecturer_auth_service.dart';
+import '../../services/lecturer/lecturer_attendance_sessions_warm_cache.dart';
+import 'lecturer_screen_session_memory.dart';
 import 'widgets/modern_popup_dialog.dart';
 
 class LecturerProfile {
@@ -187,6 +190,9 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
     if (confirmed != true || !mounted) return;
     await FirebaseAuth.instance.signOut();
     LecturerAuthService.instance.logout();
+    clearLecturerAttendanceReportNavCache();
+    LecturerManageScreenSessionMemory.clear();
+    LecturerAttendanceSessionsWarmCache.clear();
 
     // استخدام الـ root navigator لمسح الـ stack بالكامل (بما فيه LecturerMainShell والـ BottomNav)
     // وإظهار شاشة الترحيب فقط — منع تكرار الـ BottomNav أو بقائه ظاهراً بعد الخروج.

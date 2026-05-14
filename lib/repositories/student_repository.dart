@@ -1,0 +1,267 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+
+import '../models/course_model.dart';
+import '../models/course_weekly_slot.dart';
+
+class StudentRepository {
+  StudentRepository({
+    FirebaseFirestore? firestore,
+    Box<dynamic>? coursesBox,
+  })  : _firestore = firestore ?? FirebaseFirestore.instance,
+        _coursesBox = coursesBox;
+
+  final FirebaseFirestore _firestore;
+  final Box<dynamic>? _coursesBox;
+
+  /// Hive box name (opened in [main] via [Hive.openBox]).
+  static const String coursesBoxName = 'coursesBox';
+
+  static const String _enrollmentsCollection = 'student_section_enrollments';
+  static const String _sectionsCollection = 'sections';
+  static const String _coursesCollection = 'courses';
+
+  Box<dynamic> get _box {
+    final b = _coursesBox ?? Hive.box<dynamic>(coursesBoxName);
+    return b;
+  }
+
+  /// Fast synchronous read from Hive. Returns `null` if there is no entry for [studentId].
+  List<CourseModel>? getCachedCourses(String studentId) {
+    final key = studentId.trim();
+    if (key.isEmpty) return null;
+    if (!_box.isOpen) return null;
+    final raw = _box.get(key);
+    if (raw == null) return null;
+    final decoded = _decodeCoursesList(raw);
+    if (decoded == null) return null;
+    return decoded;
+  }
+
+  /// Persists [courses] for [studentId] (overwrites existing).
+  Future<void> saveCourses(String studentId, List<CourseModel> courses) async {
+    final key = studentId.trim();
+    if (key.isEmpty) return;
+    final encoded = courses.map((c) => c.toJson()).toList();
+    await _box.put(key, encoded);
+  }
+
+  /// Cache-first:
+  /// - If Hive has data for [studentId], returns it immediately and refreshes Firestore in the background.
+  /// - Otherwise fetches from Firestore, saves to Hive, then returns.
+  Future<List<CourseModel>> getStudentCourses(String studentId) async {
+    final sid = studentId.trim();
+    if (sid.isEmpty) return const <CourseModel>[];
+
+    final cached = getCachedCourses(sid);
+    if (cached != null) {
+      final needsScheduleData = cached.any(
+        (c) => c.sectionId.trim().isNotEmpty && c.weeklySlots.isEmpty,
+      );
+      if (needsScheduleData) {
+        try {
+          final fresh = await _fetchCoursesFromFirestore(sid);
+          await saveCourses(sid, fresh);
+          return fresh;
+        } catch (_) {
+          unawaited(_refreshFromFirestoreAndCache(sid));
+          return cached;
+        }
+      }
+      unawaited(_refreshFromFirestoreAndCache(sid));
+      return cached;
+    }
+
+    final fresh = await _fetchCoursesFromFirestore(sid);
+    await saveCourses(sid, fresh);
+    return fresh;
+  }
+
+  Future<void> _refreshFromFirestoreAndCache(String studentId) async {
+    try {
+      final fresh = await _fetchCoursesFromFirestore(studentId);
+      await saveCourses(studentId, fresh);
+    } catch (_) {
+      // Silent: keep last good cache on network/rules failures.
+    }
+  }
+
+  /// Fetches all courses for a student by:
+  /// - reading `student_section_enrollments` to get sectionIds
+  /// - fetching those `sections` documents
+  /// - fetching related `courses` documents (by courseCode)
+  ///
+  /// Uses parallel fetches via [Future.wait] (no sequential per-section awaits).
+  Future<List<CourseModel>> _fetchCoursesFromFirestore(String sidRaw) async {
+    final sidInt = int.tryParse(sidRaw);
+
+    final enrollmentsQuery = _firestore
+        .collection(_enrollmentsCollection)
+        .where('studentId', isEqualTo: sidInt ?? sidRaw);
+
+    final enrollSnap = await enrollmentsQuery.get();
+
+    final sectionIds = enrollSnap.docs
+        .map((d) => (d.data()['sectionId'] ?? '').toString().trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+
+    if (sectionIds.isEmpty) return const <CourseModel>[];
+
+    final sectionFutures = sectionIds
+        .map(
+          (id) => _firestore.collection(_sectionsCollection).doc(id).get(),
+        )
+        .toList();
+
+    final sectionSnaps = await Future.wait(sectionFutures);
+
+    final sectionsById = <String, Map<String, dynamic>>{};
+    for (final snap in sectionSnaps) {
+      if (!snap.exists) continue;
+      final data = snap.data();
+      if (data == null) continue;
+      sectionsById[snap.id] = Map<String, dynamic>.from(data);
+    }
+
+    final courseCodes = sectionsById.values
+        .map((s) => (s['courseCode'] ?? '').toString().trim())
+        .where((c) => c.isNotEmpty)
+        .toSet()
+        .toList();
+
+    final courseSnaps = courseCodes.isEmpty
+        ? const <DocumentSnapshot<Map<String, dynamic>>>[]
+        : await Future.wait(
+            courseCodes
+                .map(
+                  (code) =>
+                      _firestore.collection(_coursesCollection).doc(code).get(),
+                )
+                .toList(),
+          );
+
+    final coursesByCode = <String, Map<String, dynamic>>{};
+    for (final snap in courseSnaps) {
+      if (!snap.exists) continue;
+      final data = snap.data();
+      if (data == null) continue;
+      coursesByCode[snap.id] = Map<String, dynamic>.from(data);
+    }
+
+    final out = <CourseModel>[];
+    for (final sectionId in sectionIds) {
+      final section = sectionsById[sectionId];
+      if (section == null) {
+        out.add(
+          CourseModel(
+            studentId: sidRaw,
+            sectionId: sectionId,
+            sectionLabel: '',
+            courseCode: '',
+            courseNameAr: '',
+            courseNameEn: '',
+            lecturerName: '',
+            courseType: '',
+            creditHours: '',
+            weeklySlots: const <CourseWeeklySlot>[],
+          ),
+        );
+        continue;
+      }
+
+      final courseCode = (section['courseCode'] ?? '').toString().trim();
+      final courseDoc = courseCode.isEmpty ? null : coursesByCode[courseCode];
+
+      final sectionNameAr = (section['courseName_Ar'] ?? '').toString().trim();
+      final sectionNameEn = (section['courseName'] ?? '').toString().trim();
+
+      final courseNameAr = sectionNameAr.isNotEmpty
+          ? sectionNameAr
+          : (courseDoc?['courseName_Ar'] ?? '').toString().trim();
+      final courseNameEn = sectionNameEn.isNotEmpty
+          ? sectionNameEn
+          : (courseDoc?['courseName'] ?? '').toString().trim();
+
+      final sectionLabel = (section['section'] ?? section['sectionLabel'] ?? '')
+          .toString()
+          .trim();
+      final lecturerName = (section['lecturerName'] ?? '').toString().trim();
+
+      final rawTypeSection = (section['courseType'] ?? '').toString().trim();
+      final rawTypeCourse = (courseDoc?['courseType'] ?? '').toString().trim();
+      final courseType =
+          rawTypeSection.isNotEmpty ? rawTypeSection : rawTypeCourse;
+
+      final ch = courseDoc?['creditHours'];
+      final creditHours = switch (ch) {
+        int() => ch.toString(),
+        num() => ch.toInt().toString(),
+        _ => (ch ?? '').toString().trim(),
+      };
+
+      out.add(
+        CourseModel(
+          studentId: sidRaw,
+          sectionId: sectionId,
+          sectionLabel: sectionLabel,
+          courseCode: courseCode,
+          courseNameAr: courseNameAr,
+          courseNameEn: courseNameEn,
+          lecturerName: lecturerName,
+          courseType: courseType,
+          creditHours: creditHours,
+          weeklySlots: _weeklySlotsFromSectionMap(section),
+        ),
+      );
+    }
+
+    return out;
+  }
+}
+
+List<CourseWeeklySlot> _weeklySlotsFromSectionMap(Map<String, dynamic> data) {
+  final schedule = data['schedule'];
+  if (schedule is! List<dynamic>) return const <CourseWeeklySlot>[];
+  final out = <CourseWeeklySlot>[];
+  for (final e in schedule) {
+    final m = Map<String, dynamic>.from(e is Map ? e : <String, dynamic>{});
+    final dayOfWeek = m['dayOfWeek'] is int
+        ? m['dayOfWeek'] as int
+        : int.tryParse((m['dayOfWeek'] ?? '').toString()) ?? 0;
+    var startTime = (m['startTime'] ?? '08:00').toString();
+    if (startTime.length == 4 && startTime.isNotEmpty && startTime[0] != '0') {
+      startTime = '0$startTime';
+    }
+    var endTime = (m['endTime'] ?? '10:00').toString();
+    if (endTime.length == 4 && endTime.isNotEmpty && endTime[0] != '0') {
+      endTime = '0$endTime';
+    }
+    final hall = (m['hall'] ?? '').toString();
+    final location = (m['location'] ?? m['مقر'] ?? '').toString().trim();
+    out.add(
+      CourseWeeklySlot(
+        dayOfWeek: dayOfWeek,
+        startTime: startTime,
+        endTime: endTime,
+        hall: hall,
+        location: location,
+      ),
+    );
+  }
+  return out;
+}
+
+List<CourseModel>? _decodeCoursesList(dynamic raw) {
+  if (raw is! List<dynamic>) return null;
+  final out = <CourseModel>[];
+  for (final item in raw) {
+    if (item is! Map) return null;
+    final map = Map<String, dynamic>.from(item);
+    out.add(CourseModel.fromJson(map));
+  }
+  return out;
+}

@@ -18,6 +18,8 @@ ios/Flutter/Flutter.podspec
 # Misc
 .idea/
 .vscode/
+# Local Flutter / IDE screenshots (no source value; keep out of version control)
+flutter_*.png
 *.log
 *.pyc
 .DS_Store

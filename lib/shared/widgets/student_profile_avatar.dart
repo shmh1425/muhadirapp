@@ -74,7 +74,11 @@ class StudentProfileAvatar extends StatelessWidget {
               final student = StudentAuthService.instance.currentStudent;
               final studentId = student?.studentId ?? 0;
               final email = student?.email ?? '';
-              imageChild = _AvatarImage(studentId: studentId, email: email);
+              imageChild = _AvatarImage(
+                key: ValueKey<String>('$studentId|$email'),
+                studentId: studentId,
+                email: email,
+              );
             }
 
             return Container(
@@ -149,19 +153,59 @@ class _DirectUrlAvatarImage extends StatelessWidget {
   }
 }
 
-class _AvatarImage extends StatelessWidget {
-  const _AvatarImage({required this.studentId, required this.email});
+class _AvatarImage extends StatefulWidget {
+  const _AvatarImage({
+    super.key,
+    required this.studentId,
+    required this.email,
+  });
 
   final int studentId;
   final String email;
 
+  static Widget _fallbackAvatarStatic() {
+    return Container(
+      color: Color(0xFFF1F3F4),
+      alignment: Alignment.center,
+      child: Icon(
+        Icons.person,
+        size: 34,
+        color: Color(0xFF9AA0A6),
+      ),
+    );
+  }
+
+  @override
+  State<_AvatarImage> createState() => _AvatarImageState();
+}
+
+class _AvatarImageState extends State<_AvatarImage> {
+  late Future<String?> _profileUrlFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _profileUrlFuture = StudentProfileImageService.instance.getProfileImageUrl(
+      studentId: widget.studentId,
+      email: widget.email,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _AvatarImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.studentId != widget.studentId || oldWidget.email != widget.email) {
+      _profileUrlFuture = StudentProfileImageService.instance.getProfileImageUrl(
+        studentId: widget.studentId,
+        email: widget.email,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<String?>(
-      future: StudentProfileImageService.instance.getProfileImageUrl(
-        studentId: studentId,
-        email: email,
-      ),
+      future: _profileUrlFuture,
       builder: (context, snapshot) {
         final url = snapshot.data?.trim() ?? '';
         if (url.isNotEmpty) {
@@ -199,18 +243,6 @@ class _AvatarImage extends StatelessWidget {
     );
   }
 
-  Widget _fallbackAvatar() => _fallbackAvatarStatic();
-
-  static Widget _fallbackAvatarStatic() {
-    return Container(
-      color: Color(0xFFF1F3F4),
-      alignment: Alignment.center,
-      child: Icon(
-        Icons.person,
-        size: 34,
-        color: Color(0xFF9AA0A6),
-      ),
-    );
-  }
+  Widget _fallbackAvatar() => _AvatarImage._fallbackAvatarStatic();
 }
 

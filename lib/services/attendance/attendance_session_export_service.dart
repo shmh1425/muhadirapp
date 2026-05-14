@@ -8,7 +8,8 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../models/attendance/manual_attendance_record.dart';
 import '../../models/attendance/manual_attendance_session.dart';
-import '../lecturer/lecturer_sections_service.dart';
+import '../../repositories/lecturer_catalog_repository.dart';
+import '../lecturer_auth_service.dart';
 import 'manual_attendance_service.dart';
 
 /// Phase 1: single-session CSV export from authoritative Firestore attendance data.
@@ -81,9 +82,14 @@ class AttendanceSessionExportService {
   Future<bool> _currentLecturerOwnsSection(String sectionId) async {
     final want = sectionId.trim();
     if (want.isEmpty) return false;
-    final lectures = await LecturerSectionsService.instance
-        .getLecturesForCurrentLecturer();
-    return lectures.any((l) => (l.sectionId ?? '').trim() == want);
+    final lecturerId =
+        LecturerAuthService.instance.currentLecturer?.lecturerId.trim() ?? '';
+    if (lecturerId.isEmpty) return false;
+    final catalog =
+        await LecturerCatalogRepository.instance.getCatalogForLecturer(
+      lecturerId,
+    );
+    return catalog.sectionIds.contains(want);
   }
 
   String _buildFilename(ManualAttendanceSession session) {

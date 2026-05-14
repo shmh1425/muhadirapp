@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../providers/security_scan_providers.dart';
 import '../../services/female_security/security_gate_scan_service.dart';
 import 'female_security_nav_bar.dart';
 import 'rejected_students_screen.dart';
@@ -19,17 +21,15 @@ const _kDateIconBg = Color(0xFFF5F5F5);
 const _kInputFill = Color(0xFFF8F7F7);
 const _kCardShadow = Color(0x0D000000);
 
-class AcceptedScreen extends StatefulWidget {
+class AcceptedScreen extends ConsumerStatefulWidget {
   const AcceptedScreen({super.key});
 
   @override
-  State<AcceptedScreen> createState() => _AcceptedScreenState();
+  ConsumerState<AcceptedScreen> createState() => _AcceptedScreenState();
 }
 
-class _AcceptedScreenState extends State<AcceptedScreen> {
+class _AcceptedScreenState extends ConsumerState<AcceptedScreen> {
   final TextEditingController _searchController = TextEditingController();
-  final FemaleSecurityGateScanService _service =
-      FemaleSecurityGateScanService.instance;
 
   int _selectedNavIndex = 0;
   bool _dateUpdated = true;
@@ -164,24 +164,21 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
                       valueListenable: selectedGateId,
                       builder: (context, gateId, _) {
                         _logAcceptedQueryValues(gateId);
-                        return StreamBuilder<List<SecurityGateScanRecord>>(
-                          stream: _service.getAcceptedScans(
-                            gateId: gateId,
-                            date: _selectedDate,
-                          ),
-                          builder: (context, snapshot) {
-                            if (snapshot.hasError && snapshot.error != null) {
-                              _logAcceptedQueryError(
-                                error: snapshot.error!,
-                                stackTrace: snapshot.stackTrace,
-                                gateId: gateId,
-                              );
-                            }
-                            final scans = _filterScans(
-                              snapshot.data ?? const <SecurityGateScanRecord>[],
-                            );
+                        final day = DateTime(
+                          _selectedDate.year,
+                          _selectedDate.month,
+                          _selectedDate.day,
+                        );
+                        final streamKey = GateScanKey(gateId: gateId, date: day);
+                        final async = ref.watch(
+                          securityAcceptedScansStreamProvider(streamKey),
+                        );
+                        return async.when(
+                          data: (records) {
+                            final scans = _filterScans(records);
                             return ListView(
-                              padding: const EdgeInsets.fromLTRB(24, 18, 24, 8),
+                              padding:
+                                  const EdgeInsets.fromLTRB(24, 18, 24, 8),
                               children: [
                                 HeaderSection(
                                   onRefresh: _onRefresh,
@@ -197,20 +194,10 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
                                   onChanged: (_) => setState(() {}),
                                 ),
                                 const SizedBox(height: 12),
-                                if (snapshot.hasError)
+                                if (scans.isEmpty)
                                   _CompactStateCard(
-                                    message:
-                                        SecurityLocalization.acceptedLoadError,
-                                    icon: Icons.error_outline_rounded,
-                                  )
-                                else if (snapshot.connectionState ==
-                                        ConnectionState.waiting &&
-                                    !snapshot.hasData)
-                                  const _CompactLoadingCard()
-                                else if (scans.isEmpty)
-                                  _CompactStateCard(
-                                    message:
-                                        SecurityLocalization.noAcceptedStudents,
+                                    message: SecurityLocalization
+                                        .noAcceptedStudents,
                                     icon: Icons.how_to_reg_outlined,
                                   )
                                 else
@@ -218,6 +205,58 @@ class _AcceptedScreenState extends State<AcceptedScreen> {
                               ],
                             );
                           },
+                          error: (e, st) {
+                            _logAcceptedQueryError(
+                              error: e,
+                              stackTrace: st,
+                              gateId: gateId,
+                            );
+                            return ListView(
+                              padding:
+                                  const EdgeInsets.fromLTRB(24, 18, 24, 8),
+                              children: [
+                                HeaderSection(
+                                  onRefresh: _onRefresh,
+                                  onPickDate: _openDatePicker,
+                                  formattedDate: formattedDate,
+                                  isDateActive: _dateUpdated,
+                                ),
+                                const SizedBox(height: 12),
+                                const _AcceptedStatusBanner(),
+                                const SizedBox(height: 12),
+                                SearchBar(
+                                  controller: _searchController,
+                                  onChanged: (_) => setState(() {}),
+                                ),
+                                const SizedBox(height: 12),
+                                _CompactStateCard(
+                                  message:
+                                      SecurityLocalization.acceptedLoadError,
+                                  icon: Icons.error_outline_rounded,
+                                ),
+                              ],
+                            );
+                          },
+                          loading: () => ListView(
+                            padding: const EdgeInsets.fromLTRB(24, 18, 24, 8),
+                            children: [
+                              HeaderSection(
+                                onRefresh: _onRefresh,
+                                onPickDate: _openDatePicker,
+                                formattedDate: formattedDate,
+                                isDateActive: _dateUpdated,
+                              ),
+                              const SizedBox(height: 12),
+                              const _AcceptedStatusBanner(),
+                              const SizedBox(height: 12),
+                              SearchBar(
+                                controller: _searchController,
+                                onChanged: (_) => setState(() {}),
+                              ),
+                              const SizedBox(height: 12),
+                              const _CompactLoadingCard(),
+                            ],
+                          ),
                         );
                       },
                     ),

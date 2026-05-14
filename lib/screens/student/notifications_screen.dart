@@ -39,6 +39,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   int get _studentId =>
       StudentAuthService.instance.currentStudent?.studentId ?? 0;
 
+  /// One stable stream per screen open. Re-creating [watchCurrentStudentNotifications]
+  /// on every [AnimatedBuilder] rebuild resets [StreamBuilder] to `waiting` and
+  /// flashes the loading spinner indefinitely.
+  Stream<List<StudentNotification>>? _notificationsStream;
+
   String _selectedCategory = 'الكل';
   final ValueNotifier<Set<String>> _optimisticHiddenIds =
       ValueNotifier<Set<String>>(<String>{});
@@ -53,6 +58,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   /// Matches other student headers (جدول، حضور، أعذار).
   static const Color _headerPrimary = Color(0xFF006571);
   static const Color _deleteAllRed = Color(0xFFDC2626);
+
+  @override
+  void initState() {
+    super.initState();
+    final id = StudentAuthService.instance.currentStudent?.studentId ?? 0;
+    if (id > 0) {
+      _notificationsStream =
+          _notificationsService.watchCurrentStudentNotifications(id);
+    }
+  }
 
   @override
   void dispose() {
@@ -329,25 +344,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       ];
     }
 
+    _notificationsStream ??=
+        _notificationsService.watchCurrentStudentNotifications(_studentId);
+
     return <Widget>[
       StreamBuilder<List<StudentNotification>>(
-        stream: _notificationsService.watchCurrentStudentNotifications(_studentId),
+        initialData: const <StudentNotification>[],
+        stream: _notificationsStream!,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 48),
-              child: Center(
-                child: SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: _brand,
-                  ),
-                ),
-              ),
-            );
-          }
           if (snapshot.hasError) {
             return _EmptyNotificationsMessage(
               message: _tr(t, 'تعذر تحميل التنبيهات حالياً.', 'Could not load notifications.'),

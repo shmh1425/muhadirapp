@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../providers/security_scan_providers.dart';
 import '../../services/female_security/security_gate_scan_service.dart';
 import 'accepted_screen.dart';
 import 'female_security_nav_bar.dart';
@@ -21,17 +23,16 @@ const _kDateIconBg = Color(0xFFF5F5F5);
 const _kInputFill = Color(0xFFF8F7F7);
 const _kCardShadow = Color(0x0D000000);
 
-class RejectedStudentsScreen extends StatefulWidget {
+class RejectedStudentsScreen extends ConsumerStatefulWidget {
   const RejectedStudentsScreen({super.key});
 
   @override
-  State<RejectedStudentsScreen> createState() => _RejectedStudentsScreenState();
+  ConsumerState<RejectedStudentsScreen> createState() =>
+      _RejectedStudentsScreenState();
 }
 
-class _RejectedStudentsScreenState extends State<RejectedStudentsScreen> {
+class _RejectedStudentsScreenState extends ConsumerState<RejectedStudentsScreen> {
   final TextEditingController _searchController = TextEditingController();
-  final FemaleSecurityGateScanService _service =
-      FemaleSecurityGateScanService.instance;
 
   int _selectedNavIndex = 1;
   bool _dateUpdated = true;
@@ -153,20 +154,27 @@ class _RejectedStudentsScreenState extends State<RejectedStudentsScreen> {
                   child: ValueListenableBuilder<String>(
                     valueListenable: selectedGateId,
                     builder: (context, gateId, _) {
-                      return StreamBuilder<List<SecurityGateScanRecord>>(
-                        stream: _service.getRejectedScans(
-                          gateId: gateId,
-                          date: _selectedDate,
-                        ),
-                        builder: (context, snapshot) {
-                          final scans = _filterScans(snapshot.data ?? const []);
+                      final day = DateTime(
+                        _selectedDate.year,
+                        _selectedDate.month,
+                        _selectedDate.day,
+                      );
+                      final streamKey = GateScanKey(gateId: gateId, date: day);
+                      final async = ref.watch(
+                        securityRejectedScansStreamProvider(streamKey),
+                      );
+                      return async.when(
+                        data: (records) {
+                          final scans = _filterScans(records);
                           return ListView(
-                            padding: const EdgeInsets.fromLTRB(24, 18, 24, 8),
+                            padding:
+                                const EdgeInsets.fromLTRB(24, 18, 24, 8),
                             children: [
                               _RejectedHeader(
                                 onRefresh: _onRefresh,
                                 onPickDate: _openDatePicker,
-                                formattedDate: _getFormattedDate(_selectedDate),
+                                formattedDate:
+                                    _getFormattedDate(_selectedDate),
                                 isDateActive: _dateUpdated,
                               ),
                               const SizedBox(height: 12),
@@ -177,20 +185,10 @@ class _RejectedStudentsScreenState extends State<RejectedStudentsScreen> {
                                 onChanged: (_) => setState(() {}),
                               ),
                               const SizedBox(height: 12),
-                              if (snapshot.hasError)
+                              if (scans.isEmpty)
                                 _CompactStateCard(
-                                  message:
-                                      SecurityLocalization.rejectedLoadError,
-                                  icon: Icons.error_outline_rounded,
-                                )
-                              else if (snapshot.connectionState ==
-                                      ConnectionState.waiting &&
-                                  !snapshot.hasData)
-                                const _CompactLoadingCard()
-                              else if (scans.isEmpty)
-                                _CompactStateCard(
-                                  message:
-                                      SecurityLocalization.noRejectedStudents,
+                                  message: SecurityLocalization
+                                      .noRejectedStudents,
                                   icon: Icons.person_off_outlined,
                                 )
                               else
@@ -201,6 +199,52 @@ class _RejectedStudentsScreenState extends State<RejectedStudentsScreen> {
                             ],
                           );
                         },
+                        error: (_, __) => ListView(
+                          padding: const EdgeInsets.fromLTRB(24, 18, 24, 8),
+                          children: [
+                            _RejectedHeader(
+                              onRefresh: _onRefresh,
+                              onPickDate: _openDatePicker,
+                              formattedDate:
+                                  _getFormattedDate(_selectedDate),
+                              isDateActive: _dateUpdated,
+                            ),
+                            const SizedBox(height: 12),
+                            const _StatusBadge(),
+                            const SizedBox(height: 12),
+                            _RejectedSearchBar(
+                              controller: _searchController,
+                              onChanged: (_) => setState(() {}),
+                            ),
+                            const SizedBox(height: 12),
+                            _CompactStateCard(
+                              message:
+                                  SecurityLocalization.rejectedLoadError,
+                              icon: Icons.error_outline_rounded,
+                            ),
+                          ],
+                        ),
+                        loading: () => ListView(
+                          padding: const EdgeInsets.fromLTRB(24, 18, 24, 8),
+                          children: [
+                            _RejectedHeader(
+                              onRefresh: _onRefresh,
+                              onPickDate: _openDatePicker,
+                              formattedDate:
+                                  _getFormattedDate(_selectedDate),
+                              isDateActive: _dateUpdated,
+                            ),
+                            const SizedBox(height: 12),
+                            const _StatusBadge(),
+                            const SizedBox(height: 12),
+                            _RejectedSearchBar(
+                              controller: _searchController,
+                              onChanged: (_) => setState(() {}),
+                            ),
+                            const SizedBox(height: 12),
+                            const _CompactLoadingCard(),
+                          ],
+                        ),
                       );
                     },
                   ),
