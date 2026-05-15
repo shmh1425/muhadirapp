@@ -1,7 +1,6 @@
 import 'package:flutter/widgets.dart';
 
 import '../../features/translation/translation_controller.dart';
-import '../../services/geo/geo_fence_outcome.dart';
 
 class SecurityLocalization {
   SecurityLocalization._();
@@ -197,39 +196,6 @@ class SecurityLocalization {
   static String get gateCardRevStale => tr(
     'رمز البطاقة لم يعد صالحاً (مثلاً بعد انسحاب أو تحديث وضع الطالبة). يُرجى فتح بطاقة الطالبة من جديد لتحديث الرمز.',
     'This gate card code is no longer valid (e.g. after withdrawal or status update). Ask the student to open the card screen to refresh the code.',
-  );
-
-  /// Maps [GeoFenceOutcome] to localized text (service returns codes only).
-  static String geoFenceOutcomeMessage(GeoFenceOutcome outcome) {
-    switch (outcome) {
-      case GeoFenceOutcome.inside:
-        return '';
-      case GeoFenceOutcome.outsideCampus:
-        return tr(
-          'أنتِ خارج نطاق الجامعة، لا يمكن إكمال عملية التحقق.',
-          'You are outside the university area. Verification cannot continue.',
-        );
-      case GeoFenceOutcome.permissionDenied:
-        return tr(
-          'يرجى تفعيل إذن الموقع لإكمال عملية التحقق.',
-          'Please enable location permission to continue verification.',
-        );
-      case GeoFenceOutcome.locationServiceDisabled:
-        return tr(
-          'يرجى تفعيل خدمة الموقع من إعدادات الجهاز.',
-          'Please enable location services from device settings.',
-        );
-      case GeoFenceOutcome.locationUnavailable:
-        return tr(
-          'تعذر تحديد موقعك الحالي. يرجى المحاولة مرة أخرى.',
-          'Unable to determine your current location. Please try again.',
-        );
-    }
-  }
-
-  static String get securityGateGeoLayerHint => tr(
-    'تُتحقق أولاً من أن الجهاز داخل نطاق الحرم (جيوفنس)، ثم تُفعّل قراءة NFC أو مسح QR.',
-    'Campus boundary is checked first (geo-fence), then NFC or QR scanning runs.',
   );
 
   static String dayName(DateTime date) {

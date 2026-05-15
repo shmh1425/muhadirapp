@@ -44,7 +44,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   /// flashes the loading spinner indefinitely.
   Stream<List<StudentNotification>>? _notificationsStream;
 
-  String _selectedCategory = 'الكل';
   final ValueNotifier<Set<String>> _optimisticHiddenIds =
       ValueNotifier<Set<String>>(<String>{});
 
@@ -52,9 +51,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       t.translateToEnglish ? en : ar;
 
   static const Color _bg = Color(0xFFF7F9FB);
-  static const Color _brand = Color(0xFF0F766E);
-  static const Color _brandAccent = Color(0xFF14B8A6);
-  static const Color _mutedTab = Color(0xFF94A3B8);
   /// Matches other student headers (جدول، حضور، أعذار).
   static const Color _headerPrimary = Color(0xFF006571);
   static const Color _deleteAllRed = Color(0xFFDC2626);
@@ -189,7 +185,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _buildHeader(context, translation),
-                    if (_studentId > 0) _buildTabs(translation),
+                    if (_studentId > 0) _buildDeleteAllBar(translation),
                     Expanded(
                       child: ListView(
                         padding: const EdgeInsets.fromLTRB(0, 8, 0, 24),
@@ -243,94 +239,29 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
-  Widget _buildTabs(TranslationController t) {
-    Widget tab(String value, String ar, String en) {
-      final isActive = _selectedCategory == value;
-      return Expanded(
-        child: InkWell(
-          onTap: () => setState(() => _selectedCategory = value),
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TText(
-                  _tr(t, ar, en),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: 'Tajawal',
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: isActive ? _brand : _mutedTab,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOut,
-                  height: 3,
-                  margin: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(2),
-                    gradient: isActive
-                        ? const LinearGradient(
-                            colors: <Color>[_brand, _brandAccent],
-                          )
-                        : null,
-                    color: isActive ? null : Colors.transparent,
-                  ),
-                ),
-              ],
+  Widget _buildDeleteAllBar(TranslationController t) {
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(top: 4, bottom: 8),
+      child: Align(
+        alignment: AlignmentDirectional.centerEnd,
+        child: TextButton(
+          onPressed: _confirmDeleteAll,
+          style: TextButton.styleFrom(
+            foregroundColor: _deleteAllRed,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: TText(
+            _tr(t, 'حذف الكل', 'Delete all'),
+            style: const TextStyle(
+              fontFamily: 'Tajawal',
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: _deleteAllRed,
             ),
           ),
         ),
-      );
-    }
-
-    return Container(
-      color: Colors.white,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(left: 8, right: 8, bottom: 4),
-            child: Row(
-              children: [
-                tab('الكل', 'الكل', 'All'),
-                tab('المحاضرات', 'المحاضرات', 'Classes'),
-                tab('الحضور', 'الحضور', 'Attendance'),
-                tab('الأعذار', 'الأعذار', 'Excuses'),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsetsDirectional.only(start: 8, end: 8, bottom: 10),
-            child: Align(
-              alignment: AlignmentDirectional.centerEnd,
-              child: TextButton(
-                onPressed: _confirmDeleteAll,
-                style: TextButton.styleFrom(
-                  foregroundColor: _deleteAllRed,
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: TText(
-                  _tr(t, 'حذف الكل', 'Delete all'),
-                  style: const TextStyle(
-                    fontFamily: 'Tajawal',
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: _deleteAllRed,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -363,7 +294,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             valueListenable: _optimisticHiddenIds,
             builder: (context, optimisticHidden, _) {
               final filtered = _sortedNotificationsForDisplay(
-                _filteredNotifications(all)
+                all
                     .where(
                       (n) =>
                           !optimisticHidden.contains(n.id) &&
@@ -383,7 +314,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 switchInCurve: Curves.easeOut,
                 switchOutCurve: Curves.easeIn,
                 child: Column(
-                  key: ValueKey<String>('${_selectedCategory}_${filtered.length}'),
+                  key: ValueKey<int>(filtered.length),
                   children: filtered
                       .map(
                         (n) => _NotificationCard(
@@ -415,22 +346,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       return b.createdAt.compareTo(a.createdAt);
     });
     return copy;
-  }
-
-  List<StudentNotification> _filteredNotifications(List<StudentNotification> all) {
-    if (_selectedCategory == 'الكل') return all;
-    return all.where((n) {
-      switch (_selectedCategory) {
-        case 'الحضور':
-          return n.category == StudentNotificationCategory.attendance;
-        case 'المحاضرات':
-          return n.category == StudentNotificationCategory.lectures;
-        case 'الأعذار':
-          return n.category == StudentNotificationCategory.excuses;
-        default:
-          return true;
-      }
-    }).toList();
   }
 
   Future<void> _openDetails(StudentNotification notification) async {
@@ -650,14 +565,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       final all = await _notificationsService
           .watchCurrentStudentNotifications(_studentId)
           .first;
-      final filtered = _filteredNotifications(all);
       await _notificationsService.deleteAllForStudent(
         studentId: _studentId,
-        visibleNotifications: filtered,
+        visibleNotifications: all,
       );
       if (!mounted) return;
       final next = Set<String>.of(_optimisticHiddenIds.value);
-      for (final n in filtered) {
+      for (final n in all) {
         next.add(n.id);
         next.add(n.rawId);
       }

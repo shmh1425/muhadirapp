@@ -25,10 +25,10 @@ final studentUnifiedCoursesProvider =
   try {
     all = await repo.getStudentCourses(trimmed).timeout(
           const Duration(seconds: 15),
-          onTimeout: () => repo.getCachedCourses(trimmed) ?? <CourseModel>[],
+          onTimeout: () => <CourseModel>[],
         );
   } catch (_) {
-    all = repo.getCachedCourses(trimmed) ?? <CourseModel>[];
+    all = <CourseModel>[];
   }
   // Do not block the whole student UI on calendar I/O (can stall on slow/offline networks).
   var isHoliday = false;

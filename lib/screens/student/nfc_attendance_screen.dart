@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
+import 'dart:math' show min;
 
 // ignore: depend_on_referenced_packages
 import 'package:device_info_plus/device_info_plus.dart';
@@ -17,6 +18,7 @@ import '../../services/attendance/bluetooth_ble_service.dart';
 import '../../services/attendance/nfc_attendance_service.dart';
 import '../../services/nfc/nfc_tag_identifier.dart';
 import '../../services/attendance/qr_attendance_service.dart';
+import '../../services/geo/student_campus_geo_guard.dart';
 import '../../services/student_auth_service.dart';
 import '../../services/student_notifications_service.dart';
 import '../../shared/widgets/chat_fab.dart';
@@ -24,6 +26,7 @@ import '../../shared/widgets/attendance_result_popup.dart';
 import 'components/custom_nav_bar_icons.dart';
 import 'components/notification_bell.dart';
 import 'components/student_back_chevron_icon.dart';
+import 'widgets/attendance_mode_chip.dart';
 import 'home_screen.dart';
 import 'notifications_screen.dart';
 import 'services_screen.dart';
@@ -49,6 +52,12 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
 
   String _tr(String ar, String en) {
     return TranslationController.instance.translateToEnglish ? en : ar;
+  }
+
+  Future<String?> _campusGeoBlockMessage() async {
+    final blocked = await StudentCampusGeoGuard.blockingOutcome();
+    if (blocked == null) return null;
+    return StudentCampusGeoGuard.localizedMessage(blocked);
   }
 
   bool _isNfc = true;
@@ -140,16 +149,60 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       _isEnteringQrCode = false;
       _isProcessingQrScan = false;
       _isQrScanPaused = true;
+      _bluetoothScanResult = null;
       _qrStatusMessage = _tr(
-        'اضغطي بدء البحث لاكتشاف إشارة المحاضرة القريبة.',
+        'اضغط «بدء البحث» لاكتشاف إشارة المحاضرة القريبة.',
         'Tap Start Scan to find a nearby lecture signal.',
       );
     });
     _stopQrScanner();
+    unawaited(_refreshBluetoothAvailability());
+  }
+
+  Future<void> _refreshBluetoothAvailability() async {
+    if (!mounted || !_isBluetooth || kIsWeb) return;
+    final support = await _bluetoothBleService.checkPlatformSupport(
+      BluetoothBleRole.scanner,
+    );
+    if (!mounted || !_isBluetooth) return;
+    if (support.status == BluetoothBleSupportStatus.off) {
+      setState(() {
+        _bluetoothScanResult = BluetoothScanResult(
+          state: BluetoothScanState.error,
+          message: support.message,
+        );
+        _isBluetoothScanning = false;
+      });
+    }
+  }
+
+  bool _isBluetoothPoweredOff(BluetoothScanResult? result) {
+    if (result == null) return false;
+    if (result.state != BluetoothScanState.error) return false;
+    final lower = result.message.toLowerCase();
+    return lower.contains('turned off') ||
+        lower.contains('powered off') ||
+        lower.contains('location services are disabled');
+  }
+
+  bool _shouldShowBluetoothLecturerHint(BluetoothScanResult? result) {
+    return result?.state == BluetoothScanState.notFound;
   }
 
   Future<void> _startBluetoothScan() async {
     if (_isBluetoothScanning) return;
+    final geoMsg = await _campusGeoBlockMessage();
+    if (!mounted) return;
+    if (geoMsg != null) {
+      setState(() {
+        _bluetoothScanResult = BluetoothScanResult(
+          state: BluetoothScanState.error,
+          message: geoMsg,
+        );
+        _isBluetoothScanning = false;
+      });
+      return;
+    }
     await _bluetoothScanSub?.cancel();
     setState(() {
       _isBluetoothScanning = true;
@@ -203,6 +256,18 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
 
   Future<void> _submitBluetoothAttendance() async {
     if (_isSubmittingBluetoothAttendance) return;
+    final geoMsg = await _campusGeoBlockMessage();
+    if (!mounted) return;
+    if (geoMsg != null) {
+      await AttendanceResultPopup.show(
+        context,
+        success: false,
+        message: _tr('فشل تسجيل الحضور', 'Attendance failed'),
+        subtitle: geoMsg,
+        autoDismiss: false,
+      );
+      return;
+    }
     final detection = _bluetoothScanResult?.detection;
     if (detection == null) {
       await AttendanceResultPopup.show(
@@ -403,6 +468,16 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
           _nfcUnavailableMessage(english: false),
           _nfcUnavailableMessage(english: true),
         );
+      });
+      return;
+    }
+
+    final geoMsg = await _campusGeoBlockMessage();
+    if (!mounted) return;
+    if (geoMsg != null) {
+      setState(() {
+        _statusError = true;
+        _statusMessage = geoMsg;
       });
       return;
     }
@@ -738,10 +813,6 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       _isEnteringQrCode = true;
       _isQrScanPaused = true;
       _qrStatusError = false;
-      _qrStatusMessage = _tr(
-        'أدخلي رمز الحضور المعروض لدى المحاضر.',
-        'Enter the attendance code shown by the lecturer.',
-      );
     });
   }
 
@@ -749,9 +820,26 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     if (_isSubmittingAttendanceCode || _isNfc || _isBluetooth) return;
     final code = _attendanceCodeController.text.trim();
     if (code.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _tr('رمز الحضور مطلوب', 'Code is required'),
+            style: const TextStyle(fontFamily: 'Cairo', color: Colors.white),
+          ),
+          backgroundColor: const Color(0xFF006571),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final geoMsg = await _campusGeoBlockMessage();
+    if (!mounted) return;
+    if (geoMsg != null) {
       setState(() {
         _qrStatusError = true;
-        _qrStatusMessage = _tr('رمز الحضور مطلوب', 'Code is required');
+        _qrStatusMessage = geoMsg;
       });
       return;
     }
@@ -759,7 +847,6 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     setState(() {
       _isSubmittingAttendanceCode = true;
       _qrStatusError = false;
-      _qrStatusMessage = _tr('جاري التحقق من الرمز...', 'Verifying code...');
     });
 
     try {
@@ -910,6 +997,17 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         _qrStatusError = true;
         _qrStatusMessage =
             'رمز QR غير صالح. الرجاء مسح رمز التحضير من شاشة المحاضر.';
+      });
+      return;
+    }
+
+    final geoMsg = await _campusGeoBlockMessage();
+    if (!mounted) return;
+    if (geoMsg != null) {
+      setState(() {
+        _isQrScanPaused = true;
+        _qrStatusError = true;
+        _qrStatusMessage = geoMsg;
       });
       return;
     }
@@ -1129,10 +1227,11 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                   'Bluetooth scanning requires a supported mobile device.',
                 )
               : _tr(
-                  'تأكدي من تشغيل البلوتوث ثم ابدئي البحث عن إشارة المحاضرة.',
+                  'تأكّد من تشغيل البلوتوث ثم ابدأ البحث عن إشارة المحاضرة.',
                   'Make sure Bluetooth is turned on, then start searching for the lecture signal.',
                 ))
         : _localizedBluetoothScanMessage(result);
+    final showLecturerHint = _shouldShowBluetoothLecturerHint(result);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 22),
@@ -1194,21 +1293,23 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                     height: 1.45,
                   ),
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  _tr(
-                    'اطلبي من المحاضر تفعيل جلسة البلوتوث وبدء البث.',
-                    'Ask your lecturer to activate Bluetooth attendance and start broadcasting.',
+                if (showLecturerHint) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    _tr(
+                      'اطلب من المحاضر تفعيل جلسة البلوتوث وبدء البث.',
+                      'Ask your lecturer to activate Bluetooth attendance and start broadcasting.',
+                    ),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Color(0xFF5F7A80),
+                      fontSize: 12,
+                      fontFamily: 'Cairo',
+                      fontWeight: FontWeight.w600,
+                      height: 1.4,
+                    ),
                   ),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Color(0xFF5F7A80),
-                    fontSize: 12,
-                    fontFamily: 'Cairo',
-                    fontWeight: FontWeight.w600,
-                    height: 1.4,
-                  ),
-                ),
+                ],
                 if (detection != null) ...[
                   const SizedBox(height: 12),
                   _BluetoothDetectionLine(
@@ -1266,10 +1367,13 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                 style: const TextStyle(
                   fontWeight: FontWeight.w700,
                   fontFamily: 'Cairo',
+                  color: Colors.white,
                 ),
               ),
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF006571),
+                foregroundColor: Colors.white,
+                disabledForegroundColor: Colors.white70,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24),
                 ),
@@ -1307,10 +1411,13 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                   style: const TextStyle(
                     fontWeight: FontWeight.w800,
                     fontFamily: 'Cairo',
+                    color: Colors.white,
                   ),
                 ),
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFF2B9E56),
+                  foregroundColor: Colors.white,
+                  disabledForegroundColor: Colors.white70,
                   disabledBackgroundColor: const Color(0xFFB6C7C9),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(24),
@@ -1334,13 +1441,13 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         );
       case BluetoothScanState.detected:
         return _tr(
-          'تم العثور على إشارة المحاضرة. اضغطي تسجيل الحضور للمتابعة.',
+          'تم العثور على إشارة المحاضرة. اضغط «تسجيل الحضور» للمتابعة.',
           'Lecture signal found. Tap Submit Bluetooth Attendance to continue.',
         );
       case BluetoothScanState.notFound:
         return _tr(
-          'لم يتم العثور على إشارة محاضرة.',
-          'No lecture signal found.',
+          'تعذّر العثور على إشارة المحاضرة.',
+          'Could not find the lecture signal.',
         );
       case BluetoothScanState.unsupported:
         return _tr(
@@ -1355,8 +1462,18 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
             'Bluetooth permission is required for scanning.',
           );
         }
-        if (lower.contains('turned off')) {
-          return _tr('البلوتوث غير مفعّل.', 'Bluetooth is turned off.');
+        if (lower.contains('turned off') ||
+            lower.contains('powered off') ||
+            lower.contains('location services')) {
+          return lower.contains('location services')
+              ? _tr(
+                  'خدمات الموقع معطّلة. فعّلها للبحث عبر البلوتوث.',
+                  'Location services are disabled. Enable them for Bluetooth scanning.',
+                )
+              : _tr(
+                  'البلوتوث غير مفعّل. يرجى تفعيل البلوتوث.',
+                  'Bluetooth is off. Please turn on Bluetooth.',
+                );
         }
         return _tr(
           'تعذر البحث عبر البلوتوث حالياً.',
@@ -1364,7 +1481,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         );
       case BluetoothScanState.idle:
         return _tr(
-          'اضغطي بدء البحث لاكتشاف إشارة المحاضرة القريبة.',
+          'اضغط «بدء البحث» لاكتشاف إشارة المحاضرة القريبة.',
           'Tap Start Scan to find a nearby lecture signal.',
         );
     }
@@ -1401,7 +1518,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         return _tr('انتهت صلاحية جلسة البلوتوث', 'Bluetooth session expired');
       case BluetoothAttendanceErrorCode.studentNotEnrolled:
         return _tr(
-          'الطالبة غير مسجلة في هذه الشعبة',
+          'غير مسجل في هذه الشعبة',
           'You are not enrolled in this section',
         );
       case BluetoothAttendanceErrorCode.alreadyMarked:
@@ -1416,6 +1533,339 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                 'Unable to record Bluetooth attendance right now.',
               );
     }
+  }
+
+  Widget _buildQrAttendanceContent(BuildContext context) {
+    final scanSize = min(280.0, MediaQuery.sizeOf(context).width - 72);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Container(
+            height: 40,
+            decoration: BoxDecoration(
+              color: const Color(0xFFD7F1F1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            padding: const EdgeInsets.all(4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: AttendanceModeChip(
+                    label: _tr('مسح QR', 'Scan QR'),
+                    isActive: !_isEnteringQrCode,
+                    onTap: _retryQrScan,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: AttendanceModeChip(
+                    label: _tr('إدخال يدوي', 'Manual code'),
+                    isActive: _isEnteringQrCode,
+                    onTap: _showAttendanceCodeEntry,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (_isEnteringQrCode)
+          _buildQrManualEntryCard()
+        else
+          _buildQrScannerCard(scanSize),
+        if (!_isEnteringQrCode) ...[
+          const SizedBox(height: 14),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: _buildQrStatusBanner(),
+          ),
+        ],
+        const SizedBox(height: 14),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: SizedBox(
+            width: double.infinity,
+            height: 46,
+            child: FilledButton(
+              onPressed: _qrPrimaryActionEnabled ? _onQrPrimaryAction : null,
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF006571),
+                foregroundColor: Colors.white,
+                disabledForegroundColor: Colors.white70,
+                disabledBackgroundColor: const Color(0xFF006571).withValues(
+                  alpha: 0.4,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+              ),
+              child: _qrPrimaryActionChild,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  bool get _qrPrimaryActionEnabled {
+    if (_isEnteringQrCode) return !_isSubmittingAttendanceCode;
+    return !_isStartingQrScanner && !_isProcessingQrScan;
+  }
+
+  void _onQrPrimaryAction() {
+    if (_isEnteringQrCode) {
+      unawaited(_submitAttendanceCode());
+    } else {
+      unawaited(_retryQrScan());
+    }
+  }
+
+  Widget get _qrPrimaryActionChild {
+    if (_isEnteringQrCode) {
+      if (_isSubmittingAttendanceCode) {
+        return const SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+        );
+      }
+      return Text(
+        _tr('تحقق من الرمز', 'Verify code'),
+        style: const TextStyle(
+          fontWeight: FontWeight.w700,
+          fontFamily: 'Cairo',
+          color: Colors.white,
+        ),
+      );
+    }
+    return Text(
+      _isQrScanPaused
+          ? _tr('إعادة المسح', 'Scan again')
+          : _tr('بدء مسح QR', 'Start QR scan'),
+      style: const TextStyle(
+        fontWeight: FontWeight.w700,
+        fontFamily: 'Cairo',
+        color: Colors.white,
+      ),
+    );
+  }
+
+  Widget _buildQrStatusBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: _qrStatusError ? const Color(0xFFFFEBEE) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _qrStatusError
+              ? const Color(0xFFE57373)
+              : const Color(0xFFCCE8EA),
+        ),
+      ),
+      child: Text(
+        _qrStatusMessage,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: _qrStatusError
+              ? const Color(0xFFB71C1C)
+              : const Color(0xFF35565E),
+          fontSize: 13,
+          fontFamily: 'Cairo',
+          fontWeight: FontWeight.w600,
+          height: 1.35,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQrManualEntryCard() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: const Color(0xFF006571), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF006571).withValues(alpha: 0.08),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE6FBFB),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.pin_rounded,
+                size: 32,
+                color: Color(0xFF006571),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              _tr('رمز الحضور', 'Attendance code'),
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF1F2E33),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _tr(
+                'أدخل الرمز المكوّن من 6 أرقام كما يظهر لدى المحاضر',
+                'Enter the 6-digit code shown by your lecturer',
+              ),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 13,
+                color: Color(0xFF5F7A80),
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 18),
+            TextField(
+              controller: _attendanceCodeController,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              maxLength: 6,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 32,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 8,
+                color: Color(0xFF1F2E33),
+              ),
+              decoration: InputDecoration(
+                counterText: '',
+                hintText: '••••••',
+                hintStyle: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 28,
+                  letterSpacing: 6,
+                  color: Colors.grey.shade400,
+                  fontWeight: FontWeight.w600,
+                ),
+                filled: true,
+                fillColor: const Color(0xFFF7FAFB),
+                contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Color(0xFFCCE8EA)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF006571),
+                    width: 2,
+                  ),
+                ),
+              ),
+              onSubmitted: (_) => unawaited(_submitAttendanceCode()),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQrScannerCard(double scanSize) {
+    final cutOut = scanSize * 0.68;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: scanSize,
+            height: scanSize,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xFF006571), width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                if (_qrScannerInitialized)
+                  QRView(
+                    key: _qrViewKey,
+                    onQRViewCreated: _onQrViewCreated,
+                    onPermissionSet: _onQrPermissionSet,
+                    overlay: QrScannerOverlayShape(
+                      borderColor: Colors.transparent,
+                      overlayColor: Colors.transparent,
+                      borderWidth: 0,
+                      cutOutSize: cutOut,
+                    ),
+                  ),
+                if (!_qrScannerInitialized ||
+                    _qrPermissionDenied ||
+                    _qrCameraUnavailable)
+                  _QrScannerFallback(
+                    message: _checkingQrAvailability
+                        ? _tr(
+                            'جاري تجهيز الكاميرا...',
+                            'Preparing camera...',
+                          )
+                        : _qrPermissionDenied
+                        ? _tr(
+                            'فعّل صلاحية الكاميرا من إعدادات الجهاز لمسح الرمز.',
+                            'Enable camera access in device settings to scan.',
+                          )
+                        : _qrStatusMessage,
+                    showRetry:
+                        !_checkingQrAvailability && !_qrPermissionDenied,
+                    onRetry: _retryQrScan,
+                  ),
+                IgnorePointer(
+                  child: Container(
+                    width: cutOut,
+                    height: cutOut,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white, width: 3),
+                    ),
+                  ),
+                ),
+                if (_isStartingQrScanner)
+                  Container(
+                    color: Colors.black.withValues(alpha: 0.22),
+                    alignment: Alignment.center,
+                    child: const CircularProgressIndicator(color: Colors.white),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -1495,7 +1945,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                     child: Row(
                       children: [
                         Expanded(
-                          child: _ModeChip(
+                          child: AttendanceModeChip(
                             label: 'QR',
                             isActive: !_isNfc && !_isBluetooth,
                             onTap: () => _toggleMode(false),
@@ -1503,7 +1953,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                         ),
                         const SizedBox(width: 6),
                         Expanded(
-                          child: _ModeChip(
+                          child: AttendanceModeChip(
                             label: 'NFC',
                             isActive: _isNfc,
                             onTap: () => _toggleMode(true),
@@ -1511,7 +1961,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                         ),
                         const SizedBox(width: 6),
                         Expanded(
-                          child: _ModeChip(
+                          child: AttendanceModeChip(
                             label: _tr('بلوتوث', 'Bluetooth'),
                             isActive: _isBluetooth,
                             onTap: _toggleBluetoothMode,
@@ -1523,11 +1973,12 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                 ),
                 const SizedBox(height: 16),
                 Container(
-                  height: MediaQuery.of(context).size.height * 0.68,
+                  width: double.infinity,
                   decoration: BoxDecoration(
                     color: const Color(0xFFE6FBFB),
                     borderRadius: BorderRadius.circular(26),
                   ),
+                  padding: const EdgeInsets.symmetric(vertical: 20),
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
@@ -1634,6 +2085,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                                     : _startNfcAttendance,
                                 style: FilledButton.styleFrom(
                                   backgroundColor: const Color(0xFF006571),
+                                  foregroundColor: Colors.white,
+                                  disabledForegroundColor: Colors.white70,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(24),
                                   ),
@@ -1660,6 +2113,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w700,
                                           fontFamily: 'Cairo',
+                                          color: Colors.white,
                                         ),
                                       ),
                               ),
@@ -1669,350 +2123,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                       ] else if (_isBluetooth) ...[
                         _buildBluetoothPlaceholderPanel(),
                       ] else ...[
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 260,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFD7F1F1),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              padding: const EdgeInsets.all(4),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: _ModeChip(
-                                      label: _tr('رمز QR', 'QR Code'),
-                                      isActive: !_isEnteringQrCode,
-                                      onTap: _retryQrScan,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: _ModeChip(
-                                      label: _tr(
-                                        'إدخال رمز الحضور',
-                                        'Enter Code',
-                                      ),
-                                      isActive: _isEnteringQrCode,
-                                      onTap: _showAttendanceCodeEntry,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            Container(
-                              width: 290,
-                              height: 290,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(28),
-                                border: Border.all(
-                                  color: const Color(0xFF006571),
-                                  width: 2,
-                                ),
-                              ),
-                              clipBehavior: Clip.antiAlias,
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  if (_isEnteringQrCode)
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 24,
-                                      ),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(
-                                            Icons.pin_rounded,
-                                            size: 46,
-                                            color: Color(0xFF006571),
-                                          ),
-                                          const SizedBox(height: 14),
-                                          TextField(
-                                            controller:
-                                                _attendanceCodeController,
-                                            keyboardType: TextInputType.number,
-                                            textAlign: TextAlign.center,
-                                            maxLength: 6,
-                                            inputFormatters: [
-                                              FilteringTextInputFormatter
-                                                  .digitsOnly,
-                                            ],
-                                            style: const TextStyle(
-                                              fontFamily: 'Cairo',
-                                              fontSize: 28,
-                                              fontWeight: FontWeight.w800,
-                                              letterSpacing: 3,
-                                              color: Color(0xFF1F2E33),
-                                            ),
-                                            decoration: InputDecoration(
-                                              counterText: '',
-                                              labelText: _tr(
-                                                'رمز الحضور',
-                                                'Attendance Code',
-                                              ),
-                                              labelStyle: const TextStyle(
-                                                fontFamily: 'Cairo',
-                                                color: Color(0xFF5F7A80),
-                                              ),
-                                              enabledBorder: OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(16),
-                                                borderSide: const BorderSide(
-                                                  color: Color(0xFFCCE8EA),
-                                                ),
-                                              ),
-                                              focusedBorder: OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(16),
-                                                borderSide: const BorderSide(
-                                                  color: Color(0xFF006571),
-                                                  width: 2,
-                                                ),
-                                              ),
-                                            ),
-                                            onSubmitted: (_) =>
-                                                _submitAttendanceCode(),
-                                          ),
-                                        ],
-                                      ),
-                                    )
-                                  else if (_qrScannerInitialized)
-                                    QRView(
-                                      key: _qrViewKey,
-                                      onQRViewCreated: _onQrViewCreated,
-                                      onPermissionSet: _onQrPermissionSet,
-                                      overlay: QrScannerOverlayShape(
-                                        borderColor: Colors.transparent,
-                                        overlayColor: Colors.transparent,
-                                        borderWidth: 0,
-                                        cutOutSize: 190,
-                                      ),
-                                    ),
-                                  if (!_isEnteringQrCode &&
-                                      (!_qrScannerInitialized ||
-                                          _qrPermissionDenied ||
-                                          _qrCameraUnavailable))
-                                    _QrScannerFallback(
-                                      message: _checkingQrAvailability
-                                          ? _tr(
-                                              'جاري تجهيز الكاميرا...',
-                                              'Preparing camera...',
-                                            )
-                                          : _qrPermissionDenied
-                                          ? _tr(
-                                              'لم يتم السماح باستخدام الكاميرا. يرجى تفعيل صلاحية الكاميرا لمسح رمز QR.',
-                                              'Camera permission is not granted. Please enable camera access to scan the QR.',
-                                            )
-                                          : _qrStatusMessage,
-                                      showRetry:
-                                          !_checkingQrAvailability &&
-                                          !_qrPermissionDenied,
-                                      onRetry: _retryQrScan,
-                                    ),
-                                  if (!_isEnteringQrCode)
-                                    IgnorePointer(
-                                      child: Container(
-                                        width: 190,
-                                        height: 190,
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(
-                                            22,
-                                          ),
-                                          border: Border.all(
-                                            color: Colors.white,
-                                            width: 3,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  if (_isStartingQrScanner)
-                                    Container(
-                                      color: Colors.black.withValues(
-                                        alpha: 0.22,
-                                      ),
-                                      alignment: Alignment.center,
-                                      child: const CircularProgressIndicator(
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Container(
-                              margin: const EdgeInsets.symmetric(
-                                horizontal: 18,
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _qrStatusError
-                                    ? const Color(0xFFFFEBEE)
-                                    : Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: _qrStatusError
-                                      ? const Color(0xFFE57373)
-                                      : const Color(0xFFCCE8EA),
-                                ),
-                              ),
-                              child: Text(
-                                _qrStatusMessage,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: _qrStatusError
-                                      ? const Color(0xFFB71C1C)
-                                      : const Color(0xFF35565E),
-                                  fontSize: 13,
-                                  fontFamily: 'Cairo',
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Container(
-                              margin: const EdgeInsets.symmetric(
-                                horizontal: 18,
-                              ),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: const Color(0xFFCCE8EA),
-                                ),
-                              ),
-                              child: Column(
-                                children: [
-                                  TextField(
-                                    controller: _attendanceCodeController,
-                                    keyboardType: TextInputType.number,
-                                    textAlign: TextAlign.center,
-                                    maxLength: 6,
-                                    inputFormatters: [
-                                      FilteringTextInputFormatter.digitsOnly,
-                                    ],
-                                    style: const TextStyle(
-                                      fontFamily: 'Cairo',
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 2,
-                                      color: Color(0xFF1F2E33),
-                                    ),
-                                    decoration: InputDecoration(
-                                      counterText: '',
-                                      labelText: _tr(
-                                        'أدخلي رمز الحضور (6 أرقام)',
-                                        'Enter attendance code (6 digits)',
-                                      ),
-                                      labelStyle: const TextStyle(
-                                        fontFamily: 'Cairo',
-                                        color: Color(0xFF5F7A80),
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                        borderSide: const BorderSide(
-                                          color: Color(0xFFCCE8EA),
-                                        ),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                        borderSide: const BorderSide(
-                                          color: Color(0xFF006571),
-                                          width: 2,
-                                        ),
-                                      ),
-                                    ),
-                                    onSubmitted: (_) => _submitAttendanceCode(),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 42,
-                                    child: OutlinedButton.icon(
-                                      onPressed: _isSubmittingAttendanceCode
-                                          ? null
-                                          : _submitAttendanceCode,
-                                      icon: _isSubmittingAttendanceCode
-                                          ? const SizedBox(
-                                              width: 16,
-                                              height: 16,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                              ),
-                                            )
-                                          : const Icon(
-                                              Icons.pin_rounded,
-                                              size: 18,
-                                            ),
-                                      label: Text(
-                                        _tr('تحقق من الرمز', 'Verify Code'),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          fontFamily: 'Cairo',
-                                        ),
-                                      ),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: const Color(
-                                          0xFF006571,
-                                        ),
-                                        side: const BorderSide(
-                                          color: Color(0xFF006571),
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            22,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            SizedBox(
-                              width: 210,
-                              height: 44,
-                              child: FilledButton(
-                                onPressed:
-                                    (_isEnteringQrCode
-                                        ? _isSubmittingAttendanceCode
-                                        : (_isStartingQrScanner ||
-                                              _isProcessingQrScan))
-                                    ? null
-                                    : (_isEnteringQrCode
-                                          ? _submitAttendanceCode
-                                          : _retryQrScan),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: const Color(0xFF006571),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(24),
-                                  ),
-                                ),
-                                child: Text(
-                                  _isEnteringQrCode
-                                      ? _tr('تحقق من الرمز', 'Verify Code')
-                                      : _isQrScanPaused
-                                      ? _tr('إعادة المسح', 'Scan again')
-                                      : _tr('بدء مسح QR', 'Start QR scan'),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontFamily: 'Cairo',
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                        _buildQrAttendanceContent(context),
                       ],
                     ],
                   ),
@@ -2135,54 +2246,6 @@ class _BluetoothDetectionLine extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _ModeChip extends StatelessWidget {
-  const _ModeChip({
-    required this.label,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
-        decoration: BoxDecoration(
-          color: isActive ? const Color(0xFF006571) : Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: isActive
-              ? null
-              : Border.all(
-                  color: const Color(0xFF006571).withValues(alpha: 0.22),
-                ),
-        ),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                label,
-                maxLines: 1,
-                style: TextStyle(
-                  color: isActive ? Colors.white : const Color(0xFF006571),
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'Cairo',
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

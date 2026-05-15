@@ -7,7 +7,7 @@ import '../../features/translation/translation_controller.dart';
 import '../../features/translation/widgets/t_text.dart';
 import 'components/student_back_chevron_icon.dart';
 import 'widgets/student_digital_id_card.dart';
-import 'widgets/student_gate_hce_banner.dart';
+import 'widgets/student_gate_mode_panel.dart';
 
 class StudentCardPage extends StatelessWidget {
   const StudentCardPage({super.key});
@@ -23,47 +23,55 @@ class StudentCardPage extends StatelessWidget {
           textDirection: translation.textDirection,
           child: Scaffold(
             backgroundColor: const Color(0xFFF8F9FA),
-            appBar: AppBar(
-              backgroundColor: Colors.white,
-              elevation: 0,
-              automaticallyImplyLeading: false,
-              leading: Directionality(
-                // Keep back arrow on the left always.
-                textDirection: TextDirection.ltr,
-                child: IconButton(
-                  icon: StudentBackChevronIcon(
-                    color: Colors.black87,
-                  ),
-                  onPressed: () => Navigator.of(context).maybePop(),
-                ),
-              ),
-              title: TText(
-                student?.isFemale == true ? 'بطاقة الطالبة' : 'بطاقة الطالب',
-                style: const TextStyle(
-                  color: Color(0xFF00525D),
-                  fontWeight: FontWeight.bold,
-                  fontSize: 22,
-                  fontFamily: 'Cairo',
-                ),
-              ),
-              centerTitle: true,
-              actions: const [],
-            ),
             body: SafeArea(
-              child: Container(
-                width: double.infinity,
-                constraints: const BoxConstraints(minHeight: double.infinity),
-                padding: const EdgeInsets.all(16),
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    color: Colors.white,
+                    padding: const EdgeInsets.fromLTRB(12, 4, 16, 8),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: StudentBackChevronIcon(
+                            color: const Color(0xFF006571),
+                            size: 16,
+                          ),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => Navigator.of(context).maybePop(),
+                        ),
+                        Expanded(
+                          child: TText(
+                            student?.isFemale == true
+                                ? 'بطاقة الطالبة'
+                                : 'بطاقة الطالب',
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFF00525D),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 22,
+                              fontFamily: 'Cairo',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 40),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
                       if (student != null)
                         StudentDigitalIdCard(student: student)
                       else
                         _buildMissingStudentCard(),
-                      if (student != null && student.studentId > 0) ...[
-                        const SizedBox(height: 16),
+                      if (student != null && student.studentId > 0)
                         StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                           stream: StudentAuthService.instance
                               .watchCurrentStudentDoc(),
@@ -77,18 +85,22 @@ class StudentCardPage extends StatelessWidget {
                                       '',
                                 ) ??
                                 0;
-                            return StudentGateHceBanner(
-                              studentId: student.studentId,
-                              gateCardRev: rev,
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 20),
+                              child: StudentGateModePanel(
+                                studentId: student.studentId,
+                                gateCardRev: rev,
+                              ),
                             );
                           },
                         ),
-                      ],
                       const SizedBox(height: 20),
-                      _buildElectronicWalletSection(context, student),
-                    ],
+                          _buildElectronicWalletSection(context, student),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
           ),

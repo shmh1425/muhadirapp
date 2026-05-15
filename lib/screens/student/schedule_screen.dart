@@ -54,33 +54,41 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     return rtl ? _days.reversed.toList() : _days;
   }
 
-  // أوقات الجدول بنظام 24 ساعة (يعرض أي شعبة مهما كان وقتها).
-  final List<TimeSlot> _timeSlots = <TimeSlot>[
-    TimeSlot(start: '00:00', end: '01:00'),
-    TimeSlot(start: '01:00', end: '02:00'),
-    TimeSlot(start: '02:00', end: '03:00'),
-    TimeSlot(start: '03:00', end: '04:00'),
-    TimeSlot(start: '04:00', end: '05:00'),
-    TimeSlot(start: '05:00', end: '06:00'),
-    TimeSlot(start: '06:00', end: '07:00'),
-    TimeSlot(start: '07:00', end: '08:00'),
-    TimeSlot(start: '08:00', end: '09:00'),
-    TimeSlot(start: '09:00', end: '10:00'),
-    TimeSlot(start: '10:00', end: '11:00'),
-    TimeSlot(start: '11:00', end: '12:00'),
-    TimeSlot(start: '12:00', end: '13:00'),
-    TimeSlot(start: '13:00', end: '14:00'),
-    TimeSlot(start: '14:00', end: '15:00'),
-    TimeSlot(start: '15:00', end: '16:00'),
-    TimeSlot(start: '16:00', end: '17:00'),
-    TimeSlot(start: '17:00', end: '18:00'),
-    TimeSlot(start: '18:00', end: '19:00'),
-    TimeSlot(start: '19:00', end: '20:00'),
-    TimeSlot(start: '20:00', end: '21:00'),
-    TimeSlot(start: '21:00', end: '22:00'),
-    TimeSlot(start: '22:00', end: '23:00'),
-    TimeSlot(start: '23:00', end: '24:00'),
-  ];
+  /// Hour rows covering only this student's lecture window (e.g. 10:00–14:00).
+  List<TimeSlot> _timeSlotsForCourses(List<CourseSchedule> courses) {
+    if (courses.isEmpty) {
+      return const <TimeSlot>[
+        TimeSlot(start: '08:00', end: '09:00'),
+        TimeSlot(start: '09:00', end: '10:00'),
+        TimeSlot(start: '10:00', end: '11:00'),
+      ];
+    }
+
+    var minMinutes = 24 * 60;
+    var maxMinutes = 0;
+    for (final course in courses) {
+      final start = _parseTimeToMinutes(course.startTime);
+      var end = _parseTimeToMinutes(course.endTime);
+      if (end <= start) end += 24 * 60;
+      if (start < minMinutes) minMinutes = start;
+      if (end > maxMinutes) maxMinutes = end;
+    }
+
+    final startHour = (minMinutes ~/ 60).clamp(0, 23);
+    final endHour = ((maxMinutes + 59) ~/ 60).clamp(startHour + 1, 24);
+
+    final slots = <TimeSlot>[];
+    for (var h = startHour; h < endHour; h++) {
+      final next = h + 1;
+      slots.add(
+        TimeSlot(
+          start: '${h.toString().padLeft(2, '0')}:00',
+          end: '${next.toString().padLeft(2, '0')}:00',
+        ),
+      );
+    }
+    return slots;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -114,7 +122,25 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
               child: Column(
                 children: <Widget>[
                   _buildHeader(context),
-                  Expanded(child: _buildScheduleBody()),
+                  Expanded(
+                    child: RefreshIndicator(
+                      color: _primaryColor,
+                      onRefresh: () async {
+                        final student =
+                            StudentAuthService.instance.currentStudent;
+                        if (student == null || student.studentId <= 0) return;
+                        final sid = student.studentId.toString();
+                        await ref
+                            .read(studentRepositoryProvider)
+                            .clearCoursesCache(sid);
+                        ref.invalidate(studentUnifiedCoursesProvider(sid));
+                        await ref.read(
+                          studentUnifiedCoursesProvider(sid).future,
+                        );
+                      },
+                      child: _buildScheduleBody(),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -216,10 +242,14 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
         ),
       );
     }
-    return _buildSchedule(courses);
+    final timeSlots = _timeSlotsForCourses(courses);
+    return _buildSchedule(courses, timeSlots);
   }
 
-  Widget _buildSchedule(List<CourseSchedule> courses) {
+  Widget _buildSchedule(
+    List<CourseSchedule> courses,
+    List<TimeSlot> timeSlots,
+  ) {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final screenWidth = MediaQuery.of(context).size.width;
@@ -237,7 +267,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                 children: <Widget>[
                   _buildSemesterRow(),
                   const SizedBox(height: 10),
-                  _buildTable(dayWidth, courses),
+                  _buildTable(dayWidth, courses, timeSlots),
                 ],
               ),
             ),
@@ -261,10 +291,14 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     );
   }
 
-  Widget _buildTable(double dayWidth, List<CourseSchedule> courses) {
+  Widget _buildTable(
+    double dayWidth,
+    List<CourseSchedule> courses,
+    List<TimeSlot> timeSlots,
+  ) {
     final translation = TranslationController.instance;
     final isRtl = translation.textDirection == TextDirection.rtl;
-    final tableHeight = _timeSlots.length * _rowHeight;
+    final tableHeight = timeSlots.length * _rowHeight;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
@@ -288,20 +322,26 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                     SizedBox(
                       width: _timeColWidth,
                       height: tableHeight,
-                      child: _buildTimeColumn(),
+                      child: _buildTimeColumn(timeSlots),
                     ),
                   ..._daysInTableOrder(isRtl).map((day) {
                     return SizedBox(
                       width: dayWidth,
                       height: tableHeight,
-                      child: _buildDayStack(day, dayWidth, tableHeight, courses),
+                      child: _buildDayStack(
+                        day,
+                        dayWidth,
+                        tableHeight,
+                        courses,
+                        timeSlots,
+                      ),
                     );
                   }),
                   if (isRtl)
                     SizedBox(
                       width: _timeColWidth,
                       height: tableHeight,
-                      child: _buildTimeColumn(),
+                      child: _buildTimeColumn(timeSlots),
                     ),
                 ],
               ),
@@ -359,11 +399,11 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     );
   }
 
-  Widget _buildTimeColumn() {
+  Widget _buildTimeColumn(List<TimeSlot> timeSlots) {
     final translation = TranslationController.instance;
     final isRtl = translation.textDirection == TextDirection.rtl;
     return Column(
-      children: _timeSlots.map((TimeSlot slot) {
+      children: timeSlots.map((TimeSlot slot) {
         return Container(
           height: _rowHeight,
           padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -388,8 +428,9 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     double dayWidth,
     double tableHeight,
     List<CourseSchedule> courses,
+    List<TimeSlot> timeSlots,
   ) {
-    final firstSlotMinutes = _parseTimeToMinutes(_timeSlots.first.start);
+    final firstSlotMinutes = _parseTimeToMinutes(timeSlots.first.start);
     const int slotMinutes = 60;
 
     final dayCourses = courses.where((c) => c.day == day).toList();
@@ -403,7 +444,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
       children: <Widget>[
         // Grid background
         Column(
-          children: List<Widget>.generate(_timeSlots.length, (int idx) {
+          children: List<Widget>.generate(timeSlots.length, (int idx) {
             return Container(
               height: _rowHeight,
               decoration: BoxDecoration(
@@ -430,13 +471,14 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
           final durationMin = (endMin - startMin).clamp(0, 24 * 60);
           final slotCount = (durationMin / slotMinutes).ceil().clamp(
             1,
-            _timeSlots.length,
+            timeSlots.length,
           );
           final slotIndex = ((startMin - firstSlotMinutes) / slotMinutes)
               .floor()
-              .clamp(0, _timeSlots.length - 1);
+              .clamp(0, timeSlots.length - 1);
           final top = slotIndex * _rowHeight;
-          final visibleSlots = (_timeSlots.length - slotIndex).clamp(1, _timeSlots.length);
+          final visibleSlots =
+              (timeSlots.length - slotIndex).clamp(1, timeSlots.length);
           final blockHeight = slotCount.clamp(1, visibleSlots) * _rowHeight;
 
           return Positioned(

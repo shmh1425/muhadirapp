@@ -8,18 +8,15 @@ import '../../../features/translation/translation_controller.dart';
 import '../../../models/external_student.dart';
 import '../../../services/student_auth_service.dart';
 import '../../../shared/widgets/web_network_image_blur.dart';
-import 'student_gate_qr_card.dart';
 
-/// Digital student ID: teal header, photo, academics, embedded gate QR.
+/// Digital student ID: photo, name, academics (QR and NFC are separate sections).
 class StudentDigitalIdCard extends StatefulWidget {
   const StudentDigitalIdCard({
     super.key,
     required this.student,
-    this.showEnlargeButton = true,
   });
 
   final ExternalStudent student;
-  final bool showEnlargeButton;
 
   @override
   State<StudentDigitalIdCard> createState() => _StudentDigitalIdCardState();
@@ -35,46 +32,6 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
 
   String _tr(String ar, String en) =>
       TranslationController.instance.translateToEnglish ? en : ar;
-
-  void _openEnlarged(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        fullscreenDialog: true,
-        builder: (ctx) {
-          return Scaffold(
-            backgroundColor: Colors.black.withValues(alpha: 0.9),
-            body: SafeArea(
-              child: Column(
-                children: [
-                  Align(
-                    alignment: AlignmentDirectional.centerEnd,
-                    child: IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white),
-                      onPressed: () => Navigator.of(ctx).pop(),
-                    ),
-                  ),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 440),
-                          child: StudentDigitalIdCard(
-                            student: widget.student,
-                            showEnlargeButton: false,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
 
   String _normalizeMajorAr(String rawAr, String rawEn) {
     final ar = rawAr.trim();
@@ -95,18 +52,28 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
 
     final collegeAr = s.collegeArSafe.trim();
     final collegeEn = s.collegeSafe.trim();
-    final majorAr = _normalizeMajorAr(s.majorArSafe, s.major);
+    final majorArNormalized = _normalizeMajorAr(s.majorArSafe, s.major);
     final majorEn = s.major.trim();
-
-    final collegeLine = collegeAr.isNotEmpty
-        ? collegeAr
-        : (collegeEn.isNotEmpty ? collegeEn : '—');
-    final majorLine =
-        majorAr.isNotEmpty ? majorAr : (majorEn.isNotEmpty ? majorEn : '—');
 
     return AnimatedBuilder(
       animation: TranslationController.instance,
       builder: (context, _) {
+        final isEn = TranslationController.instance.translateToEnglish;
+        final collegeLine = isEn
+            ? (collegeEn.isNotEmpty
+                ? collegeEn
+                : (collegeAr.isNotEmpty ? collegeAr : '—'))
+            : (collegeAr.isNotEmpty
+                ? collegeAr
+                : (collegeEn.isNotEmpty ? collegeEn : '—'));
+        final majorLine = isEn
+            ? (majorEn.isNotEmpty
+                ? majorEn
+                : (majorArNormalized.isNotEmpty ? majorArNormalized : '—'))
+            : (majorArNormalized.isNotEmpty
+                ? majorArNormalized
+                : (majorEn.isNotEmpty ? majorEn : '—'));
+
         return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
           stream: StudentAuthService.instance.watchCurrentStudentDoc(),
           builder: (context, snap) {
@@ -130,13 +97,6 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
                 : photoVersion.isEmpty
                     ? photoUrlRaw
                     : '$photoUrlRaw${photoUrlRaw.contains('?') ? '&' : '?'}v=$photoVersion';
-
-            final revRaw = data['gateCardRev'];
-            final int gateCardRev = revRaw is int
-                ? revRaw
-                : revRaw is num
-                    ? revRaw.toInt()
-                    : int.tryParse(revRaw?.toString() ?? '') ?? 0;
 
             return Container(
               width: double.infinity,
@@ -174,39 +134,6 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
                           borderRadius: BorderRadius.vertical(
                             top: Radius.circular(13),
                           ),
-                        ),
-                        child: Stack(
-                          children: [
-                            if (widget.showEnlargeButton)
-                              PositionedDirectional(
-                                top: 8,
-                                start: 8,
-                                child: TextButton.icon(
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Colors.white,
-                                    backgroundColor:
-                                        Colors.white.withValues(alpha: 0.16),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 6,
-                                    ),
-                                    minimumSize: Size.zero,
-                                    tapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                  onPressed: () => _openEnlarged(context),
-                                  icon: const Icon(Icons.zoom_out_map, size: 18),
-                                  label: Text(
-                                    _tr('تكبير', 'Enlarge'),
-                                    style: const TextStyle(
-                                      fontFamily: 'Cairo',
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
                         ),
                       ),
                       Positioned(
@@ -327,29 +254,6 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 18),
-                        if (s.studentId > 0)
-                          StudentGateQrCard(
-                            studentId: s.studentId,
-                            embeddedInIdCard: true,
-                            gateCardRev: gateCardRev,
-                          )
-                        else
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Text(
-                              _tr(
-                                'رقم البطاقة غير جاهز لعرض رمز الدخول.',
-                                'Card number is not ready to show the gate code.',
-                              ),
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 13,
-                                color: _mutedTeal,
-                              ),
-                            ),
-                          ),
                         const SizedBox(height: 16),
                         if (nationality.isNotEmpty || nationalId.isNotEmpty) ...[
                           if (nationality.isNotEmpty)

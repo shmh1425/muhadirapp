@@ -1357,6 +1357,9 @@ class _AdminCoursesTab extends StatefulWidget {
 class _AdminCoursesTabState extends State<_AdminCoursesTab> {
   final _coursesRef = FirebaseFirestore.instance.collection('courses');
   final _sectionsRef = FirebaseFirestore.instance.collection('sections');
+  final _enrollmentsRef = FirebaseFirestore.instance.collection(
+    'student_section_enrollments',
+  );
   final _lecturersRef = FirebaseFirestore.instance.collection(
     'external_lecturers',
   );
@@ -1751,9 +1754,35 @@ class _AdminCoursesTabState extends State<_AdminCoursesTab> {
 
   Future<void> _deleteCourse(String docId) async {
     try {
-      await _coursesRef.doc(docId).delete();
+      final firestore = FirebaseFirestore.instance;
+      final sectionsSnap = await _sectionsRef
+          .where('courseCode', isEqualTo: docId)
+          .get();
+      final batch = firestore.batch();
+      var deletes = 0;
+
+      for (final sectionDoc in sectionsSnap.docs) {
+        final sectionId = sectionDoc.id;
+        final enrollmentsSnap = await _enrollmentsRef
+            .where('sectionId', isEqualTo: sectionId)
+            .get();
+        for (final enrollmentDoc in enrollmentsSnap.docs) {
+          batch.delete(enrollmentDoc.reference);
+          deletes++;
+        }
+        batch.delete(sectionDoc.reference);
+        deletes++;
+      }
+      batch.delete(_coursesRef.doc(docId));
+      deletes++;
+
+      if (deletes > 0) {
+        await batch.commit();
+      } else {
+        await _coursesRef.doc(docId).delete();
+      }
       if (!mounted) return;
-      _showMessage('تم حذف المقرر');
+      _showMessage('تم حذف المقرر والشعب والتسجيلات المرتبطة');
     } on FirebaseException catch (e) {
       _showMessage(_firebaseErrorMessage(e));
     }

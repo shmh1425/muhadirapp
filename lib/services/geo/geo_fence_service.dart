@@ -8,8 +8,8 @@ import 'geo_fence_outcome.dart';
 
 /// Campus geo-fence: OS location services, runtime permission, GPS sample, polygon.
 ///
-/// UI strings live in [SecurityLocalization] (or your layer); this service only
-/// returns [GeoFenceOutcome]. Polygon vertices use a **buffer zone** — see
+/// UI strings: [StudentCampusGeoGuard] for students; this service only returns
+/// [GeoFenceOutcome]. Polygon vertices use a **buffer zone** — see
 /// [campusPolygon] in [campus_geo_constants.dart].
 class GeoFenceService {
   GeoFenceService._();
@@ -19,7 +19,7 @@ class GeoFenceService {
   Future<bool> isInsideCampus() async =>
       (await evaluateCampusBoundary()) == GeoFenceOutcome.inside;
 
-  /// One-shot check used before Security Gate NFC: inside polygon or a failure code.
+  /// One-shot campus boundary check: inside polygon or a failure code.
   Future<GeoFenceOutcome> evaluateCampusBoundary() async {
     if (kIsWeb) {
       return GeoFenceOutcome.locationUnavailable;

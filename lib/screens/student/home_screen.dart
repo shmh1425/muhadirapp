@@ -324,9 +324,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               const SizedBox(height: 5),
 
               SizedBox(
-                // Cards can grow slightly when showing status badges / longer text.
-                // Keep a bit of extra vertical space to avoid bottom overflow on small devices.
-                height: 208,
+                // Fits badge without overflow; not extra-tall below the card.
+                height: 228,
                 child: _buildActiveAbsencesSection(context),
               ),
                 ],
@@ -397,6 +396,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 }
                 return ListView(
                   scrollDirection: Axis.horizontal,
+                  padding: EdgeInsets.zero,
                   children: shown.map((e) {
                     final r = e.record;
                     final merged = e.merged;
@@ -418,7 +418,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     );
                     return Padding(
                       padding: const EdgeInsets.only(right: 12),
-                      child: InkWell(
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: InkWell(
                         onTap: () {
                           if (merged == 'معلقة') {
                             Navigator.push(
@@ -474,6 +476,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         },
                         borderRadius: BorderRadius.circular(16),
                         child: card,
+                      ),
                       ),
                     );
                   }).toList(),
@@ -626,40 +629,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           TText(
             title,
             textAlign: TextAlign.start,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontWeight: FontWeight.bold,
-              fontSize: 16,
+              fontSize: 15,
+              height: 1.25,
               color: _textStrong,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           TText(
             isEn ? 'Lecture' : 'نظري',
             textAlign: TextAlign.start,
-            style: const TextStyle(color: _textMuted),
+            style: const TextStyle(fontSize: 13, color: _textMuted, height: 1.2),
           ),
           TText(
             isEn ? 'Section $section' : 'الشعبة $section',
             textAlign: TextAlign.start,
-            style: const TextStyle(color: _textMuted),
+            style: const TextStyle(fontSize: 13, color: _textMuted, height: 1.2),
           ),
           TText(
             isEn ? 'Room $room' : 'القاعة $room',
             textAlign: TextAlign.start,
-            style: const TextStyle(color: _textMuted),
+            style: const TextStyle(fontSize: 13, color: _textMuted, height: 1.2),
           ),
           if (statusText != null) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.symmetric(vertical: 7),
               decoration: BoxDecoration(
                 color: statusColor ?? Colors.grey[400],
                 borderRadius: BorderRadius.circular(8),
@@ -669,6 +676,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   statusText,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
+                    fontSize: 13,
                     color: Colors.black,
                   ),
                 ),
@@ -723,21 +731,10 @@ class _TodayLecturesStrip extends ConsumerWidget {
     }
 
     final sid = studentId.toString();
-    final repo = ref.watch(studentRepositoryProvider);
     final unifiedAsync = ref.watch(studentUnifiedCoursesProvider(sid));
 
-    UnifiedStudentCourses? unified;
     if (unifiedAsync.hasValue) {
-      unified = unifiedAsync.requireValue;
-    } else {
-      final cached = repo.getCachedCourses(sid);
-      if (cached != null && cached.isNotEmpty) {
-        // Instant UI from Hive while async provider (holiday + refresh) finishes.
-        unified = UnifiedStudentCourses.fromCourses(cached, isHoliday: false);
-      }
-    }
-
-    if (unified != null) {
+      final unified = unifiedAsync.requireValue;
       return SizedBox(height: 150, child: _lecturesFromUnified(context, unified));
     }
 

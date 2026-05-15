@@ -9,8 +9,6 @@ import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 
 import '../../providers/security_scan_providers.dart';
 import '../../services/female_security/security_gate_scan_service.dart';
-import '../../services/geo/geo_fence_outcome.dart';
-import '../../services/geo/geo_fence_service.dart';
 import '../../services/nfc/nfc_tag_identifier.dart';
 import '../../services/student/student_gate_payload.dart';
 import 'security_localization.dart';
@@ -172,19 +170,6 @@ class _SecurityNfcVerificationScreenState
       _outcomeBanner = _GateOutcomeBanner.none;
     });
     await _qrController?.pauseCamera();
-
-    final geoOutcome = await GeoFenceService.instance.evaluateCampusBoundary();
-    if (!mounted) return;
-    if (geoOutcome != GeoFenceOutcome.inside) {
-      setState(() {
-        _isQrProcessing = false;
-        _statusError = true;
-        _outcomeBanner = _GateOutcomeBanner.none;
-        _statusMessage =
-            SecurityLocalization.geoFenceOutcomeMessage(geoOutcome);
-      });
-      return;
-    }
 
     final parsed = StudentGatePayload.parseGatePayload(raw.trim());
     if (parsed == null || parsed.lookupKey.isEmpty) {
@@ -429,19 +414,6 @@ class _SecurityNfcVerificationScreenState
       _gateDecisionDialogPending = false;
       _outcomeBanner = _GateOutcomeBanner.none;
     });
-
-    final geoOutcome = await GeoFenceService.instance.evaluateCampusBoundary();
-    if (!mounted) return;
-    if (geoOutcome != GeoFenceOutcome.inside) {
-      setState(() {
-        _isScanning = false;
-        _statusError = true;
-        _outcomeBanner = _GateOutcomeBanner.none;
-        _statusMessage =
-            SecurityLocalization.geoFenceOutcomeMessage(geoOutcome);
-      });
-      return;
-    }
 
     if (!mounted) return;
     await _runNfcDiscoverySession();

@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'app_settings.dart';
+import '../../services/notifications/device_notification_permission_service.dart';
 import 'components/notification_bell.dart';
 import 'notifications_screen.dart';
 import 'components/custom_nav_bar_icons.dart';
@@ -134,7 +138,7 @@ class SettingsScreen extends StatelessWidget {
                           Navigator.of(context).maybePop();
                           await FirebaseAuth.instance.signOut();
                           ChatbotProvider.instance.clearChat();
-                          StudentAuthService.instance.logout();
+                          await StudentAuthService.instance.logout();
                           if (!context.mounted) return;
                           Navigator.of(context).pushAndRemoveUntil(
                             MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -291,10 +295,8 @@ class SettingsScreen extends StatelessWidget {
                               Expanded(
                                 child: Align(
                                   alignment: AlignmentDirectional.centerStart,
-                                  child: TText(
-                                    translation.toggleLabel,
-                                    textAlign: TextAlign.start,
-                                    style: const TextStyle(color: Color(0xFF006571)),
+                                  child: _LanguageToggleLabel(
+                                    isEnglish: translation.translateToEnglish,
                                   ),
                                 ),
                               ),
@@ -302,6 +304,8 @@ class SettingsScreen extends StatelessWidget {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      const _NotificationPermissionTile(),
                       const SizedBox(height: 12),
                       Builder(
                         builder: (context) {
@@ -397,6 +401,182 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
+class _NotificationPermissionTile extends StatefulWidget {
+  const _NotificationPermissionTile();
+
+  @override
+  State<_NotificationPermissionTile> createState() =>
+      _NotificationPermissionTileState();
+}
+
+class _NotificationPermissionTileState extends State<_NotificationPermissionTile>
+    with WidgetsBindingObserver {
+  final DeviceNotificationPermissionService _permissions =
+      DeviceNotificationPermissionService.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_permissions.refresh());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_permissions.refresh());
+    }
+  }
+
+  bool get _en => TranslationController.instance.translateToEnglish;
+
+  Future<void> _onToggle(bool wantEnable) async {
+    if (!_permissions.isSupported) {
+      _showSnack(
+        _en
+            ? 'Notifications are not supported on this platform.'
+            : 'الإشعارات غير مدعومة على هذه المنصة.',
+      );
+      return;
+    }
+
+    if (wantEnable) {
+      final status = await _permissions.requestEnable();
+      if (!mounted) return;
+      if (status.isGranted || status.isLimited) {
+        _showSnack(
+          _en ? 'Notifications enabled.' : 'تم تفعيل الإشعارات.',
+        );
+        return;
+      }
+      if (status.isPermanentlyDenied) {
+        await _showOpenSettingsDialog(
+          title: _en ? 'Enable notifications' : 'تفعيل الإشعارات',
+          message: _en
+              ? 'Allow notifications for Muhadir in your device settings.'
+              : 'اسمحي للتطبيق بإرسال الإشعارات من إعدادات الجهاز.',
+        );
+      } else {
+        _showSnack(
+          _en
+              ? 'Notification permission was not granted.'
+              : 'لم يتم منح إذن الإشعارات.',
+        );
+      }
+      return;
+    }
+
+    await _showOpenSettingsDialog(
+      title: _en ? 'Turn off notifications' : 'إيقاف الإشعارات',
+      message: _en
+          ? 'To stop notifications, turn them off for Muhadir in your device settings.'
+          : 'لإيقاف الإشعارات، عطّليها من إعدادات الجهاز للتطبيق.',
+    );
+    if (mounted) {
+      await _permissions.refresh();
+    }
+  }
+
+  Future<void> _showOpenSettingsDialog({
+    required String title,
+    required String message,
+  }) async {
+    final open = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return Directionality(
+          textDirection: TranslationController.instance.textDirection,
+          child: AlertDialog(
+            title: Text(title, style: const TextStyle(fontFamily: 'Cairo')),
+            content: Text(message, style: const TextStyle(fontFamily: 'Cairo')),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: TText(_en ? 'Cancel' : 'إلغاء'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: TText(_en ? 'Open settings' : 'فتح الإعدادات'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (open == true) {
+      await _permissions.openSystemSettings();
+    }
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: const TextStyle(fontFamily: 'Cairo', color: Colors.white),
+        ),
+        backgroundColor: const Color(0xFF006571),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final translation = TranslationController.instance;
+    return AnimatedBuilder(
+      animation: Listenable.merge([translation, _permissions.notificationsEnabled]),
+      builder: (context, _) {
+        final enabled = _permissions.notificationsEnabled.value;
+        final supported = _permissions.isSupported;
+
+        return _SettingsTile(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Icon(Icons.notifications_outlined, color: Color(0xFF006571)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  _en ? 'Notifications' : 'الإشعارات',
+                  style: const TextStyle(
+                    color: Color(0xFF006571),
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+              ),
+              if (enabled == null && supported)
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFF006571),
+                  ),
+                )
+              else
+                Switch(
+                  value: enabled ?? false,
+                  onChanged: supported ? _onToggle : null,
+                  activeTrackColor: const Color(0xFF006571).withValues(alpha: 0.45),
+                  activeThumbColor: const Color(0xFF006571),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _DataRow extends StatelessWidget {
   const _DataRow({required this.label, required this.value});
 
@@ -450,6 +630,54 @@ class _SettingsTile extends StatelessWidget {
         ],
       ),
       child: child,
+    );
+  }
+}
+
+/// Language row label: English | عربي (active side highlighted).
+class _LanguageToggleLabel extends StatelessWidget {
+  const _LanguageToggleLabel({required this.isEnglish});
+
+  final bool isEnglish;
+
+  static const Color _teal = Color(0xFF006571);
+  static const Color _muted = Color(0xFF5F7A80);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: 'English',
+            style: TextStyle(
+              fontFamily: 'Tajawal',
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: isEnglish ? _teal : _muted,
+            ),
+          ),
+          const TextSpan(
+            text: ' | ',
+            style: TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 15,
+              fontWeight: FontWeight.w400,
+              color: _muted,
+            ),
+          ),
+          TextSpan(
+            text: 'عربي',
+            style: TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: isEnglish ? _muted : _teal,
+            ),
+          ),
+        ],
+      ),
+      textAlign: TextAlign.start,
     );
   }
 }

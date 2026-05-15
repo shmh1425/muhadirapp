@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../repositories/student_repository.dart';
 import '../models/external_student.dart';
 
 /// خدمة التحقق من الطالب وعرض بياناته
@@ -122,7 +124,11 @@ class StudentAuthService {
   }
 
   /// تسجيل الخروج (مسح بيانات الطالب الحالي)
-  void logout() {
+  Future<void> logout() async {
+    final sid = _currentStudent?.studentId;
+    if (sid != null && sid > 0) {
+      await StudentRepository().clearCoursesCache(sid.toString());
+    }
     _currentStudent = null;
     _currentStudentDocId = null;
   }

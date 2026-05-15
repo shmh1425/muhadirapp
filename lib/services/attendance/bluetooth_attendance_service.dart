@@ -209,7 +209,7 @@ class BluetoothAttendanceService {
     if (student == null || student.studentId <= 0) {
       throw BluetoothAttendanceException(
         code: BluetoothAttendanceErrorCode.invalidInput,
-        message: 'انتهت جلسة الطالبة. سجّلي الدخول من جديد.',
+        message: 'انتهت جلسة تسجيل الدخول. يرجى تسجيل الدخول من جديد.',
       );
     }
 
@@ -348,7 +348,7 @@ class BluetoothAttendanceService {
     if (enrollment == null) {
       throw BluetoothAttendanceException(
         code: BluetoothAttendanceErrorCode.studentNotEnrolled,
-        message: 'الطالبة غير مسجلة في هذه الشعبة',
+        message: 'غير مسجل في هذه الشعبة',
       );
     }
 

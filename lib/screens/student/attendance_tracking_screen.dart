@@ -20,6 +20,7 @@ import 'notifications_screen.dart';
 import 'settings_screen.dart';
 import '../../shared/widgets/chat_fab.dart';
 import '../../features/translation/translation_controller.dart';
+import '../../shared/widgets/rtl_start_horizontal_filter.dart';
 import '../../features/translation/widgets/t_text.dart';
 
 class AttendanceTrackingScreen extends ConsumerStatefulWidget {
@@ -767,7 +768,6 @@ class _AttendanceTrackingScreenState
   }
 
   Widget _buildCourseTabs() {
-    final translation = TranslationController.instance;
     final courses = _courses;
     if (courses.isEmpty) return const SizedBox.shrink();
 
@@ -786,54 +786,49 @@ class _AttendanceTrackingScreenState
         borderRadius: BorderRadius.circular(22),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        reverse: translation.textDirection == TextDirection.rtl,
-        child: Row(
-          children: courses.map((String course) {
-            final bool isActive = course == _selectedCourse;
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: InkWell(
-                onTap: () => setState(() => _selectedCourse = course),
-                borderRadius: BorderRadius.circular(22),
-                child: Container(
-                  height: 36,
-                  constraints: const BoxConstraints(minWidth: 110),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
+      child: RtlStartHorizontalFilter(
+        children: courses.map((String course) {
+          final bool isActive = course == _selectedCourse;
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: InkWell(
+              onTap: () => setState(() => _selectedCourse = course),
+              borderRadius: BorderRadius.circular(22),
+              child: Container(
+                height: 36,
+                constraints: const BoxConstraints(minWidth: 110),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(22),
+                  gradient: isActive
+                      ? const LinearGradient(
+                          colors: <Color>[
+                            Color(0xFF27A2A9),
+                            Color(0xFF006571),
+                          ],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        )
+                      : null,
+                  color: isActive ? null : Colors.white,
+                ),
+                alignment: Alignment.center,
+                child: TText(
+                  course,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isActive ? Colors.white : const Color(0xFF444444),
                   ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(22),
-                    gradient: isActive
-                        ? const LinearGradient(
-                            colors: <Color>[
-                              Color(0xFF27A2A9),
-                              Color(0xFF006571),
-                            ],
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                          )
-                        : null,
-                    color: isActive ? null : Colors.white,
-                  ),
-                  alignment: Alignment.center,
-                  child: TText(
-                    course,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: isActive ? Colors.white : const Color(0xFF444444),
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
+                  textAlign: TextAlign.center,
                 ),
               ),
-            );
-          }).toList(),
-        ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -855,27 +850,69 @@ class _AttendanceTrackingScreenState
           ),
         ],
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        reverse: false,
-        child: Row(
-          children: <Widget>[
-            Padding(
+      child: RtlStartHorizontalFilter(
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: InkWell(
+              onTap: () {
+                if (weeks.isEmpty) return;
+                setState(() {
+                  _weekFilterTouchedByUser = true;
+                  if (_allWeeksMode) {
+                    _allWeeksMode = false;
+                    _selectedWeeks.clear();
+                    return;
+                  }
+                  _allWeeksMode = true;
+                  _selectedWeeks.clear();
+                });
+              },
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                width: 52,
+                height: 52,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 4,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: allSelected
+                      ? const Color(0xFF27A2A9)
+                      : Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                alignment: Alignment.center,
+                child: TText(
+                  'الكل',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: allSelected
+                        ? Colors.white
+                        : const Color(0xFF1A1A1A),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ),
+          ...weeks.map((String week) {
+            final bool isSelected =
+                _allWeeksMode || _selectedWeeks.contains(week);
+            final String displayText = week.replaceFirst(' ', '\n');
+            return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 3),
               child: InkWell(
                 onTap: () {
-                  if (weeks.isEmpty) return;
                   setState(() {
                     _weekFilterTouchedByUser = true;
-                    if (_allWeeksMode) {
-                      // Toggle OFF: show nothing until user selects weeks
-                      _allWeeksMode = false;
-                      _selectedWeeks.clear();
-                      return;
+                    if (_allWeeksMode) _allWeeksMode = false;
+                    if (isSelected) {
+                      _selectedWeeks.remove(week);
+                    } else {
+                      _selectedWeeks.add(week);
                     }
-                    // Toggle ON: All mode
-                    _allWeeksMode = true;
-                    _selectedWeeks.clear();
                   });
                 },
                 borderRadius: BorderRadius.circular(10),
@@ -887,78 +924,30 @@ class _AttendanceTrackingScreenState
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: allSelected
+                    color: isSelected
                         ? const Color(0xFF27A2A9)
                         : Colors.grey.shade200,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   alignment: Alignment.center,
                   child: TText(
-                    'الكل',
+                    displayText,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 10,
                       fontWeight: FontWeight.w600,
-                      color: allSelected
+                      color: isSelected
                           ? Colors.white
                           : const Color(0xFF1A1A1A),
                     ),
                     textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
-            ),
-            ...weeks.map((String week) {
-              final bool isSelected =
-                  _allWeeksMode || _selectedWeeks.contains(week);
-              final String displayText = week.replaceFirst(' ', '\n');
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 3),
-                child: InkWell(
-                  onTap: () {
-                    setState(() {
-                      _weekFilterTouchedByUser = true;
-                      if (_allWeeksMode) _allWeeksMode = false;
-                      if (isSelected) {
-                        _selectedWeeks.remove(week);
-                      } else {
-                        _selectedWeeks.add(week);
-                      }
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    width: 52,
-                    height: 52,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? const Color(0xFF27A2A9)
-                          : Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    alignment: Alignment.center,
-                    child: TText(
-                      displayText,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: isSelected
-                            ? Colors.white
-                            : const Color(0xFF1A1A1A),
-                      ),
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ],
-        ),
+            );
+          }),
+        ],
       ),
     );
   }

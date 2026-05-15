@@ -83,6 +83,7 @@ class StudentGateQrCard extends StatefulWidget {
     super.key,
     required this.studentId,
     this.embeddedInIdCard = false,
+    this.contentOnly = false,
     this.gateCardRev = 0,
   });
 
@@ -90,6 +91,9 @@ class StudentGateQrCard extends StatefulWidget {
 
   /// When true, only the inner white panel (QR + clock + id) — no section titles above.
   final bool embeddedInIdCard;
+
+  /// When true, only the QR panel (for use inside [StudentCardSectionShell]).
+  final bool contentOnly;
 
   /// Must match Firestore `external_students.gateCardRev` for gate acceptance.
   final int gateCardRev;
@@ -195,8 +199,10 @@ class _StudentGateQrCardState extends State<StudentGateQrCard>
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF27A2A9).withValues(alpha: widget.embeddedInIdCard ? 0.12 : 0.06),
-            blurRadius: widget.embeddedInIdCard ? 16 : 12,
+            color: const Color(0xFF27A2A9).withValues(
+              alpha: (widget.embeddedInIdCard && !widget.contentOnly) ? 0.12 : 0.06,
+            ),
+            blurRadius: (widget.embeddedInIdCard && !widget.contentOnly) ? 16 : 12,
             offset: const Offset(0, 4),
           ),
           BoxShadow(
@@ -207,10 +213,10 @@ class _StudentGateQrCardState extends State<StudentGateQrCard>
         ],
       ),
       padding: EdgeInsets.fromLTRB(
-        widget.embeddedInIdCard ? 12 : 16,
-        widget.embeddedInIdCard ? 14 : 18,
-        widget.embeddedInIdCard ? 12 : 16,
-        widget.embeddedInIdCard ? 14 : 16,
+        (widget.embeddedInIdCard && !widget.contentOnly) ? 12 : 16,
+        (widget.embeddedInIdCard && !widget.contentOnly) ? 14 : 18,
+        (widget.embeddedInIdCard && !widget.contentOnly) ? 12 : 16,
+        (widget.embeddedInIdCard && !widget.contentOnly) ? 14 : 16,
       ),
       child: Column(
         children: [
@@ -274,7 +280,7 @@ class _StudentGateQrCardState extends State<StudentGateQrCard>
               height: 1.2,
             ),
           ),
-          if (!widget.embeddedInIdCard) ...[
+          if (!widget.embeddedInIdCard && !widget.contentOnly) ...[
             const SizedBox(height: 12),
             Text(
               _tr('رقم البطاقة', 'Card number'),
@@ -341,7 +347,8 @@ class _StudentGateQrCardState extends State<StudentGateQrCard>
       gateCardRev: widget.gateCardRev,
     );
     final idLabel = widget.studentId.toString();
-    final qrSize = widget.embeddedInIdCard
+    final compact = widget.embeddedInIdCard && !widget.contentOnly;
+    final qrSize = compact
         ? math.min(176.0, MediaQuery.sizeOf(context).width * 0.42)
         : math.min(200.0, MediaQuery.sizeOf(context).width * 0.48);
 
@@ -354,7 +361,7 @@ class _StudentGateQrCardState extends State<StudentGateQrCard>
           idLabel: idLabel,
           qrSize: qrSize,
         );
-        if (widget.embeddedInIdCard) {
+        if (widget.embeddedInIdCard || widget.contentOnly) {
           return panel;
         }
         return Column(

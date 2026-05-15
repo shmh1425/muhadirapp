@@ -48,43 +48,29 @@ class StudentRepository {
     await _box.put(key, encoded);
   }
 
-  /// Cache-first:
-  /// - If Hive has data for [studentId], returns it immediately and refreshes Firestore in the background.
-  /// - Otherwise fetches from Firestore, saves to Hive, then returns.
+  /// Removes cached courses for [studentId] (e.g. on logout).
+  Future<void> clearCoursesCache(String studentId) async {
+    final key = studentId.trim();
+    if (key.isEmpty) return;
+    if (!_box.isOpen) return;
+    await _box.delete(key);
+  }
+
+  /// Network-first with Hive fallback:
+  /// always tries Firestore so admin deletes (course/section/enrollment) show up;
+  /// uses cache only when the fetch fails.
   Future<List<CourseModel>> getStudentCourses(String studentId) async {
     final sid = studentId.trim();
     if (sid.isEmpty) return const <CourseModel>[];
 
-    final cached = getCachedCourses(sid);
-    if (cached != null) {
-      final needsScheduleData = cached.any(
-        (c) => c.sectionId.trim().isNotEmpty && c.weeklySlots.isEmpty,
-      );
-      if (needsScheduleData) {
-        try {
-          final fresh = await _fetchCoursesFromFirestore(sid);
-          await saveCourses(sid, fresh);
-          return fresh;
-        } catch (_) {
-          unawaited(_refreshFromFirestoreAndCache(sid));
-          return cached;
-        }
-      }
-      unawaited(_refreshFromFirestoreAndCache(sid));
-      return cached;
-    }
-
-    final fresh = await _fetchCoursesFromFirestore(sid);
-    await saveCourses(sid, fresh);
-    return fresh;
-  }
-
-  Future<void> _refreshFromFirestoreAndCache(String studentId) async {
     try {
-      final fresh = await _fetchCoursesFromFirestore(studentId);
-      await saveCourses(studentId, fresh);
+      final fresh = await _fetchCoursesFromFirestore(sid);
+      await saveCourses(sid, fresh);
+      return fresh;
     } catch (_) {
-      // Silent: keep last good cache on network/rules failures.
+      // Do not show stale Hive rows after admin deletes (offline/errors).
+      await clearCoursesCache(sid);
+      return const <CourseModel>[];
     }
   }
 
@@ -97,13 +83,34 @@ class StudentRepository {
   Future<List<CourseModel>> _fetchCoursesFromFirestore(String sidRaw) async {
     final sidInt = int.tryParse(sidRaw);
 
-    final enrollmentsQuery = _firestore
-        .collection(_enrollmentsCollection)
-        .where('studentId', isEqualTo: sidInt ?? sidRaw);
+    final enrollmentDocs = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
 
-    final enrollSnap = await enrollmentsQuery.get();
+    void mergeEnrollments(QuerySnapshot<Map<String, dynamic>> snap) {
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        if (data['isActive'] == false) continue;
+        enrollmentDocs[doc.id] = doc;
+      }
+    }
 
-    final sectionIds = enrollSnap.docs
+    if (sidInt != null) {
+      mergeEnrollments(
+        await _firestore
+            .collection(_enrollmentsCollection)
+            .where('studentId', isEqualTo: sidInt)
+            .get(),
+      );
+    }
+    if (sidInt == null || sidInt.toString() != sidRaw) {
+      mergeEnrollments(
+        await _firestore
+            .collection(_enrollmentsCollection)
+            .where('studentId', isEqualTo: sidRaw)
+            .get(),
+      );
+    }
+
+    final sectionIds = enrollmentDocs.values
         .map((d) => (d.data()['sectionId'] ?? '').toString().trim())
         .where((id) => id.isNotEmpty)
         .toSet()
@@ -155,26 +162,22 @@ class StudentRepository {
     final out = <CourseModel>[];
     for (final sectionId in sectionIds) {
       final section = sectionsById[sectionId];
-      if (section == null) {
-        out.add(
-          CourseModel(
-            studentId: sidRaw,
-            sectionId: sectionId,
-            sectionLabel: '',
-            courseCode: '',
-            courseNameAr: '',
-            courseNameEn: '',
-            lecturerName: '',
-            courseType: '',
-            creditHours: '',
-            weeklySlots: const <CourseWeeklySlot>[],
-          ),
-        );
-        continue;
-      }
+      // Enrollment without a section doc (deleted in admin) — skip, don't show ghosts.
+      if (section == null) continue;
 
       final courseCode = (section['courseCode'] ?? '').toString().trim();
       final courseDoc = courseCode.isEmpty ? null : coursesByCode[courseCode];
+
+      // Section exists but master course was deleted and section has no copied names.
+      final sectionNameArProbe =
+          (section['courseName_Ar'] ?? '').toString().trim();
+      final sectionNameEnProbe = (section['courseName'] ?? '').toString().trim();
+      if (courseDoc == null &&
+          courseCode.isNotEmpty &&
+          sectionNameArProbe.isEmpty &&
+          sectionNameEnProbe.isEmpty) {
+        continue;
+      }
 
       final sectionNameAr = (section['courseName_Ar'] ?? '').toString().trim();
       final sectionNameEn = (section['courseName'] ?? '').toString().trim();

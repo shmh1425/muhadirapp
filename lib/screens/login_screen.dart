@@ -12,6 +12,7 @@ import 'lecturer/lecturer_profile_screen.dart';
 import 'admin/admin_dashboard_screen.dart';
 import 'female_security/female_security_home_screen.dart';
 import '../providers/courses_providers.dart';
+import '../repositories/student_repository.dart';
 import '../providers/lecturer_catalog_providers.dart';
 import '../services/student_auth_service.dart';
 import '../services/lecturer_auth_service.dart';
@@ -148,10 +149,11 @@ class _LoginScreenState extends State<LoginScreen> {
         if (!mounted) return;
         try {
           final container = ProviderScope.containerOf(context);
+          final sid = student.studentId.toString();
+          await StudentRepository().clearCoursesCache(sid);
           await container
               .read(
-                studentUnifiedCoursesProvider(student.studentId.toString())
-                    .future,
+                studentUnifiedCoursesProvider(sid).future,
               )
               .timeout(const Duration(seconds: 12));
         } catch (e) {

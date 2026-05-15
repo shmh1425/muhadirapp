@@ -17,6 +17,7 @@ import '../../services/excuse/excuse_attendance_merge.dart';
 import '../../services/student_auth_service.dart';
 import '../../features/translation/translation_controller.dart';
 import '../../features/translation/widgets/t_text.dart';
+import '../../shared/widgets/rtl_start_horizontal_filter.dart';
 
 class ExcuseScreen extends ConsumerStatefulWidget {
   const ExcuseScreen({super.key});
@@ -417,62 +418,24 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
         borderRadius: BorderRadius.circular(22),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      child: Row(
-        children: <Widget>[
-          ...tabs.map((String course) {
-            final bool isAll = course == 'الكل';
-            final bool isActive =
-                isAll ? _selectedCourse == null : _selectedCourse == course;
-            return Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: _GradientTabChip(
-                  label: course,
-                  isActive: isActive,
-                  onTap: () {
-                    setState(() {
-                      _selectedCourse = isAll ? null : course;
-                    });
-                  },
-                ),
-              ),
-            );
-          }),
-          if (tabs.length == 1) ...<Widget>[
-            // Keep the initial "الكل" tab width stable before courses load.
-            // Two invisible placeholders match the common 3-tab layout.
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: IgnorePointer(
-                  child: Opacity(
-                    opacity: 0,
-                    child: _GradientTabChip(
-                      label: '',
-                      isActive: false,
-                      onTap: () {},
-                    ),
-                  ),
-                ),
-              ),
+      child: RtlStartHorizontalFilter(
+        children: tabs.map((String course) {
+          final bool isAll = course == 'الكل';
+          final bool isActive =
+              isAll ? _selectedCourse == null : _selectedCourse == course;
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: _GradientTabChip(
+              label: course,
+              isActive: isActive,
+              onTap: () {
+                setState(() {
+                  _selectedCourse = isAll ? null : course;
+                });
+              },
             ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: IgnorePointer(
-                  child: Opacity(
-                    opacity: 0,
-                    child: _GradientTabChip(
-                      label: '',
-                      isActive: false,
-                      onTap: () {},
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
+          );
+        }).toList(),
       ),
     );
   }
@@ -510,11 +473,8 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
         ],
       ),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        child: Row(
-          children: _filters.map((String filter) {
+      child: RtlStartHorizontalFilter(
+        children: _filters.map((String filter) {
             final bool isSelected = filter == _selectedFilter;
             final Color filterColor = _getFilterColor(filter);
             return Padding(
@@ -565,7 +525,6 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
               ),
             );
           }).toList(),
-        ),
       ),
     );
   }
@@ -589,6 +548,8 @@ class _GradientTabChip extends StatelessWidget {
       borderRadius: BorderRadius.circular(22),
       child: Container(
         height: 36,
+        constraints: const BoxConstraints(minWidth: 72),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(22),
           gradient: isActive
@@ -608,6 +569,8 @@ class _GradientTabChip extends StatelessWidget {
             ? const SizedBox.shrink()
             : TText(
                 label,
+                maxLines: 1,
+                softWrap: false,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,

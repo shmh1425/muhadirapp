@@ -18,12 +18,16 @@ class TranslationController extends ChangeNotifier {
       _translateToEnglish ? const Locale('en') : const Locale('ar');
 
   void toggle() {
-    _translateToEnglish = !_translateToEnglish;
+    setTranslateToEnglish(!_translateToEnglish);
+  }
+
+  void setTranslateToEnglish(bool toEnglish) {
+    if (_translateToEnglish == toEnglish) return;
+    _translateToEnglish = toEnglish;
     notifyListeners();
   }
 
-  /// Returns proper label for the toggle button.
-  String get toggleLabel =>
-      _translateToEnglish ? 'Translate to Arabic' : 'Translate to English';
+  /// Tooltip for language icon buttons (settings header, welcome, etc.).
+  String get toggleLabel => 'English | عربي';
 }
 
