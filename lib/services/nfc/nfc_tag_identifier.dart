@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:nfc_manager/nfc_manager.dart';
 
 import '../attendance/nfc_attendance_service.dart';
+import '../student/student_gate_payload.dart';
 
 /// Shared NFC tag → normalized identifier string (hex UID or NDEF payload).
 class NfcTagIdentifier {
@@ -45,19 +46,20 @@ class NfcTagIdentifier {
   static String extractStudentGateCardNdefRaw(NfcTag tag) {
     final raw = _extractCardIdFromNdef(tag);
     if (raw.isEmpty) return '';
-    try {
-      final decoded = jsonDecode(raw.trim());
-      if (decoded is Map) {
-        final type = (decoded['type'] ?? '').toString().trim().toLowerCase();
-        if (type == 'student_gate_card') return raw.trim();
-      }
-    } catch (_) {}
+    if (StudentGatePayload.parseGatePayload(raw.trim()) != null) {
+      return raw.trim();
+    }
     return '';
   }
 
   static String _normalizeFromNdefText(String rawText) {
     final text = rawText.trim();
     if (text.isEmpty) return '';
+
+    final gateLookup = StudentGatePayload.parseStudentLookupKey(text);
+    if (gateLookup != null && gateLookup.isNotEmpty) {
+      return NfcAttendanceService.normalizeLecturerCardId(gateLookup);
+    }
 
     try {
       final decoded = jsonDecode(text);

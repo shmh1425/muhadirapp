@@ -118,10 +118,8 @@ class SecurityLocalization {
     'اضغطي «تأكيد ودخول» للمتابعة إلى نافذة التحقق، أو «إلغاء» للعودة.',
     'Tap “Confirm entry” to open the verification screen, or “Cancel” to go back.',
   );
-  static String get priorRejectionAlertContinue => tr(
-    'تأكيد ودخول',
-    'Confirm entry',
-  );
+  static String get priorRejectionAlertContinue =>
+      tr('تأكيد ودخول', 'Confirm entry');
   static String get priorRejectionAlertCancel => tr('إلغاء', 'Cancel');
 
   static String get nfcGateVerificationTitle =>
@@ -130,16 +128,13 @@ class SecurityLocalization {
       tr('التحقق من البطاقة', 'Card verification');
   static String get cardDataSectionTitle =>
       tr('بيانات البطاقة', 'Card details');
-  static String get confirmEntry =>
-      tr('تأكيد الدخول', 'Confirm entry');
-  static String get rejectEntry =>
-      tr('رفض الدخول', 'Reject entry');
+  static String get confirmEntry => tr('تأكيد الدخول', 'Confirm entry');
+  static String get rejectEntry => tr('رفض الدخول', 'Reject entry');
   static String get nfcGateVerificationSubtitle => tr(
     'امسحي بطاقة الطالبة (NFC) أو رمز QR المعروض على بطاقتها في التطبيق.',
     'Scan the student card (NFC) or the QR code shown on her card in the app.',
   );
-  static String get nfcStartScan =>
-      tr('بدء قراءة البطاقة', 'Start card scan');
+  static String get nfcStartScan => tr('بدء قراءة البطاقة', 'Start card scan');
   static String get nfcScanningHint => tr(
     'قرّبي البطاقة أو الجهاز من أعلى الهاتف…',
     'Hold the card or phone near the top of this device…',
@@ -148,25 +143,18 @@ class SecurityLocalization {
     'NFC غير مدعوم على المتصفح. استخدمي التطبيق على iOS/Android في جهاز حقيقي.',
     'NFC is not supported in the browser. Use the iOS/Android app on a real device.',
   );
-  static String get nfcNotAvailableDevice => tr(
-    'NFC غير متاح على هذا الجهاز',
-    'NFC is not available on this device',
-  );
-  static String get nfcReadFailed => tr(
-    'تعذرت قراءة البطاقة',
-    'Could not read the card',
-  );
+  static String get nfcNotAvailableDevice =>
+      tr('NFC غير متاح على هذا الجهاز', 'NFC is not available on this device');
+  static String get nfcReadFailed =>
+      tr('تعذرت قراءة البطاقة', 'Could not read the card');
   static String get nfcUnknownStudent => tr(
     'لم يُعثر على طالبة مطابقة لهذا المعرّف',
     'No student matched this identifier',
   );
   static String get nfcUidLabel => tr('معرّف القراءة', 'Read identifier');
-  static String get nfcContinueHumanVerification => tr(
-    'متابعة التحقق البصري',
-    'Continue to visual verification',
-  );
-  static String get nfcScanAgain =>
-      tr('مسح جديد', 'Scan again');
+  static String get nfcContinueHumanVerification =>
+      tr('متابعة التحقق البصري', 'Continue to visual verification');
+  static String get nfcScanAgain => tr('مسح جديد', 'Scan again');
   static String get nfcHintFirestoreField => tr(
     'يتم البحث في الحقل securityGateNfcUid أو الرقم الجامعي أو رقم البطاقة من QR/NFC',
     'Lookup uses securityGateNfcUid, university ID, or card number from QR/NFC',
@@ -174,6 +162,14 @@ class SecurityLocalization {
 
   static String get gateReaderModeNfc => tr('NFC', 'NFC');
   static String get gateReaderModeQr => tr('QR', 'QR');
+  static String get gateQrModeHint => tr(
+    'لو كانت بطاقة الطالبة على iPhone فاختاري QR وامسحي الرمز من شاشة البطاقة.',
+    'If the student card is on iPhone, use QR mode and scan the code from the card screen.',
+  );
+  static String get gateNfcModeHint => tr(
+    'NFC هنا مخصص لبطاقات NFC أو Android HCE. بطاقات iPhone تُقرأ عبر QR.',
+    'NFC mode reads physical NFC tags or Android HCE. iPhone cards are verified via QR.',
+  );
   static String get qrScanHint => tr(
     'وجّهي الكاميرا نحو رمز QR على البطاقة.',
     'Point the camera at the QR on the card.',
@@ -191,8 +187,7 @@ class SecurityLocalization {
     'QR scanning is not available in the browser. Use the security app on a phone.',
   );
   static String get qrProcessing => tr('جاري التحقق…', 'Verifying…');
-  static String get qrResumeScanning =>
-      tr('متابعة المسح', 'Continue scanning');
+  static String get qrResumeScanning => tr('متابعة المسح', 'Continue scanning');
   static String get gateCardRevStale => tr(
     'رمز البطاقة لم يعد صالحاً (مثلاً بعد انسحاب أو تحديث وضع الطالبة). يُرجى فتح بطاقة الطالبة من جديد لتحديث الرمز.',
     'This gate card code is no longer valid (e.g. after withdrawal or status update). Ask the student to open the card screen to refresh the code.',

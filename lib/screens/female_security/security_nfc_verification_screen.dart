@@ -38,11 +38,12 @@ class _SecurityNfcVerificationScreenState
   String? _statusMessage;
   bool _statusError = false;
   String? _lastReadId;
+
   /// True while the confirm/reject dialog is open or about to open (blocks duplicate QR scans).
   bool _gateDecisionDialogPending = false;
   _GateOutcomeBanner _outcomeBanner = _GateOutcomeBanner.none;
 
-  _GateReaderMode _scanMode = _GateReaderMode.nfc;
+  late _GateReaderMode _scanMode;
   QRViewController? _qrController;
   final GlobalKey _qrViewKey = GlobalKey(debugLabel: 'securityGateQr');
   StreamSubscription<Barcode>? _qrScanSub;
@@ -85,6 +86,7 @@ class _SecurityNfcVerificationScreenState
   @override
   void initState() {
     super.initState();
+    _scanMode = _GateReaderMode.nfc;
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4),
@@ -171,21 +173,24 @@ class _SecurityNfcVerificationScreenState
     });
     await _qrController?.pauseCamera();
 
-    final parsed = StudentGatePayload.parseGatePayload(raw.trim());
-    if (parsed == null || parsed.lookupKey.isEmpty) {
+    final rawTrimmed = raw.trim();
+    final parsed = StudentGatePayload.parseGatePayload(rawTrimmed);
+    final lookupKey =
+        parsed?.lookupKey ??
+        StudentGatePayload.parseStudentLookupKey(rawTrimmed);
+    if (lookupKey == null || lookupKey.isEmpty) {
       if (!mounted) return;
       setState(() {
         _isQrProcessing = false;
         _statusError = true;
         _outcomeBanner = _GateOutcomeBanner.none;
         _statusMessage = SecurityLocalization.qrInvalidGatePayload;
-        _lastReadId =
-            raw.length > 48 ? '${raw.substring(0, 48)}…' : raw.trim();
+        _lastReadId = raw.length > 48 ? '${raw.substring(0, 48)}…' : raw.trim();
       });
       return;
     }
 
-    await _resolveProfile(parsed.lookupKey, gateClientRev: parsed.gateCardRev);
+    await _resolveProfile(lookupKey, gateClientRev: parsed?.gateCardRev);
   }
 
   Future<void> _checkNfc() async {
@@ -233,7 +238,8 @@ class _SecurityNfcVerificationScreenState
     final repo = ref.read(securityRepositoryProvider);
     final bypassCache = gateClientRev != null;
     final byUid = await repo.findStudentBySecurityNfcUid(id);
-    final byUni = byUid ??
+    final byUni =
+        byUid ??
         await repo.findStudentByUniversityId(id, bypassCache: bypassCache);
     if (!mounted) return;
 
@@ -273,8 +279,9 @@ class _SecurityNfcVerificationScreenState
 
   Future<void> _openVerifyDialog(SecurityStudentProfile profile) async {
     try {
-      final reasons =
-          await ref.read(securityRepositoryProvider).getActiveRejectionReasons();
+      final reasons = await ref
+          .read(securityRepositoryProvider)
+          .getActiveRejectionReasons();
       if (!mounted) return;
 
       final result = StudentGateScanResult(
@@ -287,18 +294,19 @@ class _SecurityNfcVerificationScreenState
 
       final gate = currentSecurityGateOption;
       final scanDateKey = formatScanDateKey(DateTime.now());
-      final priorHint =
-          await FemaleSecurityGateScanService.instance
-              .loadPriorRejectionVerificationHint(
-        studentId: profile.studentId.toString(),
-        gateId: gate.gateId,
-        scanDateKey: scanDateKey,
-      );
+      final priorHint = await FemaleSecurityGateScanService.instance
+          .loadPriorRejectionVerificationHint(
+            studentId: profile.studentId.toString(),
+            gateId: gate.gateId,
+            scanDateKey: scanDateKey,
+          );
       if (!mounted) return;
 
       if (priorHint != null) {
-        final proceed =
-            await SecurityPriorRejectionDialog.show(context, priorHint);
+        final proceed = await SecurityPriorRejectionDialog.show(
+          context,
+          priorHint,
+        );
         if (!mounted) return;
         if (proceed != true) {
           return;
@@ -321,7 +329,9 @@ class _SecurityNfcVerificationScreenState
           gate: gate,
           decision: decision.isApproved
               ? const SecurityVerificationDecision.approved()
-              : SecurityVerificationDecision.rejected(decision.rejectionReason!),
+              : SecurityVerificationDecision.rejected(
+                  decision.rejectionReason!,
+                ),
         );
         if (!mounted) return;
         setState(() {
@@ -552,7 +562,10 @@ class _SecurityNfcVerificationScreenState
             ),
             body: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -571,6 +584,20 @@ class _SecurityNfcVerificationScreenState
                       )
                     else ...[
                       Center(child: _buildModePill()),
+                      const SizedBox(height: 10),
+                      Text(
+                        _scanMode == _GateReaderMode.qr
+                            ? SecurityLocalization.gateQrModeHint
+                            : SecurityLocalization.gateNfcModeHint,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 12,
+                          color: _kTextMuted,
+                          height: 1.35,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       const SizedBox(height: 16),
                       Expanded(
                         child: Container(
@@ -694,16 +721,14 @@ class _SecurityNfcVerificationScreenState
       secondaryFg = _kOutcomeDuplicateText.withValues(alpha: 0.85);
     } else {
       bg = _statusError ? _kStudentMsgBgError : Colors.white;
-      border =
-          _statusError ? _kStudentMsgBorderError : _kStudentMsgBorderOk;
+      border = _statusError ? _kStudentMsgBorderError : _kStudentMsgBorderOk;
       fg = _statusError ? _kStudentMsgTextError : _kStudentMsgText;
       secondaryFg = _kTextMuted;
     }
 
     final lines = _statusMessage!.split('\n');
     final primary = lines.isNotEmpty ? lines.first : _statusMessage!;
-    final secondary =
-        lines.length > 1 ? lines.sublist(1).join('\n') : null;
+    final secondary = lines.length > 1 ? lines.sublist(1).join('\n') : null;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 18),
@@ -809,8 +834,9 @@ class _SecurityNfcVerificationScreenState
                   width: 210,
                   height: 44,
                   child: FilledButton(
-                    onPressed:
-                        (_nfcAvailable && !_isScanning) ? _startScan : null,
+                    onPressed: (_nfcAvailable && !_isScanning)
+                        ? _startScan
+                        : null,
                     style: FilledButton.styleFrom(
                       backgroundColor: _kStudentTealDark,
                       shape: RoundedRectangleBorder(
@@ -835,7 +861,8 @@ class _SecurityNfcVerificationScreenState
   }
 
   Widget _buildQrPanel(BuildContext context) {
-    final showStatusStrip = _statusMessage != null &&
+    final showStatusStrip =
+        _statusMessage != null &&
         !_gateDecisionDialogPending &&
         (_statusError ||
             _lastReadId != null ||
@@ -993,9 +1020,7 @@ class _SecurityGateModeChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(18),
           border: isActive
               ? null
-              : Border.all(
-                  color: _kTeal.withValues(alpha: 0.22),
-                ),
+              : Border.all(color: _kTeal.withValues(alpha: 0.22)),
         ),
         child: Center(
           child: Padding(
