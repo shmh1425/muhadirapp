@@ -17,9 +17,10 @@ import '../../services/lecturer/calendar_sync_service.dart';
 import '../../services/lecturer/filter_service.dart';
 import '../../services/notifications/lecture_action_notification_service.dart';
 import '../../widgets/lecturer/lecturer_home_header.dart';
-import '../../widgets/lecturer/lecture_timeline.dart';
+import '../../widgets/lecturer/lecture_card.dart';
 import '../../widgets/lecturer/day_tap_handler.dart';
 import 'lecturer_navigation.dart';
+import '../../utils/shared/time_utils.dart';
 import 'widgets/modern_popup_dialog.dart';
 
 class LecturerHomeScreen extends ConsumerStatefulWidget {
@@ -221,6 +222,13 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
                 fontWeight: FontWeight.w800,
               ),
             ),
+            actions: [
+              ModernPopupActionButton(
+                label: LecturerLanguageController.tr('إلغاء', 'Cancel'),
+                onTap: () => Navigator.of(ctx).pop(),
+                isPrimary: false,
+              ),
+            ],
             child: Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -241,13 +249,6 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
                 );
               }).toList(),
             ),
-            actions: [
-              ModernPopupActionButton(
-                label: LecturerLanguageController.tr('إلغاء', 'Cancel'),
-                onTap: () => Navigator.of(ctx).pop(),
-                isPrimary: false,
-              ),
-            ],
           ),
         );
       },
@@ -319,13 +320,6 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
               fontWeight: FontWeight.w800,
             ),
           ),
-          child: Text(
-            LecturerLanguageController.tr(
-              'سيتم إشعار الطلاب بإلغاء هذه المحاضرة. هل تريد المتابعة؟',
-              'Students will be notified that this lecture is canceled. Continue?',
-            ),
-            style: const TextStyle(fontFamily: 'Cairo', height: 1.45),
-          ),
           actions: [
             ModernPopupActionButton(
               label: LecturerLanguageController.tr('تراجع', 'Back'),
@@ -339,6 +333,13 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
               primaryColor: const Color(0xFFD32F2F),
             ),
           ],
+          child: Text(
+            LecturerLanguageController.tr(
+              'سيتم إشعار الطلاب بإلغاء هذه المحاضرة. هل تريد المتابعة؟',
+              'Students will be notified that this lecture is canceled. Continue?',
+            ),
+            style: const TextStyle(fontFamily: 'Cairo', height: 1.45),
+          ),
         ),
       ),
     );
@@ -412,18 +413,96 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
     required DateTime Function(LectureItem lecture) actionDateResolver,
     void Function(LectureItem lecture)? onAttendTap,
   }) {
+    final sortedLectures = TimeUtils.sortLecturesByTime(
+      lectures,
+      (lecture) => lecture.startTime,
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionTitle(titleAr, titleEn),
-        LectureTimeline(
-          lectures: lectures,
-          onLectureTap: onAttendTap,
-          onDelayLectureTap: (lecture) =>
-              _onDelayLectureFromCard(lecture, actionDateResolver(lecture)),
-          onCancelLectureTap: (lecture) =>
-              _onCancelLectureFromCard(lecture, actionDateResolver(lecture)),
-        ),
+        if (sortedLectures.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                LecturerLanguageController.tr(
+                  'لا توجد محاضرات',
+                  'No lectures available',
+                ),
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: Color(0xFF999999),
+                  fontFamily: 'Cairo',
+                ),
+              ),
+            ),
+          )
+        else
+          SizedBox(
+            height: 292,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              itemCount: sortedLectures.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (context, index) {
+                final lecture = sortedLectures[index];
+                final timeLabel = lecture.timeSlots.isNotEmpty
+                    ? lecture.timeSlots.join('  •  ')
+                    : lecture.startTime;
+                return SizedBox(
+                  width: 320,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEAF5F6),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            timeLabel,
+                            textDirection: TextDirection.ltr,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF006571),
+                              fontFamily: 'Cairo',
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: LectureCard(
+                          lecture: lecture,
+                          onTap: onAttendTap != null
+                              ? () => onAttendTap(lecture)
+                              : null,
+                          onDelayTap: () => _onDelayLectureFromCard(
+                            lecture,
+                            actionDateResolver(lecture),
+                          ),
+                          onCancelTap: () => _onCancelLectureFromCard(
+                            lecture,
+                            actionDateResolver(lecture),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
       ],
     );
   }

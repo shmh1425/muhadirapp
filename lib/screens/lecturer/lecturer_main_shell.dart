@@ -25,11 +25,16 @@ class LecturerMainShell extends ConsumerStatefulWidget {
 
 class _LecturerMainShellState extends ConsumerState<LecturerMainShell> {
   late int _selectedIndex;
+  late final List<GlobalKey<NavigatorState>> _navigatorKeys;
 
   @override
   void initState() {
     super.initState();
     _selectedIndex = widget.initialIndex.clamp(0, 2);
+    _navigatorKeys = List<GlobalKey<NavigatorState>>.generate(
+      3,
+      (_) => GlobalKey<NavigatorState>(),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(
@@ -42,7 +47,7 @@ class _LecturerMainShellState extends ConsumerState<LecturerMainShell> {
 
   Widget _buildTabNavigator(int index, Widget screen) {
     return Navigator(
-      key: ValueKey<int>(index),
+      key: _navigatorKeys[index],
       initialRoute: '/',
       onGenerateRoute: (settings) {
         if (settings.name == '/' || settings.name == null) {
@@ -77,7 +82,11 @@ class _LecturerMainShellState extends ConsumerState<LecturerMainShell> {
       bottomNavigationBar: LecturerNavBar(
         selectedIndex: _selectedIndex,
         onItemTapped: (index) {
-          if (index == _selectedIndex) return;
+          if (index == _selectedIndex) {
+            final navigator = _navigatorKeys[index].currentState;
+            navigator?.popUntil((route) => route.isFirst);
+            return;
+          }
           setState(() => _selectedIndex = index);
         },
       ),

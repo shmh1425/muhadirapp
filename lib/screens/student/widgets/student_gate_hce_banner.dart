@@ -8,6 +8,7 @@ import '../../../features/translation/translation_controller.dart';
 import '../../../services/geo/student_campus_geo_guard.dart';
 import '../../../services/student/student_gate_hce_service.dart';
 import 'student_card_section_shell.dart';
+import 'student_gate_qr_card.dart';
 
 /// Lets the student turn on Android NFC card emulation so security can read the gate payload.
 class StudentGateHceBanner extends StatefulWidget {
@@ -37,6 +38,7 @@ class _StudentGateHceBannerState extends State<StudentGateHceBanner>
   bool _loading = true;
   bool _hceSupported = false;
   bool _emulating = false;
+  bool _iosPrepared = false;
   String? _error;
 
   late final AnimationController _pulseController;
@@ -182,6 +184,14 @@ class _StudentGateHceBannerState extends State<StudentGateHceBanner>
     unawaited(_setEmulating(true));
   }
 
+  void _onIosTapZone() {
+    if (_loading) return;
+    setState(() {
+      _iosPrepared = true;
+      _error = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -191,7 +201,20 @@ class _StudentGateHceBannerState extends State<StudentGateHceBanner>
           return const SizedBox.shrink();
         }
 
-        if (kIsWeb || !Platform.isAndroid) {
+        if (kIsWeb) {
+          return _infoCard(
+            _tr(
+              'ميزة بطاقة البوابة غير متاحة على الويب.',
+              'Gate card mode is not available on web.',
+            ),
+          );
+        }
+
+        if (Platform.isIOS) {
+          return _buildIosGateBody();
+        }
+
+        if (!Platform.isAndroid) {
           return _infoCard(
             _tr(
               'محاكاة بطاقة NFC للبوابة متاحة على أندرويد فقط.',
@@ -458,6 +481,102 @@ class _StudentGateHceBannerState extends State<StudentGateHceBanner>
             fontSize: 14,
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildIosGateBody() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            _tr(
+              'قرّبي ظهر الجهاز من قارئ البوابة حتى يتم المسح. على iPhone يتم عرض رمز البوابة بعد التفعيل.',
+              'Hold the back of your phone near the gate reader. On iPhone, the gate code appears after activation.',
+            ),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 13,
+              height: 1.4,
+              color: Color(0xFF4B5563),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _onIosTapZone,
+              borderRadius: BorderRadius.circular(20),
+              child: Ink(
+                height: 200,
+                decoration: BoxDecoration(
+                  color: _panelBg,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFCCE8EA)),
+                ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    if (_iosPrepared) _buildPulsingRings(),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildCenterBadge(
+                          isActive: _iosPrepared,
+                          isBusy: false,
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          _iosPrepared
+                              ? _tr(
+                                  'تم تفعيل بطاقة الدخول',
+                                  'Gate card is activated',
+                                )
+                              : _tr(
+                                  'اضغطي لتفعيل بطاقة NFC',
+                                  'Tap to activate NFC card',
+                                ),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: _iosPrepared ? 15 : 14,
+                            fontWeight: FontWeight.w700,
+                            height: 1.35,
+                            color: _iosPrepared
+                                ? _titleTeal
+                                : const Color(0xFF35565E),
+                          ),
+                        ),
+                        if (!_iosPrepared) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            _tr('اضغطي هنا', 'Tap here'),
+                            style: TextStyle(
+                              fontFamily: 'Cairo',
+                              fontSize: 12,
+                              color: _darkTeal.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (_iosPrepared) ...[
+            const SizedBox(height: 14),
+            StudentGateQrCard(
+              studentId: widget.studentId,
+              gateCardRev: widget.gateCardRev,
+              contentOnly: true,
+            ),
+          ],
+        ],
       ),
     );
   }

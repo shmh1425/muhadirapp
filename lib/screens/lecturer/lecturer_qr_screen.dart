@@ -527,14 +527,6 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
     final messenger = ScaffoldMessenger.maybeOf(context);
     final lecture = _activeLecture;
     if (lecture == null) {
-      if (!mounted) return;
-      messenger?.showSnackBar(
-        SnackBar(
-          content: Text(
-            _tr('لا توجد محاضرة حالياً', 'No lecture is currently active'),
-          ),
-        ),
-      );
       return;
     }
 
@@ -622,13 +614,6 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
     final lecture = _activeLecture;
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (lecture == null) {
-      messenger?.showSnackBar(
-        SnackBar(
-          content: Text(
-            _tr('لا توجد محاضرة حالياً', 'No lecture is currently active'),
-          ),
-        ),
-      );
       return;
     }
 
@@ -978,13 +963,6 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
     final lecture = _activeLecture;
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (lecture == null) {
-      messenger?.showSnackBar(
-        SnackBar(
-          content: Text(
-            _tr('لا توجد محاضرة حالياً', 'No lecture is currently active'),
-          ),
-        ),
-      );
       return;
     }
     if (_isNfcActiveForLecture) {
@@ -1087,10 +1065,12 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
       valueListenable: LecturerLanguageController.notifier,
       builder: (context, _, __) => Directionality(
         textDirection: LecturerLanguageController.direction(),
-        child: Scaffold(
-          backgroundColor: Colors.white,
-          body: SafeArea(
-            child: Column(
+        child: PopScope(
+          canPop: false,
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            body: SafeArea(
+              child: Column(
               children: [
                 const SizedBox(height: 16),
                 Padding(
@@ -1747,6 +1727,7 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
           ),
         ),
       ),
+    ),
     );
   }
 

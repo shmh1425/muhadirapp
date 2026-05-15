@@ -584,20 +584,6 @@ class _SecurityNfcVerificationScreenState
                       )
                     else ...[
                       Center(child: _buildModePill()),
-                      const SizedBox(height: 10),
-                      Text(
-                        _scanMode == _GateReaderMode.qr
-                            ? SecurityLocalization.gateQrModeHint
-                            : SecurityLocalization.gateNfcModeHint,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontFamily: 'Cairo',
-                          fontSize: 12,
-                          color: _kTextMuted,
-                          height: 1.35,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
                       const SizedBox(height: 16),
                       Expanded(
                         child: Container(
