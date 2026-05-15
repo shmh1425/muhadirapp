@@ -61,28 +61,35 @@ class LecturerNavBar extends StatelessWidget {
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
             alignment: _alignmentForIndex(selectedIndex),
-            child: Container(
-              width: _circleSize,
-              height: _circleSize,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment(0.50, 1.00),
-                  end: Alignment(0.50, 0.00),
-                  colors: [Color(0xFF27A2A9), Color(0xFF006571)],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Color(0x33000000),
-                    blurRadius: 12,
-                    offset: Offset(0, 6),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => onItemTapped(selectedIndex),
+                customBorder: const CircleBorder(),
+                child: Ink(
+                  width: _circleSize,
+                  height: _circleSize,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      begin: Alignment(0.50, 1.00),
+                      end: Alignment(0.50, 0.00),
+                      colors: [Color(0xFF27A2A9), Color(0xFF006571)],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color(0x33000000),
+                        blurRadius: 12,
+                        offset: Offset(0, 6),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: Icon(
-                _iconForIndex(selectedIndex),
-                color: Colors.white,
-                size: 28,
+                  child: Icon(
+                    _iconForIndex(selectedIndex),
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
               ),
             ),
           ),
