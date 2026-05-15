@@ -1,5 +1,3 @@
-import 'dart:ui' as ui;
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -25,13 +23,7 @@ class StudentDigitalIdCard extends StatefulWidget {
 class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
   /// Matches app-wide teal (see lecturer profile, security nav, student screens).
   static const Color _darkTeal = Color(0xFF006571);
-  static const Color _lightTeal = Color(0xFF27A2A9);
-  static const Color _titleTeal = Color(0xFF00525D);
   static const Color _bodyText = Color(0xFF2D2D2D);
-  static const Color _mutedTeal = Color(0xFF5F7A80);
-
-  String _tr(String ar, String en) =>
-      TranslationController.instance.translateToEnglish ? en : ar;
 
   String _normalizeMajorAr(String rawAr, String rawEn) {
     final ar = rawAr.trim();
@@ -41,15 +33,68 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
     return ar;
   }
 
-  String _bachelorsLabel() => _tr('بكالوريوس', "Bachelor's");
+  static String _monthYear(DateTime d) =>
+      '${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  /// Resolves MM/YYYY from Firestore strings, [Timestamp], or ISO; else current month.
+  static String _resolvedIssueMmYyyy(Map<String, dynamic> data) {
+    bool looksLikeMmYyyy(String s) =>
+        RegExp(r'^\d{1,2}/\d{4}$').hasMatch(s.trim());
+
+    String normalized(String raw) {
+      final t = raw.trim();
+      if (t.isEmpty) return '';
+      if (looksLikeMmYyyy(t)) {
+        final p = t.split('/');
+        final m = int.tryParse(p[0]) ?? 0;
+        final y = int.tryParse(p[1]) ?? 0;
+        if (m >= 1 && m <= 12 && y >= 1900) {
+          return '${m.toString().padLeft(2, '0')}/$y';
+        }
+      }
+      final iso = DateTime.tryParse(t);
+      if (iso != null) return _monthYear(iso);
+      return t;
+    }
+
+    dynamic field(String k) => data[k];
+
+    final candidates = <dynamic>[
+      field('cardIssueDate'),
+      field('issueDateMmYyyy'),
+      field('issue_date'),
+      field('cardIssuedMmYyyy'),
+      field('issuedAtMmYyyy'),
+      field('cardIssueAt'),
+      field('cardIssuedAt'),
+      field('issuedAt'),
+    ];
+
+    for (final c in candidates) {
+      if (c == null) continue;
+      if (c is Timestamp) {
+        return _monthYear(c.toDate());
+      }
+      final s = normalized(c.toString());
+      if (s.isNotEmpty) return s;
+    }
+
+    return _monthYear(DateTime.now());
+  }
+
+  String _studentIdLabel(ExternalStudent student) {
+    final sid = '${student.studentId}';
+    if (TranslationController.instance.translateToEnglish) {
+      return 'Student ID: $sid';
+    }
+    return '${student.isFemale ? 'رقم الطالبة' : 'رقم الطالب'} : $sid';
+  }
 
   @override
   Widget build(BuildContext context) {
     final s = widget.student;
     final nameAr = s.nameAr.trim().isNotEmpty ? s.nameAr.trim() : s.name;
     final nameEn = s.name.trim().isNotEmpty ? s.name.trim() : s.nameAr;
-    final studentIdStr = s.studentId.toString();
-
     final collegeAr = s.collegeArSafe.trim();
     final collegeEn = s.collegeSafe.trim();
     final majorArNormalized = _normalizeMajorAr(s.majorArSafe, s.major);
@@ -58,31 +103,11 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
     return AnimatedBuilder(
       animation: TranslationController.instance,
       builder: (context, _) {
-        final isEn = TranslationController.instance.translateToEnglish;
-        final collegeLine = isEn
-            ? (collegeEn.isNotEmpty
-                ? collegeEn
-                : (collegeAr.isNotEmpty ? collegeAr : '—'))
-            : (collegeAr.isNotEmpty
-                ? collegeAr
-                : (collegeEn.isNotEmpty ? collegeEn : '—'));
-        final majorLine = isEn
-            ? (majorEn.isNotEmpty
-                ? majorEn
-                : (majorArNormalized.isNotEmpty ? majorArNormalized : '—'))
-            : (majorArNormalized.isNotEmpty
-                ? majorArNormalized
-                : (majorEn.isNotEmpty ? majorEn : '—'));
 
         return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
           stream: StudentAuthService.instance.watchCurrentStudentDoc(),
           builder: (context, snap) {
             final data = snap.data?.data() ?? const <String, dynamic>{};
-            final nationality = (data['nationality'] ?? '').toString().trim();
-            final nationalId = (data['nationalIdOrIqama'] ?? data['nationalId'] ?? '')
-                .toString()
-                .trim();
-
             var photoUrlRaw =
                 (data['photoUrl'] ?? data['photoURL'] ?? data['photo_url'] ?? '')
                     .toString()
@@ -98,11 +123,136 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
                     ? photoUrlRaw
                     : '$photoUrlRaw${photoUrlRaw.contains('?') ? '&' : '?'}v=$photoVersion';
 
+            final deptEnRaw = s.departmentSafe.trim();
+            final deptArRaw = s.departmentArSafe.trim();
+            final facultyEn = collegeEn.isNotEmpty
+                ? collegeEn
+                : (collegeAr.isNotEmpty ? collegeAr : '—');
+            final facultyAr = collegeAr.isNotEmpty
+                ? collegeAr
+                : (collegeEn.isNotEmpty ? collegeEn : '—');
+            final deptEnDisp = deptEnRaw.isNotEmpty
+                ? deptEnRaw
+                : (majorEn.isNotEmpty ? majorEn : '—');
+            final deptArDisp = deptArRaw.isNotEmpty
+                ? deptArRaw
+                : (majorArNormalized.isNotEmpty ? majorArNormalized : '—');
+            final majorEnDisp = majorEn.isNotEmpty
+                ? majorEn
+                : (majorArNormalized.isNotEmpty ? majorArNormalized : '—');
+            final majorArDisp = majorArNormalized.isNotEmpty
+                ? majorArNormalized
+                : (majorEn.isNotEmpty ? majorEn : '—');
+
+            final displayIssue = _resolvedIssueMmYyyy(data);
+
+            const detailSideStyle = TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 11.5,
+              height: 1.32,
+              fontWeight: FontWeight.w400,
+              color: _bodyText,
+            );
+
+            const nameLineStyle = TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 13,
+              height: 1.28,
+              fontWeight: FontWeight.w700,
+              color: _bodyText,
+            );
+
+            const footerMuted = TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 10,
+              height: 1.35,
+              color: Color(0xFF9CA3AF),
+              fontWeight: FontWeight.w400,
+            );
+
+            final isEnUi = TranslationController.instance.translateToEnglish;
+            // Expanded Column follows ambient RTL; force LTR here so end == visual right next to photo.
+            final headerColumnCross =
+                isEnUi ? CrossAxisAlignment.start : CrossAxisAlignment.end;
+            final headerAlign =
+                isEnUi ? TextAlign.left : TextAlign.right;
+
+            final displayName =
+                isEnUi
+                    ? (nameEn.isNotEmpty ? nameEn : nameAr)
+                    : (nameAr.isNotEmpty ? nameAr : nameEn);
+
+            final nameBlock = Directionality(
+              textDirection:
+                  isEnUi ? TextDirection.ltr : TextDirection.rtl,
+              child: Text(
+                displayName,
+                textAlign: headerAlign,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: nameLineStyle,
+              ),
+            );
+
+            Widget buildHeaderRow() {
+              final gap = const SizedBox(width: 8);
+              final logo = Image.asset(
+                'assets/images/NFC_logo.jpeg',
+                width: 32,
+                height: 32,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: Icon(
+                    Icons.school_outlined,
+                    color: _bodyText,
+                    size: 22,
+                  ),
+                ),
+              );
+              final nameSection = Expanded(
+                child: Directionality(
+                  textDirection: TextDirection.ltr,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: headerColumnCross,
+                    children: [
+                    nameBlock,
+                    const SizedBox(height: 4),
+                    Text(
+                      _studentIdLabel(s),
+                      textAlign: headerAlign,
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 11,
+                        fontWeight: FontWeight.w400,
+                        color: _bodyText,
+                        height: 1.28,
+                      ),
+                    ),
+                  ],
+                ),
+                ),
+              );
+              final photo = _CardProfilePhoto(
+                imageUrl: imageUrl,
+                size: 56,
+              );
+              return Row(
+                textDirection: TextDirection.ltr,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: isEnUi
+                    ? [photo, gap, nameSection, gap, logo]
+                    : [logo, gap, nameSection, gap, photo],
+              );
+            }
+
             return Container(
               width: double.infinity,
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: _darkTeal.withValues(alpha: 0.22),
                   width: 1,
@@ -119,175 +269,79 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        width: double.infinity,
-                        height: 112,
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [_lightTeal, _darkTeal],
-                          ),
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(13),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        top: 56,
-                        left: 0,
-                        right: 0,
-                        child: Center(
-                          child: _CardProfilePhoto(imageUrl: imageUrl),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 54),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-                    child: Column(
+                    padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
+                    child: buildHeaderRow(),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
+                    child: Row(
+                      textDirection: TextDirection.ltr,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          nameAr,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                            color: _titleTeal,
-                            height: 1.25,
-                          ),
-                        ),
-                        if (nameEn.isNotEmpty && nameEn != nameAr) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            nameEn,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 13,
-                              color: _mutedTeal,
-                              height: 1.2,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 8),
-                        Directionality(
-                          textDirection: ui.TextDirection.ltr,
-                          child: Text(
-                            studentIdStr,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              color: _bodyText,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _darkTeal,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            _tr('منتظم', 'Active'),
-                            style: const TextStyle(
-                              fontFamily: 'Cairo',
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          collegeLine,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: _bodyText,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          majorLine,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 13,
-                            color: _mutedTeal,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _darkTeal.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: _darkTeal.withValues(alpha: 0.28),
-                            ),
-                          ),
-                          child: Text(
-                            _bachelorsLabel(),
-                            style: const TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: _darkTeal,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        if (nationality.isNotEmpty || nationalId.isNotEmpty) ...[
-                          if (nationality.isNotEmpty)
-                            Text(
-                              nationality,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontFamily: 'Cairo',
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: _mutedTeal,
-                              ),
-                            ),
-                          if (nationalId.isNotEmpty) ...[
-                            if (nationality.isNotEmpty)
-                              const SizedBox(height: 6),
-                            Directionality(
-                              textDirection: ui.TextDirection.ltr,
-                              child: Text(
-                                nationalId,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  fontFamily: 'Cairo',
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF2D2D2D),
+                        Expanded(
+                          child: Directionality(
+                            textDirection: TextDirection.ltr,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Faculty: $facultyEn',
+                                  style: detailSideStyle,
                                 ),
-                              ),
+                                const SizedBox(height: 5),
+                                Text(
+                                  'Department: $deptEnDisp',
+                                  style: detailSideStyle,
+                                ),
+                                const SizedBox(height: 5),
+                                Text(
+                                  'Major: $majorEnDisp',
+                                  style: detailSideStyle,
+                                ),
+                              ],
                             ),
-                          ],
-                          const SizedBox(height: 12),
-                        ] else
-                          const SizedBox(height: 8),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Directionality(
+                            textDirection: TextDirection.rtl,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'الكلية: $facultyAr',
+                                  textAlign: TextAlign.right,
+                                  style: detailSideStyle,
+                                ),
+                                const SizedBox(height: 5),
+                                Text(
+                                  'قسم $deptArDisp',
+                                  textAlign: TextAlign.right,
+                                  style: detailSideStyle,
+                                ),
+                                const SizedBox(height: 5),
+                                Text(
+                                  'التخصص: $majorArDisp',
+                                  textAlign: TextAlign.right,
+                                  style: detailSideStyle,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                    child: Text(
+                      isEnUi
+                          ? 'Issue Date: $displayIssue'
+                          : 'تاريخ الإصدار: $displayIssue',
+                      textAlign: TextAlign.center,
+                      style: footerMuted,
                     ),
                   ),
                 ],
@@ -302,22 +356,25 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
 
 /// Circular profile image for the digital card (always visible, no blur).
 class _CardProfilePhoto extends StatelessWidget {
-  const _CardProfilePhoto({required this.imageUrl});
+  const _CardProfilePhoto({required this.imageUrl, this.size = 96});
 
   final String imageUrl;
-
-  static const double _kSize = 96;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
     const borderColor = Color(0xFF006571);
-    const sized = Size.square(_kSize);
+    final dimension = size;
+    final sized = Size.square(dimension);
+    final borderW = dimension <= 62 ? 2.0 : 2.5;
+    final iconSz = (dimension * 0.42).clamp(22.0, 40.0);
+    final progSz = (dimension * 0.36).clamp(20.0, 28.0);
 
     Widget core;
     if (imageUrl.isEmpty) {
-      core = const ColoredBox(
-        color: Color(0xFFECEFF1),
-        child: Icon(Icons.person, size: 48, color: Color(0xFF9AA0A6)),
+      core = ColoredBox(
+        color: const Color(0xFFECEFF1),
+        child: Icon(Icons.person, size: iconSz, color: const Color(0xFF9AA0A6)),
       );
     } else if (kIsWeb) {
       core = WebNetworkImageBlur(
@@ -336,9 +393,9 @@ class _CardProfilePhoto extends StatelessWidget {
         fit: BoxFit.cover,
         alignment: Alignment.center,
         filterQuality: FilterQuality.medium,
-        errorBuilder: (_, __, ___) => const ColoredBox(
-          color: Color(0xFFECEFF1),
-          child: Icon(Icons.person, size: 48, color: Color(0xFF9AA0A6)),
+        errorBuilder: (_, __, ___) => ColoredBox(
+          color: const Color(0xFFECEFF1),
+          child: Icon(Icons.person, size: iconSz, color: const Color(0xFF9AA0A6)),
         ),
         loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) {
@@ -348,10 +405,10 @@ class _CardProfilePhoto extends StatelessWidget {
             color: const Color(0xFFECEFF1),
             child: Center(
               child: SizedBox(
-                width: 28,
-                height: 28,
+                width: progSz,
+                height: progSz,
                 child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
+                  strokeWidth: 2,
                   color: borderColor.withValues(alpha: 0.7),
                 ),
               ),
@@ -364,13 +421,13 @@ class _CardProfilePhoto extends StatelessWidget {
     core = SizedBox.fromSize(size: sized, child: core);
 
     return SizedBox(
-      width: _kSize,
-      height: _kSize,
+      width: dimension,
+      height: dimension,
       child: Container(
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: Colors.white,
-          border: Border.all(color: borderColor, width: 3),
+          border: Border.all(color: borderColor, width: borderW),
         ),
         child: ClipOval(child: core),
       ),

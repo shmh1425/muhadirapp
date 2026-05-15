@@ -17,6 +17,7 @@ class StudentGateHceBanner extends StatefulWidget {
     required this.studentId,
     this.gateCardRev = 0,
     this.contentOnly = false,
+    this.onPreferQr,
   });
 
   final int studentId;
@@ -24,6 +25,9 @@ class StudentGateHceBanner extends StatefulWidget {
 
   /// When true, inner body only (inside attendance-style teal panel).
   final bool contentOnly;
+
+  /// Switch to QR mode on the parent panel.
+  final VoidCallback? onPreferQr;
   @override
   State<StudentGateHceBanner> createState() => _StudentGateHceBannerState();
 }
@@ -493,8 +497,8 @@ class _StudentGateHceBannerState extends State<StudentGateHceBanner>
         children: [
           Text(
             _tr(
-              'قرّبي ظهر الجهاز من قارئ البوابة حتى يتم المسح. على iPhone يتم عرض رمز البوابة بعد التفعيل.',
-              'Hold the back of your phone near the gate reader. On iPhone, the gate code appears after activation.',
+              'قرّبي ظهر الجهاز من قارئ البوابة حتى يتم المسح. على iPhone يتم عرض رمز البطاقة بعد التفعيل.',
+              'Hold the back of your phone near the gate reader. On iPhone, the card code appears after activation.',
             ),
             textAlign: TextAlign.center,
             style: const TextStyle(
@@ -574,6 +578,20 @@ class _StudentGateHceBannerState extends State<StudentGateHceBanner>
               studentId: widget.studentId,
               gateCardRev: widget.gateCardRev,
               contentOnly: true,
+            ),
+          ],
+          if (widget.onPreferQr != null) ...[
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: widget.onPreferQr,
+              child: Text(
+                _tr('استخدمي QR بدلاً من ذلك', 'Use QR instead'),
+                style: const TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 13,
+                  color: _darkTeal,
+                ),
+              ),
             ),
           ],
         ],

@@ -162,6 +162,10 @@ class SecurityLocalization {
 
   static String get gateReaderModeNfc => tr('NFC', 'NFC');
   static String get gateReaderModeQr => tr('QR', 'QR');
+  static String get gateDualModeSecurityHint => tr(
+    'QR يعمل مع iPhone وأندرويد. NFC لبطاقة فعلية أو جوال أندرويد عند القارئ.',
+    'QR works on iPhone and Android. NFC is for physical cards or Android phones at the reader.',
+  );
   static String get gateQrModeHint => tr(
     'لو كانت بطاقة الطالبة على iPhone فاختاري QR وامسحي الرمز من شاشة البطاقة.',
     'If the student card is on iPhone, use QR mode and scan the code from the card screen.',

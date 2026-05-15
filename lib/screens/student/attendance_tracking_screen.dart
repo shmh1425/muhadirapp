@@ -1133,7 +1133,10 @@ class _AttendanceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final translation = TranslationController.instance;
     final isLtr = translation.textDirection == TextDirection.ltr;
-    final cross = isLtr ? CrossAxisAlignment.start : CrossAxisAlignment.end;
+    // RTL: Column's crossAxisAlignment.end aligns to visual LEFT — wrong for Arabic titles.
+    final crossCenterBlock = CrossAxisAlignment.start;
+    final crossTimeBlock =
+        isLtr ? CrossAxisAlignment.start : CrossAxisAlignment.end;
     final textAlign = isLtr ? TextAlign.left : TextAlign.right;
 
     final badge = Container(
@@ -1172,7 +1175,7 @@ class _AttendanceCard extends StatelessWidget {
 
     final timeColumn = Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: cross,
+      crossAxisAlignment: crossTimeBlock,
       children: <Widget>[
         Text(
           record.timeRange,
@@ -1198,7 +1201,7 @@ class _AttendanceCard extends StatelessWidget {
             isLtr ? Alignment.centerLeft : Alignment.centerRight,
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: cross,
+          crossAxisAlignment: crossCenterBlock,
           children: <Widget>[
             TText(
               record.course,
@@ -1254,19 +1257,13 @@ class _AttendanceCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            if (isLtr) ...[
-              details,
-              const SizedBox(width: 10),
-              timeColumn,
-              const SizedBox(width: 10),
-              badge,
-            ] else ...[
-              badge,
-              const SizedBox(width: 10),
-              details,
-              const SizedBox(width: 10),
-              timeColumn,
-            ],
+            // Order fixed: badge is always first in traversal so it sits at
+            // layout "start" (left in LTR English, right in RTL Arabic).
+            badge,
+            const SizedBox(width: 10),
+            details,
+            const SizedBox(width: 10),
+            timeColumn,
           ],
         ),
       ),

@@ -1,15 +1,18 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../features/translation/translation_controller.dart';
-import '../../../services/geo/student_campus_geo_guard.dart';
 import '../../../features/translation/widgets/t_text.dart';
+import '../../../services/geo/student_campus_geo_guard.dart';
+import '../../../services/student/student_gate_platform.dart';
 import 'attendance_mode_chip.dart';
 import 'student_gate_hce_banner.dart';
 import 'student_gate_qr_card.dart';
 
-/// Gate access on the student card — same QR / NFC shell as attendance screen.
+/// Gate access on the student card — QR (all phones) and NFC HCE (Android).
 class StudentGateModePanel extends StatefulWidget {
   const StudentGateModePanel({
     super.key,
@@ -25,9 +28,16 @@ class StudentGateModePanel extends StatefulWidget {
 }
 
 class _StudentGateModePanelState extends State<StudentGateModePanel> {
+  /// QR is the default on every platform (iPhone + Android).
   bool _isNfc = false;
   String? _geoBlockMessage;
   bool _checkingGeo = true;
+
+  bool get _iosShowsNfcUnsupportedCard =>
+      !kIsWeb &&
+      Platform.isIOS &&
+      _isNfc &&
+      StudentGatePlatform.showNfcModeChip;
 
   String _tr(String ar, String en) =>
       TranslationController.instance.translateToEnglish ? en : ar;
@@ -39,6 +49,15 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
   }
 
   Future<void> _refreshCampusGeo() async {
+    if (_iosShowsNfcUnsupportedCard) {
+      if (!mounted) return;
+      setState(() {
+        _checkingGeo = false;
+        _geoBlockMessage = null;
+      });
+      return;
+    }
+
     final blocked = await StudentCampusGeoGuard.blockingOutcome();
     if (!mounted) return;
     setState(() {
@@ -50,18 +69,20 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
   }
 
   Future<void> _onModeSelected(bool nfc) async {
+    if (!StudentGatePlatform.showNfcModeChip && nfc) return;
     if (_isNfc == nfc) return;
     setState(() {
       _isNfc = nfc;
-      _checkingGeo = true;
       _geoBlockMessage = null;
+      _checkingGeo = !(nfc && !kIsWeb && Platform.isIOS);
     });
     await _refreshCampusGeo();
   }
 
   @override
   Widget build(BuildContext context) {
-    final modeTitle = _isNfc
+    final showNfcChip = StudentGatePlatform.showNfcModeChip;
+    final modeTitle = _isNfc && showNfcChip
         ? _tr('البوابة عبر NFC', 'Gate via NFC')
         : _tr('البوابة عبر QR', 'Gate via QR');
 
@@ -73,7 +94,7 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
           children: [
             Center(
               child: TText(
-                modeTitle,
+                _tr('البوابة الأمنية', 'Security gate'),
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
@@ -82,37 +103,51 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            Center(
-              child: Container(
-                width: 200,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE1F7F7),
-                  borderRadius: BorderRadius.circular(22),
-                ),
-                padding: const EdgeInsets.all(4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: AttendanceModeChip(
-                        label: 'QR',
-                        isActive: !_isNfc,
-                        onTap: () => unawaited(_onModeSelected(false)),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: AttendanceModeChip(
-                        label: 'NFC',
-                        isActive: _isNfc,
-                        onTap: () => unawaited(_onModeSelected(true)),
-                      ),
-                    ),
-                  ],
+            if (showNfcChip) ...[
+              const SizedBox(height: 12),
+              Center(
+                child: TText(
+                  modeTitle,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF35565E),
+                    fontFamily: 'Cairo',
+                  ),
                 ),
               ),
-            ),
+              const SizedBox(height: 10),
+              Center(
+                child: Container(
+                  width: 200,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE1F7F7),
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  padding: const EdgeInsets.all(4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: AttendanceModeChip(
+                          label: 'QR',
+                          isActive: !_isNfc,
+                          onTap: () => unawaited(_onModeSelected(false)),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: AttendanceModeChip(
+                          label: 'NFC',
+                          isActive: _isNfc,
+                          onTap: () => unawaited(_onModeSelected(true)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             Container(
               width: double.infinity,
@@ -121,7 +156,9 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
                 borderRadius: BorderRadius.circular(26),
               ),
               padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
-              child: _checkingGeo
+              child: _iosShowsNfcUnsupportedCard
+                  ? _buildIosNfcUnsupportedPanel()
+                  : _checkingGeo
                   ? const SizedBox(
                       height: 120,
                       child: Center(
@@ -132,17 +169,45 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
                     )
                   : _geoBlockMessage != null
                   ? _buildGeoBlockedPanel()
-                  : _isNfc
+                  : _isNfc && showNfcChip
                   ? StudentGateHceBanner(
                       studentId: widget.studentId,
                       gateCardRev: widget.gateCardRev,
                       contentOnly: true,
+                      onPreferQr: () => unawaited(_onModeSelected(false)),
                     )
                   : _buildQrPanel(),
             ),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildIosNfcUnsupportedPanel() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(horizontal: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8E1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFFC107)),
+      ),
+      child: Text(
+        _tr(
+          'NFC غير متوفر حاليًا على iPhone.',
+          'NFC is currently not supported on iPhone.',
+        ),
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: Color(0xFF5D4037),
+          fontSize: 13,
+          fontFamily: 'Cairo',
+          fontWeight: FontWeight.w600,
+          height: 1.4,
+        ),
+      ),
     );
   }
 
@@ -185,8 +250,8 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
           ),
           child: Text(
             _tr(
-              'اعرض الرمز على قارئ البوابة حتى يتم التحقق.',
-              'Show this code at the gate reader until verified.',
+              'اعرضي الرمز لقارئ البوابة.',
+              'Show this code to the gate reader.',
             ),
             textAlign: TextAlign.center,
             style: const TextStyle(

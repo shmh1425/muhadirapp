@@ -324,8 +324,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               const SizedBox(height: 5),
 
               SizedBox(
-                // Fits badge without overflow; not extra-tall below the card.
-                height: 228,
+                height: 160,
                 child: _buildActiveAbsencesSection(context),
               ),
                 ],
@@ -415,12 +414,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       r.lectureEndTime.isNotEmpty ? r.lectureEndTime : '—',
                       statusText: badge.text,
                       statusColor: badge.color,
+                      fixedHeight: 160,
                     );
                     return Padding(
                       padding: const EdgeInsets.only(right: 12),
-                      child: Align(
-                        alignment: Alignment.topCenter,
-                        child: InkWell(
+                      child: InkWell(
                         onTap: () {
                           if (merged == 'معلقة') {
                             Navigator.push(
@@ -476,7 +474,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         },
                         borderRadius: BorderRadius.circular(16),
                         child: card,
-                      ),
                       ),
                     );
                   }).toList(),
@@ -613,10 +610,68 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     String room, {
     String? statusText,
     Color? statusColor,
+    double? fixedHeight,
   }) {
     final isEn = TranslationController.instance.translateToEnglish;
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TText(
+          title,
+          textAlign: TextAlign.start,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 15,
+            height: 1.25,
+            color: _textStrong,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TText(
+          isEn ? 'Lecture' : 'نظري',
+          textAlign: TextAlign.start,
+          style: const TextStyle(fontSize: 13, color: _textMuted, height: 1.2),
+        ),
+        TText(
+          isEn ? 'Section $section' : 'الشعبة $section',
+          textAlign: TextAlign.start,
+          style: const TextStyle(fontSize: 13, color: _textMuted, height: 1.2),
+        ),
+        TText(
+          isEn ? 'Room $room' : 'القاعة $room',
+          textAlign: TextAlign.start,
+          style: const TextStyle(fontSize: 13, color: _textMuted, height: 1.2),
+        ),
+      ],
+    );
+
+    final statusButton = statusText == null
+        ? null
+        : Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            decoration: BoxDecoration(
+              color: statusColor ?? Colors.grey[400],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Center(
+              child: TText(
+                statusText,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Colors.black,
+                ),
+              ),
+            ),
+          );
+
     return Container(
       width: 220,
+      height: fixedHeight,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -629,62 +684,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TText(
-            title,
-            textAlign: TextAlign.start,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-              height: 1.25,
-              color: _textStrong,
+      padding: fixedHeight != null
+          ? const EdgeInsets.fromLTRB(12, 10, 12, 10)
+          : const EdgeInsets.fromLTRB(14, 14, 14, 12),
+      child: fixedHeight == null
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ...details.children,
+                if (statusButton != null) ...[
+                  const SizedBox(height: 8),
+                  statusButton,
+                ],
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: details),
+                if (statusButton != null) ...[
+                  const SizedBox(height: 6),
+                  statusButton,
+                ],
+              ],
             ),
-          ),
-          const SizedBox(height: 6),
-          TText(
-            isEn ? 'Lecture' : 'نظري',
-            textAlign: TextAlign.start,
-            style: const TextStyle(fontSize: 13, color: _textMuted, height: 1.2),
-          ),
-          TText(
-            isEn ? 'Section $section' : 'الشعبة $section',
-            textAlign: TextAlign.start,
-            style: const TextStyle(fontSize: 13, color: _textMuted, height: 1.2),
-          ),
-          TText(
-            isEn ? 'Room $room' : 'القاعة $room',
-            textAlign: TextAlign.start,
-            style: const TextStyle(fontSize: 13, color: _textMuted, height: 1.2),
-          ),
-          if (statusText != null) ...[
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 7),
-              decoration: BoxDecoration(
-                color: statusColor ?? Colors.grey[400],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Center(
-                child: TText(
-                  statusText,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: Colors.black,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
     );
   }
 }

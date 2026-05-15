@@ -310,7 +310,7 @@ class _StudentGateQrCardState extends State<StudentGateQrCard>
           ] else ...[
             const SizedBox(height: 8),
             Text(
-              _tr('رمز البوابة', 'Gate code'),
+              _tr('رمز البطاقة', 'Card code'),
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontFamily: 'Cairo',

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_nfc_hce/flutter_nfc_hce.dart';
 
+import 'android_gate_hce_platform.dart';
 import 'student_gate_payload.dart';
 
 /// Android NFC Host Card Emulation so the security gate reader can read the
@@ -49,6 +50,7 @@ class StudentGateHceService {
   }) async {
     if (!isPlatformSupported || studentId <= 0) return null;
     final content = StudentGatePayload.buildJsonString(studentId, gateCardRev: gateCardRev);
+    await AndroidGateHcePlatform.setPreferredGateService();
     return _plugin.startNfcHce(
       content,
       mimeType: 'text/plain',
@@ -63,5 +65,6 @@ class StudentGateHceService {
     } catch (_) {
       // no-op
     }
+    await AndroidGateHcePlatform.unsetPreferredGateService();
   }
 }
