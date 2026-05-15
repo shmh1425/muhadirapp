@@ -36,6 +36,14 @@
 	<string>يحتاج التطبيق إلى الكاميرا لمسح رمز QR الخاص بتسجيل الحضور.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>يُستخدم الموقع للتحقق من أن جهاز البوابة داخل نطاق الحرم الجامعي قبل قراءة بطاقة NFC.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>يستخدم التطبيق الموقع للتحقق من وجود الجهاز داخل نطاق الجامعة أثناء عمليات التحقق بالحضور حتى تعمل الميزة بشكل صحيح.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>يستخدم التطبيق الموقع للتحقق من وجود الجهاز داخل نطاق الجامعة أثناء عمليات التحقق بالحضور حتى تعمل الميزة بشكل صحيح.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>يحتاج التطبيق الوصول إلى مكتبة الصور لاختيار صورة من الجهاز عند استخدام ميزة رفع الصور.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>يحتاج التطبيق حفظ الصور أو الملفات الناتجة داخل مكتبة الصور عند اختيار المستخدم لذلك.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
