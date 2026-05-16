@@ -47,20 +47,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     'تم الرفض',
   };
 
+  String _tr(String ar, String en) =>
+      TranslationController.instance.translateToEnglish ? en : ar;
+
   ({String text, Color color}) _badgeForMergedExcuseStatus(String status) {
+    final isEn = TranslationController.instance.translateToEnglish;
     switch (status) {
       case 'معلقة':
-        return (text: 'إرفاق عذر', color: Colors.grey);
+        return (text: isEn ? 'Attach excuse' : 'إرفاق عذر', color: Colors.grey);
       case 'قيد الانتظار':
-        return (text: 'قيد الانتظار', color: Colors.amber);
+        return (text: isEn ? 'Pending' : 'قيد الانتظار', color: Colors.amber);
       case 'تم الرفض':
-        return (text: 'مرفوض', color: Colors.red);
+        return (text: isEn ? 'Rejected' : 'مرفوض', color: Colors.red);
       case 'مغلق':
-        return (text: 'مغلق', color: Colors.blueGrey);
+        return (text: isEn ? 'Closed' : 'مغلق', color: Colors.blueGrey);
       case 'منتهي':
-        return (text: 'منتهي', color: Colors.brown);
+        return (text: isEn ? 'Expired' : 'منتهي', color: Colors.brown);
       case 'تم القبول':
-        return (text: 'مقبول', color: Colors.green);
+        return (text: isEn ? 'Accepted' : 'مقبول', color: Colors.green);
       default:
         return (text: '—', color: Colors.grey);
     }
@@ -284,9 +288,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const TText(
-                    'الغيابات النشطة:',
-                    style: TextStyle(
+                  TText(
+                    translation.translateToEnglish
+                        ? 'Active absences:'
+                        : 'الغيابات النشطة:',
+                    style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
                       color: _textStrong,
@@ -313,9 +319,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         const Color(0x22006571),
                       ),
                     ),
-                    child: const TText(
-                      ' إدارة الأعذار >',
-                      style: TextStyle(fontWeight: FontWeight.w500),
+                    child: TText(
+                      translation.translateToEnglish
+                          ? 'Manage excuses >'
+                          : ' إدارة الأعذار >',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
                     ),
                   ),
                 ],
@@ -386,7 +394,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
-                        'لا توجد غيابات نشطة حاليًا',
+                        _tr(
+                          'لا توجد غيابات نشطة حاليًا',
+                          'No active absences at the moment',
+                        ),
                         style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                         textAlign: TextAlign.center,
                       ),

@@ -27,6 +27,24 @@ class StudentAuthService {
     return updated;
   }
 
+  /// Latest Firestore fields for the logged-in student (empty map if unknown).
+  Future<Map<String, dynamic>> currentStudentData() async {
+    final docId = (_currentStudentDocId ?? '').trim();
+    final fallbackStudentId = _currentStudent?.studentId;
+    final resolvedDocId = docId.isNotEmpty
+        ? docId
+        : (fallbackStudentId == null || fallbackStudentId <= 0
+              ? ''
+              : fallbackStudentId.toString());
+    if (resolvedDocId.isEmpty) return <String, dynamic>{};
+
+    final snap = await FirebaseFirestore.instance
+        .collection('external_students')
+        .doc(resolvedDocId)
+        .get();
+    return Map<String, dynamic>.from(snap.data() ?? const <String, dynamic>{});
+  }
+
   Stream<DocumentSnapshot<Map<String, dynamic>>> watchCurrentStudentDoc() {
     final docId = (_currentStudentDocId ?? '').trim();
     final fallbackStudentId = _currentStudent?.studentId;

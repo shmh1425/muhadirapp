@@ -1,3 +1,5 @@
+import '../services/geo/campus_geo_registry.dart';
+
 /// نموذج بيانات الطالب من مجموعة external_students في Firestore
 class ExternalStudent {
   const ExternalStudent({
@@ -15,6 +17,10 @@ class ExternalStudent {
     this.majorAr,
     this.department,
     this.departmentAr,
+    this.campusId,
+    this.campusName,
+    this.gateCampusId,
+    this.gateCampusName,
   });
 
   final int studentId;
@@ -39,6 +45,17 @@ class ExternalStudent {
   final String? department;
   final String? departmentAr;
 
+  /// e.g. `zaher` for فرع الزاهر — controls on-campus geo-fence.
+  final String? campusId;
+
+  /// e.g. `الزاهر` — fallback when [campusId] is absent.
+  final String? campusName;
+
+  /// Security gate campus (girls); defaults to Al-Zaher when unset.
+  final String? gateCampusId;
+
+  final String? gateCampusName;
+
   String get collegeSafe => (college ?? '').toString();
   String get collegeArSafe => (collegeAr ?? '').toString();
   String get majorArSafe => (majorAr ?? '').toString();
@@ -53,6 +70,15 @@ class ExternalStudent {
     final g = gender.trim().toLowerCase();
     return g == 'f' || g == 'female';
   }
+
+  bool get requiresAlZaherGeoFence =>
+      CampusGeoRegistry.campusIdFromStudentFields({
+        'campusId': campusId,
+        'campusName': campusName,
+        'gateCampusId': gateCampusId,
+        'gateCampusName': gateCampusName,
+      }) ==
+      CampusGeoRegistry.alZaherCampusId;
 
   factory ExternalStudent.fromMap(Map<String, dynamic>? map) {
     if (map == null) map = {};
@@ -101,6 +127,18 @@ class ExternalStudent {
       departmentAr: safeStr(map['department_ar']).isNotEmpty
           ? safeStr(map['department_ar'])
           : safeStr(map['departmentAr']),
+      campusId: safeStr(map['campusId']).isNotEmpty
+          ? safeStr(map['campusId'])
+          : safeStr(map['campus_id']),
+      campusName: safeStr(map['campusName']).isNotEmpty
+          ? safeStr(map['campusName'])
+          : safeStr(map['campus_name']),
+      gateCampusId: safeStr(map['gateCampusId']).isNotEmpty
+          ? safeStr(map['gateCampusId'])
+          : safeStr(map['gate_campus_id']),
+      gateCampusName: safeStr(map['gateCampusName']).isNotEmpty
+          ? safeStr(map['gateCampusName'])
+          : safeStr(map['gate_campus_name']),
     );
   }
 
@@ -123,5 +161,12 @@ class ExternalStudent {
     'department': departmentSafe,
     'department_ar': departmentArSafe,
     'departmentAr': departmentArSafe,
+    if (campusId != null && campusId!.trim().isNotEmpty) 'campusId': campusId,
+    if (campusName != null && campusName!.trim().isNotEmpty)
+      'campusName': campusName,
+    if (gateCampusId != null && gateCampusId!.trim().isNotEmpty)
+      'gateCampusId': gateCampusId,
+    if (gateCampusName != null && gateCampusName!.trim().isNotEmpty)
+      'gateCampusName': gateCampusName,
   };
 }

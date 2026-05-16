@@ -17,6 +17,7 @@ import '../../services/excuse/excuse_attendance_merge.dart';
 import '../../models/excuse/excuse_request.dart';
 import '../../features/translation/translation_controller.dart';
 import '../../features/translation/widgets/t_text.dart';
+import '../../shared/theme/light_surface_theme.dart';
 
 class SubmitExcuseScreen extends StatefulWidget {
   final String? course;
@@ -50,6 +51,13 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
 
   String _en(String ar, String eng) =>
       TranslationController.instance.translateToEnglish ? eng : ar;
+
+  bool get _english => TranslationController.instance.translateToEnglish;
+
+  TextAlign get _textAlignStart => _english ? TextAlign.left : TextAlign.right;
+
+  TextDirection get _fieldTextDirection =>
+      _english ? TextDirection.ltr : TextDirection.rtl;
 
   String _displayDateLine() {
     final raw = (widget.dateText ?? '').trim();
@@ -87,52 +95,68 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
-      builder: (context) {
+      builder: (sheetContext) {
         final td = TranslationController.instance.textDirection;
-        return Directionality(
-          textDirection: td,
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 4),
-                  Container(
-                    width: 44,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(99),
+        return Theme(
+          data: themeForLightSurface(),
+          child: Directionality(
+            textDirection: td,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 4),
+                    Container(
+                      width: 44,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(99),
+                      ),
                     ),
-                  ),
-                  const TText(
-                    'اختر نوع المرفق',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF1A1A1A),
+                    Text(
+                      _en('اختر نوع المرفق', 'Choose attachment type'),
+                      style: lightSurfaceFieldTextStyle.copyWith(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      textAlign: _textAlignStart,
                     ),
-                    textAlign: TextAlign.start,
-                  ),
-                  const SizedBox(height: 12),
-                  ListTile(
-                    leading: const Icon(Icons.image, color: Color(0xFF006571)),
-                    title: const TText('صورة من المعرض'),
-                    onTap: () => Navigator.of(context).pop('gallery'),
-                  ),
-                  ListTile(
-                    leading:
-                        const Icon(Icons.picture_as_pdf, color: Color(0xFF006571)),
-                    title: const TText('ملف PDF'),
-                    onTap: () => Navigator.of(context).pop('pdf'),
-                  ),
-                  const SizedBox(height: 6),
-                ],
+                    const SizedBox(height: 12),
+                    ListTile(
+                      leading:
+                          const Icon(Icons.image, color: Color(0xFF006571)),
+                      title: Text(
+                        _en('صورة من المعرض', 'Photo from gallery'),
+                        style: lightSurfaceFieldTextStyle.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      onTap: () => Navigator.of(sheetContext).pop('gallery'),
+                    ),
+                    ListTile(
+                      leading: const Icon(
+                        Icons.picture_as_pdf,
+                        color: Color(0xFF006571),
+                      ),
+                      title: Text(
+                        _en('ملف PDF', 'PDF file'),
+                        style: lightSurfaceFieldTextStyle.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      onTap: () => Navigator.of(sheetContext).pop('pdf'),
+                    ),
+                    const SizedBox(height: 6),
+                  ],
+                ),
               ),
             ),
           ),
@@ -425,7 +449,9 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
         final translation = TranslationController.instance;
         return Directionality(
           textDirection: translation.textDirection,
-          child: Scaffold(
+          child: Theme(
+            data: themeForLightSurface(),
+            child: Scaffold(
             backgroundColor: Colors.white,
             bottomNavigationBar: NavBarSettingsArabic(
               selectedIndex: 1,
@@ -469,6 +495,7 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
                 ],
               ),
             ),
+          ),
           ),
         );
       },
@@ -528,7 +555,7 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
         children: <Widget>[
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 TText(
                   widget.course ?? 'جودة البرمجيات',
@@ -537,7 +564,7 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF1A1A1A),
                   ),
-                  textAlign: TextAlign.start,
+                  textAlign: _textAlignStart,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -549,7 +576,7 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
                     fontWeight: FontWeight.w600,
                     color: Color(0xFF1A1A1A),
                   ),
-                  textAlign: TextAlign.start,
+                  textAlign: _textAlignStart,
                 ),
               ],
             ),
@@ -572,14 +599,14 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const TText(
+        TText(
           'إضافة ملف',
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
             color: Color(0xFF1A1A1A),
           ),
-          textAlign: TextAlign.start,
+          textAlign: _textAlignStart,
         ),
         const SizedBox(height: 12),
         GestureDetector(
@@ -641,14 +668,14 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const TText(
+        TText(
           'إضافة نص',
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
             color: Color(0xFF1A1A1A),
           ),
-          textAlign: TextAlign.start,
+          textAlign: _textAlignStart,
         ),
         const SizedBox(height: 12),
         Container(
@@ -672,22 +699,21 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
           child: TextField(
             controller: _textController,
             maxLines: null,
-            textAlign: TranslationController.instance.translateToEnglish
-                ? TextAlign.start
-                : TextAlign.end,
+            cursorColor: const Color(0xFF006571),
+            textAlign: _textAlignStart,
+            textDirection: _fieldTextDirection,
             decoration: InputDecoration(
               border: InputBorder.none,
-              hintText: TranslationController.instance.translateToEnglish
+              alignLabelWithHint: true,
+              hintText: _english
                   ? 'Type your excuse here…'
-                  : '...',
-              hintStyle: const TextStyle(
-                color: Color(0xFF9E9E9E),
+                  : 'اكتب نص العذر هنا...',
+              hintStyle: lightSurfaceFieldTextStyle.copyWith(
+                fontSize: 14,
+                color: lightSurfaceFieldHintColor,
               ),
             ),
-            style: const TextStyle(
-              fontSize: 14,
-              color: Color(0xFF1A1A1A),
-            ),
+            style: lightSurfaceFieldTextStyle.copyWith(fontSize: 14),
           ),
         ),
       ],

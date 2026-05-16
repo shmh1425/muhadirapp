@@ -1,9 +1,12 @@
+import 'dart:ui';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../features/translation/translation_controller.dart';
 import '../../../models/external_student.dart';
+import '../../../screens/student/app_settings.dart';
 import '../../../services/student_auth_service.dart';
 import '../../../shared/widgets/web_network_image_blur.dart';
 
@@ -238,6 +241,7 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
               final photo = _CardProfilePhoto(
                 imageUrl: imageUrl,
                 size: 56,
+                isFemale: s.isFemale,
               );
               return Row(
                 textDirection: TextDirection.ltr,
@@ -354,12 +358,44 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
   }
 }
 
-/// Circular profile image for the digital card (always visible, no blur).
+/// Circular profile image for the digital card (respects privacy blur setting).
 class _CardProfilePhoto extends StatelessWidget {
-  const _CardProfilePhoto({required this.imageUrl, this.size = 96});
+  const _CardProfilePhoto({
+    required this.imageUrl,
+    required this.isFemale,
+    this.size = 96,
+  });
+
+  final String imageUrl;
+  final bool isFemale;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: AppSettings.instance.blurProfileImage,
+      builder: (context, isBlurred, _) {
+        final blurSigma = (isFemale && isBlurred) ? 5.0 : 0.0;
+        return _CardProfilePhotoContent(
+          imageUrl: imageUrl,
+          size: size,
+          blurSigma: blurSigma,
+        );
+      },
+    );
+  }
+}
+
+class _CardProfilePhotoContent extends StatelessWidget {
+  const _CardProfilePhotoContent({
+    required this.imageUrl,
+    required this.size,
+    required this.blurSigma,
+  });
 
   final String imageUrl;
   final double size;
+  final double blurSigma;
 
   @override
   Widget build(BuildContext context) {
@@ -369,6 +405,7 @@ class _CardProfilePhoto extends StatelessWidget {
     final borderW = dimension <= 62 ? 2.0 : 2.5;
     final iconSz = (dimension * 0.42).clamp(22.0, 40.0);
     final progSz = (dimension * 0.36).clamp(20.0, 28.0);
+    final preferHtmlElement = blurSigma <= 0;
 
     Widget core;
     if (imageUrl.isEmpty) {
@@ -376,10 +413,10 @@ class _CardProfilePhoto extends StatelessWidget {
         color: const Color(0xFFECEFF1),
         child: Icon(Icons.person, size: iconSz, color: const Color(0xFF9AA0A6)),
       );
-    } else if (kIsWeb) {
+    } else if (kIsWeb && blurSigma > 0) {
       core = WebNetworkImageBlur(
         url: imageUrl,
-        blurSigma: 0,
+        blurSigma: blurSigma,
         fit: BoxFit.cover,
         onErrorFallback: const Center(
           child: Icon(Icons.broken_image_outlined, color: Color(0xFF9AA0A6)),
@@ -393,6 +430,9 @@ class _CardProfilePhoto extends StatelessWidget {
         fit: BoxFit.cover,
         alignment: Alignment.center,
         filterQuality: FilterQuality.medium,
+        webHtmlElementStrategy: preferHtmlElement
+            ? WebHtmlElementStrategy.prefer
+            : WebHtmlElementStrategy.never,
         errorBuilder: (_, __, ___) => ColoredBox(
           color: const Color(0xFFECEFF1),
           child: Icon(Icons.person, size: iconSz, color: const Color(0xFF9AA0A6)),
@@ -429,7 +469,17 @@ class _CardProfilePhoto extends StatelessWidget {
           color: Colors.white,
           border: Border.all(color: borderColor, width: borderW),
         ),
-        child: ClipOval(child: core),
+        child: ClipOval(
+          child: (kIsWeb && blurSigma > 0)
+              ? core
+              : ImageFiltered(
+                  imageFilter: ImageFilter.blur(
+                    sigmaX: blurSigma,
+                    sigmaY: blurSigma,
+                  ),
+                  child: core,
+                ),
+        ),
       ),
     );
   }

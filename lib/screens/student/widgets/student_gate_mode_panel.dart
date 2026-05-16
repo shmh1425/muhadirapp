@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../../features/translation/translation_controller.dart';
 import '../../../features/translation/widgets/t_text.dart';
+import '../../../services/geo/campus_geo_check_mode.dart';
 import '../../../services/geo/student_campus_geo_guard.dart';
 import '../../../services/student/student_gate_platform.dart';
 import 'attendance_mode_chip.dart';
@@ -31,7 +32,7 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
   /// QR is the default on every platform (iPhone + Android).
   bool _isNfc = false;
   String? _geoBlockMessage;
-  bool _checkingGeo = true;
+  bool _geoVerifying = false;
 
   bool get _iosShowsNfcUnsupportedCard =>
       !kIsWeb &&
@@ -48,35 +49,44 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
     unawaited(_refreshCampusGeo());
   }
 
-  Future<void> _refreshCampusGeo() async {
+  Future<void> _refreshCampusGeo({bool invalidateCache = false}) async {
     if (_iosShowsNfcUnsupportedCard) {
       if (!mounted) return;
       setState(() {
-        _checkingGeo = false;
+        _geoVerifying = false;
         _geoBlockMessage = null;
       });
       return;
     }
 
-    final blocked = await StudentCampusGeoGuard.blockingOutcome();
+    if (invalidateCache) {
+      StudentCampusGeoGuard.invalidateGateCache();
+    }
+
+    if (!mounted) return;
+    setState(() => _geoVerifying = true);
+
+    final blocked = await StudentCampusGeoGuard.blockingOutcome(
+      mode: CampusGeoCheckMode.girlsSecurityGate,
+    );
     if (!mounted) return;
     setState(() {
-      _checkingGeo = false;
+      _geoVerifying = false;
       _geoBlockMessage = blocked == null
           ? null
-          : StudentCampusGeoGuard.localizedMessage(blocked);
+          : StudentCampusGeoGuard.localizedMessage(
+              blocked,
+              mode: CampusGeoCheckMode.girlsSecurityGate,
+            );
     });
   }
 
   Future<void> _onModeSelected(bool nfc) async {
     if (!StudentGatePlatform.showNfcModeChip && nfc) return;
     if (_isNfc == nfc) return;
-    setState(() {
-      _isNfc = nfc;
-      _geoBlockMessage = null;
-      _checkingGeo = !(nfc && !kIsWeb && Platform.isIOS);
-    });
-    await _refreshCampusGeo();
+    setState(() => _isNfc = nfc);
+    if (_geoBlockMessage != null) return;
+    unawaited(_refreshCampusGeo());
   }
 
   @override
@@ -158,25 +168,31 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
               padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
               child: _iosShowsNfcUnsupportedCard
                   ? _buildIosNfcUnsupportedPanel()
-                  : _checkingGeo
-                  ? const SizedBox(
-                      height: 120,
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          color: Color(0xFF006571),
-                        ),
-                      ),
-                    )
                   : _geoBlockMessage != null
                   ? _buildGeoBlockedPanel()
-                  : _isNfc && showNfcChip
-                  ? StudentGateHceBanner(
-                      studentId: widget.studentId,
-                      gateCardRev: widget.gateCardRev,
-                      contentOnly: true,
-                      onPreferQr: () => unawaited(_onModeSelected(false)),
-                    )
-                  : _buildQrPanel(),
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_geoVerifying)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 10),
+                            child: LinearProgressIndicator(
+                              minHeight: 3,
+                              color: Color(0xFF006571),
+                              backgroundColor: Color(0xFFCCE8EA),
+                            ),
+                          ),
+                        if (_isNfc && showNfcChip)
+                          StudentGateHceBanner(
+                            studentId: widget.studentId,
+                            gateCardRev: widget.gateCardRev,
+                            contentOnly: true,
+                            onPreferQr: () => unawaited(_onModeSelected(false)),
+                          )
+                        else
+                          _buildQrPanel(),
+                      ],
+                    ),
             ),
           ],
         );
@@ -221,16 +237,34 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE57373)),
       ),
-      child: Text(
-        _geoBlockMessage!,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          color: Color(0xFFB71C1C),
-          fontSize: 13,
-          fontFamily: 'Cairo',
-          fontWeight: FontWeight.w600,
-          height: 1.4,
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            _geoBlockMessage!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Color(0xFFB71C1C),
+              fontSize: 13,
+              fontFamily: 'Cairo',
+              fontWeight: FontWeight.w600,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: _geoVerifying
+                ? null
+                : () => unawaited(_refreshCampusGeo(invalidateCache: true)),
+            child: TText(
+              _tr('إعادة التحقق من الموقع', 'Check location again'),
+              style: const TextStyle(
+                color: Color(0xFF006571),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

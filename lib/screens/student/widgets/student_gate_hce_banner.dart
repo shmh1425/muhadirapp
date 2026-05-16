@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../features/translation/translation_controller.dart';
+import '../../../services/geo/campus_geo_check_mode.dart';
 import '../../../services/geo/student_campus_geo_guard.dart';
 import '../../../services/student/student_gate_hce_service.dart';
 import 'student_card_section_shell.dart';
@@ -132,12 +133,17 @@ class _StudentGateHceBannerState extends State<StudentGateHceBanner>
     });
     try {
       if (value) {
-        final geoBlocked = await StudentCampusGeoGuard.blockingOutcome();
+        final geoBlocked = await StudentCampusGeoGuard.blockingOutcome(
+          mode: CampusGeoCheckMode.girlsSecurityGate,
+        );
         if (!mounted) return;
         if (geoBlocked != null) {
           setState(() {
             _loading = false;
-            _error = StudentCampusGeoGuard.localizedMessage(geoBlocked);
+            _error = StudentCampusGeoGuard.localizedMessage(
+              geoBlocked,
+              mode: CampusGeoCheckMode.girlsSecurityGate,
+            );
           });
           return;
         }

@@ -71,7 +71,9 @@ class StudentCardPage extends StatelessWidget {
                         StudentDigitalIdCard(student: student)
                       else
                         _buildMissingStudentCard(),
-                      if (student != null && student.studentId > 0)
+                      if (student != null &&
+                          student.studentId > 0 &&
+                          student.isFemale)
                         StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                           stream: StudentAuthService.instance
                               .watchCurrentStudentDoc(),

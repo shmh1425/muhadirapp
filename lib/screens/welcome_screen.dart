@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'login_screen.dart';
 import '../features/translation/translation_controller.dart';
-import '../features/translation/widgets/t_text.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -12,11 +11,36 @@ class WelcomeScreen extends StatefulWidget {
   State<WelcomeScreen> createState() => _WelcomeScreenState();
 }
 
+class _WelcomeSlide {
+  const _WelcomeSlide({
+    required this.imageAsset,
+    required this.labelAr,
+    required this.labelEn,
+  });
+
+  final String imageAsset;
+  final String labelAr;
+  final String labelEn;
+}
+
 class _WelcomeScreenState extends State<WelcomeScreen> {
   final PageController _controller = PageController();
-  final List<String> _images = const [
-    'assets/images/welcome_qr.png',
-    'assets/images/welcome_nfc.png',
+  static const List<_WelcomeSlide> _slides = <_WelcomeSlide>[
+    _WelcomeSlide(
+      imageAsset: 'assets/images/welcome_qr.png',
+      labelAr: 'رمز QR',
+      labelEn: 'QR code',
+    ),
+    _WelcomeSlide(
+      imageAsset: 'assets/images/welcome_nfc.png',
+      labelAr: 'تقنية NFC',
+      labelEn: 'NFC',
+    ),
+    _WelcomeSlide(
+      imageAsset: 'assets/images/Bluetooth.jpg',
+      labelAr: 'البلوتوث',
+      labelEn: 'Bluetooth',
+    ),
   ];
   Timer? _timer;
   int _currentIndex = 0;
@@ -28,7 +52,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       if (!_controller.hasClients) {
         return;
       }
-      final nextIndex = (_currentIndex + 1) % _images.length;
+      final nextIndex = (_currentIndex + 1) % _slides.length;
       _controller.animateToPage(
         nextIndex,
         duration: const Duration(milliseconds: 400),
@@ -50,6 +74,14 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     return AnimatedBuilder(
       animation: translation,
       builder: (context, _) {
+        final en = translation.translateToEnglish;
+        final titleWelcome = en ? 'Welcome' : 'مرحباً بكم';
+        final titleApp = en ? 'To the Muhadir app' : 'في تطبيق محضر';
+        final description = en
+            ? 'Sign in with your university account to record attendance easily via NFC, QR code, or your lecturer\'s Bluetooth signal — a smart, reliable attendance experience.'
+            : 'سجّل دخولك باستخدام حسابك الجامعي لتأكيد حضورك بسهولة عبر تقنية NFC أو مسح رمز QR أو إشارة البلوتوث الخاصة بالمحاضر، وكن جزءًا من تجربة حضور ذكية وموثوقة.';
+        final btnLogin = en ? 'Sign in' : 'تسجيل الدخول';
+
         return Directionality(
           textDirection: translation.textDirection,
           child: Scaffold(
@@ -72,9 +104,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const TText(
-                      'مرحباً بكم',
-                      style: TextStyle(
+                    Text(
+                      titleWelcome,
+                      style: const TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.w700,
                         color: Color(0xFF006571),
@@ -82,9 +114,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    const TText(
-                      'في تطبيق محضر',
-                      style: TextStyle(
+                    Text(
+                      titleApp,
+                      style: const TextStyle(
                         fontSize: 16,
                         color: Color(0xFFB08B50),
                         fontFamily: 'Cairo',
@@ -94,23 +126,41 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     Expanded(
                       child: PageView.builder(
                         controller: _controller,
-                        itemCount: _images.length,
+                        itemCount: _slides.length,
                         onPageChanged: (index) {
                           setState(() {
                             _currentIndex = index;
                           });
                         },
                         itemBuilder: (context, index) {
-                          return Image.asset(
-                            _images[index],
-                            fit: BoxFit.contain,
+                          final slide = _slides[index];
+                          return Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: Image.asset(
+                                  slide.imageAsset,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                en ? slide.labelEn : slide.labelAr,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF006571),
+                                  fontFamily: 'Cairo',
+                                ),
+                              ),
+                            ],
                           );
                         },
                       ),
                     ),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(_images.length, (index) {
+                      children: List.generate(_slides.length, (index) {
                         final isActive = index == _currentIndex;
                         return AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
@@ -127,10 +177,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       }),
                     ),
                     const SizedBox(height: 10),
-                    const TText(
-                      'سجّل دخولك باستخدام حسابك الجامعي لتأكيد حضورك بسهولة عبر تقنية الـNFC أو مسح رمز QR الخاص بالمحاضـر، وكن جزءًا من تجربة حضور ذكية وموثوقة.',
+                    Text(
+                      description,
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 14,
                         height: 1.6,
                         color: Colors.black,
@@ -158,9 +208,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                               ),
                             );
                           },
-                          child: const TText(
-                            'تسجيل الدخول',
-                            style: TextStyle(
+                          child: Text(
+                            btnLogin,
+                            style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w600,
                             ),

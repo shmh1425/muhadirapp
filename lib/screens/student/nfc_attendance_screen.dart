@@ -18,6 +18,7 @@ import '../../services/attendance/bluetooth_ble_service.dart';
 import '../../services/attendance/nfc_attendance_service.dart';
 import '../../services/nfc/nfc_tag_identifier.dart';
 import '../../services/attendance/qr_attendance_service.dart';
+import '../../services/geo/campus_geo_check_mode.dart';
 import '../../services/geo/student_campus_geo_guard.dart';
 import '../../services/student_auth_service.dart';
 import '../../services/student_notifications_service.dart';
@@ -40,7 +41,7 @@ class NfcAttendanceScreen extends StatefulWidget {
 }
 
 class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final NfcAttendanceService _nfcAttendance = NfcAttendanceService.instance;
   final QrAttendanceService _qrAttendance = QrAttendanceService.instance;
   final BluetoothAttendanceService _bluetoothAttendance =
@@ -55,9 +56,74 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Future<String?> _campusGeoBlockMessage() async {
-    final blocked = await StudentCampusGeoGuard.blockingOutcome();
+    const mode = CampusGeoCheckMode.todaySchedule;
+    final blocked = await StudentCampusGeoGuard.blockingOutcome(mode: mode);
     if (blocked == null) return null;
-    return StudentCampusGeoGuard.localizedMessage(blocked);
+    return StudentCampusGeoGuard.localizedMessage(blocked, mode: mode);
+  }
+
+  Future<void> _refreshCampusGeo() async {
+    if (kIsWeb) {
+      if (!mounted) return;
+      setState(() {
+        _geoVerifying = false;
+        _geoRequiredToday = false;
+        _geoBlockMessage = null;
+      });
+      return;
+    }
+
+    setState(() => _geoVerifying = true);
+    final required =
+        await StudentCampusGeoGuard.attendanceGeoRequiredToday();
+    if (!mounted) return;
+
+    if (!required) {
+      setState(() {
+        _geoVerifying = false;
+        _geoRequiredToday = false;
+        _geoBlockMessage = null;
+      });
+      return;
+    }
+
+    const mode = CampusGeoCheckMode.todaySchedule;
+    final blocked = await StudentCampusGeoGuard.blockingOutcome(mode: mode);
+    if (!mounted) return;
+
+    setState(() {
+      _geoVerifying = false;
+      _geoRequiredToday = true;
+      _geoBlockMessage = blocked == null
+          ? null
+          : StudentCampusGeoGuard.localizedMessage(blocked, mode: mode);
+    });
+
+    if (_isAttendanceGeoBlocked) {
+      if (_isScanning) {
+        unawaited(_stopNfcSessionQuietly());
+      }
+      unawaited(_stopBluetoothScan());
+      unawaited(_stopQrScanner());
+    }
+  }
+
+  Future<void> _stopNfcSessionQuietly() async {
+    try {
+      await NfcManager.instance.stopSession();
+    } catch (_) {
+      // no-op
+    }
+    if (!mounted) return;
+    setState(() {
+      _isScanning = false;
+      _statusError = true;
+      _statusMessage = _geoBlockMessage ??
+          _tr(
+            'أنت خارج حدود فرع العابدية.',
+            'You are outside the Al-Abdiya campus boundary.',
+          );
+    });
   }
 
   bool _isNfc = true;
@@ -94,6 +160,13 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   );
   bool _qrStatusError = false;
 
+  bool _geoVerifying = true;
+  bool _geoRequiredToday = false;
+  String? _geoBlockMessage;
+
+  bool get _isAttendanceGeoBlocked =>
+      _geoRequiredToday && _geoBlockMessage != null && !_geoVerifying;
+
   String _nfcUnavailableMessage({required bool english}) {
     if (kIsWeb) {
       return english
@@ -129,13 +202,15 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       }
     });
 
+    unawaited(_refreshCampusGeo());
+
     if (nfc) {
       _stopQrScanner();
       return;
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _isNfc || _isBluetooth) return;
+      if (!mounted || _isNfc || _isBluetooth || _isAttendanceGeoBlocked) return;
       _prepareQrScanner();
     });
   }
@@ -156,6 +231,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       );
     });
     _stopQrScanner();
+    unawaited(_refreshCampusGeo());
     unawaited(_refreshBluetoothAvailability());
   }
 
@@ -190,7 +266,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Future<void> _startBluetoothScan() async {
-    if (_isBluetoothScanning) return;
+    if (_isBluetoothScanning || _isAttendanceGeoBlocked) return;
     final geoMsg = await _campusGeoBlockMessage();
     if (!mounted) return;
     if (geoMsg != null) {
@@ -255,7 +331,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Future<void> _submitBluetoothAttendance() async {
-    if (_isSubmittingBluetoothAttendance) return;
+    if (_isSubmittingBluetoothAttendance || _isAttendanceGeoBlocked) return;
     final geoMsg = await _campusGeoBlockMessage();
     if (!mounted) return;
     if (geoMsg != null) {
@@ -405,11 +481,27 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4),
     )..repeat();
     _checkNfcAvailability();
+    unawaited(_refreshCampusGeo());
+    StudentCampusGeoGuard.debugSkipAttendanceGeoFence
+        .addListener(_onAttendanceGeoDebugToggle);
+  }
+
+  void _onAttendanceGeoDebugToggle() {
+    if (!mounted) return;
+    unawaited(_refreshCampusGeo());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshCampusGeo());
+    }
   }
 
   Future<void> _checkNfcAvailability() async {
@@ -450,7 +542,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Future<void> _startNfcAttendance() async {
-    if (_isScanning || !_isNfc || _isBluetooth) return;
+    if (_isScanning || !_isNfc || _isBluetooth || _isAttendanceGeoBlocked) return;
 
     final student = StudentAuthService.instance.currentStudent;
     if (student == null) {
@@ -743,7 +835,11 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   String _extractCardId(NfcTag tag) => NfcTagIdentifier.extractNormalizedId(tag);
 
   Future<void> _startQrScanner() async {
-    if (_isNfc || _isBluetooth || _isStartingQrScanner || _isProcessingQrScan) {
+    if (_isNfc ||
+        _isBluetooth ||
+        _isStartingQrScanner ||
+        _isProcessingQrScan ||
+        _isAttendanceGeoBlocked) {
       return;
     }
     if (_qrCameraUnavailable || _qrPermissionDenied || !_qrScannerInitialized) {
@@ -817,7 +913,12 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Future<void> _submitAttendanceCode() async {
-    if (_isSubmittingAttendanceCode || _isNfc || _isBluetooth) return;
+    if (_isSubmittingAttendanceCode ||
+        _isNfc ||
+        _isBluetooth ||
+        _isAttendanceGeoBlocked) {
+      return;
+    }
     final code = _attendanceCodeController.text.trim();
     if (code.isEmpty) {
       if (!mounted) return;
@@ -928,7 +1029,13 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Future<void> _prepareQrScanner() async {
-    if (!mounted || _isNfc || _isBluetooth || _checkingQrAvailability) return;
+    if (!mounted ||
+        _isNfc ||
+        _isBluetooth ||
+        _checkingQrAvailability ||
+        _isAttendanceGeoBlocked) {
+      return;
+    }
 
     setState(() {
       _checkingQrAvailability = true;
@@ -1197,6 +1304,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
 
   @override
   void dispose() {
+    StudentCampusGeoGuard.debugSkipAttendanceGeoFence
+        .removeListener(_onAttendanceGeoDebugToggle);
+    WidgetsBinding.instance.removeObserver(this);
     _pulseController?.dispose();
     _attendanceCodeController.dispose();
     _bluetoothScanSub?.cancel();
@@ -1208,6 +1318,141 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     }
     _qrScannerController = null;
     super.dispose();
+  }
+
+  Widget _buildAttendanceGeoDebugToggle() {
+    return ValueListenableBuilder<bool>(
+      valueListenable: StudentCampusGeoGuard.debugSkipAttendanceGeoFence,
+      builder: (context, skipped, _) {
+        return Material(
+          color: skipped ? const Color(0xFFFFF8E1) : const Color(0xFFE8F5E9),
+          borderRadius: BorderRadius.circular(12),
+          child: SwitchListTile(
+            value: skipped,
+            activeThumbColor: const Color(0xFF006571),
+            onChanged: (value) {
+              StudentCampusGeoGuard.debugSkipAttendanceGeoFence.value = value;
+            },
+            title: Text(
+              _tr(
+                'تعطيل الحدود الجغرافية (اختبار التحضير)',
+                'Disable geo-fence (attendance testing)',
+              ),
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF1A1A1A),
+              ),
+            ),
+            subtitle: Text(
+              _tr(
+                'للتجربة فقط — لا يؤثر على بوابة الأمن',
+                'Testing only — does not affect the security gate',
+              ),
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11,
+                color: Colors.grey.shade700,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGeoVerifyingPanel() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 28),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 36,
+            height: 36,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              color: Color(0xFF006571),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _tr('جاري التحقق من موقعك...', 'Checking your location...'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF35565E),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGeoBlockedPanel() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.location_off_rounded,
+            size: 52,
+            color: Color(0xFFB71C1C),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            _tr('خارج الحدود المسموح', 'Outside allowed area'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFFB71C1C),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFEBEE),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE57373)),
+            ),
+            child: Text(
+              _geoBlockMessage!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFFB71C1C),
+                fontSize: 13,
+                fontFamily: 'Cairo',
+                fontWeight: FontWeight.w600,
+                height: 1.45,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          TextButton.icon(
+            onPressed: _geoVerifying
+                ? null
+                : () => unawaited(_refreshCampusGeo()),
+            icon: const Icon(Icons.my_location_rounded, color: Color(0xFF006571)),
+            label: Text(
+              _tr('إعادة التحقق من الموقع', 'Check location again'),
+              style: const TextStyle(
+                color: Color(0xFF006571),
+                fontWeight: FontWeight.w700,
+                fontFamily: 'Cairo',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildBluetoothPlaceholderPanel() {
@@ -1344,7 +1589,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
             width: 240,
             height: 44,
             child: FilledButton.icon(
-              onPressed: _isSubmittingBluetoothAttendance
+              onPressed: _isAttendanceGeoBlocked
+                  ? null
+                  : _isSubmittingBluetoothAttendance
                   ? null
                   : _isBluetoothScanning
                   ? _stopBluetoothScan
@@ -1611,6 +1858,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   bool get _qrPrimaryActionEnabled {
+    if (_isAttendanceGeoBlocked) return false;
     if (_isEnteringQrCode) return !_isSubmittingAttendanceCode;
     return !_isStartingQrScanner && !_isProcessingQrScan;
   }
@@ -1972,6 +2220,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                   ),
                 ),
                 const SizedBox(height: 16),
+                if (kDebugMode) _buildAttendanceGeoDebugToggle(),
+                if (kDebugMode) const SizedBox(height: 8),
                 Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
@@ -1982,7 +2232,11 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      if (_isNfc) ...[
+                      if (_geoVerifying)
+                        _buildGeoVerifyingPanel()
+                      else if (_isAttendanceGeoBlocked)
+                        _buildGeoBlockedPanel()
+                      else if (_isNfc) ...[
                         AnimatedBuilder(
                           animation:
                               _pulseController ??
@@ -2080,7 +2334,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                                 onPressed:
                                     (_isScanning ||
                                         _checkingNfcAvailability ||
-                                        !_nfcAvailable)
+                                        !_nfcAvailable ||
+                                        _isAttendanceGeoBlocked)
                                     ? null
                                     : _startNfcAttendance,
                                 style: FilledButton.styleFrom(

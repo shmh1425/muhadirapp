@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../shared/theme/light_surface_theme.dart';
 import '../models/chat_message.dart';
 import '../providers/chatbot_provider.dart';
 import '../../translation/translation_controller.dart';
@@ -23,7 +24,9 @@ class ChatbotScreen extends StatelessWidget {
           final dir = controller.textDirection;
           return Directionality(
             textDirection: dir,
-            child: Scaffold(
+            child: Theme(
+              data: themeForLightSurface(),
+              child: Scaffold(
               backgroundColor: Colors.white,
               appBar: AppBar(
                 backgroundColor: Colors.white,
@@ -100,6 +103,7 @@ class ChatbotScreen extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
             ),
           );
         },
@@ -486,9 +490,15 @@ class _InputBarState extends State<_InputBar> {
               controller: _controller,
               focusNode: _focusNode,
               textDirection: dir,
+              style: lightSurfaceFieldTextStyle,
+              cursorColor: ChatbotScreen._primaryColor,
               decoration: InputDecoration(
                 hintText: english ? 'Type your message…' : 'اكتب رسالتك...',
-                hintStyle: TextStyle(color: Colors.grey[500], fontSize: 15),
+                hintStyle: const TextStyle(
+                  color: lightSurfaceFieldHintColor,
+                  fontSize: 15,
+                  fontFamily: 'Cairo',
+                ),
                 filled: true,
                 fillColor: Colors.grey[100],
                 border: OutlineInputBorder(
