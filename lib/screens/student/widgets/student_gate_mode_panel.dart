@@ -50,7 +50,7 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
   }
 
   Future<void> _refreshCampusGeo({bool invalidateCache = false}) async {
-    if (_iosShowsNfcUnsupportedCard) {
+    if (_iosShowsNfcUnsupportedCard || _isNfc) {
       if (!mounted) return;
       setState(() {
         _geoVerifying = false;
@@ -85,7 +85,6 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
     if (!StudentGatePlatform.showNfcModeChip && nfc) return;
     if (_isNfc == nfc) return;
     setState(() => _isNfc = nfc);
-    if (_geoBlockMessage != null) return;
     unawaited(_refreshCampusGeo());
   }
 
@@ -168,12 +167,12 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
               padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
               child: _iosShowsNfcUnsupportedCard
                   ? _buildIosNfcUnsupportedPanel()
-                  : _geoBlockMessage != null
+                  : !_isNfc && _geoBlockMessage != null
                   ? _buildGeoBlockedPanel()
                   : Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (_geoVerifying)
+                        if (!_isNfc && _geoVerifying)
                           const Padding(
                             padding: EdgeInsets.only(bottom: 10),
                             child: LinearProgressIndicator(

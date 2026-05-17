@@ -1,6 +1,6 @@
 /// How campus geo-fencing is chosen before a location check.
 enum CampusGeoCheckMode {
-  /// Attendance (NFC/QR/BT): campuses from **today's** schedule `location` / مقر.
+  /// Attendance QR: campuses from **today's** schedule `location` / مقر (NFC/BT exempt).
   todaySchedule,
 
   /// Attendance fallback: every enrolled weekly slot location.

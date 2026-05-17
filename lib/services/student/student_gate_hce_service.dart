@@ -19,8 +19,16 @@ class StudentGateHceService {
   bool get isPlatformSupported => !kIsWeb && Platform.isAndroid;
 
   /// NDEF text payload (JSON) for gate readers.
-  static String buildGatePayload(int studentId, {int gateCardRev = 0}) =>
-      StudentGatePayload.buildJsonString(studentId, gateCardRev: gateCardRev);
+  static String buildGatePayload(
+    int studentId, {
+    int gateCardRev = 0,
+    DateTime? at,
+  }) =>
+      StudentGatePayload.buildJsonString(
+        studentId,
+        gateCardRev: gateCardRev,
+        at: at,
+      );
 
   Future<bool> isHceSupported() async {
     if (!isPlatformSupported) return false;
@@ -47,9 +55,14 @@ class StudentGateHceService {
   Future<String?> start({
     required int studentId,
     int gateCardRev = 0,
+    DateTime? at,
   }) async {
     if (!isPlatformSupported || studentId <= 0) return null;
-    final content = StudentGatePayload.buildJsonString(studentId, gateCardRev: gateCardRev);
+    final content = StudentGatePayload.buildJsonString(
+      studentId,
+      gateCardRev: gateCardRev,
+      at: at,
+    );
     await AndroidGateHcePlatform.setPreferredGateService();
     return _plugin.startNfcHce(
       content,

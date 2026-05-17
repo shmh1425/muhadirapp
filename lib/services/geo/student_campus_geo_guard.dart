@@ -11,7 +11,7 @@ import 'geo_fence_service.dart';
 class StudentCampusGeoGuard {
   StudentCampusGeoGuard._();
 
-  /// Debug / QA only: skip attendance geo-fence (NFC, QR, Bluetooth). Gate unchanged.
+  /// Debug / QA only: skip attendance geo-fence for QR. NFC and Bluetooth have no geo-fence.
   static final ValueNotifier<bool> debugSkipAttendanceGeoFence =
       ValueNotifier<bool>(false);
 
@@ -126,8 +126,8 @@ class StudentCampusGeoGuard {
           return _girlsGateOutsideCampusMessage(en);
         }
         return en
-            ? 'You are outside the Al-Abdiya campus boundary. Attendance is blocked until you enter the allowed area.'
-            : 'أنت خارج حدود فرع العابدية. لا يمكن تسجيل الحضور قبل الدخول إلى النطاق المسموح.';
+            ? 'You are outside the university campus boundary. Attendance is blocked until you enter the allowed area.'
+            : 'أنت خارج حدود الحرم الجامعي. لا يمكن تسجيل الحضور قبل الدخول إلى النطاق المسموح.';
       case GeoFenceOutcome.permissionDenied:
         return en
             ? 'Location permission is required. Enable it in device settings.'

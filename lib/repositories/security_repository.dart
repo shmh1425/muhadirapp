@@ -124,6 +124,7 @@ class SecurityRepository {
         'nationality': p.nationality,
         'nationalIdOrIqama': p.nationalIdOrIqama,
         'photoUrl': p.photoUrl,
+        'photoVersion': p.photoVersion,
         'attendanceStatus': p.attendanceStatus,
         'studentAcademicStatus': p.studentAcademicStatus,
         'studentCardStatus': p.studentCardStatus,

@@ -120,8 +120,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       _statusError = true;
       _statusMessage = _geoBlockMessage ??
           _tr(
-            'أنت خارج حدود فرع العابدية.',
-            'You are outside the Al-Abdiya campus boundary.',
+            'أنت خارج حدود الحرم الجامعي.',
+            'You are outside the university campus boundary.',
           );
     });
   }
@@ -164,8 +164,13 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   bool _geoRequiredToday = false;
   String? _geoBlockMessage;
 
+  /// Geo-fence applies to QR attendance only (not NFC or Bluetooth).
   bool get _isAttendanceGeoBlocked =>
-      _geoRequiredToday && _geoBlockMessage != null && !_geoVerifying;
+      !_isNfc &&
+      !_isBluetooth &&
+      _geoRequiredToday &&
+      _geoBlockMessage != null &&
+      !_geoVerifying;
 
   String _nfcUnavailableMessage({required bool english}) {
     if (kIsWeb) {
@@ -266,19 +271,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Future<void> _startBluetoothScan() async {
-    if (_isBluetoothScanning || _isAttendanceGeoBlocked) return;
-    final geoMsg = await _campusGeoBlockMessage();
-    if (!mounted) return;
-    if (geoMsg != null) {
-      setState(() {
-        _bluetoothScanResult = BluetoothScanResult(
-          state: BluetoothScanState.error,
-          message: geoMsg,
-        );
-        _isBluetoothScanning = false;
-      });
-      return;
-    }
+    if (_isBluetoothScanning) return;
     await _bluetoothScanSub?.cancel();
     setState(() {
       _isBluetoothScanning = true;
@@ -331,19 +324,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Future<void> _submitBluetoothAttendance() async {
-    if (_isSubmittingBluetoothAttendance || _isAttendanceGeoBlocked) return;
-    final geoMsg = await _campusGeoBlockMessage();
-    if (!mounted) return;
-    if (geoMsg != null) {
-      await AttendanceResultPopup.show(
-        context,
-        success: false,
-        message: _tr('فشل تسجيل الحضور', 'Attendance failed'),
-        subtitle: geoMsg,
-        autoDismiss: false,
-      );
-      return;
-    }
+    if (_isSubmittingBluetoothAttendance) return;
     final detection = _bluetoothScanResult?.detection;
     if (detection == null) {
       await AttendanceResultPopup.show(
@@ -542,7 +523,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Future<void> _startNfcAttendance() async {
-    if (_isScanning || !_isNfc || _isBluetooth || _isAttendanceGeoBlocked) return;
+    if (_isScanning || !_isNfc || _isBluetooth) return;
 
     final student = StudentAuthService.instance.currentStudent;
     if (student == null) {
@@ -560,16 +541,6 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
           _nfcUnavailableMessage(english: false),
           _nfcUnavailableMessage(english: true),
         );
-      });
-      return;
-    }
-
-    final geoMsg = await _campusGeoBlockMessage();
-    if (!mounted) return;
-    if (geoMsg != null) {
-      setState(() {
-        _statusError = true;
-        _statusMessage = geoMsg;
       });
       return;
     }
@@ -1347,8 +1318,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
             ),
             subtitle: Text(
               _tr(
-                'للتجربة فقط — لا يؤثر على بوابة الأمن',
-                'Testing only — does not affect the security gate',
+                'للتجربة فقط — QR فقط (NFC والبلوتوث بدون حدود)',
+                'Testing only — QR only (NFC and Bluetooth have no geo-fence)',
               ),
               style: TextStyle(
                 fontFamily: 'Cairo',
@@ -1405,7 +1376,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
           ),
           const SizedBox(height: 14),
           Text(
-            _tr('خارج الحدود المسموح', 'Outside allowed area'),
+            _tr('خارج الحرم الجامعي', 'Outside campus'),
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontFamily: 'Cairo',
@@ -2232,7 +2203,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      if (_geoVerifying)
+                      if (_geoVerifying && !_isNfc && !_isBluetooth)
                         _buildGeoVerifyingPanel()
                       else if (_isAttendanceGeoBlocked)
                         _buildGeoBlockedPanel()
@@ -2334,8 +2305,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                                 onPressed:
                                     (_isScanning ||
                                         _checkingNfcAvailability ||
-                                        !_nfcAvailable ||
-                                        _isAttendanceGeoBlocked)
+                                        !_nfcAvailable)
                                     ? null
                                     : _startNfcAttendance,
                                 style: FilledButton.styleFrom(

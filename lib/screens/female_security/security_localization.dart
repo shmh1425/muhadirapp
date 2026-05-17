@@ -196,6 +196,10 @@ class SecurityLocalization {
     'رمز البطاقة لم يعد صالحاً (مثلاً بعد انسحاب أو تحديث وضع الطالبة). يُرجى فتح بطاقة الطالبة من جديد لتحديث الرمز.',
     'This gate card code is no longer valid (e.g. after withdrawal or status update). Ask the student to open the card screen to refresh the code.',
   );
+  static String get gateRotatingSlotStale => tr(
+    'انتهت صلاحية رمز البطاقة. اطلبي من الطالبة إبقاء شاشة البطاقة مفتوحة ثم المسح من جديد.',
+    'This gate code has expired. Ask the student to keep the card screen open, then scan again.',
+  );
 
   static String dayName(DateTime date) {
     final ar = [

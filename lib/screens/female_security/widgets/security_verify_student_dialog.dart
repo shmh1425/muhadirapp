@@ -160,21 +160,54 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
     );
   }
 
-  /// No student photo for security (privacy); generic gate icon only.
   Widget _buildCardIcon() {
+    final photoUrl = widget.result.photoUrl?.trim() ?? '';
+    const size = 88.0;
+    const borderWidth = 1.0;
+
     return Center(
-      child: Container(
-        width: 72,
-        height: 72,
-        decoration: BoxDecoration(
-          color: _kTealLight.withValues(alpha: 0.1),
-          shape: BoxShape.circle,
-          border: Border.all(color: _kTealLight, width: 2),
-        ),
-        child: const Icon(
-          Icons.badge_outlined,
-          size: 36,
-          color: _kTealLight,
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: _kTealLight.withValues(alpha: 0.28),
+              width: borderWidth,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(borderWidth),
+            child: ClipOval(
+              child: ColoredBox(
+                color: _kTealLight.withValues(alpha: 0.06),
+                child: photoUrl.isNotEmpty
+                    ? Image.network(
+                        photoUrl,
+                        width: size,
+                        height: size,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            const _GatePhotoFallback(),
+                        loadingBuilder: (context, child, progress) {
+                          if (progress == null) return child;
+                          return const Center(
+                            child: SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: _kTealLight,
+                              ),
+                            ),
+                          );
+                        },
+                      )
+                    : const _GatePhotoFallback(),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -366,5 +399,20 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
       );
       setState(() => _isSavingAcceptedScan = false);
     }
+  }
+}
+
+class _GatePhotoFallback extends StatelessWidget {
+  const _GatePhotoFallback();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Icon(
+        Icons.badge_outlined,
+        size: 36,
+        color: _kTealLight,
+      ),
+    );
   }
 }

@@ -5,8 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../features/translation/translation_controller.dart';
-import '../../../services/geo/campus_geo_check_mode.dart';
-import '../../../services/geo/student_campus_geo_guard.dart';
+import '../../../services/student/student_gate_rotating_slot.dart';
 import '../../../services/student/student_gate_hce_service.dart';
 import 'student_card_section_shell.dart';
 import 'student_gate_qr_card.dart';
@@ -47,6 +46,8 @@ class _StudentGateHceBannerState extends State<StudentGateHceBanner>
   String? _error;
 
   late final AnimationController _pulseController;
+  Timer? _slotRefreshTimer;
+  int? _lastHceSlot;
 
   @override
   void initState() {
@@ -60,11 +61,31 @@ class _StudentGateHceBannerState extends State<StudentGateHceBanner>
 
   @override
   void dispose() {
+    _stopSlotRefreshTimer();
     _pulseController.dispose();
     if (StudentGateHceService.instance.isPlatformSupported && _emulating) {
       StudentGateHceService.instance.stop();
     }
     super.dispose();
+  }
+
+  void _stopSlotRefreshTimer() {
+    _slotRefreshTimer?.cancel();
+    _slotRefreshTimer = null;
+    _lastHceSlot = null;
+  }
+
+  void _startSlotRefreshTimer() {
+    _stopSlotRefreshTimer();
+    if (!_emulating) return;
+    _lastHceSlot = StudentGateRotatingSlot.current();
+    _slotRefreshTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final slot = StudentGateRotatingSlot.current();
+      if (slot != _lastHceSlot) {
+        _lastHceSlot = slot;
+        unawaited(_restartHcePayload());
+      }
+    });
   }
 
   @override
@@ -133,20 +154,6 @@ class _StudentGateHceBannerState extends State<StudentGateHceBanner>
     });
     try {
       if (value) {
-        final geoBlocked = await StudentCampusGeoGuard.blockingOutcome(
-          mode: CampusGeoCheckMode.girlsSecurityGate,
-        );
-        if (!mounted) return;
-        if (geoBlocked != null) {
-          setState(() {
-            _loading = false;
-            _error = StudentCampusGeoGuard.localizedMessage(
-              geoBlocked,
-              mode: CampusGeoCheckMode.girlsSecurityGate,
-            );
-          });
-          return;
-        }
         final nfc = await svc.isNfcAdapterEnabled();
         if (!nfc) {
           if (!mounted) return;
@@ -168,7 +175,9 @@ class _StudentGateHceBannerState extends State<StudentGateHceBanner>
           _emulating = true;
           _loading = false;
         });
+        _startSlotRefreshTimer();
       } else {
+        _stopSlotRefreshTimer();
         await svc.stop();
         if (!mounted) return;
         setState(() {

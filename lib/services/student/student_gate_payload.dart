@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'student_gate_rotating_slot.dart';
+
 /// Shared JSON payload for campus gate: HCE (Android), student-card QR, and security reader.
 class StudentGatePayload {
   StudentGatePayload._();
@@ -7,15 +9,27 @@ class StudentGatePayload {
   /// Primary type written into QR / NFC text NDEF.
   static const String typeStudentGateCard = 'student_gate_card';
 
+  /// Rotating gate code period (see [StudentGateRotatingSlot]).
+  static const int rotatingSlotSeconds = StudentGateRotatingSlot.windowSeconds;
+
   /// Increment in Firestore `external_students.gateCardRev` when the card must
   /// invalidate (e.g. withdrawal) so old QR/screenshots stop working.
-  static String buildJsonString(int studentId, {int gateCardRev = 0}) {
+  static String buildJsonString(
+    int studentId, {
+    int gateCardRev = 0,
+    DateTime? at,
+  }) {
+    final time = at ?? DateTime.now();
     return jsonEncode(<String, dynamic>{
       'type': typeStudentGateCard,
       'id': studentId.toString(),
       'rev': gateCardRev,
+      'slot': StudentGateRotatingSlot.at(time),
     });
   }
+
+  static bool isRotatingSlotAccepted(int? slot, {DateTime? now}) =>
+      StudentGateRotatingSlot.isAccepted(slot, now: now);
 
   /// Result of parsing a gate QR / NDEF JSON payload.
   static ParsedStudentGatePayload? parseGatePayload(String raw) {
@@ -42,7 +56,15 @@ class StudentGatePayload {
           ? int.tryParse(m['rev'].toString()) ?? 0
           : null;
 
-      return ParsedStudentGatePayload(lookupKey: id, gateCardRev: rev);
+      final int? slot = m.containsKey('slot')
+          ? int.tryParse(m['slot'].toString())
+          : null;
+
+      return ParsedStudentGatePayload(
+        lookupKey: id,
+        gateCardRev: rev,
+        rotatingSlot: slot,
+      );
     } catch (_) {
       return null;
     }
@@ -65,10 +87,14 @@ class ParsedStudentGatePayload {
   const ParsedStudentGatePayload({
     required this.lookupKey,
     this.gateCardRev,
+    this.rotatingSlot,
   });
 
   final String lookupKey;
 
   /// When non-null, security must match [SecurityStudentProfile.gateCardRev].
   final int? gateCardRev;
+
+  /// 30-second window index; null on legacy payloads without `slot`.
+  final int? rotatingSlot;
 }

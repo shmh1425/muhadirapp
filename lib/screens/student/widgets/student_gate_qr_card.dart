@@ -236,6 +236,7 @@ class _StudentGateQrCardState extends State<StudentGateQrCard>
                       width: qrSize,
                       height: qrSize,
                       child: QrImageView(
+                        key: ValueKey(payload),
                         data: payload,
                         size: qrSize,
                         backgroundColor: Colors.white,
@@ -345,6 +346,7 @@ class _StudentGateQrCardState extends State<StudentGateQrCard>
     final payload = StudentGatePayload.buildJsonString(
       widget.studentId,
       gateCardRev: widget.gateCardRev,
+      at: _now,
     );
     final idLabel = widget.studentId.toString();
     final compact = widget.embeddedInIdCard && !widget.contentOnly;

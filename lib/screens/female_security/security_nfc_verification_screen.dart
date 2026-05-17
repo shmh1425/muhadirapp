@@ -190,7 +190,11 @@ class _SecurityNfcVerificationScreenState
       return;
     }
 
-    await _resolveProfile(lookupKey, gateClientRev: parsed?.gateCardRev);
+    await _resolveProfile(
+      lookupKey,
+      gateClientRev: parsed?.gateCardRev,
+      gateRotatingSlot: parsed?.rotatingSlot,
+    );
   }
 
   Future<void> _checkNfc() async {
@@ -234,7 +238,26 @@ class _SecurityNfcVerificationScreenState
     return '${two(n.hour)}:${two(n.minute)}:${two(n.second)}';
   }
 
-  Future<void> _resolveProfile(String id, {int? gateClientRev}) async {
+  Future<void> _resolveProfile(
+    String id, {
+    int? gateClientRev,
+    int? gateRotatingSlot,
+  }) async {
+    if (gateRotatingSlot != null &&
+        !StudentGatePayload.isRotatingSlotAccepted(gateRotatingSlot)) {
+      if (!mounted) return;
+      setState(() {
+        _lastReadId = id;
+        _isScanning = false;
+        _isQrProcessing = false;
+        _gateDecisionDialogPending = false;
+        _outcomeBanner = _GateOutcomeBanner.none;
+        _statusError = true;
+        _statusMessage = SecurityLocalization.gateRotatingSlotStale;
+      });
+      return;
+    }
+
     final repo = ref.read(securityRepositoryProvider);
     final bypassCache = gateClientRev != null;
     final byUid = await repo.findStudentBySecurityNfcUid(id);
@@ -289,7 +312,7 @@ class _SecurityNfcVerificationScreenState
         universityId: profile.universityId,
         major: profile.major,
         scanTime: _formatScanTime(),
-        photoUrl: null,
+        photoUrl: profile.displayPhotoUrl,
       );
 
       final gate = currentSecurityGateOption;
@@ -467,6 +490,7 @@ class _SecurityNfcVerificationScreenState
             await _resolveProfile(
               parsed.lookupKey,
               gateClientRev: parsed.gateCardRev,
+              gateRotatingSlot: parsed.rotatingSlot,
             );
           } else {
             final id = NfcTagIdentifier.extractNormalizedId(tag);

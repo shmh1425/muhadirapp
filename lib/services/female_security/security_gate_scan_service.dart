@@ -103,6 +103,7 @@ class SecurityStudentProfile {
     this.nationality = 'غير محدد',
     this.nationalIdOrIqama = '',
     this.photoUrl,
+    this.photoVersion = '',
     this.attendanceStatus = 'منتظم',
     this.studentAcademicStatus = 'active',
     this.studentCardStatus = 'active',
@@ -120,6 +121,7 @@ class SecurityStudentProfile {
   final String nationality;
   final String nationalIdOrIqama;
   final String? photoUrl;
+  final String photoVersion;
   final String attendanceStatus;
   final String studentAcademicStatus;
   final String studentCardStatus;
@@ -127,6 +129,15 @@ class SecurityStudentProfile {
 
   /// Bumped in Firestore when the gate QR/NFC payload must invalidate (e.g. withdrawal).
   final int gateCardRev;
+
+  /// Clear profile photo URL for security verification (not blurred).
+  String? get displayPhotoUrl {
+    final raw = (photoUrl ?? '').trim();
+    if (raw.isEmpty) return null;
+    final version = photoVersion.trim();
+    if (version.isEmpty) return raw;
+    return '$raw${raw.contains('?') ? '&' : '?'}v=$version';
+  }
 
   factory SecurityStudentProfile.fromMap(
     Map<String, dynamic> data,
@@ -149,6 +160,7 @@ class SecurityStudentProfile {
                   '')
               .toString(),
       photoUrl: (data['photoUrl'] ?? data['photoURL'])?.toString(),
+      photoVersion: (data['photoVersion'] ?? '').toString(),
       attendanceStatus: (data['attendanceStatus'] ?? 'منتظم').toString(),
       studentAcademicStatus: (data['studentAcademicStatus'] ?? 'active')
           .toString(),
