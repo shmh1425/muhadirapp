@@ -28,6 +28,10 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
   static const Color _darkTeal = Color(0xFF006571);
   static const Color _bodyText = Color(0xFF2D2D2D);
 
+  /// Fixed card footprint — long names/majors ellipsize instead of resizing the card.
+  static const double _cardHeight = 198;
+  static const double _detailsBlockHeight = 70;
+
   String _normalizeMajorAr(String rawAr, String rawEn) {
     final ar = rawAr.trim();
     final en = rawEn.trim().toLowerCase();
@@ -191,11 +195,32 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
               child: Text(
                 displayName,
                 textAlign: headerAlign,
-                maxLines: 3,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: nameLineStyle,
               ),
             );
+
+            Widget detailLine(String text, TextAlign align, TextDirection dir) {
+              return SizedBox(
+                height: 17,
+                child: Align(
+                  alignment: align == TextAlign.right
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
+                  child: Directionality(
+                    textDirection: dir,
+                    child: Text(
+                      text,
+                      textAlign: align,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: detailSideStyle,
+                    ),
+                  ),
+                ),
+              );
+            }
 
             Widget buildHeaderRow() {
               final gap = const SizedBox(width: 8);
@@ -218,24 +243,33 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
                 child: Directionality(
                   textDirection: TextDirection.ltr,
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: headerColumnCross,
                     children: [
-                    nameBlock,
-                    const SizedBox(height: 4),
-                    Text(
-                      _studentIdLabel(s),
-                      textAlign: headerAlign,
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 11,
-                        fontWeight: FontWeight.w400,
-                        color: _bodyText,
-                        height: 1.28,
+                      SizedBox(
+                        height: 36,
+                        child: Align(
+                          alignment: isEnUi
+                              ? Alignment.centerLeft
+                              : Alignment.centerRight,
+                          child: nameBlock,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _studentIdLabel(s),
+                        textAlign: headerAlign,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w400,
+                          color: _bodyText,
+                          height: 1.28,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               );
               final photo = _CardProfilePhoto(
@@ -254,6 +288,7 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
 
             return Container(
               width: double.infinity,
+              height: _cardHeight,
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
@@ -270,85 +305,80 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
                 ],
               ),
               clipBehavior: Clip.antiAlias,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 11, 12, 10),
-                    child: buildHeaderRow(),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
-                    child: Row(
-                      textDirection: TextDirection.ltr,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Directionality(
-                            textDirection: TextDirection.ltr,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
+                child: Column(
+                  children: [
+                    buildHeaderRow(),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      height: _detailsBlockHeight,
+                      child: Row(
+                        textDirection: TextDirection.ltr,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
+                                detailLine(
                                   'Faculty: $facultyEn',
-                                  style: detailSideStyle,
+                                  TextAlign.left,
+                                  TextDirection.ltr,
                                 ),
-                                const SizedBox(height: 5),
-                                Text(
+                                const SizedBox(height: 4),
+                                detailLine(
                                   'Department: $deptEnDisp',
-                                  style: detailSideStyle,
+                                  TextAlign.left,
+                                  TextDirection.ltr,
                                 ),
-                                const SizedBox(height: 5),
-                                Text(
+                                const SizedBox(height: 4),
+                                detailLine(
                                   'Major: $majorEnDisp',
-                                  style: detailSideStyle,
+                                  TextAlign.left,
+                                  TextDirection.ltr,
                                 ),
                               ],
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Directionality(
-                            textDirection: TextDirection.rtl,
+                          const SizedBox(width: 10),
+                          Expanded(
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
+                                detailLine(
                                   'الكلية: $facultyAr',
-                                  textAlign: TextAlign.right,
-                                  style: detailSideStyle,
+                                  TextAlign.right,
+                                  TextDirection.rtl,
                                 ),
-                                const SizedBox(height: 5),
-                                Text(
+                                const SizedBox(height: 4),
+                                detailLine(
                                   'قسم $deptArDisp',
-                                  textAlign: TextAlign.right,
-                                  style: detailSideStyle,
+                                  TextAlign.right,
+                                  TextDirection.rtl,
                                 ),
-                                const SizedBox(height: 5),
-                                Text(
+                                const SizedBox(height: 4),
+                                detailLine(
                                   'التخصص: $majorArDisp',
-                                  textAlign: TextAlign.right,
-                                  style: detailSideStyle,
+                                  TextAlign.right,
+                                  TextDirection.rtl,
                                 ),
                               ],
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-                    child: Text(
+                    const Spacer(),
+                    Text(
                       isEnUi
                           ? 'Issue Date: $displayIssue'
                           : 'تاريخ الإصدار: $displayIssue',
                       textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: footerMuted,
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
           },

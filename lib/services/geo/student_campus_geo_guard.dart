@@ -11,9 +11,13 @@ import 'geo_fence_service.dart';
 class StudentCampusGeoGuard {
   StudentCampusGeoGuard._();
 
-  /// Debug / QA only: skip attendance geo-fence for QR. NFC and Bluetooth have no geo-fence.
-  static final ValueNotifier<bool> debugSkipAttendanceGeoFence =
+  /// Debug / QA only: skip all student geo-fence checks (gate QR + attendance QR).
+  static final ValueNotifier<bool> debugSkipGeoFenceForTesting =
       ValueNotifier<bool>(false);
+
+  @Deprecated('Use debugSkipGeoFenceForTesting')
+  static ValueNotifier<bool> get debugSkipAttendanceGeoFence =>
+      debugSkipGeoFenceForTesting;
 
   static const Duration _gateCacheTtl = Duration(seconds: 90);
   static bool _gateCacheValid = false;
@@ -23,7 +27,7 @@ class StudentCampusGeoGuard {
 
   /// Whether today's timetable requires attendance geo-fence (العابدية only).
   static Future<bool> attendanceGeoRequiredToday() async {
-    if (debugSkipAttendanceGeoFence.value) return false;
+    if (debugSkipGeoFenceForTesting.value) return false;
     if (kIsWeb) return false;
     final ids = await CampusGeoScheduleResolver.campusIdsFromSchedule(
       CampusGeoCheckMode.todaySchedule,
@@ -36,9 +40,9 @@ class StudentCampusGeoGuard {
     CampusGeoCheckMode mode = CampusGeoCheckMode.todaySchedule,
   }) async {
     if (kIsWeb) return null;
+    if (debugSkipGeoFenceForTesting.value) return null;
 
     final isGate = mode == CampusGeoCheckMode.girlsSecurityGate;
-    if (!isGate && debugSkipAttendanceGeoFence.value) return null;
     if (isGate) {
       final cached = _readGateCache();
       if (cached.hit) return cached.blocking;

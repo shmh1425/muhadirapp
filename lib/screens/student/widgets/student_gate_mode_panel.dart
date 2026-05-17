@@ -46,7 +46,23 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
   @override
   void initState() {
     super.initState();
+    StudentCampusGeoGuard.debugSkipGeoFenceForTesting.addListener(
+      _onDebugGeoFenceToggle,
+    );
     unawaited(_refreshCampusGeo());
+  }
+
+  @override
+  void dispose() {
+    StudentCampusGeoGuard.debugSkipGeoFenceForTesting.removeListener(
+      _onDebugGeoFenceToggle,
+    );
+    super.dispose();
+  }
+
+  void _onDebugGeoFenceToggle() {
+    if (!mounted) return;
+    unawaited(_refreshCampusGeo(invalidateCache: true));
   }
 
   Future<void> _refreshCampusGeo({bool invalidateCache = false}) async {
