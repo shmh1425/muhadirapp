@@ -42,6 +42,11 @@ class NfcAttendanceScreen extends StatefulWidget {
 
 class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  static const bool _qaShowAttendanceGeoDebugToggle = bool.fromEnvironment(
+    'QA_SHOW_ATTENDANCE_GEO_DEBUG_TOGGLE',
+    defaultValue: false,
+  );
+
   final NfcAttendanceService _nfcAttendance = NfcAttendanceService.instance;
   final QrAttendanceService _qrAttendance = QrAttendanceService.instance;
   final BluetoothAttendanceService _bluetoothAttendance =
@@ -74,8 +79,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     }
 
     setState(() => _geoVerifying = true);
-    final required =
-        await StudentCampusGeoGuard.attendanceGeoRequiredToday();
+    final required = await StudentCampusGeoGuard.attendanceGeoRequiredToday();
     if (!mounted) return;
 
     if (!required) {
@@ -118,7 +122,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     setState(() {
       _isScanning = false;
       _statusError = true;
-      _statusMessage = _geoBlockMessage ??
+      _statusMessage =
+          _geoBlockMessage ??
           _tr(
             'أنت خارج حدود الحرم الجامعي.',
             'You are outside the university campus boundary.',
@@ -265,6 +270,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         lower.contains('powered off') ||
         lower.contains('location services are disabled');
   }
+
+  bool get _showAttendanceGeoDebugToggle =>
+      kDebugMode || _qaShowAttendanceGeoDebugToggle;
 
   bool _shouldShowBluetoothLecturerHint(BluetoothScanResult? result) {
     return result?.state == BluetoothScanState.notFound;
@@ -469,8 +477,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     )..repeat();
     _checkNfcAvailability();
     unawaited(_refreshCampusGeo());
-    StudentCampusGeoGuard.debugSkipAttendanceGeoFence
-        .addListener(_onAttendanceGeoDebugToggle);
+    StudentCampusGeoGuard.debugSkipAttendanceGeoFence.addListener(
+      _onAttendanceGeoDebugToggle,
+    );
   }
 
   void _onAttendanceGeoDebugToggle() {
@@ -803,7 +812,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     );
   }
 
-  String _extractCardId(NfcTag tag) => NfcTagIdentifier.extractNormalizedId(tag);
+  String _extractCardId(NfcTag tag) =>
+      NfcTagIdentifier.extractNormalizedId(tag);
 
   Future<void> _startQrScanner() async {
     if (_isNfc ||
@@ -1275,8 +1285,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
 
   @override
   void dispose() {
-    StudentCampusGeoGuard.debugSkipAttendanceGeoFence
-        .removeListener(_onAttendanceGeoDebugToggle);
+    StudentCampusGeoGuard.debugSkipAttendanceGeoFence.removeListener(
+      _onAttendanceGeoDebugToggle,
+    );
     WidgetsBinding.instance.removeObserver(this);
     _pulseController?.dispose();
     _attendanceCodeController.dispose();
@@ -1411,7 +1422,10 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
             onPressed: _geoVerifying
                 ? null
                 : () => unawaited(_refreshCampusGeo()),
-            icon: const Icon(Icons.my_location_rounded, color: Color(0xFF006571)),
+            icon: const Icon(
+              Icons.my_location_rounded,
+              color: Color(0xFF006571),
+            ),
             label: Text(
               _tr('إعادة التحقق من الموقع', 'Check location again'),
               style: const TextStyle(
@@ -1813,9 +1827,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                 backgroundColor: const Color(0xFF006571),
                 foregroundColor: Colors.white,
                 disabledForegroundColor: Colors.white70,
-                disabledBackgroundColor: const Color(0xFF006571).withValues(
-                  alpha: 0.4,
-                ),
+                disabledBackgroundColor: const Color(
+                  0xFF006571,
+                ).withValues(alpha: 0.4),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24),
                 ),
@@ -2049,18 +2063,14 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                     _qrCameraUnavailable)
                   _QrScannerFallback(
                     message: _checkingQrAvailability
-                        ? _tr(
-                            'جاري تجهيز الكاميرا...',
-                            'Preparing camera...',
-                          )
+                        ? _tr('جاري تجهيز الكاميرا...', 'Preparing camera...')
                         : _qrPermissionDenied
                         ? _tr(
                             'فعّل صلاحية الكاميرا من إعدادات الجهاز لمسح الرمز.',
                             'Enable camera access in device settings to scan.',
                           )
                         : _qrStatusMessage,
-                    showRetry:
-                        !_checkingQrAvailability && !_qrPermissionDenied,
+                    showRetry: !_checkingQrAvailability && !_qrPermissionDenied,
                     onRetry: _retryQrScan,
                   ),
                 IgnorePointer(
@@ -2191,8 +2201,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                   ),
                 ),
                 const SizedBox(height: 16),
-                if (kDebugMode) _buildAttendanceGeoDebugToggle(),
-                if (kDebugMode) const SizedBox(height: 8),
+                if (_showAttendanceGeoDebugToggle)
+                  _buildAttendanceGeoDebugToggle(),
+                if (_showAttendanceGeoDebugToggle) const SizedBox(height: 8),
                 Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
