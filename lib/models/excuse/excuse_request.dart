@@ -9,6 +9,7 @@ class ExcuseRequest {
     required this.studentId,
     required this.sectionId,
     required this.courseNameAr,
+    required this.courseNameEn,
     required this.lectureDate,
     required this.lectureStartTime,
     required this.lectureEndTime,
@@ -34,6 +35,7 @@ class ExcuseRequest {
   final int studentId;
   final String sectionId;
   final String courseNameAr;
+  final String courseNameEn;
   final DateTime lectureDate;
   final String lectureStartTime;
   final String lectureEndTime;
@@ -131,14 +133,10 @@ class ExcuseRequest {
       );
     }
     if (parsedSectionId.isEmpty) {
-      debugPrint(
-        '[ExcuseRequest] fromDoc ${doc.id}: missing sectionId.',
-      );
+      debugPrint('[ExcuseRequest] fromDoc ${doc.id}: missing sectionId.');
     }
     if (sid.isEmpty) {
-      debugPrint(
-        '[ExcuseRequest] fromDoc ${doc.id}: missing sessionId.',
-      );
+      debugPrint('[ExcuseRequest] fromDoc ${doc.id}: missing sessionId.');
     }
     if (attId.isEmpty) {
       debugPrint(
@@ -146,13 +144,21 @@ class ExcuseRequest {
       );
     }
 
-    final courseAr =
-        (data['courseNameAr'] ?? data['courseName_Ar'] ?? '').toString().trim();
+    final courseAr = (data['courseNameAr'] ?? data['courseName_Ar'] ?? '')
+        .toString()
+        .trim();
+    final courseEn = (data['courseNameEn'] ?? data['courseName'] ?? '')
+        .toString()
+        .trim();
     final partial =
         parsedStudentId <= 0 || parsedSectionId.isEmpty || courseAr.isEmpty;
-    final parsedAttachmentName = (data['attachmentName'] ?? '').toString().trim();
+    final parsedAttachmentName = (data['attachmentName'] ?? '')
+        .toString()
+        .trim();
     final parsedAttachmentUrl =
-        (data['attachmentUrl'] ?? data['attachmentURL'] ?? '').toString().trim();
+        (data['attachmentUrl'] ?? data['attachmentURL'] ?? '')
+            .toString()
+            .trim();
     debugPrint(
       '[ExcuseRequest] fromDoc ${doc.id}: '
       'hasAttachment=${parsedAttachmentUrl.isNotEmpty} '
@@ -165,16 +171,16 @@ class ExcuseRequest {
       studentId: parsedStudentId,
       sectionId: parsedSectionId,
       courseNameAr: courseAr,
+      courseNameEn: courseEn,
       lectureDate: lectureDate,
       lectureStartTime: (data['lectureStartTime'] ?? '').toString().trim(),
       lectureEndTime: (data['lectureEndTime'] ?? '').toString().trim(),
       status: statusFromString((data['status'] ?? '').toString()),
-      reasonText: (data['reasonText'] ?? data['reason'] ?? '').toString().trim().isEmpty
+      reasonText:
+          (data['reasonText'] ?? data['reason'] ?? '').toString().trim().isEmpty
           ? null
           : (data['reasonText'] ?? data['reason'] ?? '').toString().trim(),
-      attachmentUrl: parsedAttachmentUrl.isEmpty
-          ? null
-          : parsedAttachmentUrl,
+      attachmentUrl: parsedAttachmentUrl.isEmpty ? null : parsedAttachmentUrl,
       attachmentName: parsedAttachmentName.isEmpty
           ? null
           : parsedAttachmentName,
@@ -206,7 +212,10 @@ class ExcuseRequest {
       'studentId': studentId,
       'sectionId': sectionId,
       'courseNameAr': courseNameAr,
-      'lectureDate': Timestamp.fromDate(DateTime(lectureDate.year, lectureDate.month, lectureDate.day)),
+      if (courseNameEn.trim().isNotEmpty) 'courseNameEn': courseNameEn,
+      'lectureDate': Timestamp.fromDate(
+        DateTime(lectureDate.year, lectureDate.month, lectureDate.day),
+      ),
       'lectureYear': lectureDate.year,
       'lectureMonth': lectureDate.month,
       'lectureDay': lectureDate.day,
@@ -222,7 +231,8 @@ class ExcuseRequest {
       if (lecturerId != null) 'lecturerId': lecturerId,
       if (studentName != null) 'studentName': studentName,
       if (submittedAt != null) 'submittedAt': Timestamp.fromDate(submittedAt!),
-      if (reviewDeadlineAt != null) 'reviewDeadlineAt': Timestamp.fromDate(reviewDeadlineAt!),
+      if (reviewDeadlineAt != null)
+        'reviewDeadlineAt': Timestamp.fromDate(reviewDeadlineAt!),
       if (reviewedBy != null) 'reviewedBy': reviewedBy,
       if (reviewedAt != null) 'reviewedAt': Timestamp.fromDate(reviewedAt!),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -236,4 +246,3 @@ class ExcuseRequest {
     return int.tryParse((value ?? '').toString()) ?? 0;
   }
 }
-

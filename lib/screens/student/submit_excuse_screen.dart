@@ -74,7 +74,9 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
       await FirebaseAuth.instance.signInAnonymously();
       return FirebaseAuth.instance.currentUser != null;
     } on FirebaseAuthException catch (e) {
-      debugPrint('[SubmitExcuse] FirebaseAuthException: code=${e.code} message=${e.message}');
+      debugPrint(
+        '[SubmitExcuse] FirebaseAuthException: code=${e.code} message=${e.message}',
+      );
       return false;
     } catch (e) {
       debugPrint('[SubmitExcuse] Auth error: $e');
@@ -104,8 +106,10 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
             child: SafeArea(
               top: false,
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -131,8 +135,10 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
                     ),
                     const SizedBox(height: 12),
                     ListTile(
-                      leading:
-                          const Icon(Icons.image, color: Color(0xFF006571)),
+                      leading: const Icon(
+                        Icons.image,
+                        color: Color(0xFF006571),
+                      ),
                       title: Text(
                         _en('صورة من المعرض', 'Photo from gallery'),
                         style: lightSurfaceFieldTextStyle.copyWith(
@@ -190,8 +196,9 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
         allowedExtensions: <String>['pdf'],
       );
       if (!mounted) return;
-      final file =
-          (res != null && res.files.isNotEmpty) ? res.files.first : null;
+      final file = (res != null && res.files.isNotEmpty)
+          ? res.files.first
+          : null;
       if (file == null) return;
       final bytes = file.bytes;
       if (bytes == null || bytes.isEmpty) return;
@@ -204,7 +211,11 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
 
   List<String> _parseTimeRange(String? raw) {
     final t = (raw ?? '').trim();
-    final parts = t.split('-').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    final parts = t
+        .split('-')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
     if (parts.length == 2) return parts;
     return <String>['', ''];
   }
@@ -250,7 +261,8 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
       );
       return;
     }
-    if (reason.isEmpty && (_selectedFileBytes == null || _selectedFileBytes!.isEmpty)) {
+    if (reason.isEmpty &&
+        (_selectedFileBytes == null || _selectedFileBytes!.isEmpty)) {
       _showError(
         'أضف نص أو أرفق ملف قبل الإرسال.',
         'Add text or attach a file before submitting.',
@@ -280,13 +292,23 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
         final storagePath =
             'excuses/$studentId/${DateTime.now().millisecondsSinceEpoch}_$attachmentName';
         final ref = FirebaseStorage.instance.ref(storagePath);
-        debugPrint('[SubmitExcuse] uploading attachment path=$storagePath bytes=${_selectedFileBytes!.length}');
+        debugPrint(
+          '[SubmitExcuse] uploading attachment path=$storagePath bytes=${_selectedFileBytes!.length}',
+        );
         try {
-          await ref.putData(_selectedFileBytes!).timeout(const Duration(seconds: 30));
-          attachmentUrl = await ref.getDownloadURL().timeout(const Duration(seconds: 15));
-          debugPrint('[SubmitExcuse] attachment uploaded url=${attachmentUrl.substring(0, 32)}...');
+          await ref
+              .putData(_selectedFileBytes!)
+              .timeout(const Duration(seconds: 30));
+          attachmentUrl = await ref.getDownloadURL().timeout(
+            const Duration(seconds: 15),
+          );
+          debugPrint(
+            '[SubmitExcuse] attachment uploaded url=${attachmentUrl.substring(0, 32)}...',
+          );
         } on FirebaseException catch (e) {
-          debugPrint('[SubmitExcuse] Storage FirebaseException: code=${e.code} message=${e.message}');
+          debugPrint(
+            '[SubmitExcuse] Storage FirebaseException: code=${e.code} message=${e.message}',
+          );
           rethrow;
         }
       }
@@ -295,10 +317,12 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
       final recordId = widget.attendanceRecordId.trim();
       final String requestId = recordId.isNotEmpty
           ? recordId
-          : (sessionId.isNotEmpty ? '${sessionId}_$studentId' : FirebaseFirestore.instance
-              .collection(ExcuseService.excusesCollection)
-              .doc()
-              .id);
+          : (sessionId.isNotEmpty
+                ? '${sessionId}_$studentId'
+                : FirebaseFirestore.instance
+                      .collection(ExcuseService.excusesCollection)
+                      .doc()
+                      .id);
 
       final studentDisplayName = (student?.nameAr ?? '').trim().isNotEmpty
           ? (student!.nameAr).trim()
@@ -309,7 +333,12 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
         studentId: studentId,
         sectionId: widget.sectionId,
         courseNameAr: (widget.course ?? '').trim(),
-        lectureDate: DateTime(widget.lectureDate.year, widget.lectureDate.month, widget.lectureDate.day),
+        courseNameEn: (widget.course ?? '').trim(),
+        lectureDate: DateTime(
+          widget.lectureDate.year,
+          widget.lectureDate.month,
+          widget.lectureDate.day,
+        ),
         lectureStartTime: start,
         lectureEndTime: end,
         status: ExcuseRequestStatus.pending,
@@ -318,16 +347,22 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
         attachmentName: attachmentName,
         sessionId: sessionId.isEmpty ? null : sessionId,
         attendanceRecordId: recordId.isEmpty ? null : recordId,
-        studentName:
-            studentDisplayName.trim().isEmpty ? null : studentDisplayName.trim(),
+        studentName: studentDisplayName.trim().isEmpty
+            ? null
+            : studentDisplayName.trim(),
         submittedAt: DateTime.now(),
       );
 
-      debugPrint('[SubmitExcuse] submitting request id=$requestId sectionId=${widget.sectionId} sessionId=${widget.sessionId} recordId=${widget.attendanceRecordId}');
-      final storedInExcuseRequests = await ExcuseService.instance.submitRequestAndNotifyLecturer(
-        request: request,
-        studentDisplayName: studentDisplayName.isEmpty ? studentId.toString() : studentDisplayName,
+      debugPrint(
+        '[SubmitExcuse] submitting request id=$requestId sectionId=${widget.sectionId} sessionId=${widget.sessionId} recordId=${widget.attendanceRecordId}',
       );
+      final storedInExcuseRequests = await ExcuseService.instance
+          .submitRequestAndNotifyLecturer(
+            request: request,
+            studentDisplayName: studentDisplayName.isEmpty
+                ? studentId.toString()
+                : studentDisplayName,
+          );
       if (!storedInExcuseRequests) {
         _showError(
           'تم رفع الملف، لكن لم يتم حفظ بيانات العذر في قاعدة البيانات (excuse_requests). تأكد من نشر قواعد Firestore وتفعيل Anonymous Auth ثم أعد الإرسال.',
@@ -347,7 +382,9 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
             ? 'Failed to submit excuse: $msg'
             : 'Failed to submit excuse: $code',
       );
-      debugPrint('[SubmitExcuse] FirebaseException: code=$code message=${e.message}');
+      debugPrint(
+        '[SubmitExcuse] FirebaseException: code=$code message=${e.message}',
+      );
     } on TimeoutException {
       _showError(
         'العملية أخذت وقت طويل. تأكد من الإنترنت وحاول مرة ثانية.',
@@ -381,7 +418,7 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: <BoxShadow>[
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color: Colors.black.withValues(alpha: 0.1),
                     blurRadius: 20,
                     offset: const Offset(0, 10),
                   ),
@@ -452,50 +489,52 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
           child: Theme(
             data: themeForLightSurface(),
             child: Scaffold(
-            backgroundColor: Colors.white,
-            bottomNavigationBar: NavBarSettingsArabic(
-              selectedIndex: 1,
-              onItemTapped: (index) {
-                if (index == 0) {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
-                  );
-                } else if (index == 2) {
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const HomeScreen()),
-                    (route) => false,
-                  );
-                } else if (index == 1) {
-                  Navigator.of(context).popUntil((route) => route.isFirst);
-                }
-              },
-            ),
-            body: SafeArea(
-              child: Column(
-                children: <Widget>[
-                  _buildHeader(context),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: <Widget>[
-                          _buildDetailsCard(),
-                          const SizedBox(height: 24),
-                          _buildFileUploadSection(),
-                          const SizedBox(height: 24),
-                          _buildTextInputSection(),
-                          const SizedBox(height: 32),
-                          _buildSubmitButton(),
-                        ],
+              backgroundColor: Colors.white,
+              bottomNavigationBar: NavBarSettingsArabic(
+                selectedIndex: 1,
+                onItemTapped: (index) {
+                  if (index == 0) {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                    );
+                  } else if (index == 2) {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => const HomeScreen()),
+                      (route) => false,
+                    );
+                  } else if (index == 1) {
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                  }
+                },
+              ),
+              body: SafeArea(
+                child: Column(
+                  children: <Widget>[
+                    _buildHeader(context),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 16,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            _buildDetailsCard(),
+                            const SizedBox(height: 24),
+                            _buildFileUploadSection(),
+                            const SizedBox(height: 24),
+                            _buildTextInputSection(),
+                            const SizedBox(height: 32),
+                            _buildSubmitButton(),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
           ),
         );
       },
@@ -509,10 +548,7 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
       child: Row(
         children: <Widget>[
           IconButton(
-            icon: StudentBackChevronIcon(
-              color: Color(0xFF006571),
-              size: 16,
-            ),
+            icon: StudentBackChevronIcon(color: Color(0xFF006571), size: 16),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
             onPressed: () => Navigator.of(context).maybePop(),
@@ -544,7 +580,7 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
         borderRadius: BorderRadius.circular(18),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -617,13 +653,10 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
             decoration: BoxDecoration(
               color: const Color(0xFFF5F5F5),
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: Colors.grey.shade300,
-                width: 1,
-              ),
+              border: Border.all(color: Colors.grey.shade300, width: 1),
               boxShadow: <BoxShadow>[
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
+                  color: Colors.black.withValues(alpha: 0.04),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -684,13 +717,10 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
           decoration: BoxDecoration(
             color: const Color(0xFFF5F5F5),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: Colors.grey.shade300,
-              width: 1,
-            ),
+            border: Border.all(color: Colors.grey.shade300, width: 1),
             boxShadow: <BoxShadow>[
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -725,10 +755,7 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
       height: 50,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: <Color>[
-            Color(0xFF27A2A9),
-            Color(0xFF006571),
-          ],
+          colors: <Color>[Color(0xFF27A2A9), Color(0xFF006571)],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
         ),

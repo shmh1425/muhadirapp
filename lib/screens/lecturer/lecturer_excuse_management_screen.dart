@@ -119,6 +119,15 @@ class _LecturerExcuseManagementScreenState
     return '$a - $b';
   }
 
+  String _excuseCourseName(ExcuseRequest item) {
+    final ar = item.courseNameAr.trim();
+    final en = item.courseNameEn.trim();
+    if (LecturerLanguageController.isArabic) {
+      return ar.isNotEmpty ? ar : (en.isNotEmpty ? en : _lecture.courseName);
+    }
+    return en.isNotEmpty ? en : (ar.isNotEmpty ? ar : _lecture.courseName);
+  }
+
   String get _lectureTimeRange {
     final slots = _lecture.timeSlots;
     if (slots.isEmpty) return '${_lecture.startTime} - ${_lecture.endTime}';
@@ -127,19 +136,7 @@ class _LecturerExcuseManagementScreenState
   }
 
   String get _lectureDayName {
-    const days = [
-      '',
-      'الاثنين',
-      'الثلاثاء',
-      'الأربعاء',
-      'الخميس',
-      'الجمعة',
-      'السبت',
-      'الأحد',
-    ];
-    const daysEn = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    final i = _lecture.dayOfWeek.clamp(1, 7);
-    return LecturerLanguageController.isArabic ? days[i] : daysEn[i];
+    return LecturerLanguageController.dayNameFromWeekday(_lecture.dayOfWeek);
   }
 
   bool get _hasPendingDecisions => _staged.isNotEmpty;
@@ -480,19 +477,6 @@ class _LecturerExcuseManagementScreenState
                 color: Color(0xFF213236),
               ),
             ),
-            child: Text(
-              _tr(
-                'هل أنت متأكد من تعديل قرار العذر؟',
-                'Are you sure you want to change the excuse decision?',
-              ),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 14,
-                height: 1.4,
-                color: Color(0xFF475569),
-              ),
-            ),
             actions: [
               ModernPopupActionButton(
                 label: _tr('إلغاء', 'Cancel'),
@@ -506,6 +490,19 @@ class _LecturerExcuseManagementScreenState
                 primaryColor: _primary,
               ),
             ],
+            child: Text(
+              _tr(
+                'هل أنت متأكد من تعديل قرار العذر؟',
+                'Are you sure you want to change the excuse decision?',
+              ),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 14,
+                height: 1.4,
+                color: Color(0xFF475569),
+              ),
+            ),
           ),
         );
       },
@@ -598,9 +595,7 @@ class _LecturerExcuseManagementScreenState
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        item.courseNameAr.trim().isNotEmpty
-                            ? item.courseNameAr.trim()
-                            : _lecture.courseName,
+                        _excuseCourseName(item),
                         style: const TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 14,
@@ -982,6 +977,7 @@ class _LecturerExcuseManagementScreenState
             attendanceRecordId: req.attendanceRecordId,
             notificationSessionId: req.sessionId ?? widget.sessionId,
             courseNameAr: req.courseNameAr,
+            courseNameEn: req.courseNameEn,
             sectionId: req.sectionId,
           ),
         );
@@ -996,6 +992,7 @@ class _LecturerExcuseManagementScreenState
             attendanceRecordId: req.attendanceRecordId,
             notificationSessionId: req.sessionId ?? widget.sessionId,
             courseNameAr: req.courseNameAr,
+            courseNameEn: req.courseNameEn,
             sectionId: req.sectionId,
           ),
         );
@@ -1077,10 +1074,10 @@ class _LecturerExcuseManagementScreenState
                 children: [
                   _buildHeader(),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-                    child: _buildFilterBar(),
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                    child: _buildFilters(),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
                   Expanded(child: _buildTableSection()),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
@@ -1096,7 +1093,9 @@ class _LecturerExcuseManagementScreenState
   }
 
   Widget _buildHeader() {
-    final activityLabel = _lecture.activity == 'عملي'
+    final activity = _lecture.activity.trim().toLowerCase();
+    final isPractical = activity == 'عملي' || activity == 'lab';
+    final activityLabel = isPractical
         ? _tr('عملي', 'Lab')
         : _tr('نظري', 'Theory');
     final sectionLabel = '${_tr('الشعبة', 'Section')} ${_lecture.section}';
@@ -1105,10 +1104,10 @@ class _LecturerExcuseManagementScreenState
         '${sessionDay.year}-${sessionDay.month.toString().padLeft(2, '0')}-${sessionDay.day.toString().padLeft(2, '0')}';
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: const Color(0xFFE8E8E8))),
+        color: const Color(0xFFF8FAFC),
+        border: Border(bottom: BorderSide(color: const Color(0xFFE7EEF0))),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1124,7 +1123,7 @@ class _LecturerExcuseManagementScreenState
                     fontFamily: 'Cairo',
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF222222),
+                    color: Color(0xFF24383D),
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1133,92 +1132,297 @@ class _LecturerExcuseManagementScreenState
               ProfileBackButton(onTap: () => Navigator.of(context).pop()),
             ],
           ),
-          const SizedBox(height: 14),
-          Text(
-            _lecture.courseName,
-            style: const TextStyle(
-              fontFamily: 'Cairo',
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF213236),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0B8793), Color(0xFF005B66)],
+                begin: Alignment.topRight,
+                end: Alignment.bottomLeft,
+              ),
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: _primary.withValues(alpha: 0.18),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '$_lectureDayName  ·  $activityLabel  ·  $sectionLabel',
-            style: const TextStyle(
-              fontFamily: 'Cairo',
-              fontSize: 13,
-              color: Color(0xFF666666),
-              fontWeight: FontWeight.w500,
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.24),
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.assignment_turned_in_rounded,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _lecture.courseName,
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          height: 1.25,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        '$_lectureDayName · $activityLabel · $sectionLabel',
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontWeight: FontWeight.w700,
+                          height: 1.25,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '$_lectureTimeRange · ${_tr('تاريخ الجلسة', 'Session date')} $dateStr',
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 11.5,
+                          color: Colors.white.withValues(alpha: 0.84),
+                          fontWeight: FontWeight.w600,
+                          height: 1.25,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 2),
-          Text(
-            '$_lectureTimeRange  ·  ${_tr('تاريخ الجلسة', 'Session date')} $dateStr',
-            style: const TextStyle(
-              fontFamily: 'Cairo',
-              fontSize: 13,
-              color: Color(0xFF666666),
-              fontWeight: FontWeight.w500,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
+          const SizedBox(height: 12),
         ],
       ),
     );
   }
 
-  Widget _buildFilterBar() {
+  Widget _buildFilterSectionTitle({
+    required IconData icon,
+    required String title,
+    String? hint,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: const Color(0xFFE8F4F5),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(icon, size: 16, color: _primary),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: const TextStyle(
+            fontFamily: 'Cairo',
+            fontSize: 13.2,
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF24484F),
+          ),
+        ),
+        if (hint != null) ...[
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              hint,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 11.2,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF6B8389),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildFilters() {
     final filters = [
       ExcuseStatusFilter.all,
       ExcuseStatusFilter.pending,
       ExcuseStatusFilter.accepted,
       ExcuseStatusFilter.rejected,
     ];
+    final total = _sectionScopedExcuses.length;
+    final visible = _filteredRows.length;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFDCE6E8)),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFD9E8EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.045),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
-      child: Row(
-        children: filters.map((filter) {
-          final active = _statusFilter == filter;
-          final style = _filterStyle(filter);
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => _statusFilter = filter),
-              child: Container(
-                height: 34,
-                margin: const EdgeInsets.symmetric(horizontal: 3),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: active ? style.activeBg : const Color(0xFFF2F5F6),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  style.label,
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    color: active ? Colors.white : const Color(0xFF516166),
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0B8793), Color(0xFF066A75)],
+                begin: Alignment.topRight,
+                end: Alignment.bottomLeft,
               ),
+              borderRadius: BorderRadius.circular(999),
             ),
-          );
-        }).toList(),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.filter_alt_rounded,
+                  color: Colors.white,
+                  size: 17,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  _tr('فلترة الأعذار', 'Excuse Filters'),
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 12.6,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildFilterSectionTitle(
+            icon: Icons.rule_rounded,
+            title: _tr('حالة العذر', 'Excuse status'),
+            hint: _tr('اختاري حالة الطلبات', 'Filter review requests'),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F9FA),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFDCE6E8)),
+            ),
+            child: Row(
+              children: filters.map((filter) {
+                final active = _statusFilter == filter;
+                final style = _filterStyle(filter);
+                return Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _statusFilter = filter),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 160),
+                      height: 32,
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: active ? style.activeBg : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: active
+                            ? [
+                                BoxShadow(
+                                  color: style.activeBg.withValues(alpha: 0.18),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: Text(
+                        style.label,
+                        style: TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: active
+                              ? Colors.white
+                              : const Color(0xFF516166),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF7FAFB),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE0ECEE)),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.list_alt_rounded,
+                  size: 17,
+                  color: Color(0xFF5A757C),
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    _tr(
+                      'المعروض: $visible من $total طلب',
+                      'Showing: $visible of $total requests',
+                    ),
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 11.6,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF5A757C),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1294,20 +1498,67 @@ class _LecturerExcuseManagementScreenState
           border: Border.all(color: const Color(0xFFDDE6E8)),
         ),
         child: list.isEmpty
-            ? Center(
+            ? Align(
+                alignment: Alignment.topCenter,
                 child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    _tr(
-                      'لا يوجد طلاب في هذا الفلتر.',
-                      'No students in this filter.',
+                  padding: const EdgeInsets.all(14),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 22,
                     ),
-                    style: const TextStyle(
-                      fontFamily: 'Cairo',
-                      color: Color(0xFF666666),
-                      fontWeight: FontWeight.w600,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF7FAFB),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFE0ECEE)),
                     ),
-                    textAlign: TextAlign.center,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8F4F5),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(
+                            Icons.search_off_rounded,
+                            color: _primary,
+                            size: 23,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          _tr(
+                            'لا يوجد طلاب في هذا الفلتر.',
+                            'No students in this filter.',
+                          ),
+                          style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            color: Color(0xFF455D63),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _tr(
+                            'جرّبي تغيير حالة العذر أو إعادة ضبط الفلتر.',
+                            'Try another status or reset the filter.',
+                          ),
+                          style: const TextStyle(
+                            fontFamily: 'Cairo',
+                            color: Color(0xFF7A9097),
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               )
@@ -1464,6 +1715,11 @@ class _LecturerExcuseManagementScreenState
 
   Widget _buildSaveButton() {
     final enabled = _hasPendingDecisions && !_isSaving;
+    final label = _isSaving
+        ? _tr('جارٍ الحفظ...', 'Saving...')
+        : enabled
+        ? _tr('حفظ ${_staged.length} قرار', 'Save ${_staged.length} decisions')
+        : _tr('لا توجد قرارات للحفظ', 'No decisions to save');
     return Container(
       width: double.infinity,
       height: 52,
@@ -1515,7 +1771,7 @@ class _LecturerExcuseManagementScreenState
                     ),
                   )
                 : Text(
-                    _tr('حفظ', 'Save'),
+                    label,
                     style: TextStyle(
                       fontFamily: 'Cairo',
                       fontSize: 14,

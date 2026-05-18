@@ -17,6 +17,7 @@ class LecturerExcuseDecision {
     this.attendanceRecordId,
     this.notificationSessionId,
     this.courseNameAr = '',
+    this.courseNameEn = '',
     this.sectionId = '',
   });
 
@@ -36,6 +37,9 @@ class LecturerExcuseDecision {
   final String courseNameAr;
 
   /// For student notification copy (may be empty on legacy docs).
+  final String courseNameEn;
+
+  /// For student notification copy (may be empty on legacy docs).
   final String sectionId;
 }
 
@@ -49,9 +53,11 @@ class ExcuseService {
 
   static const String excusesCollection = 'excuse_requests';
   static const String _sectionsCollection = 'sections';
-  static const String _lecturerNotificationsCollection = 'lecturer_notifications';
+  static const String _lecturerNotificationsCollection =
+      'lecturer_notifications';
   static const String _studentNotificationsCollection = 'student_notifications';
-  static const String _manualAttendanceRecordsCollection = 'manual_attendance_records';
+  static const String _manualAttendanceRecordsCollection =
+      'manual_attendance_records';
 
   Stream<List<ExcuseRequest>> watchStudentRequests(int studentId) {
     if (!enabled || studentId <= 0) {
@@ -62,14 +68,14 @@ class ExcuseService {
         .where('studentId', isEqualTo: studentId)
         .snapshots()
         .map((snap) {
-      final list = snap.docs.map(ExcuseRequest.fromDoc).toList();
-      list.sort((a, b) {
-        final byDate = b.lectureDate.compareTo(a.lectureDate);
-        if (byDate != 0) return byDate;
-        return b.lectureStartTime.compareTo(a.lectureStartTime);
-      });
-      return list;
-    });
+          final list = snap.docs.map(ExcuseRequest.fromDoc).toList();
+          list.sort((a, b) {
+            final byDate = b.lectureDate.compareTo(a.lectureDate);
+            if (byDate != 0) return byDate;
+            return b.lectureStartTime.compareTo(a.lectureStartTime);
+          });
+          return list;
+        });
   }
 
   /// Attendance record ids marked as an excuse submission pending review (student side).
@@ -84,14 +90,14 @@ class ExcuseService {
         .where('excuseStatus', isEqualTo: 'pending')
         .snapshots()
         .map((snap) {
-      final ids = <String>{};
-      for (final d in snap.docs) {
-        final data = d.data();
-        final id = (data['attendanceRecordId'] ?? '').toString().trim();
-        if (id.isNotEmpty) ids.add(id);
-      }
-      return ids;
-    });
+          final ids = <String>{};
+          for (final d in snap.docs) {
+            final data = d.data();
+            final id = (data['attendanceRecordId'] ?? '').toString().trim();
+            if (id.isNotEmpty) ids.add(id);
+          }
+          return ids;
+        });
   }
 
   /// Lecturer: all excuse requests tied to a manual attendance session.
@@ -100,27 +106,29 @@ class ExcuseService {
     if (sid.isEmpty) {
       return const Stream<List<ExcuseRequest>>.empty();
     }
-    debugPrint('[ExcuseService] watchSessionExcuseRequests start: sessionId=$sid');
+    debugPrint(
+      '[ExcuseService] watchSessionExcuseRequests start: sessionId=$sid',
+    );
     return _firestore
         .collection(excusesCollection)
         .where('sessionId', isEqualTo: sid)
         .snapshots()
         .map((snap) {
-      debugPrint(
-        '[ExcuseService] watchSessionExcuseRequests success: sessionId=$sid docs=${snap.docs.length}',
-      );
-      final list = snap.docs.map(ExcuseRequest.fromDoc).toList();
-      list.sort((a, b) {
-        final sa = a.submittedAt ?? a.createdAt;
-        final sb = b.submittedAt ?? b.createdAt;
-        if (sa != null && sb != null) {
-          final c = sb.compareTo(sa);
-          if (c != 0) return c;
-        }
-        return a.studentId.compareTo(b.studentId);
-      });
-      return list;
-    });
+          debugPrint(
+            '[ExcuseService] watchSessionExcuseRequests success: sessionId=$sid docs=${snap.docs.length}',
+          );
+          final list = snap.docs.map(ExcuseRequest.fromDoc).toList();
+          list.sort((a, b) {
+            final sa = a.submittedAt ?? a.createdAt;
+            final sb = b.submittedAt ?? b.createdAt;
+            if (sa != null && sb != null) {
+              final c = sb.compareTo(sa);
+              if (c != 0) return c;
+            }
+            return a.studentId.compareTo(b.studentId);
+          });
+          return list;
+        });
   }
 
   /// Same calendar day and [sectionId] as the attendance session (narrow query).
@@ -145,12 +153,12 @@ class ExcuseService {
         .where('lectureDate', isLessThan: Timestamp.fromDate(end))
         .snapshots()
         .map((snap) {
-      debugPrint(
-        '[ExcuseService] watchSectionDayExcuseRequests success: '
-        'sectionId=$sec docs=${snap.docs.length}',
-      );
-      return snap.docs.map(ExcuseRequest.fromDoc).toList();
-    });
+          debugPrint(
+            '[ExcuseService] watchSectionDayExcuseRequests success: '
+            'sectionId=$sec docs=${snap.docs.length}',
+          );
+          return snap.docs.map(ExcuseRequest.fromDoc).toList();
+        });
   }
 
   static bool _mergeIncludesFromSectionDayQuery(
@@ -164,9 +172,7 @@ class ExcuseService {
       return docSid == sessionId;
     }
     final lid = e.lecturerId?.trim() ?? '';
-    if (lecturerId.isNotEmpty &&
-        lid.isNotEmpty &&
-        lid != lecturerId) {
+    if (lecturerId.isNotEmpty && lid.isNotEmpty && lid != lecturerId) {
       return false;
     }
     final t = e.lectureStartTime.trim();
@@ -259,17 +265,28 @@ class ExcuseService {
       'notificationId': ref.id,
       'lecturerId': lecturerId,
       'sectionId': request.sectionId,
-      'courseName': request.courseNameAr,
+      'courseName': request.courseNameEn.trim().isNotEmpty
+          ? request.courseNameEn.trim()
+          : request.courseNameAr,
+      'courseNameAr': request.courseNameAr,
+      if (request.courseNameEn.trim().isNotEmpty)
+        'courseNameEn': request.courseNameEn.trim(),
       'lectureStartTime': request.lectureStartTime,
       'lectureEndTime': request.lectureEndTime,
       'lectureDate': Timestamp.fromDate(
-        DateTime(request.lectureDate.year, request.lectureDate.month, request.lectureDate.day),
+        DateTime(
+          request.lectureDate.year,
+          request.lectureDate.month,
+          request.lectureDate.day,
+        ),
       ),
       'category': 'students',
       'titleAr': 'طلب عذر من طالب',
       'titleEn': 'Student excuse request',
-      'messageAr': 'تم رفع عذر لمادة "${request.courseNameAr}". يمكنك مراجعة الطلب واتخاذ إجراء.',
-      'messageEn': 'A new excuse was submitted for "${request.courseNameAr}". You can review and take action.',
+      'messageAr':
+          'تم رفع عذر لمادة "${request.courseNameAr}". يمكنك مراجعة الطلب واتخاذ إجراء.',
+      'messageEn':
+          'A new excuse was submitted for "${request.courseNameEn.trim().isNotEmpty ? request.courseNameEn.trim() : request.courseNameAr}". You can review and take action.',
       'isRead': false,
       'isExcuseRequest': true,
       'excuseRequestId': request.id,
@@ -280,7 +297,8 @@ class ExcuseService {
       'excuseDetails': {
         'studentName': studentDisplayName,
         'academicNumber': request.studentId.toString(),
-        'submissionDate': '${request.lectureDate.year}-${request.lectureDate.month.toString().padLeft(2, '0')}-${request.lectureDate.day.toString().padLeft(2, '0')}',
+        'submissionDate':
+            '${request.lectureDate.year}-${request.lectureDate.month.toString().padLeft(2, '0')}-${request.lectureDate.day.toString().padLeft(2, '0')}',
         'submissionTime': request.lectureStartTime,
         'excuseText': request.reasonText ?? '',
         'attachmentName': request.attachmentName ?? '',
@@ -291,13 +309,16 @@ class ExcuseService {
 
     // Also add a student-side pending marker so the student UI can reflect
     // "قيد الانتظار" even if `excuse_requests` storage is blocked by rules.
-    final studentRef = _firestore.collection(_studentNotificationsCollection).doc();
+    final studentRef = _firestore
+        .collection(_studentNotificationsCollection)
+        .doc();
     await studentRef.set({
       'notificationId': studentRef.id,
       'studentId': request.studentId,
       'sectionId': request.sectionId,
       if (request.sessionId != null) 'sessionId': request.sessionId,
-      if (request.attendanceRecordId != null) 'attendanceRecordId': request.attendanceRecordId,
+      if (request.attendanceRecordId != null)
+        'attendanceRecordId': request.attendanceRecordId,
       'category': 'excuses',
       'titleAr': 'تم رفع العذر',
       'titleEn': 'Excuse submitted',
@@ -322,10 +343,15 @@ class ExcuseService {
     final id = sectionId.trim();
     if (id.isEmpty) return '';
     try {
-      final snap = await _firestore.collection(_sectionsCollection).doc(id).get();
+      final snap = await _firestore
+          .collection(_sectionsCollection)
+          .doc(id)
+          .get();
       if (!snap.exists) return '';
       final data = snap.data() ?? <String, dynamic>{};
-      return (data['lecturerId'] ?? data['instructorId'] ?? '').toString().trim();
+      return (data['lecturerId'] ?? data['instructorId'] ?? '')
+          .toString()
+          .trim();
     } catch (_) {
       return '';
     }
@@ -344,8 +370,9 @@ class ExcuseService {
     final lecturerId =
         LecturerAuthService.instance.currentLecturer?.lecturerId ?? '';
     for (final d in decisions) {
-      final excuseRef =
-          _firestore.collection(excusesCollection).doc(d.excuseRequestId);
+      final excuseRef = _firestore
+          .collection(excusesCollection)
+          .doc(d.excuseRequestId);
       final newStatus = ExcuseRequest.statusToString(d.newStatus);
       final rejectionReason = (d.rejectionReason ?? '').trim();
       final attendanceRecordId = (d.attendanceRecordId ?? '').trim();
@@ -353,10 +380,12 @@ class ExcuseService {
         await _firestore.runTransaction((tx) async {
           final excuseSnap = await tx.get(excuseRef);
           final excuseData = excuseSnap.data() ?? <String, dynamic>{};
-          final oldStatus = (excuseData['status'] ?? ExcuseRequest.statusToString(d.oldStatus))
-              .toString()
-              .trim()
-              .toLowerCase();
+          final oldStatus =
+              (excuseData['status'] ??
+                      ExcuseRequest.statusToString(d.oldStatus))
+                  .toString()
+                  .trim()
+                  .toLowerCase();
 
           final payload = <String, dynamic>{
             'status': newStatus,
@@ -370,7 +399,7 @@ class ExcuseService {
                 'changedBy': lecturerId,
                 'changedAt': Timestamp.now(),
                 if (newStatus == 'rejected') 'rejectionReason': rejectionReason,
-              }
+              },
             ]),
           };
           if (newStatus == 'rejected') {
@@ -385,42 +414,45 @@ class ExcuseService {
                 .doc(attendanceRecordId);
             final attendanceSnap = await tx.get(attendanceRef);
             if (attendanceSnap.exists) {
-              final attendanceData = attendanceSnap.data() ?? <String, dynamic>{};
-              final currentAttendanceStatus =
-                  (attendanceData['status'] ?? '').toString().trim().toLowerCase();
+              final attendanceData =
+                  attendanceSnap.data() ?? <String, dynamic>{};
+              final currentAttendanceStatus = (attendanceData['status'] ?? '')
+                  .toString()
+                  .trim()
+                  .toLowerCase();
 
               final shouldSetExcused = newStatus == 'accepted';
               final shouldRestoreFromExcused =
                   oldStatus == 'accepted' && newStatus == 'rejected';
 
               if (shouldSetExcused) {
-                final previousStored = (excuseData['previousAttendanceStatus'] ?? '')
-                    .toString()
-                    .trim();
-                if (previousStored.isEmpty && currentAttendanceStatus.isNotEmpty) {
+                final previousStored =
+                    (excuseData['previousAttendanceStatus'] ?? '')
+                        .toString()
+                        .trim();
+                if (previousStored.isEmpty &&
+                    currentAttendanceStatus.isNotEmpty) {
                   payload['previousAttendanceStatus'] = currentAttendanceStatus;
-                  final prevMethod =
-                      (attendanceData['attendanceMethod'] ?? '').toString().trim();
+                  final prevMethod = (attendanceData['attendanceMethod'] ?? '')
+                      .toString()
+                      .trim();
                   if (prevMethod.isNotEmpty) {
                     payload['previousAttendanceMethod'] = prevMethod;
                   }
                 }
-                tx.set(
-                  attendanceRef,
-                  <String, dynamic>{
-                    'status': 'excused',
-                    'attendanceTime': '--',
-                    'updatedAt': FieldValue.serverTimestamp(),
-                    'updatedBy': lecturerId,
-                    'attendanceMethod': 'manual',
-                  },
-                  SetOptions(merge: true),
-                );
+                tx.set(attendanceRef, <String, dynamic>{
+                  'status': 'excused',
+                  'attendanceTime': '--',
+                  'updatedAt': FieldValue.serverTimestamp(),
+                  'updatedBy': lecturerId,
+                  'attendanceMethod': 'manual',
+                }, SetOptions(merge: true));
               } else if (shouldRestoreFromExcused) {
-                var restoreStatus = (excuseData['previousAttendanceStatus'] ?? '')
-                    .toString()
-                    .trim()
-                    .toLowerCase();
+                var restoreStatus =
+                    (excuseData['previousAttendanceStatus'] ?? '')
+                        .toString()
+                        .trim()
+                        .toLowerCase();
                 if (restoreStatus.isEmpty) {
                   restoreStatus = 'absent';
                   debugPrint(
@@ -428,17 +460,15 @@ class ExcuseService {
                     '${d.excuseRequestId}; restoring attendance to absent.',
                   );
                 }
-                tx.set(
-                  attendanceRef,
-                  <String, dynamic>{
-                    'status': restoreStatus,
-                    'attendanceTime': _attendanceTimeForStatusValue(restoreStatus),
-                    'updatedAt': FieldValue.serverTimestamp(),
-                    'updatedBy': lecturerId,
-                    'attendanceMethod': 'manual',
-                  },
-                  SetOptions(merge: true),
-                );
+                tx.set(attendanceRef, <String, dynamic>{
+                  'status': restoreStatus,
+                  'attendanceTime': _attendanceTimeForStatusValue(
+                    restoreStatus,
+                  ),
+                  'updatedAt': FieldValue.serverTimestamp(),
+                  'updatedBy': lecturerId,
+                  'attendanceMethod': 'manual',
+                }, SetOptions(merge: true));
               }
             } else {
               debugPrint(
@@ -515,26 +545,31 @@ class ExcuseService {
       return;
     }
 
-    final courseLabel = decision.courseNameAr.trim().isEmpty
+    final courseLabelAr = decision.courseNameAr.trim().isEmpty
         ? 'المادة'
         : decision.courseNameAr.trim();
+    final courseLabelEn = decision.courseNameEn.trim().isEmpty
+        ? courseLabelAr
+        : decision.courseNameEn.trim();
     final accepted = decision.newStatus == ExcuseRequestStatus.accepted;
     final excuseStatus = ExcuseRequest.statusToString(decision.newStatus);
     final titleAr = accepted ? 'تم قبول عذرك' : 'تم رفض عذرك';
-    final titleEn = accepted ? 'Your excuse was accepted' : 'Your excuse was rejected';
+    final titleEn = accepted
+        ? 'Your excuse was accepted'
+        : 'Your excuse was rejected';
     final reason = (decision.rejectionReason ?? '').trim();
     final messageAr = accepted
-        ? 'قبل الأستاذ عذرك لمادة "$courseLabel".'
-        : 'رفض الأستاذ عذرك لمادة "$courseLabel".${reason.isEmpty ? '' : ' السبب: $reason'}';
+        ? 'قبل الأستاذ عذرك لمادة "$courseLabelAr".'
+        : 'رفض الأستاذ عذرك لمادة "$courseLabelAr".${reason.isEmpty ? '' : ' السبب: $reason'}';
     final messageEn = accepted
-        ? 'Your excuse for "$courseLabel" was accepted by the instructor.'
-        : 'Your excuse for "$courseLabel" was rejected by the instructor.'
-            '${reason.isEmpty ? '' : ' Reason: $reason'}';
+        ? 'Your excuse for "$courseLabelEn" was accepted by the instructor.'
+        : 'Your excuse for "$courseLabelEn" was rejected by the instructor.'
+              '${reason.isEmpty ? '' : ' Reason: $reason'}';
 
     final sessionForDoc =
         (decision.notificationSessionId ?? '').trim().isNotEmpty
-            ? decision.notificationSessionId!.trim()
-            : sessionIdFallback;
+        ? decision.notificationSessionId!.trim()
+        : sessionIdFallback;
     final attId = (decision.attendanceRecordId ?? '').trim();
 
     final snap = await _firestore
@@ -632,42 +667,46 @@ class _ExcuseSessionMergeStream {
       'sessionId=$sessionId sectionId=$sectionId sessionDay=$sessionDay '
       'lectureStartTime=$lectureStartTime lecturerId=$lecturerId',
     );
-    _subA = service.watchSessionExcuseRequests(sessionId).listen(
-      (list) {
-        _listA = list;
-        debugPrint(
-          '[ExcuseService] merge stream primary(sessionId) update: '
-          'count=${_listA.length}',
+    _subA = service
+        .watchSessionExcuseRequests(sessionId)
+        .listen(
+          (list) {
+            _listA = list;
+            debugPrint(
+              '[ExcuseService] merge stream primary(sessionId) update: '
+              'count=${_listA.length}',
+            );
+            _emit();
+          },
+          onError: (Object e, StackTrace st) {
+            debugPrint(
+              '[ExcuseService] primary sessionId stream failed: $e\n$st',
+            );
+            _controller.addError(e, st);
+          },
         );
-        _emit();
-      },
-      onError: (Object e, StackTrace st) {
-        debugPrint(
-          '[ExcuseService] primary sessionId stream failed: $e\n$st',
-        );
-        _controller.addError(e, st);
-      },
-    );
     if (sectionId.isNotEmpty) {
-      _subB = service._watchSectionDayExcuseRequests(sectionId, sessionDay).listen(
-        (list) {
-          _listB = list;
-          debugPrint(
-            '[ExcuseService] merge stream fallback(section/day) update: '
-            'count=${_listB.length}',
+      _subB = service
+          ._watchSectionDayExcuseRequests(sectionId, sessionDay)
+          .listen(
+            (list) {
+              _listB = list;
+              debugPrint(
+                '[ExcuseService] merge stream fallback(section/day) update: '
+                'count=${_listB.length}',
+              );
+              _emit();
+            },
+            onError: (Object e, StackTrace st) {
+              // Keep base session stream alive even if the supplemental query fails
+              // (e.g. transient permissions/index mismatch).
+              debugPrint(
+                '[ExcuseService] supplemental section/day excuse stream failed: $e\n$st',
+              );
+              _listB = const [];
+              _emit();
+            },
           );
-          _emit();
-        },
-        onError: (Object e, StackTrace st) {
-          // Keep base session stream alive even if the supplemental query fails
-          // (e.g. transient permissions/index mismatch).
-          debugPrint(
-            '[ExcuseService] supplemental section/day excuse stream failed: $e\n$st',
-          );
-          _listB = const [];
-          _emit();
-        },
-      );
     } else {
       _listB = const [];
     }
