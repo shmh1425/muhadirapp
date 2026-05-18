@@ -20,14 +20,16 @@ class ExcuseDecisionResult {
 
 class LecturerNotificationService {
   LecturerNotificationService._();
-  static final LecturerNotificationService instance = LecturerNotificationService._();
+  static final LecturerNotificationService instance =
+      LecturerNotificationService._();
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static const String _collection = 'lecturer_notifications';
   static const String _excuseRequestsCollection = 'excuse_requests';
 
   String get _currentLecturerId {
-    return (LecturerAuthService.instance.currentLecturer?.lecturerId ?? '').trim();
+    return (LecturerAuthService.instance.currentLecturer?.lecturerId ?? '')
+        .trim();
   }
 
   Stream<List<LecturerNotification>> watchCurrentLecturerNotifications() {
@@ -42,17 +44,17 @@ class LecturerNotificationService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snap) {
-      final list = snap.docs.map(LecturerNotification.fromDoc).toList();
-      list.sort((a, b) {
-        final aTime = a.createdAt;
-        final bTime = b.createdAt;
-        if (aTime == null && bTime == null) return 0;
-        if (aTime == null) return 1;
-        if (bTime == null) return -1;
-        return bTime.compareTo(aTime);
-      });
-      return list;
-    });
+          final list = snap.docs.map(LecturerNotification.fromDoc).toList();
+          list.sort((a, b) {
+            final aTime = a.createdAt;
+            final bTime = b.createdAt;
+            if (aTime == null && bTime == null) return 0;
+            if (aTime == null) return 1;
+            if (bTime == null) return -1;
+            return bTime.compareTo(aTime);
+          });
+          return list;
+        });
   }
 
   Future<void> markAsRead(String notificationId) async {
@@ -116,8 +118,10 @@ class LecturerNotificationService {
     if (notification.storedInExcuseRequests == false) {
       return const ExcuseDecisionResult(
         success: false,
-        messageAr: 'هذا الطلب محفوظ كنسخة داخل الإشعار فقط، ولا يوجد مستند فعلي في طلبات الأعذار.',
-        messageEn: 'This request is only stored as a notification snapshot; no primary excuse request document exists.',
+        messageAr:
+            'هذا الطلب محفوظ كنسخة داخل الإشعار فقط، ولا يوجد مستند فعلي في طلبات الأعذار.',
+        messageEn:
+            'This request is only stored as a notification snapshot; no primary excuse request document exists.',
       );
     }
 
@@ -129,7 +133,8 @@ class LecturerNotificationService {
       return const ExcuseDecisionResult(
         success: false,
         messageAr: 'لم يتم العثور على مستند طلب العذر في قاعدة البيانات.',
-        messageEn: 'The related excuse request document was not found in Firestore.',
+        messageEn:
+            'The related excuse request document was not found in Firestore.',
       );
     }
 
@@ -139,21 +144,25 @@ class LecturerNotificationService {
       return const ExcuseDecisionResult(
         success: false,
         messageAr: 'رقم الطالب غير متوفر في مستند العذر، لا يمكن إتمام القرار.',
-        messageEn: 'Student ID is missing in the excuse document, so the decision cannot be applied.',
+        messageEn:
+            'Student ID is missing in the excuse document, so the decision cannot be applied.',
       );
     }
 
     final currentStatus = ExcuseRequest.statusFromString(
       (reqData['status'] ?? notification.statusFromSnapshot).toString(),
     );
-    final sessionId = (reqData['sessionId'] ?? notification.sessionIdFromSnapshot)
-        .toString()
-        .trim();
+    final sessionId =
+        (reqData['sessionId'] ?? notification.sessionIdFromSnapshot)
+            .toString()
+            .trim();
     if (sessionId.isEmpty) {
       return const ExcuseDecisionResult(
         success: false,
-        messageAr: 'المعرف الجلسي لطلب العذر غير متوفر، لا يمكن تطبيق القرار بأمان.',
-        messageEn: 'Session ID is missing for this excuse request, so the decision cannot be safely applied.',
+        messageAr:
+            'المعرف الجلسي لطلب العذر غير متوفر، لا يمكن تطبيق القرار بأمان.',
+        messageEn:
+            'Session ID is missing for this excuse request, so the decision cannot be safely applied.',
       );
     }
 
@@ -161,12 +170,26 @@ class LecturerNotificationService {
       excuseRequestId: notification.excuseRequestId,
       studentId: studentId,
       oldStatus: currentStatus,
-      newStatus: approve ? ExcuseRequestStatus.accepted : ExcuseRequestStatus.rejected,
+      newStatus: approve
+          ? ExcuseRequestStatus.accepted
+          : ExcuseRequestStatus.rejected,
       rejectionReason: approve ? null : rejectionReason.trim(),
-      attendanceRecordId: (reqData['attendanceRecordId'] ?? '').toString().trim(),
+      attendanceRecordId: (reqData['attendanceRecordId'] ?? '')
+          .toString()
+          .trim(),
       notificationSessionId: sessionId,
-      courseNameAr: (reqData['courseNameAr'] ?? notification.courseName).toString().trim(),
-      sectionId: (reqData['sectionId'] ?? notification.sectionId).toString().trim(),
+      courseNameAr: (reqData['courseNameAr'] ?? notification.courseName)
+          .toString()
+          .trim(),
+      courseNameEn:
+          (reqData['courseNameEn'] ??
+                  reqData['courseName'] ??
+                  notification.courseName)
+              .toString()
+              .trim(),
+      sectionId: (reqData['sectionId'] ?? notification.sectionId)
+          .toString()
+          .trim(),
     );
 
     await ExcuseService.instance.applyLecturerDecisions(
@@ -176,7 +199,9 @@ class LecturerNotificationService {
 
     return ExcuseDecisionResult(
       success: true,
-      messageAr: approve ? 'تم قبول طلب العذر بنجاح.' : 'تم رفض طلب العذر بنجاح.',
+      messageAr: approve
+          ? 'تم قبول طلب العذر بنجاح.'
+          : 'تم رفض طلب العذر بنجاح.',
       messageEn: approve
           ? 'Excuse request approved successfully.'
           : 'Excuse request rejected successfully.',

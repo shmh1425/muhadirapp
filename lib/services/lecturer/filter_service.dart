@@ -1,4 +1,5 @@
 import '../../models/lecturer/lecture_item.dart';
+import '../../screens/lecturer/lecturer_language.dart';
 
 /// Service لإدارة منطق الفلترة
 class FilterService {
@@ -38,11 +39,17 @@ class FilterService {
   static String getSectionTitle(String filter) {
     switch (filter) {
       case 'غدًا':
-        return 'محاضرات الغد';
+        return LecturerLanguageController.tr(
+          'محاضرات الغد',
+          "Tomorrow's Lectures",
+        );
       case 'الكل':
-        return 'جميع المحاضرات';
+        return LecturerLanguageController.tr('جميع المحاضرات', 'All Lectures');
       default: // 'اليوم'
-        return 'محاضرات اليوم';
+        return LecturerLanguageController.tr(
+          'محاضرات اليوم',
+          "Today's Lectures",
+        );
     }
   }
 }

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../models/lecturer/lecture_item.dart';
+import '../../screens/lecturer/lecturer_language.dart';
 
 /// Repository لإدارة بيانات المحاضرات والتقويم الأكاديمي.
 class LectureRepository {
@@ -269,9 +270,10 @@ class LectureRepository {
   /// dayOfWeek: 1=الاثنين, 2=الثلاثاء, 3=الأربعاء, 4=الخميس, 5=الجمعة, 6=السبت, 7=الأحد
   List<LectureItem> getAllLectures() {
     final now = _currentDateTime;
+    String tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
     return [
       LectureItem(
-        courseName: 'هندسة البرمجيات',
+        courseName: tr('هندسة البرمجيات', 'Software Engineering'),
         crn: 'SE3310',
         hall: 'DEN01',
         section: '1',
@@ -281,7 +283,7 @@ class LectureRepository {
         dayOfWeek: 7,
       ),
       LectureItem(
-        courseName: 'قواعد البيانات',
+        courseName: tr('قواعد البيانات', 'Databases'),
         crn: 'CS3320',
         hall: 'DEN02',
         section: '2',
@@ -291,7 +293,7 @@ class LectureRepository {
         dayOfWeek: 7,
       ),
       LectureItem(
-        courseName: 'الذكاء الاصطناعي',
+        courseName: tr('الذكاء الاصطناعي', 'Artificial Intelligence'),
         crn: 'CS3330',
         hall: 'DEN03',
         section: '1',
@@ -301,7 +303,7 @@ class LectureRepository {
         dayOfWeek: 7,
       ),
       LectureItem(
-        courseName: 'أمن المعلومات',
+        courseName: tr('أمن المعلومات', 'Information Security'),
         crn: 'CS3340',
         hall: 'DEN04',
         section: '3',
@@ -311,7 +313,7 @@ class LectureRepository {
         dayOfWeek: 7,
       ),
       LectureItem(
-        courseName: 'الشبكات الحاسوبية',
+        courseName: tr('الشبكات الحاسوبية', 'Computer Networks'),
         crn: 'CS3350',
         hall: 'DEN05',
         section: '2',
@@ -321,7 +323,7 @@ class LectureRepository {
         dayOfWeek: 7,
       ),
       LectureItem(
-        courseName: 'تطوير التطبيقات',
+        courseName: tr('تطوير التطبيقات', 'Application Development'),
         crn: 'SE3360',
         hall: 'DEN06',
         section: '1',
@@ -331,7 +333,7 @@ class LectureRepository {
         dayOfWeek: 1,
       ),
       LectureItem(
-        courseName: 'الخوارزميات المتقدمة',
+        courseName: tr('الخوارزميات المتقدمة', 'Advanced Algorithms'),
         crn: 'CS3370',
         hall: 'DEN07',
         section: '2',
@@ -341,7 +343,7 @@ class LectureRepository {
         dayOfWeek: 1,
       ),
       LectureItem(
-        courseName: 'أنظمة التشغيل',
+        courseName: tr('أنظمة التشغيل', 'Operating Systems'),
         crn: 'CS3380',
         hall: 'DEN08',
         section: '3',
@@ -351,7 +353,7 @@ class LectureRepository {
         dayOfWeek: 2,
       ),
       LectureItem(
-        courseName: 'البرمجة المتقدمة',
+        courseName: tr('البرمجة المتقدمة', 'Advanced Programming'),
         crn: 'CS3390',
         hall: 'DEN09',
         section: '1',
@@ -361,7 +363,7 @@ class LectureRepository {
         dayOfWeek: 2,
       ),
       LectureItem(
-        courseName: 'مشروع التخرج',
+        courseName: tr('مشروع التخرج', 'Graduation Project'),
         crn: 'CS3400',
         hall: 'DEN10',
         section: '1',
@@ -371,7 +373,7 @@ class LectureRepository {
         dayOfWeek: 2,
       ),
       LectureItem(
-        courseName: 'تحليل النظم',
+        courseName: tr('تحليل النظم', 'Systems Analysis'),
         crn: 'SE3410',
         hall: 'DEN11',
         section: '2',
@@ -381,7 +383,7 @@ class LectureRepository {
         dayOfWeek: 2,
       ),
       LectureItem(
-        courseName: 'قواعد البيانات المتقدمة',
+        courseName: tr('قواعد البيانات المتقدمة', 'Advanced Databases'),
         crn: 'CS3420',
         hall: 'DEN12',
         section: '1',
@@ -391,7 +393,7 @@ class LectureRepository {
         dayOfWeek: 4,
       ),
       LectureItem(
-        courseName: 'هندسة المتطلبات',
+        courseName: tr('هندسة المتطلبات', 'Requirements Engineering'),
         crn: 'SE3430',
         hall: 'DEN01',
         section: '2',
@@ -401,7 +403,10 @@ class LectureRepository {
         dayOfWeek: 4,
       ),
       LectureItem(
-        courseName: 'الذكاء الاصطناعي التطبيقي',
+        courseName: tr(
+          'الذكاء الاصطناعي التطبيقي',
+          'Applied Artificial Intelligence',
+        ),
         crn: 'CS3440',
         hall: 'DEN02',
         section: '1',
@@ -411,7 +416,7 @@ class LectureRepository {
         dayOfWeek: 4,
       ),
       LectureItem(
-        courseName: 'محاضرة اليوم',
+        courseName: tr('محاضرة اليوم', "Today's Lecture"),
         crn: 'TODAY1',
         hall: 'DEN01',
         section: '1',
@@ -421,7 +426,7 @@ class LectureRepository {
         dayOfWeek: now.weekday,
       ),
       LectureItem(
-        courseName: 'محاضرة الغد',
+        courseName: tr('محاضرة الغد', "Tomorrow's Lecture"),
         crn: 'TOMORROW1',
         hall: 'DEN02',
         section: '1',
