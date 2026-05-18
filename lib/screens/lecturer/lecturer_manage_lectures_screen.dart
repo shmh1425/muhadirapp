@@ -73,7 +73,9 @@ class _LecturerManageLecturesScreenState
         selectedLectureKeys: Set<String>.from(_selectedLectureKeys),
       );
     }
-    LecturerLanguageController.notifier.removeListener(_onLecturerLanguageChanged);
+    LecturerLanguageController.notifier.removeListener(
+      _onLecturerLanguageChanged,
+    );
     _calendarSyncSub?.cancel();
     super.dispose();
   }
@@ -134,11 +136,15 @@ class _LecturerManageLecturesScreenState
     if (_allLectures.isEmpty) {
       await _awaitInitialLectureLoad(forceRefreshCatalog: forceRefreshCatalog);
     } else {
-      await _refreshLecturesInBackground(forceRefreshCatalog: forceRefreshCatalog);
+      await _refreshLecturesInBackground(
+        forceRefreshCatalog: forceRefreshCatalog,
+      );
     }
   }
 
-  Future<void> _awaitInitialLectureLoad({bool forceRefreshCatalog = false}) async {
+  Future<void> _awaitInitialLectureLoad({
+    bool forceRefreshCatalog = false,
+  }) async {
     setState(() {
       _isLoadingLectures = true;
       _loadError = null;
@@ -156,8 +162,9 @@ class _LecturerManageLecturesScreenState
       ]);
       if (!mounted) return;
       final cat = ref.read(lecturerUnifiedCatalogProvider).requireValue;
-      final list =
-          cat.toLectureItems(isArabic: LecturerLanguageController.isArabic);
+      final list = cat.toLectureItems(
+        isArabic: LecturerLanguageController.isArabic,
+      );
       setState(() {
         _allLectures = list;
         _selectedWeekNumber = _currentWeekNumber;
@@ -196,8 +203,9 @@ class _LecturerManageLecturesScreenState
       ]);
       if (!mounted) return;
       final cat = ref.read(lecturerUnifiedCatalogProvider).requireValue;
-      final list =
-          cat.toLectureItems(isArabic: LecturerLanguageController.isArabic);
+      final list = cat.toLectureItems(
+        isArabic: LecturerLanguageController.isArabic,
+      );
       setState(() {
         _allLectures = list;
         _loadError = null;
@@ -1344,8 +1352,13 @@ class _LecturerManageLecturesScreenState
           isExpanded: true,
           value: _selectedCourseCode,
           hint: Text(_tr('اختاري المقرر', 'Select course')),
-          icon: const Icon(Icons.keyboard_arrow_down_rounded),
+          icon: const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: Color(0xFF006571),
+          ),
           borderRadius: BorderRadius.circular(12),
+          dropdownColor: Colors.white,
+          menuMaxHeight: 320,
           style: const TextStyle(
             fontFamily: 'Cairo',
             fontSize: 13,
@@ -1391,8 +1404,13 @@ class _LecturerManageLecturesScreenState
         child: DropdownButton<int>(
           isExpanded: true,
           value: weeks.contains(selected) ? selected : weeks.first,
-          icon: const Icon(Icons.keyboard_arrow_down_rounded),
+          icon: const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: Color(0xFF006571),
+          ),
           borderRadius: BorderRadius.circular(12),
+          dropdownColor: Colors.white,
+          menuMaxHeight: 300,
           style: const TextStyle(
             fontFamily: 'Cairo',
             fontSize: 13,

@@ -3,7 +3,7 @@ import 'dart:ui';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../welcome_screen.dart';
+import '../login_screen.dart';
 import 'lecturer_attendance_report_screen.dart'
     show LecturerAttendanceReportScreen, clearLecturerAttendanceReportNavCache;
 import 'lecturer_language.dart';
@@ -189,15 +189,15 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
 
     if (confirmed != true || !mounted) return;
     await FirebaseAuth.instance.signOut();
+    if (!mounted) return;
     LecturerAuthService.instance.logout();
     clearLecturerAttendanceReportNavCache();
     LecturerManageScreenSessionMemory.clear();
     LecturerAttendanceSessionsWarmCache.clear();
 
-    // استخدام الـ root navigator لمسح الـ stack بالكامل (بما فيه LecturerMainShell والـ BottomNav)
-    // وإظهار شاشة الترحيب فقط — منع تكرار الـ BottomNav أو بقائه ظاهراً بعد الخروج.
+    // Clear the root stack so auth screens only appear after an explicit logout.
     Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,
     );
   }
@@ -538,7 +538,6 @@ class _ProfileActionButton extends StatelessWidget {
                 ),
               ),
             ),
-            const Icon(Icons.chevron_left, color: Color(0xFF9E9E9E)),
           ],
         ),
       ),

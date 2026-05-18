@@ -1479,7 +1479,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   }
 
   Widget _buildHeader() {
-    final activityLabel = _lecture.activity == 'عملي'
+    final activity = _lecture.activity.trim().toLowerCase();
+    final isPractical = activity == 'عملي' || activity == 'lab';
+    final activityLabel = isPractical
         ? _tr('عملي', 'Lab')
         : _tr('نظري', 'Theory');
     final sectionLabel = '${_tr('الشعبة', 'Section')} ${_lecture.section}';
@@ -1496,7 +1498,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       ),
       child: Row(
         children: [
-          // زر الرجوع: نفس ProfileBackButton (يستخدم BackButtonIcon القياسي ويحترم RTL/LTR).
+          // زر الرجوع: نفس ProfileBackButton ويحترم RTL/LTR.
           ProfileBackButton(onTap: () => Navigator.of(context).pop()),
           const SizedBox(width: 12),
           Expanded(
@@ -1733,6 +1735,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           PopupMenuButton<AttendanceStatusFilter>(
             tooltip: _tr('تغيير الفلتر', 'Change filter'),
             initialValue: _statusFilter,
+            color: Colors.white,
+            surfaceTintColor: Colors.transparent,
             onSelected: (filter) => setState(() => _statusFilter = filter),
             itemBuilder: (context) => _filterMenuOrder.map((filter) {
               final style = _filterStyle(filter);
@@ -1756,6 +1760,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                         style: const TextStyle(
                           fontFamily: 'Cairo',
                           fontWeight: FontWeight.w700,
+                          color: Color(0xFF24383D),
                         ),
                       ),
                     ),
@@ -1786,6 +1791,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   Widget _buildCompactMethodMenu() {
     return PopupMenuButton<AttendanceMethod>(
       tooltip: _tr('اختيار طريقة التحضير', 'Select attendance method'),
+      color: Colors.white,
+      surfaceTintColor: Colors.transparent,
       onSelected: _onSelectMethod,
       itemBuilder: (context) => [
         PopupMenuItem<AttendanceMethod>(

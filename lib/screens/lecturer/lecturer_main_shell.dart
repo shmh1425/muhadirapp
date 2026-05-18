@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/lecturer/lecturer_cold_start_warmup.dart';
 import 'lecturer_nav_bar.dart';
 import 'lecturer_home_screen.dart';
+import 'lecturer_language.dart';
 import 'lecturer_qr_screen.dart';
 import 'lecturer_profile_screen.dart';
 
@@ -58,38 +59,74 @@ class _LecturerMainShellState extends ConsumerState<LecturerMainShell> {
     );
   }
 
+  void _handleBlockedRootPop() {
+    final currentNavigator = _navigatorKeys[_selectedIndex].currentState;
+    if (currentNavigator?.canPop() == true) {
+      currentNavigator!.pop();
+      return;
+    }
+
+    if (_selectedIndex != 2) {
+      setState(() => _selectedIndex = 2);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final profile =
-        widget.profile ??
-        const LecturerProfile(
-          name: 'محاضر',
-          email: 'lecturer@uqu.edu.sa',
-          college: 'كلية الحاسبات',
-          department: 'غير محدد',
-        );
+    return ValueListenableBuilder<LecturerLanguage>(
+      valueListenable: LecturerLanguageController.notifier,
+      builder: (context, _, __) {
+        final profile =
+            widget.profile ??
+            LecturerProfile(
+              name: LecturerLanguageController.tr('محاضر', 'Lecturer'),
+              email: 'lecturer@uqu.edu.sa',
+              college: LecturerLanguageController.tr(
+                'كلية الحاسبات',
+                'College of Computing',
+              ),
+              department: LecturerLanguageController.tr('غير محدد', 'Unknown'),
+            );
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: [
-          _buildTabNavigator(0, LecturerProfileScreen(lecturer: profile)),
-          _buildTabNavigator(1, const LecturerQrScreen(lecture: null)),
-          _buildTabNavigator(2, LecturerHomeScreen(lecturerName: profile.name)),
-        ],
-      ),
-      bottomNavigationBar: LecturerNavBar(
-        selectedIndex: _selectedIndex,
-        onItemTapped: (index) {
-          if (index == _selectedIndex) {
-            final navigator = _navigatorKeys[index].currentState;
-            navigator?.popUntil((route) => route.isFirst);
-            return;
-          }
-          setState(() => _selectedIndex = index);
-        },
-      ),
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            _handleBlockedRootPop();
+          },
+          child: Directionality(
+            textDirection: LecturerLanguageController.direction(),
+            child: Scaffold(
+              backgroundColor: Colors.white,
+              body: IndexedStack(
+                index: _selectedIndex,
+                children: [
+                  _buildTabNavigator(
+                    0,
+                    LecturerProfileScreen(lecturer: profile),
+                  ),
+                  _buildTabNavigator(1, const LecturerQrScreen(lecture: null)),
+                  _buildTabNavigator(
+                    2,
+                    LecturerHomeScreen(lecturerName: profile.name),
+                  ),
+                ],
+              ),
+              bottomNavigationBar: LecturerNavBar(
+                selectedIndex: _selectedIndex,
+                onItemTapped: (index) {
+                  if (index == _selectedIndex) {
+                    final navigator = _navigatorKeys[index].currentState;
+                    navigator?.popUntil((route) => route.isFirst);
+                    return;
+                  }
+                  setState(() => _selectedIndex = index);
+                },
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

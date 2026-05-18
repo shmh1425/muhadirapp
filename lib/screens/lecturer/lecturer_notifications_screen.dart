@@ -6,6 +6,7 @@ import '../../services/notifications/lecturer_notification_service.dart';
 import '../../widgets/lecturer/excuse_attachment_preview.dart';
 import '../../widgets/lecturer/excuse_rejection_reason_dialog.dart';
 import 'lecturer_language.dart';
+import 'widgets/directional_navigation_icon.dart';
 import 'widgets/modern_popup_dialog.dart';
 import 'widgets/profile_back_button.dart';
 
@@ -880,11 +881,7 @@ class _NotificationCard extends StatelessWidget {
                   ),
                 ),
               ),
-              const Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 13,
-                color: Color(0xFF006571),
-              ),
+              const LecturerDirectionalForwardIcon(size: 13),
             ],
           ),
         ],
@@ -1393,6 +1390,13 @@ class _LecturerNotificationDetailsScreenState
                 color: Color(0xFF213236),
               ),
             ),
+            actions: [
+              ModernPopupActionButton(
+                label: tr('إغلاق', 'Close'),
+                onTap: () => Navigator.of(ctx).pop(),
+                isPrimary: false,
+              ),
+            ],
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1447,13 +1451,6 @@ class _LecturerNotificationDetailsScreenState
                 ),
               ],
             ),
-            actions: [
-              ModernPopupActionButton(
-                label: tr('إغلاق', 'Close'),
-                onTap: () => Navigator.of(ctx).pop(),
-                isPrimary: false,
-              ),
-            ],
           ),
         );
       },
@@ -1480,6 +1477,18 @@ class _LecturerNotificationDetailsScreenState
                 color: Color(0xFF213236),
               ),
             ),
+            actions: [
+              ModernPopupActionButton(
+                label: tr('إلغاء', 'Cancel'),
+                onTap: () => Navigator.of(ctx).pop(false),
+                isPrimary: false,
+              ),
+              ModernPopupActionButton(
+                label: tr('متابعة', 'Continue'),
+                onTap: () => Navigator.of(ctx).pop(true),
+                isPrimary: true,
+              ),
+            ],
             child: Text(
               tr(
                 'هل أنت متأكد من تعديل قرار العذر؟',
@@ -1493,18 +1502,6 @@ class _LecturerNotificationDetailsScreenState
                 color: Color(0xFF475569),
               ),
             ),
-            actions: [
-              ModernPopupActionButton(
-                label: tr('إلغاء', 'Cancel'),
-                onTap: () => Navigator.of(ctx).pop(false),
-                isPrimary: false,
-              ),
-              ModernPopupActionButton(
-                label: tr('متابعة', 'Continue'),
-                onTap: () => Navigator.of(ctx).pop(true),
-                isPrimary: true,
-              ),
-            ],
           ),
         );
       },
@@ -1872,6 +1869,20 @@ class _NotificationExcuseDetails {
       return fallback;
     }
 
+    String readLocalized({
+      required String arKey,
+      required String enKey,
+      String fallback = '',
+    }) {
+      final primary = LecturerLanguageController.isArabic ? arKey : enKey;
+      final secondary = LecturerLanguageController.isArabic ? enKey : arKey;
+      final value = read(primary);
+      if (value.isNotEmpty) return value;
+      final fallbackValue = read(secondary);
+      if (fallbackValue.isNotEmpty) return fallbackValue;
+      return fallback;
+    }
+
     final lectureDate = notification.lectureDate;
     final rawLectureDate = read('lectureDate');
     String lectureDateText = _normalizeDateText(rawLectureDate);
@@ -1885,8 +1896,9 @@ class _NotificationExcuseDetails {
       submissionTime: read('submissionTime', fallback: '-'),
       studentName: read('studentName', fallback: '-'),
       academicNumber: read('academicNumber', fallback: '-'),
-      courseName: read(
-        'courseNameAr',
+      courseName: readLocalized(
+        arKey: 'courseNameAr',
+        enKey: 'courseNameEn',
         fallback: notification.courseName.isEmpty
             ? '-'
             : notification.courseName,
@@ -1983,6 +1995,18 @@ class _ResolvedExcuseData {
     String readLive(String key) => (liveData[key] ?? '').toString().trim();
     final base = _NotificationExcuseDetails.fromNotification(notification);
     final liveReason = readLive('reasonText');
+    String localizedLiveCourseName() {
+      final primary = LecturerLanguageController.isArabic
+          ? readLive('courseNameAr')
+          : readLive('courseNameEn');
+      if (primary.isNotEmpty) return primary;
+
+      final fallback = LecturerLanguageController.isArabic
+          ? readLive('courseNameEn')
+          : readLive('courseNameAr');
+      return fallback.isNotEmpty ? fallback : base.courseName;
+    }
+
     final snapshotReason =
         (notification.excuseRequestSnapshot['reasonText'] ?? '')
             .toString()
@@ -2019,9 +2043,7 @@ class _ResolvedExcuseData {
       section: readLive('sectionId').isEmpty
           ? base.section
           : readLive('sectionId'),
-      courseName: readLive('courseNameAr').isEmpty
-          ? base.courseName
-          : readLive('courseNameAr'),
+      courseName: localizedLiveCourseName(),
       academicNumber: readLive('studentId').isEmpty
           ? base.academicNumber
           : readLive('studentId'),

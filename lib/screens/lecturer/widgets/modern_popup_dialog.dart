@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../lecturer_language.dart';
+
 class ModernPopupDialog extends StatelessWidget {
   const ModernPopupDialog({
     super.key,
@@ -153,9 +155,7 @@ class ModernPopupSheet extends StatelessWidget {
           if (cap > 0) {
             body = ConstrainedBox(
               constraints: BoxConstraints(maxHeight: cap),
-              child: SingleChildScrollView(
-                child: child,
-              ),
+              child: SingleChildScrollView(child: child),
             );
           }
         }
@@ -208,7 +208,8 @@ class ModernPopupSheet extends StatelessWidget {
                                 color: accentColor,
                               ),
                             ),
-                          if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
+                          if (subtitle != null &&
+                              subtitle!.trim().isNotEmpty) ...[
                             const SizedBox(height: 4),
                             Text(
                               subtitle!,
@@ -229,7 +230,10 @@ class ModernPopupSheet extends StatelessWidget {
                         onPressed: onClose,
                         icon: const Icon(Icons.close_rounded),
                         color: const Color(0xFF60757A),
-                        tooltip: 'Close',
+                        tooltip: LecturerLanguageController.tr(
+                          'إغلاق',
+                          'Close',
+                        ),
                       ),
                   ],
                 ),

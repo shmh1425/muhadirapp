@@ -1,13 +1,51 @@
 import 'package:flutter/material.dart';
 
+import '../../features/translation/translation_controller.dart';
+
 enum LecturerLanguage { arabic, english }
+
+class _LecturerLanguageNotifier extends ValueNotifier<LecturerLanguage> {
+  _LecturerLanguageNotifier()
+    : super(
+        TranslationController.instance.translateToEnglish
+            ? LecturerLanguage.english
+            : LecturerLanguage.arabic,
+      ) {
+    TranslationController.instance.addListener(_syncFromTranslation);
+  }
+
+  bool _syncingFromTranslation = false;
+
+  @override
+  set value(LecturerLanguage newValue) {
+    if (_syncingFromTranslation) {
+      super.value = newValue;
+      return;
+    }
+    TranslationController.instance.setTranslateToEnglish(
+      newValue == LecturerLanguage.english,
+    );
+    if (super.value != newValue) {
+      super.value = newValue;
+    }
+  }
+
+  void _syncFromTranslation() {
+    final language = TranslationController.instance.translateToEnglish
+        ? LecturerLanguage.english
+        : LecturerLanguage.arabic;
+    if (super.value == language) return;
+    _syncingFromTranslation = true;
+    super.value = language;
+    _syncingFromTranslation = false;
+  }
+}
 
 class LecturerLanguageController {
   LecturerLanguageController._();
 
-  static final ValueNotifier<LecturerLanguage> notifier = ValueNotifier(
-    LecturerLanguage.arabic,
-  );
+  static final ValueNotifier<LecturerLanguage> notifier =
+      _LecturerLanguageNotifier();
 
   static LecturerLanguage get current => notifier.value;
 

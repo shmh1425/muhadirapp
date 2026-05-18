@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../providers/lecturer_catalog_providers.dart';
 import 'lecturer_language.dart';
+import 'widgets/directional_navigation_icon.dart';
 import 'widgets/modern_popup_dialog.dart';
 import 'widgets/profile_back_button.dart';
 
@@ -309,7 +310,8 @@ class _LecturerMyLecturesScreenState
   }
 
   Widget _buildLectureCard(LectureItem lecture) {
-    final isPractical = lecture.activity.trim() == 'عملي';
+    final activity = lecture.activity.trim().toLowerCase();
+    final isPractical = activity == 'عملي' || activity == 'lab';
     final accentStart = isPractical ? const Color(0xFF2A9DA7) : _primaryColor;
     final accentEnd = isPractical
         ? const Color(0xFF167B83)
@@ -366,8 +368,7 @@ class _LecturerMyLecturesScreenState
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Icon(
-                          Icons.arrow_forward_ios_rounded,
+                        LecturerDirectionalForwardIcon(
                           size: 14,
                           color: _primaryColor.withValues(alpha: 0.7),
                         ),
@@ -464,7 +465,10 @@ class _LecturerMyLecturesScreenState
               if (lecture.location != null &&
                   lecture.location!.trim().isNotEmpty)
                 _detailRow(_tr('الموقع', 'Location'), lecture.location!.trim()),
-              _detailRow(_tr('النوع', 'Type'), lecture.activity),
+              _detailRow(
+                _tr('النوع', 'Type'),
+                _activityLabel(lecture.activity),
+              ),
               _detailRow(
                 _tr('اليوم', 'Day'),
                 _displayDayName(lecture.dayOfWeek),
@@ -544,23 +548,19 @@ class _LecturerMyLecturesScreenState
   }
 
   String _dayName(int weekday) {
-    switch (weekday) {
-      case 7:
-        return 'الأحد';
-      case 1:
-        return 'الاثنين';
-      case 2:
-        return 'الثلاثاء';
-      case 3:
-        return 'الأربعاء';
-      case 4:
-        return 'الخميس';
-      case 5:
-        return 'الجمعة';
-      case 6:
-        return 'السبت';
+    return LecturerLanguageController.dayNameFromWeekday(weekday);
+  }
+
+  String _activityLabel(String activity) {
+    switch (activity.trim().toLowerCase()) {
+      case 'عملي':
+      case 'lab':
+        return _tr('عملي', 'Lab');
+      case 'نظري':
+      case 'theory':
+        return _tr('نظري', 'Theory');
       default:
-        return 'غير محدد';
+        return activity;
     }
   }
 }

@@ -25,7 +25,9 @@ class LectureDetailCard extends StatelessWidget {
       lecture.startTime,
       lecture.endTime,
     );
-    final dayName = LecturerLanguageController.dayNameFromWeekday(lecture.dayOfWeek);
+    final dayName = LecturerLanguageController.dayNameFromWeekday(
+      lecture.dayOfWeek,
+    );
     final displayLocation = (lecture.location ?? '').trim().isNotEmpty
         ? lecture.location!.trim()
         : null;
@@ -33,10 +35,11 @@ class LectureDetailCard extends StatelessWidget {
         ? lecture.hall
         : null;
 
-    final iconData = lecture.activity == 'عملي'
-        ? Icons.science
-        : Icons.menu_book;
-    final iconColor = lecture.activity == 'عملي'
+    final normalizedActivity = lecture.activity.trim().toLowerCase();
+    final isPractical =
+        normalizedActivity == 'عملي' || normalizedActivity == 'lab';
+    final iconData = isPractical ? Icons.science : Icons.menu_book;
+    final iconColor = isPractical
         ? const Color(0xFF4A90E2)
         : const Color(0xFF8B6F47);
 
@@ -163,7 +166,10 @@ class _DetailRow extends StatelessWidget {
                 children: [
                   TextSpan(
                     text: '$label: ',
-                    style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey.shade800),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade800,
+                    ),
                   ),
                   TextSpan(text: value),
                 ],

@@ -213,10 +213,12 @@ class LectureCard extends StatelessWidget {
   }
 
   String _activityLabel(String activity) {
-    switch (activity) {
+    switch (activity.trim().toLowerCase()) {
       case 'عملي':
+      case 'lab':
         return LecturerLanguageController.tr('عملي', 'Lab');
       case 'نظري':
+      case 'theory':
         return LecturerLanguageController.tr('نظري', 'Theory');
       default:
         return activity;

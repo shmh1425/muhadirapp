@@ -16,6 +16,7 @@ import '../../services/lecturer_auth_service.dart';
 import '../../utils/shared/time_utils.dart';
 import 'lecturer_language.dart';
 import 'lecturer_navigation.dart';
+import 'widgets/directional_navigation_icon.dart';
 import 'widgets/modern_popup_dialog.dart';
 import 'widgets/profile_back_button.dart';
 
@@ -126,7 +127,9 @@ class _LecturerAttendanceReportScreenState
   @override
   void dispose() {
     _saveAttendanceReportNavCache();
-    LecturerLanguageController.notifier.removeListener(_onLecturerLanguageChanged);
+    LecturerLanguageController.notifier.removeListener(
+      _onLecturerLanguageChanged,
+    );
     _calendarSyncSub?.cancel();
     super.dispose();
   }
@@ -198,8 +201,8 @@ class _LecturerAttendanceReportScreenState
           final nextLecture = lec ?? g.lecture;
           final courseName =
               (nextLecture?.courseName.trim().isNotEmpty ?? false)
-                  ? nextLecture!.courseName
-                  : g.courseName;
+              ? nextLecture!.courseName
+              : g.courseName;
           final courseCode = (nextLecture?.crn.trim().isNotEmpty ?? false)
               ? nextLecture!.crn.trim()
               : g.courseCode;
@@ -245,7 +248,8 @@ class _LecturerAttendanceReportScreenState
 
     setState(() => _isLoadingRecords = true);
     try {
-      final recordsBySession = await _manualAttendanceService.getRecordsForSessionIds(want);
+      final recordsBySession = await _manualAttendanceService
+          .getRecordsForSessionIds(want);
       if (!mounted) return;
       setState(() {
         _loadedRecordSessionIds.addAll(want);
@@ -258,7 +262,9 @@ class _LecturerAttendanceReportScreenState
     }
   }
 
-  void _applyRecordsToGroups(Map<String, List<ManualAttendanceRecord>> recordsBySession) {
+  void _applyRecordsToGroups(
+    Map<String, List<ManualAttendanceRecord>> recordsBySession,
+  ) {
     if (recordsBySession.isEmpty) return;
     final updated = <_LectureAttendanceGroup>[];
     for (final g in _groups) {
@@ -425,8 +431,10 @@ class _LecturerAttendanceReportScreenState
       sectionIds.add(sectionId);
       lectureBySection[sectionId] = lecture;
     }
-    final warm =
-        LecturerAttendanceSessionsWarmCache.takeMatching(lecturerId, sectionIds);
+    final warm = LecturerAttendanceSessionsWarmCache.takeMatching(
+      lecturerId,
+      sectionIds,
+    );
     if (warm == null) return null;
     final groups = _buildGroupsFromFirestore(
       sessions: warm,
@@ -501,10 +509,9 @@ class _LecturerAttendanceReportScreenState
               sectionIds,
             )
           : null;
-      final sessions = warmSessions ??
-          await _manualAttendanceService.getSessionsForSectionIds(
-            sectionIds,
-          );
+      final sessions =
+          warmSessions ??
+          await _manualAttendanceService.getSessionsForSectionIds(sectionIds);
       final groups = _buildGroupsFromFirestore(
         sessions: sessions,
         recordsBySession: const <String, List<ManualAttendanceRecord>>{},
@@ -840,6 +847,13 @@ class _LecturerAttendanceReportScreenState
                 color: Color(0xFF2F4449),
               ),
             ),
+            actions: [
+              ModernPopupActionButton(
+                label: _tr('إلغاء', 'Cancel'),
+                onTap: () => Navigator.of(dialogContext).pop(),
+                isPrimary: false,
+              ),
+            ],
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -865,13 +879,6 @@ class _LecturerAttendanceReportScreenState
                 ),
               ],
             ),
-            actions: [
-              ModernPopupActionButton(
-                label: _tr('إلغاء', 'Cancel'),
-                onTap: () => Navigator.of(dialogContext).pop(),
-                isPrimary: false,
-              ),
-            ],
           ),
         );
       },
@@ -1930,8 +1937,13 @@ class _LecturerAttendanceReportScreenState
           isExpanded: true,
           value: _selectedCourseCode,
           hint: Text(_tr('اختاري المقرر', 'Select course')),
-          icon: const Icon(Icons.keyboard_arrow_down_rounded),
+          icon: const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: Color(0xFF006571),
+          ),
           borderRadius: BorderRadius.circular(12),
+          dropdownColor: Colors.white,
+          menuMaxHeight: 320,
           style: const TextStyle(
             fontFamily: 'Cairo',
             fontSize: 13,
@@ -1972,8 +1984,13 @@ class _LecturerAttendanceReportScreenState
         child: DropdownButton<int?>(
           isExpanded: true,
           value: _selectedWeekNumber,
-          icon: const Icon(Icons.keyboard_arrow_down_rounded),
+          icon: const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: Color(0xFF006571),
+          ),
           borderRadius: BorderRadius.circular(12),
+          dropdownColor: Colors.white,
+          menuMaxHeight: 300,
           style: const TextStyle(
             fontFamily: 'Cairo',
             fontSize: 13,
@@ -2217,22 +2234,55 @@ class _LecturerAttendanceReportScreenState
       children: [
         SizedBox(
           width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: () => _openAttendanceForGroup(group, viewOnly: false),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF006571),
-              minimumSize: const Size.fromHeight(46),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            icon: const Icon(Icons.edit_note_rounded, size: 19),
-            label: Text(
-              _tr('فتح التقرير', 'Open report'),
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontWeight: FontWeight.w800,
-                fontSize: 13.2,
+          height: 46,
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+            child: InkWell(
+              onTap: () => _openAttendanceForGroup(group, viewOnly: false),
+              borderRadius: BorderRadius.circular(14),
+              child: Ink(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF27A2A9), Color(0xFF006571)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _primary.withValues(alpha: 0.18),
+                      blurRadius: 12,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.edit_note_rounded,
+                      size: 20,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        _tr('فتح التقرير', 'Open report'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -3175,7 +3225,7 @@ class _AttendanceDayActionScreen extends StatelessWidget {
               elevation: 0,
               leading: IconButton(
                 onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                icon: const LecturerDirectionalBackIcon(size: 18),
                 color: const Color(0xFF24383D),
               ),
               title: Text(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/calendar_day.dart';
 import '../screens/lecturer/lecturer_language.dart';
+import '../shared/widgets/directional_navigation_icon.dart';
 import '../utils/hijri_converter.dart';
 
 /// تقويم شهري تفاعلي
@@ -45,18 +46,17 @@ class MonthlyCalendar extends StatelessWidget {
   }
 
   Widget _buildMonthHeader(String monthName, String year) {
-    final isArabic = LecturerLanguageController.isArabic;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         _MonthNavButton(
           tooltip: _tr('الشهر السابق', 'Previous month'),
           label: _tr('السابق', 'Previous'),
-          icon: isArabic
-              ? Icons.chevron_left_rounded
-              : Icons.chevron_left_rounded,
+          icon: const DirectionalPreviousIcon(),
           onPressed: () {
-            onMonthChanged(DateTime(currentMonth.year, currentMonth.month - 1, 1));
+            onMonthChanged(
+              DateTime(currentMonth.year, currentMonth.month - 1, 1),
+            );
           },
         ),
         // اسم الشهر والسنة
@@ -85,11 +85,11 @@ class MonthlyCalendar extends StatelessWidget {
         _MonthNavButton(
           tooltip: _tr('الشهر التالي', 'Next month'),
           label: _tr('التالي', 'Next'),
-          icon: isArabic
-              ? Icons.chevron_right_rounded
-              : Icons.chevron_right_rounded,
+          icon: const DirectionalNextIcon(),
           onPressed: () {
-            onMonthChanged(DateTime(currentMonth.year, currentMonth.month + 1, 1));
+            onMonthChanged(
+              DateTime(currentMonth.year, currentMonth.month + 1, 1),
+            );
           },
         ),
       ],
@@ -240,8 +240,10 @@ class MonthlyCalendar extends StatelessWidget {
     final isHoliday = status == DayStatus.holiday;
     final isFutureLocked = status == DayStatus.futureLocked;
     final isViewOnly = status == DayStatus.viewOnly;
-    final isEditable = status == DayStatus.editable || status == DayStatus.today;
-    final isLectureDay = hasLectures && (isEditable || isViewOnly || isFutureLocked);
+    final isEditable =
+        status == DayStatus.editable || status == DayStatus.today;
+    final isLectureDay =
+        hasLectures && (isEditable || isViewOnly || isFutureLocked);
     final backgroundColor = isToday
         ? DayStatus.today.color
         : isHoliday
@@ -438,7 +440,10 @@ class MonthlyCalendar extends StatelessWidget {
           ),
           _legendItem(
             _lectureDayFillColor(),
-            _tr('داخل آخر أسبوعين (قابل للتعديل)', 'Within last 2 weeks (editable)'),
+            _tr(
+              'داخل آخر أسبوعين (قابل للتعديل)',
+              'Within last 2 weeks (editable)',
+            ),
             false,
           ),
           _legendItem(
@@ -648,7 +653,7 @@ class _MonthNavButton extends StatelessWidget {
 
   final String tooltip;
   final String label;
-  final IconData icon;
+  final Widget icon;
   final VoidCallback onPressed;
 
   @override
@@ -667,7 +672,7 @@ class _MonthNavButton extends StatelessWidget {
             side: const BorderSide(color: Color(0xFFB8DDE2)),
           ),
         ),
-        icon: Icon(icon, size: 22),
+        icon: IconTheme(data: const IconThemeData(size: 22), child: icon),
         label: Text(
           label,
           style: const TextStyle(
