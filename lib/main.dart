@@ -16,6 +16,7 @@ import 'features/translation/translation_controller.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
+  await TranslationController.instance.loadSavedPreference();
   await Hive.openBox<dynamic>(StudentRepository.coursesBoxName);
   await Hive.openBox<dynamic>(LecturerCatalogRepository.boxName);
   await Hive.openBox<dynamic>(SecurityRepository.metadataBoxName);
@@ -65,9 +66,7 @@ class MyApp extends StatelessWidget {
       surfaceTintColor: Colors.transparent,
       elevation: 0,
     ),
-    dialogTheme: const DialogThemeData(
-      surfaceTintColor: Colors.transparent,
-    ),
+    dialogTheme: const DialogThemeData(surfaceTintColor: Colors.transparent),
     bottomSheetTheme: const BottomSheetThemeData(
       surfaceTintColor: Colors.transparent,
     ),
@@ -93,9 +92,7 @@ class MyApp extends StatelessWidget {
       surfaceTintColor: Colors.transparent,
       elevation: 0,
     ),
-    dialogTheme: const DialogThemeData(
-      surfaceTintColor: Colors.transparent,
-    ),
+    dialogTheme: const DialogThemeData(surfaceTintColor: Colors.transparent),
     bottomSheetTheme: const BottomSheetThemeData(
       surfaceTintColor: Colors.transparent,
     ),
@@ -107,31 +104,28 @@ class MyApp extends StatelessWidget {
       valueListenable: appThemeMode,
       builder: (context, mode, _) {
         final translation = TranslationController.instance;
-        return MaterialApp(
-          title: 'Flutter Demo',
-          theme: _lightTheme,
-          darkTheme: _darkTheme,
-          themeMode: mode,
-          locale: translation.locale,
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          supportedLocales: const [
-            Locale('ar'),
-            Locale('en'),
-          ],
-          builder: (context, child) {
-            return AnimatedBuilder(
-              animation: translation,
-              builder: (context, _) => Directionality(
+        return AnimatedBuilder(
+          animation: translation,
+          builder: (context, _) {
+            return MaterialApp(
+              title: 'Flutter Demo',
+              theme: _lightTheme,
+              darkTheme: _darkTheme,
+              themeMode: mode,
+              locale: translation.locale,
+              localizationsDelegates: const [
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              supportedLocales: const [Locale('ar'), Locale('en')],
+              builder: (context, child) => Directionality(
                 textDirection: translation.textDirection,
                 child: child ?? const SizedBox.shrink(),
               ),
+              home: const SplashScreen(),
             );
           },
-          home: const SplashScreen(),
         );
       },
     );

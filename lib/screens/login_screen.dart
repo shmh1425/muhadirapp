@@ -35,6 +35,9 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
 
+  String _tr(String ar, String en) =>
+      TranslationController.instance.translateToEnglish ? en : ar;
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -49,7 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final hasTerms = _agreeToTerms;
 
     setState(() {
-      _emailError = hasEmail ? null : 'اكتب ايميل';
+      _emailError = hasEmail ? null : _tr('اكتب ايميل', 'Enter your email');
       _termsError = !hasTerms;
     });
 
@@ -58,7 +61,9 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     if (password.isEmpty) {
-      setState(() => _emailError = 'أدخل كلمة المرور');
+      setState(
+        () => _emailError = _tr('أدخل كلمة المرور', 'Enter your password'),
+      );
       return;
     }
 
@@ -103,7 +108,10 @@ class _LoginScreenState extends State<LoginScreen> {
           if (!mounted) return;
           setState(() {
             _isLoading = false;
-            _emailError = 'حساب الأمن غير مفعل حالياً';
+            _emailError = _tr(
+              'حساب الأمن غير مفعل حالياً',
+              'The security account is not active right now',
+            );
           });
           return;
         }
@@ -133,11 +141,12 @@ class _LoginScreenState extends State<LoginScreen> {
         container.invalidate(lecturerUnifiedCatalogProvider);
         unawaited(LecturerColdStartWarmup.run(container));
         if (!mounted) return;
-        Navigator.of(context).pushReplacement(
+        Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(
             builder: (_) =>
                 LecturerMainShell(initialIndex: 2, profile: profile),
           ),
+          (route) => false,
         );
         return;
       }
@@ -152,9 +161,7 @@ class _LoginScreenState extends State<LoginScreen> {
           final sid = student.studentId.toString();
           await StudentRepository().clearCoursesCache(sid);
           await container
-              .read(
-                studentUnifiedCoursesProvider(sid).future,
-              )
+              .read(studentUnifiedCoursesProvider(sid).future)
               .timeout(const Duration(seconds: 12));
         } catch (e) {
           debugPrint('[Login] prefetch studentUnifiedCoursesProvider: $e');
@@ -171,20 +178,39 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _emailError = 'الحساب صحيح لكن غير مربوط بدور داخل النظام';
+        _emailError = _tr(
+          'الحساب صحيح لكن غير مربوط بدور داخل النظام',
+          'The account is valid but is not linked to a system role',
+        );
       });
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       final message = switch (e.code) {
-        'user-not-found' => 'لا يوجد حساب بهذا الإيميل، سجّل أولاً',
-        'wrong-password' => 'كلمة المرور غير صحيحة',
-        'invalid-email' => 'صيغة الإيميل غير صحيحة',
-        'invalid-credential' => 'الإيميل أو كلمة المرور غير صحيحة',
-        'network-request-failed' =>
+        'user-not-found' => _tr(
+          'لا يوجد حساب بهذا الإيميل، سجّل أولاً',
+          'No account exists for this email. Register first.',
+        ),
+        'wrong-password' => _tr(
+          'كلمة المرور غير صحيحة',
+          'The password is incorrect',
+        ),
+        'invalid-email' => _tr(
+          'صيغة الإيميل غير صحيحة',
+          'The email format is invalid',
+        ),
+        'invalid-credential' => _tr(
+          'الإيميل أو كلمة المرور غير صحيحة',
+          'The email or password is incorrect',
+        ),
+        'network-request-failed' => _tr(
           'تعذر الاتصال بالإنترنت. تأكد من الشبكة وحاول مرة أخرى.',
-        'keychain-error' =>
+          'Could not connect to the internet. Check the network and try again.',
+        ),
+        'keychain-error' => _tr(
           'تعذر الوصول إلى Keychain على macOS. أعد تشغيل التطبيق واسمح بالصلاحية.',
-        _ => e.message ?? 'فشل تسجيل الدخول',
+          'Could not access Keychain on macOS. Restart the app and allow access.',
+        ),
+        _ => e.message ?? _tr('فشل تسجيل الدخول', 'Sign-in failed'),
       };
       setState(() {
         _isLoading = false;
@@ -194,12 +220,22 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       debugPrint('Auto role routing error [${e.code}]: ${e.message}');
       final message = switch (e.code) {
-        'permission-denied' => 'لا توجد صلاحية لقراءة بيانات الدور.',
-        'unavailable' =>
+        'permission-denied' => _tr(
+          'لا توجد صلاحية لقراءة بيانات الدور.',
+          'There is no permission to read role data.',
+        ),
+        'unavailable' => _tr(
           'الخدمة غير متاحة حالياً، تأكد من الاتصال وحاول مرة أخرى.',
-        'failed-precondition' =>
+          'The service is unavailable right now. Check your connection and try again.',
+        ),
+        'failed-precondition' => _tr(
           'Firestore يحتاج إعداد إضافي (غالباً فهرس/Index).',
-        _ => 'حدث خطأ (${e.code})، حاول مرة أخرى.',
+          'Firestore needs extra setup, usually an index.',
+        ),
+        _ => _tr(
+          'حدث خطأ (${e.code})، حاول مرة أخرى.',
+          'An error occurred (${e.code}). Try again.',
+        ),
       };
       setState(() {
         _isLoading = false;
@@ -210,7 +246,10 @@ class _LoginScreenState extends State<LoginScreen> {
       debugPrint('Unknown login error: $e');
       setState(() {
         _isLoading = false;
-        _emailError = 'حدث خطأ غير متوقع، حاول مرة أخرى';
+        _emailError = _tr(
+          'حدث خطأ غير متوقع، حاول مرة أخرى',
+          'An unexpected error occurred. Try again.',
+        );
       });
     }
   }
@@ -221,21 +260,31 @@ class _LoginScreenState extends State<LoginScreen> {
     return AnimatedBuilder(
       animation: translation,
       builder: (context, _) {
-        final titleLogin = translation.translateToEnglish ? 'Sign in' : 'تسجيل الدخول';
-        final titleApp = translation.translateToEnglish ? 'In Muhadir app' : 'في تطبيق محضر';
-        final labelEmail =
-            translation.translateToEnglish ? 'University email:' : 'الإيميل الجامعي :';
-        final labelPassword =
-            translation.translateToEnglish ? 'Password:' : 'الرقم السري :';
-        final forgot =
-            translation.translateToEnglish ? 'Forgot password?' : 'نسيت كلمة المرور؟';
+        final titleLogin = translation.translateToEnglish
+            ? 'Sign in'
+            : 'تسجيل الدخول';
+        final titleApp = translation.translateToEnglish
+            ? 'In Muhadir app'
+            : 'في تطبيق محضر';
+        final labelEmail = translation.translateToEnglish
+            ? 'University email:'
+            : 'الإيميل الجامعي :';
+        final labelPassword = translation.translateToEnglish
+            ? 'Password:'
+            : 'الرقم السري :';
+        final forgot = translation.translateToEnglish
+            ? 'Forgot password?'
+            : 'نسيت كلمة المرور؟';
         final terms = translation.translateToEnglish
             ? 'By signing in, you agree to the Terms of Use and Privacy Policy.'
             : 'بدخولك إلى هذا التطبيق، فإنك توافق على شروط الاستخدام وسياسة الخصوصية.';
         final termsError = translation.translateToEnglish
             ? 'You must agree to the terms of use'
             : 'يجب الموافقة على شروط الاستخدام';
-        final btnLogin = translation.translateToEnglish ? 'Sign in' : 'تسجيل الدخول';
+        final btnLogin = translation.translateToEnglish
+            ? 'Sign in'
+            : 'تسجيل الدخول';
+        final languageTarget = translation.translateToEnglish ? 'عربي' : 'EN';
 
         return Directionality(
           textDirection: translation.textDirection,
@@ -253,204 +302,246 @@ class _LoginScreenState extends State<LoginScreen> {
                         height: 230,
                         fit: BoxFit.cover,
                       ),
-                      // Language toggle moved to Settings screen only.
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 20,
-                ),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    TText(
-                      titleLogin,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF006571),
-                        fontFamily: 'Cairo',
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    TText(
-                      titleApp,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        color: Color(0xFFB08B50),
-                        fontFamily: 'Cairo',
-                      ),
-                    ),
-                    const SizedBox(height: 22),
-                    TText(
-                      labelEmail,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF222222),
-                        fontFamily: 'Cairo',
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    _InputField(
-                      hintText: 'info@email.com',
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      textDirection: TextDirection.ltr,
-                      textAlign: TextAlign.left,
-                      errorText: _emailError,
-                      onChanged: (_) {
-                        if (_emailError != null) {
-                          setState(() {
-                            _emailError = null;
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 18),
-                    TText(
-                      labelPassword,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF222222),
-                        fontFamily: 'Cairo',
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    _InputField(
-                      hintText: '••••••••',
-                      obscureText: _obscurePassword,
-                      controller: _passwordController,
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_off_outlined
-                              : Icons.visibility_outlined,
-                          color: const Color(0xFF006571),
-                          size: 22,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _obscurePassword = !_obscurePassword;
-                          });
-                        },
-                        splashRadius: 20,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: () {},
-                        child: TText(
-                          forgot,
-                          style: const TextStyle(
-                            color: Color(0xFF444444),
-                            fontFamily: 'Cairo',
-                          ),
-                        ),
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: _agreeToTerms,
-                          onChanged: (value) {
-                            setState(() {
-                              _agreeToTerms = value ?? false;
-                              if (_agreeToTerms) {
-                                _termsError = false;
-                              }
-                            });
-                          },
-                          activeColor: const Color(0xFF006571),
-                          checkColor: Colors.white,
-                          side: const BorderSide(
-                            color: Color(0xFF006571),
-                            width: 1.4,
-                          ),
-                          fillColor:
-                              WidgetStateProperty.resolveWith<Color>((states) {
-                            if (states.contains(WidgetState.selected)) {
-                              return const Color(0xFF006571);
-                            }
-                            // Keep unchecked box clearly visible on white backgrounds.
-                            return Colors.white;
-                          }),
-                        ),
-                        Expanded(
-                          child: TText(
-                            terms,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF444444),
-                              fontFamily: 'Cairo',
+                      PositionedDirectional(
+                        top: 12,
+                        end: 12,
+                        child: Tooltip(
+                          message: translation.toggleLabel,
+                          child: Material(
+                            color: Colors.white.withValues(alpha: 0.92),
+                            borderRadius: BorderRadius.circular(24),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(24),
+                              onTap: translation.toggle,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.language,
+                                      color: Color(0xFF006571),
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      languageTarget,
+                                      style: const TextStyle(
+                                        color: Color(0xFF006571),
+                                        fontWeight: FontWeight.w700,
+                                        fontFamily: 'Cairo',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                    if (_termsError) ...[
-                      const SizedBox(height: 6),
-                      TText(
-                        termsError,
-                        style: const TextStyle(
-                          color: Color(0xFFD32F2F),
-                          fontSize: 12,
-                          fontFamily: 'Cairo',
-                        ),
                       ),
                     ],
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 46,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF27A2A9), Color(0xFF006571)],
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                          ),
-                          borderRadius: BorderRadius.circular(28),
-                        ),
-                        child: TextButton(
-                          onPressed: _isLoading ? null : _onLoginPressed,
-                          child: _isLoading
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : TText(
-                                  btnLogin,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                    fontFamily: 'Cairo',
-                                  ),
-                                ),
-                        ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 20,
+                    ),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(26),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                  ],
-                ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TText(
+                          titleLogin,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF006571),
+                            fontFamily: 'Cairo',
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        TText(
+                          titleApp,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            color: Color(0xFFB08B50),
+                            fontFamily: 'Cairo',
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        TText(
+                          labelEmail,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF222222),
+                            fontFamily: 'Cairo',
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        _InputField(
+                          hintText: 'info@email.com',
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          textDirection: TextDirection.ltr,
+                          textAlign: TextAlign.left,
+                          errorText: _emailError,
+                          onChanged: (_) {
+                            if (_emailError != null) {
+                              setState(() {
+                                _emailError = null;
+                              });
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 18),
+                        TText(
+                          labelPassword,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF222222),
+                            fontFamily: 'Cairo',
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        _InputField(
+                          hintText: '••••••••',
+                          obscureText: _obscurePassword,
+                          controller: _passwordController,
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              color: const Color(0xFF006571),
+                              size: 22,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscurePassword = !_obscurePassword;
+                              });
+                            },
+                            splashRadius: 20,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () {},
+                            child: TText(
+                              forgot,
+                              style: const TextStyle(
+                                color: Color(0xFF444444),
+                                fontFamily: 'Cairo',
+                              ),
+                            ),
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            Checkbox(
+                              value: _agreeToTerms,
+                              onChanged: (value) {
+                                setState(() {
+                                  _agreeToTerms = value ?? false;
+                                  if (_agreeToTerms) {
+                                    _termsError = false;
+                                  }
+                                });
+                              },
+                              activeColor: const Color(0xFF006571),
+                              checkColor: Colors.white,
+                              side: const BorderSide(
+                                color: Color(0xFF006571),
+                                width: 1.4,
+                              ),
+                              fillColor: WidgetStateProperty.resolveWith<Color>((
+                                states,
+                              ) {
+                                if (states.contains(WidgetState.selected)) {
+                                  return const Color(0xFF006571);
+                                }
+                                // Keep unchecked box clearly visible on white backgrounds.
+                                return Colors.white;
+                              }),
+                            ),
+                            Expanded(
+                              child: TText(
+                                terms,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF444444),
+                                  fontFamily: 'Cairo',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_termsError) ...[
+                          const SizedBox(height: 6),
+                          TText(
+                            termsError,
+                            style: const TextStyle(
+                              color: Color(0xFFD32F2F),
+                              fontSize: 12,
+                              fontFamily: 'Cairo',
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          height: 46,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF27A2A9), Color(0xFF006571)],
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                              ),
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                            child: TextButton(
+                              onPressed: _isLoading ? null : _onLoginPressed,
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : TText(
+                                      btnLogin,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                        fontFamily: 'Cairo',
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
         );
       },
     );
