@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'directional_navigation_icon.dart';
+
 class ProfileBackButton extends StatelessWidget {
   const ProfileBackButton({
     super.key,
@@ -33,10 +35,7 @@ class ProfileBackButton extends StatelessWidget {
               ),
             ],
           ),
-          child: IconTheme(
-            data: IconThemeData(color: color, size: 15),
-            child: const BackButtonIcon(),
-          ),
+          child: LecturerDirectionalBackIcon(color: color, size: 15),
         ),
       ),
     );
