@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../screens/lecturer/lecturer_language.dart';
+import '../../utils/lecturer_activity_localization.dart';
 
 /// Card component لعرض معلومات المحاضرة في Timeline
 class LectureCard extends StatelessWidget {
@@ -96,7 +97,7 @@ class LectureCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  _activityLabel(lecture.activity),
+                  LecturerActivityLocalization.label(lecture.activity),
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
@@ -210,19 +211,6 @@ class LectureCard extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  String _activityLabel(String activity) {
-    switch (activity.trim().toLowerCase()) {
-      case 'عملي':
-      case 'lab':
-        return LecturerLanguageController.tr('عملي', 'Lab');
-      case 'نظري':
-      case 'theory':
-        return LecturerLanguageController.tr('نظري', 'Theory');
-      default:
-        return activity;
-    }
   }
 
   Widget _buildDetailItem(IconData icon, String text) {

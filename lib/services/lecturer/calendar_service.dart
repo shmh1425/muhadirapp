@@ -11,10 +11,14 @@ class CalendarService {
   CalendarService(this._repository);
 
   /// بناء بيانات التقويم من المحاضرات
+  ///
+  /// When [applyActiveTermBounds] is true, days outside the active term show no
+  /// lecture counts (used by Lecturer Home).
   List<CalendarDay> buildCalendarDays(
     DateTime currentMonth,
-    List<LectureItem> allLectures,
-  ) {
+    List<LectureItem> allLectures, {
+    bool applyActiveTermBounds = false,
+  }) {
     final List<CalendarDay> calendarDays = [];
     final now = _repository.currentDateTime;
     // مقارنة بالتاريخ فقط بدون الوقت
@@ -28,17 +32,25 @@ class CalendarService {
       final date = DateTime(currentMonth.year, currentMonth.month, day);
       final hijriInfo = HijriConverter.gregorianToHijri(date);
 
-      // العطلة: لا محاضرات ولا نقاط (جمعة/سبت + عطلات رسمية)
-      final isHoliday = _repository.isHoliday(date);
-      final holidayType = isHoliday
-          ? _repository.holidayTypeForDate(date)
+      final outsideTerm = applyActiveTermBounds &&
+          !_repository.isWithinActiveTerm(date);
+      final schedulingExcluded = applyActiveTermBounds
+          ? _repository.isScheduledLecturesExcluded(date)
+          : _repository.isHoliday(date);
+      final holidayType = schedulingExcluded
+          ? (_repository.holidayTypeForDate(date) ??
+              (applyActiveTermBounds &&
+                      _repository.isNonAttendanceWeekDate(date)
+                  ? 'break'
+                  : null))
           : null;
       final dayOfWeek = date.weekday;
-      final lecturesForDay = isHoliday
-          ? <LectureItem>[]
-          : allLectures
+      final showScheduledLectures = !outsideTerm && !schedulingExcluded;
+      final lecturesForDay = showScheduledLectures
+          ? allLectures
                 .where((lecture) => lecture.dayOfWeek == dayOfWeek)
-                .toList();
+                .toList()
+          : <LectureItem>[];
       final lecturesCount = lecturesForDay.length;
 
       // تحديد الحالة حسب الأولوية
@@ -46,6 +58,8 @@ class CalendarService {
         date: date,
         today: today,
         lecturesCount: lecturesCount,
+        outsideTerm: outsideTerm,
+        schedulingExcluded: schedulingExcluded,
       );
 
       calendarDays.add(
@@ -77,20 +91,25 @@ class CalendarService {
     required DateTime date,
     required DateTime today,
     required int lecturesCount,
+    bool outsideTerm = false,
+    bool schedulingExcluded = false,
   }) {
     final bool isToday = date.isAtSameMomentAs(today);
-    final bool isHoliday = _repository.isHoliday(date);
     final bool isFuture = date.isAfter(today);
     final bool isPast = date.isBefore(today);
     final cutoff = today.subtract(const Duration(days: _editableWindowDays));
+
+    if (outsideTerm) {
+      return DayStatus.none;
+    }
 
     if (isToday) {
       // اليوم الحالي → أعلى أولوية
       return DayStatus.today;
     }
 
-    if (isHoliday) {
-      // عطلة رسمية → ثاني أولوية
+    if (schedulingExcluded) {
+      // عطلة / أسبوع غير محسوب للحضور
       return DayStatus.holiday;
     }
 

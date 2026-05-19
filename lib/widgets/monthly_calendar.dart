@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../models/calendar_day.dart';
 import '../screens/lecturer/lecturer_language.dart';
-import '../shared/widgets/directional_navigation_icon.dart';
+import '../screens/lecturer/widgets/directional_navigation_icon.dart';
+import '../shared/widgets/directional_navigation_icon.dart'
+    show DirectionalPreviousIcon;
 import '../utils/hijri_converter.dart';
 
 /// تقويم شهري تفاعلي
@@ -21,27 +23,29 @@ class MonthlyCalendar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final monthName = LecturerLanguageController.isArabic
-        ? _gregorianMonthNameAr(currentMonth.month)
-        : _gregorianMonthNameEn(currentMonth.month);
-    final yearText = LecturerLanguageController.isArabic
-        ? HijriConverter.toArabicNumber(currentMonth.year)
-        : '${currentMonth.year}';
+    return ValueListenableBuilder<LecturerLanguage>(
+      valueListenable: LecturerLanguageController.notifier,
+      builder: (context, _, __) {
+        final isArabic = LecturerLanguageController.isArabic;
+        final monthName = isArabic
+            ? _gregorianMonthNameAr(currentMonth.month)
+            : _gregorianMonthNameEn(currentMonth.month);
+        final yearText = isArabic
+            ? HijriConverter.toArabicNumber(currentMonth.year)
+            : '${currentMonth.year}';
 
-    return Column(
-      children: [
-        // شريط الشهر مع الأسهم
-        _buildMonthHeader(monthName, yearText),
-        const SizedBox(height: 16),
-        // صف أيام الأسبوع
-        _buildWeekDaysHeader(),
-        const SizedBox(height: 8),
-        // شبكة التقويم
-        _buildCalendarGrid(),
-        const SizedBox(height: 16),
-        // دليل الألوان
-        _buildColorLegend(),
-      ],
+        return Column(
+          children: [
+            _buildMonthHeader(monthName, yearText),
+            const SizedBox(height: 16),
+            _buildWeekDaysHeader(),
+            const SizedBox(height: 8),
+            _buildCalendarGrid(),
+            const SizedBox(height: 16),
+            _buildColorLegend(),
+          ],
+        );
+      },
     );
   }
 
@@ -53,6 +57,7 @@ class MonthlyCalendar extends StatelessWidget {
           tooltip: _tr('الشهر السابق', 'Previous month'),
           label: _tr('السابق', 'Previous'),
           icon: const DirectionalPreviousIcon(),
+          labelBeforeIcon: false,
           onPressed: () {
             onMonthChanged(
               DateTime(currentMonth.year, currentMonth.month - 1, 1),
@@ -85,7 +90,8 @@ class MonthlyCalendar extends StatelessWidget {
         _MonthNavButton(
           tooltip: _tr('الشهر التالي', 'Next month'),
           label: _tr('التالي', 'Next'),
-          icon: const DirectionalNextIcon(),
+          icon: const LecturerDirectionalForwardIcon(),
+          labelBeforeIcon: true,
           onPressed: () {
             onMonthChanged(
               DateTime(currentMonth.year, currentMonth.month + 1, 1),
@@ -649,39 +655,63 @@ class _MonthNavButton extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.onPressed,
+    this.labelBeforeIcon = true,
   });
 
   final String tooltip;
   final String label;
   final Widget icon;
   final VoidCallback onPressed;
+  /// When false, uses original icon-then-label layout (السابق).
+  final bool labelBeforeIcon;
+
+  ButtonStyle get _buttonStyle => FilledButton.styleFrom(
+        backgroundColor: const Color(0xFFE6F3F5),
+        foregroundColor: const Color(0xFF006571),
+        elevation: 0,
+        minimumSize: const Size(96, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: Color(0xFFB8DDE2)),
+        ),
+      );
+
+  TextStyle get _labelStyle => const TextStyle(
+        fontFamily: 'Cairo',
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+      );
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip,
-      child: FilledButton.icon(
-        onPressed: onPressed,
-        style: FilledButton.styleFrom(
-          backgroundColor: const Color(0xFFE6F3F5),
-          foregroundColor: const Color(0xFF006571),
-          elevation: 0,
-          minimumSize: const Size(96, 44),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: Color(0xFFB8DDE2)),
-          ),
-        ),
-        icon: IconTheme(data: const IconThemeData(size: 22), child: icon),
-        label: Text(
-          label,
-          style: const TextStyle(
-            fontFamily: 'Cairo',
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
+      child: labelBeforeIcon
+          ? FilledButton(
+              onPressed: onPressed,
+              style: _buttonStyle,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label, style: _labelStyle),
+                  const SizedBox(width: 6),
+                  IconTheme(
+                    data: const IconThemeData(size: 22),
+                    child: icon,
+                  ),
+                ],
+              ),
+            )
+          : FilledButton.icon(
+              onPressed: onPressed,
+              style: _buttonStyle,
+              icon: IconTheme(
+                data: const IconThemeData(size: 22),
+                child: icon,
+              ),
+              label: Text(label, style: _labelStyle),
+            ),
     );
   }
 }

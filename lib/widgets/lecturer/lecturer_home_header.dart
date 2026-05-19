@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/lecturer_auth_service.dart';
 import '../../utils/shared/date_utils.dart' as date_utils;
 import '../../screens/lecturer/lecturer_language.dart';
 
@@ -17,44 +18,63 @@ class LecturerHomeHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final language = LecturerLanguageController.current;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _getGreeting(language),
-                style: const TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF006571),
-                  fontFamily: 'Cairo',
-                  height: 1.2,
-                ),
-              ),
-              if (lecturerName != null && lecturerName!.trim().isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(
-                  lecturerName!,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF1F7F86),
-                    fontFamily: 'Cairo',
+    return ValueListenableBuilder<LecturerLanguage>(
+      valueListenable: LecturerLanguageController.notifier,
+      builder: (context, language, _) {
+        final displayName = _resolveLecturerName(language);
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _getGreeting(language),
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF006571),
+                      fontFamily: 'Cairo',
+                      height: 1.2,
+                    ),
+                    textAlign: TextAlign.start,
                   ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              _buildDateSection(language),
-            ],
-          ),
-        ),
-      ],
+                  if (displayName.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      displayName,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1F7F86),
+                        fontFamily: 'Cairo',
+                      ),
+                      textAlign: TextAlign.start,
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  _buildDateSection(language),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
+  }
+
+  String _resolveLecturerName(LecturerLanguage language) {
+    final isArabic = language == LecturerLanguage.arabic;
+    final fromAuth =
+        LecturerAuthService.instance.currentLecturer?.displayNameFor(isArabic);
+    if (fromAuth != null && fromAuth.trim().isNotEmpty) {
+      return fromAuth.trim();
+    }
+    final fallback = lecturerName?.trim() ?? '';
+    if (fallback.isNotEmpty) return fallback;
+    return LecturerLanguageController.tr('محاضر', 'Lecturer', language: language);
   }
 
   Widget _buildDateSection(LecturerLanguage language) {
@@ -131,10 +151,11 @@ class LecturerHomeHeader extends StatelessWidget {
 
   String _getGreeting(LecturerLanguage language) {
     final hour = referenceDateTime.hour;
-    if (language == LecturerLanguage.arabic) {
-      return hour < 12 ? 'صباح الخير' : 'مساء الخير';
-    }
-    return hour < 12 ? 'Good Morning' : 'Good Evening';
+    return LecturerLanguageController.tr(
+      hour < 12 ? 'صباح الخير' : 'مساء الخير',
+      hour < 12 ? 'Good morning' : 'Good evening',
+      language: language,
+    );
   }
 
   Map<String, String> _getDateInfo(DateTime date, LecturerLanguage language) {

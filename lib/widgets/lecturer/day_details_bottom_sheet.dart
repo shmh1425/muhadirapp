@@ -154,7 +154,10 @@ class DayDetailsBottomSheet extends StatelessWidget {
                         child: Text(
                           _tr(
                             'لا توجد محاضرات في هذا اليوم',
-                            'No lectures for this day',
+                            _tr(
+                              'لا توجد محاضرات في هذا اليوم',
+                              'No lectures for this day',
+                            ),
                           ),
                           style: TextStyle(
                             fontSize: 16,

@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../models/lecturer/lecture_item.dart';
+import '../../utils/lecture_action_eligibility.dart';
+import '../../utils/localized_firestore_fields.dart';
 import '../lecturer_auth_service.dart';
 
 enum LectureActionType { delay, cancel }
@@ -11,6 +13,7 @@ enum LectureActionBlockReason {
   alreadyDelayed,
   alreadyCanceled,
   canceledCannotDelay,
+  lectureExpired,
 }
 
 class LectureActionBlockedException implements Exception {
@@ -127,6 +130,16 @@ class LectureActionNotificationService {
       throw StateError('Section ID is required to notify students.');
     }
 
+    final normalizedDate = _normalizeDate(lectureDate);
+    if (!LectureActionEligibility.isLectureItemActionable(
+      lecture: lecture,
+      lectureDate: normalizedDate,
+    )) {
+      throw const LectureActionBlockedException(
+        LectureActionBlockReason.lectureExpired,
+      );
+    }
+
     final lecturer = LecturerAuthService.instance.currentLecturer;
     final lecturerId = (lecturer?.lecturerId ?? '').trim();
     if (lecturerId.isEmpty) {
@@ -136,7 +149,6 @@ class LectureActionNotificationService {
     final lecturerDisplayName = lecturer!.nameAr.trim().isNotEmpty
         ? lecturer.nameAr.trim()
         : lecturer.nameEn.trim();
-    final normalizedDate = _normalizeDate(lectureDate);
     final dateKey = _dateKey(normalizedDate);
     final actionId = _buildActionId(
       sectionId: sectionId,
@@ -180,17 +192,21 @@ class LectureActionNotificationService {
       }
       recipientsCount = studentNotificationIds.length;
 
+      final courseNameAr =
+          (lecture.courseNameAr ?? lecture.courseName).trim();
+      final courseNameEn =
+          (lecture.courseNameEn ?? lecture.courseName).trim();
       final lecturerMessageAr = _buildLecturerMessageAr(
         actionType: actionType,
         recipientCount: recipientsCount,
-        courseName: lecture.courseName,
+        courseName: courseNameAr.isNotEmpty ? courseNameAr : lecture.courseName,
         section: lecture.section,
         delayMinutes: delayMinutes,
       );
       final lecturerMessageEn = _buildLecturerMessageEn(
         actionType: actionType,
         recipientCount: recipientsCount,
-        courseName: lecture.courseName,
+        courseName: courseNameEn.isNotEmpty ? courseNameEn : lecture.courseName,
         section: lecture.section,
         delayMinutes: delayMinutes,
       );
@@ -428,7 +444,13 @@ class LectureActionNotificationService {
       'lecturerName': lecturerDisplayName,
       'sectionId': lecture.sectionId,
       'courseCode': lecture.crn,
-      'courseName': lecture.courseName,
+      'courseName': _englishCourseSnapshot(lecture),
+      'courseNameAr': (lecture.courseNameAr ?? '').trim().isNotEmpty
+          ? (lecture.courseNameAr ?? '').trim()
+          : (LocalizedFirestoreFields.containsArabicScript(lecture.courseName)
+              ? lecture.courseName
+              : ''),
+      'courseNameEn': _englishCourseSnapshot(lecture),
       'section': lecture.section,
       'dateKey': dateKey,
       'lectureStartTime': lecture.startTime,
@@ -733,5 +755,16 @@ class LectureActionNotificationService {
     if (value is int) return value;
     if (value is num) return value.toInt();
     return int.tryParse(value.toString());
+  }
+
+  static String _englishCourseSnapshot(LectureItem lecture) {
+    final en = (lecture.courseNameEn ?? '').trim();
+    if (en.isNotEmpty) return en;
+    final display = lecture.courseName.trim();
+    if (display.isNotEmpty &&
+        !LocalizedFirestoreFields.containsArabicScript(display)) {
+      return display;
+    }
+    return en;
   }
 }

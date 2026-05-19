@@ -133,21 +133,78 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
     return DateTime(tomorrow.year, tomorrow.month, tomorrow.day);
   }
 
-  List<LectureItem> _todayLectures(List<LectureItem> all) {
-    return FilterService.filterLectures(
+  static const String _emptyNoLecturesTodayAr = 'لا توجد محاضرات اليوم.';
+  static const String _emptyNoLecturesTodayEn = 'No lectures today.';
+  static const String _emptyNoLecturesTomorrowAr = 'لا توجد محاضرات غدًا.';
+  static const String _emptyNoLecturesTomorrowEn = 'No lectures tomorrow.';
+  static const String _emptyOutsideTermAr = 'هذا اليوم خارج نطاق الترم.';
+  static const String _emptyOutsideTermEn =
+      'This date is outside the active term.';
+  static const String _emptyHolidayAr =
+      'هذا اليوم إجازة أو غير محسوب للحضور.';
+  static const String _emptyHolidayEn =
+      'This date is a holiday or non-attendance day.';
+
+  ({List<LectureItem> lectures, String emptyAr, String emptyEn})
+      _resolveDayLectures(
+    List<LectureItem> all,
+    DateTime day, {
+    required String filterKey,
+    required String emptyNoLecturesAr,
+    required String emptyNoLecturesEn,
+  }) {
+    if (!_repository.isWithinActiveTerm(day)) {
+      return (
+        lectures: const <LectureItem>[],
+        emptyAr: _emptyOutsideTermAr,
+        emptyEn: _emptyOutsideTermEn,
+      );
+    }
+    if (_repository.isScheduledLecturesExcluded(day)) {
+      return (
+        lectures: const <LectureItem>[],
+        emptyAr: _emptyHolidayAr,
+        emptyEn: _emptyHolidayEn,
+      );
+    }
+    final lectures = FilterService.filterLectures(
       all,
-      'اليوم',
+      filterKey,
       baseDate: _repository.currentDateTime,
+    );
+    if (lectures.isEmpty) {
+      return (
+        lectures: lectures,
+        emptyAr: emptyNoLecturesAr,
+        emptyEn: emptyNoLecturesEn,
+      );
+    }
+    return (
+      lectures: lectures,
+      emptyAr: emptyNoLecturesAr,
+      emptyEn: emptyNoLecturesEn,
     );
   }
 
-  List<LectureItem> _tomorrowLectures(List<LectureItem> all) {
-    final tomorrow = _normalizedTomorrow();
-    if (_repository.isHoliday(tomorrow)) return [];
-    return FilterService.filterLectures(
+  ({List<LectureItem> lectures, String emptyAr, String emptyEn})
+      _todayLecturesBlock(List<LectureItem> all) {
+    return _resolveDayLectures(
       all,
-      'غدًا',
-      baseDate: _repository.currentDateTime,
+      _normalizedToday(),
+      filterKey: 'اليوم',
+      emptyNoLecturesAr: _emptyNoLecturesTodayAr,
+      emptyNoLecturesEn: _emptyNoLecturesTodayEn,
+    );
+  }
+
+  ({List<LectureItem> lectures, String emptyAr, String emptyEn})
+      _tomorrowLecturesBlock(List<LectureItem> all) {
+    return _resolveDayLectures(
+      all,
+      _normalizedTomorrow(),
+      filterKey: 'غدًا',
+      emptyNoLecturesAr: _emptyNoLecturesTomorrowAr,
+      emptyNoLecturesEn: _emptyNoLecturesTomorrowEn,
     );
   }
 
@@ -183,6 +240,11 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
         return LecturerLanguageController.tr(
           'لا يمكن تأخير محاضرة ملغية',
           'Cannot delay a canceled lecture',
+        );
+      case LectureActionBlockReason.lectureExpired:
+        return LecturerLanguageController.tr(
+          'لا يمكن تعديل محاضرة انتهى وقتها.',
+          'This lecture has already ended and cannot be modified.',
         );
     }
   }
@@ -391,6 +453,8 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
     });
   }
 
+  static const Color _sectionAccent = Color(0xFF006571);
+
   Widget _buildSectionTitle(String ar, String en) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -406,9 +470,11 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
     );
   }
 
-  Widget _buildLectureSection({
+  Widget _buildDayLecturesMainCard({
     required String titleAr,
     required String titleEn,
+    required String emptyAr,
+    required String emptyEn,
     required List<LectureItem> lectures,
     required DateTime Function(LectureItem lecture) actionDateResolver,
     void Function(LectureItem lecture)? onAttendTap,
@@ -418,92 +484,179 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
       (lecture) => lecture.startTime,
     );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle(titleAr, titleEn),
-        if (sortedLectures.isEmpty)
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text(
-                LecturerLanguageController.tr(
-                  'لا توجد محاضرات',
-                  'No lectures available',
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FCFC),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFDDE9EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 5,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: _sectionAccent,
+                  borderRadius: BorderRadius.circular(20),
                 ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  LecturerLanguageController.tr(titleAr, titleEn),
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF32484D),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F4F5),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '${sortedLectures.length}',
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: _sectionAccent,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (sortedLectures.isEmpty)
+            _buildDayLecturesEmptyState(emptyAr, emptyEn)
+          else
+            ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: SizedBox(
+                height: 278,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  itemCount: sortedLectures.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (context, index) {
+                    return _buildHorizontalLectureTile(
+                      lecture: sortedLectures[index],
+                      actionDateResolver: actionDateResolver,
+                      onAttendTap: onAttendTap,
+                    );
+                  },
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDayLecturesEmptyState(String emptyAr, String emptyEn) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 22),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE6EFF1)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.event_busy_rounded,
+            size: 32,
+            color: _sectionAccent.withValues(alpha: 0.55),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            LecturerLanguageController.tr(emptyAr, emptyEn),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF7A9097),
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHorizontalLectureTile({
+    required LectureItem lecture,
+    required DateTime Function(LectureItem lecture) actionDateResolver,
+    void Function(LectureItem lecture)? onAttendTap,
+  }) {
+    final timeLabel = lecture.timeSlots.isNotEmpty
+        ? lecture.timeSlots.join('  •  ')
+        : lecture.startTime;
+
+    return SizedBox(
+      width: 296,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEAF5F6),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: const Color(0xFFD4E8EB)),
+              ),
+              child: Text(
+                timeLabel,
+                textDirection: TextDirection.ltr,
                 style: const TextStyle(
-                  fontSize: 16,
-                  color: Color(0xFF999999),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: _sectionAccent,
                   fontFamily: 'Cairo',
                 ),
               ),
             ),
-          )
-        else
-          SizedBox(
-            height: 292,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              itemCount: sortedLectures.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
-              itemBuilder: (context, index) {
-                final lecture = sortedLectures[index];
-                final timeLabel = lecture.timeSlots.isNotEmpty
-                    ? lecture.timeSlots.join('  •  ')
-                    : lecture.startTime;
-                return SizedBox(
-                  width: 320,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Align(
-                        alignment: AlignmentDirectional.centerStart,
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEAF5F6),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            timeLabel,
-                            textDirection: TextDirection.ltr,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF006571),
-                              fontFamily: 'Cairo',
-                            ),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: LectureCard(
-                          lecture: lecture,
-                          onTap: onAttendTap != null
-                              ? () => onAttendTap(lecture)
-                              : null,
-                          onDelayTap: () => _onDelayLectureFromCard(
-                            lecture,
-                            actionDateResolver(lecture),
-                          ),
-                          onCancelTap: () => _onCancelLectureFromCard(
-                            lecture,
-                            actionDateResolver(lecture),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
+          ),
+          Expanded(
+            child: LectureCard(
+              lecture: lecture,
+              onTap: onAttendTap != null ? () => onAttendTap(lecture) : null,
+              onDelayTap: () => _onDelayLectureFromCard(
+                lecture,
+                actionDateResolver(lecture),
+              ),
+              onCancelTap: () => _onCancelLectureFromCard(
+                lecture,
+                actionDateResolver(lecture),
+              ),
             ),
           ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -517,6 +670,7 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
           calendarDays: _calendarService.buildCalendarDays(
             _currentCalendarMonth,
             allLectures,
+            applyActiveTermBounds: true,
           ),
           onDayTap: (day) => _handleDayTap(day, allLectures),
           onMonthChanged: _handleMonthChanged,
@@ -562,6 +716,8 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
         final catalogErr = catalogAsync.hasError ? catalogAsync.error : null;
         final blockFullScreenSpinner =
             catalogLoading && allLectures.isEmpty && !catalogAsync.hasValue;
+        final todayBlock = _todayLecturesBlock(allLectures);
+        final tomorrowBlock = _tomorrowLecturesBlock(allLectures);
 
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
@@ -686,24 +842,28 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
                           ],
                         ),
                         const SizedBox(height: 24),
-                        _buildLectureSection(
+                        _buildDayLecturesMainCard(
                           titleAr: 'محاضرات اليوم',
                           titleEn: "Today's Lectures",
-                          lectures: _todayLectures(allLectures),
+                          emptyAr: todayBlock.emptyAr,
+                          emptyEn: todayBlock.emptyEn,
+                          lectures: todayBlock.lectures,
                           actionDateResolver: (_) => _normalizedToday(),
                           onAttendTap: _openAttendanceForToday,
                         ),
-                        const SizedBox(height: 30),
-                        _buildLectureSection(
+                        const SizedBox(height: 16),
+                        _buildDayLecturesMainCard(
                           titleAr: 'محاضرات الغد',
                           titleEn: "Tomorrow's Lectures",
-                          lectures: _tomorrowLectures(allLectures),
+                          emptyAr: tomorrowBlock.emptyAr,
+                          emptyEn: tomorrowBlock.emptyEn,
+                          lectures: tomorrowBlock.lectures,
                           actionDateResolver: (_) => _normalizedTomorrow(),
                           onAttendTap: _openAttendanceForTomorrowViewOnly,
                         ),
-                        const SizedBox(height: 30),
+                        const SizedBox(height: 24),
                         _buildAllCalendarSection(allLectures),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 96),
                       ],
                     ),
             ),

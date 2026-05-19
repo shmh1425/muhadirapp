@@ -16,6 +16,9 @@ class LectureRepository {
   Set<int> _weekendDays = <int>{DateTime.friday, DateTime.saturday};
   Set<DateTime> _officialHolidays = <DateTime>{};
   Map<DateTime, String> _holidayTypeByDate = <DateTime, String>{};
+  Map<int, _TermWeekSchedule> _weeksByOfficialNumber = <int, _TermWeekSchedule>{};
+  List<_TermWeekSchedule> _termWeeks = <_TermWeekSchedule>[];
+  int _officialWeeksCount = 16;
 
   DateTime get currentDateTime => _currentDateTime;
   DateTime get currentDate => DateTime(
@@ -26,7 +29,27 @@ class LectureRepository {
   DateTime get semesterStartDate => _semesterStartDate;
   DateTime get semesterEndDate => _semesterEndDate;
   int get semesterWeeks => _semesterWeeks;
+  int get officialWeeksCount => _officialWeeksCount;
   int get editableWindowDays => _editableWindowDays;
+
+  /// Max official week index for Manage Lectures (not [semesterWeeks] / effective weeks).
+  ///
+  /// Priority: term `officialWeeksCount` → highest `officialWeekNumber` in loaded
+  /// `weeks` subcollection → [semesterWeeks] fallback.
+  int get manageLecturesWeekUpperBound {
+    var bound = _officialWeeksCount;
+    if (_termWeeks.isNotEmpty) {
+      for (final week in _termWeeks) {
+        if (week.officialWeekNumber > bound) {
+          bound = week.officialWeekNumber;
+        }
+      }
+    }
+    if (bound <= 0) {
+      bound = _semesterWeeks;
+    }
+    return bound.clamp(1, 60);
+  }
   Set<String> get loadedHolidayTypes => _holidayTypeByDate.values
       .map((t) => t.trim().toLowerCase())
       .where((t) => t.isNotEmpty)
@@ -53,6 +76,8 @@ class LectureRepository {
     Set<int>? fetchedWeekendDays;
     final fetchedHolidays = <DateTime>{};
     final fetchedHolidayTypes = <DateTime, String>{};
+    var fetchedTermWeeks = <_TermWeekSchedule>[];
+    int? fetchedOfficialWeeksCount;
     String? activeTermId;
     String? preferredTermIdFromCurrent;
     bool hasActiveTerm = false;
@@ -76,11 +101,15 @@ class LectureRepository {
         'semesterWeeks',
         'totalWeeks',
       ]);
+      final officialWeeks = _readPositiveInt(termData, const [
+        'officialWeeksCount',
+      ]);
       final termWeekendDays = _readWeekendDays(termData, const ['weekendDays']);
 
       fetchedStartDate = termStart;
       fetchedEndDate = termEnd;
       fetchedWeeks = termWeeks ?? fetchedWeeks;
+      fetchedOfficialWeeksCount = officialWeeks ?? fetchedOfficialWeeksCount;
       if (termWeekendDays != null) {
         fetchedWeekendDays = termWeekendDays;
       }
@@ -198,6 +227,7 @@ class LectureRepository {
       final typedHolidays = await _loadTypedTermHolidays(activeTermId);
       fetchedHolidayTypes.addAll(typedHolidays);
       fetchedHolidays.addAll(typedHolidays.keys);
+      fetchedTermWeeks = await _loadTermWeeks(activeTermId);
     }
 
     _currentDateTime = fetchedCurrentDate ?? now;
@@ -225,12 +255,20 @@ class LectureRepository {
         fetchedWeekendDays ?? <int>{DateTime.friday, DateTime.saturday};
     _officialHolidays = fetchedHolidays;
     _holidayTypeByDate = fetchedHolidayTypes;
+    _termWeeks = fetchedTermWeeks;
+    _weeksByOfficialNumber = {
+      for (final week in fetchedTermWeeks) week.officialWeekNumber: week,
+    };
+    _officialWeeksCount =
+        (fetchedOfficialWeeksCount ?? _semesterWeeks).clamp(1, 60);
     debugPrint(
       '[CalendarSync] term=$activeTermId hasActiveTerm=$hasActiveTerm '
       'preferredTermFromCurrent=$preferredTermIdFromCurrent '
       'activeTermsFound=${activeTermDocs.length} '
       'inRange=$isCurrentDateWithinActiveTerm '
       'start=$_semesterStartDate end=$_semesterEndDate weeks=$_semesterWeeks '
+      'officialWeeks=$_officialWeeksCount termWeeks=${_termWeeks.length} '
+      'nonAttendanceWeeks=${_termWeeks.where((w) => w.isNonAttendance).length} '
       'weekendDays=$_weekendDays holidays=${_officialHolidays.length} '
       'typedHolidays=${_holidayTypeByDate.length}',
     );
@@ -243,6 +281,58 @@ class LectureRepository {
     return _officialHolidays.contains(dateOnly);
   }
 
+  /// Weekends, [calendar_exceptions], and term weeks marked non-attendance.
+  ///
+  /// Used by Lecturer Home to hide schedule-driven lectures on excluded dates.
+  bool isScheduledLecturesExcluded(DateTime date) {
+    return isHoliday(date) || isNonAttendanceWeekDate(date);
+  }
+
+  /// Whether [date] falls in a term week with `countInAttendance == false` or
+  /// `status == break`, using week doc date ranges when present or official
+  /// week blocks from the active term start.
+  bool isNonAttendanceWeekDate(DateTime date) {
+    if (_termWeeks.isEmpty) return false;
+    final d = _normalizeDate(date);
+
+    for (final week in _termWeeks) {
+      if (!week.isNonAttendance) continue;
+      final start = week.startDate;
+      final end = week.endDate;
+      if (start == null || end == null) continue;
+      if (_isDateInInclusiveRange(d, start, end)) return true;
+    }
+
+    final officialWeek = _officialWeekNumberForDate(d);
+    return _weeksByOfficialNumber[officialWeek]?.isNonAttendance ?? false;
+  }
+
+  /// Whether [date] falls within the active term start/end (inclusive, date-only).
+  bool isWithinActiveTerm(DateTime date) {
+    final d = _normalizeDate(date);
+    final start = _normalizeDate(_semesterStartDate);
+    final end = _normalizeDate(_semesterEndDate);
+    return (d.isAfter(start) || d.isAtSameMomentAs(start)) &&
+        (d.isBefore(end) || d.isAtSameMomentAs(end));
+  }
+
+  int _officialWeekNumberForDate(DateTime date) {
+    final start = _normalizeDate(_semesterStartDate);
+    final d = _normalizeDate(date);
+    final days = d.difference(start).inDays;
+    if (days < 0) return 1;
+    final week = (days ~/ 7) + 1;
+    return week.clamp(1, _officialWeeksCount.clamp(1, 60));
+  }
+
+  bool _isDateInInclusiveRange(DateTime date, DateTime start, DateTime end) {
+    final d = _normalizeDate(date);
+    final s = _normalizeDate(start);
+    final e = _normalizeDate(end);
+    return (d.isAfter(s) || d.isAtSameMomentAs(s)) &&
+        (d.isBefore(e) || d.isAtSameMomentAs(e));
+  }
+
   /// رقم الأسبوع الأكاديمي بناءً على تاريخ بداية الفصل.
   int getWeekNumber(DateTime date) {
     final d = _normalizeDate(date);
@@ -252,6 +342,9 @@ class LectureRepository {
     return week.clamp(1, _semesterWeeks);
   }
 
+  /// Official week index from term start (for Manage Lectures week selection).
+  int getOfficialWeekNumber(DateTime date) => _officialWeekNumberForDate(date);
+
   /// يحوّل (رقم أسبوع + يوم أسبوع) إلى تاريخ فعلي داخل التقويم.
   DateTime? dateForWeekAndWeekday(int weekNumber, int weekday) {
     if (weekday < DateTime.monday || weekday > DateTime.sunday) return null;
@@ -260,6 +353,20 @@ class LectureRepository {
     final normalizedWeek = weekNumber.clamp(1, _semesterWeeks);
     final weekStart = _semesterStartDate.add(
       Duration(days: (normalizedWeek - 1) * 7),
+    );
+    final dayOffset = (weekday - weekStart.weekday + 7) % 7;
+    final target = weekStart.add(Duration(days: dayOffset));
+    return _normalizeDate(target);
+  }
+
+  /// Maps official week number + weekday to a date (Manage Lectures).
+  DateTime? dateForOfficialWeekAndWeekday(int weekNumber, int weekday) {
+    if (weekday < DateTime.monday || weekday > DateTime.sunday) return null;
+    final maxWeek = manageLecturesWeekUpperBound;
+    if (weekNumber < 1 || weekNumber > maxWeek) return null;
+
+    final weekStart = _semesterStartDate.add(
+      Duration(days: (weekNumber - 1) * 7),
     );
     final dayOffset = (weekday - weekStart.weekday + 7) % 7;
     final target = weekStart.add(Duration(days: dayOffset));
@@ -611,6 +718,26 @@ class LectureRepository {
     return holidays;
   }
 
+  Future<List<_TermWeekSchedule>> _loadTermWeeks(String termId) async {
+    final weeks = <_TermWeekSchedule>[];
+    try {
+      final snapshot = await _firestore
+          .collection('academic_terms')
+          .doc(termId)
+          .collection('weeks')
+          .get(const GetOptions(source: Source.server));
+      for (final doc in snapshot.docs) {
+        final week = _TermWeekSchedule.fromFirestore(doc.data());
+        if (week.officialWeekNumber > 0) {
+          weeks.add(week);
+        }
+      }
+    } catch (_) {
+      // Keep empty; Home still uses calendar_exceptions/weekends.
+    }
+    return weeks;
+  }
+
   String _normalizeHolidayType(String raw, {required bool exclude}) {
     switch (raw.trim().toLowerCase()) {
       case 'holiday':
@@ -693,6 +820,59 @@ class LectureRepository {
     for (final key in keys) {
       final value = (data[key] ?? '').toString().trim();
       if (value.isNotEmpty) return value;
+    }
+    return null;
+  }
+}
+
+class _TermWeekSchedule {
+  const _TermWeekSchedule({
+    required this.officialWeekNumber,
+    required this.countInAttendance,
+    required this.isBreak,
+    this.startDate,
+    this.endDate,
+  });
+
+  final int officialWeekNumber;
+  final bool countInAttendance;
+  final bool isBreak;
+  final DateTime? startDate;
+  final DateTime? endDate;
+
+  bool get isNonAttendance => !countInAttendance || isBreak;
+
+  factory _TermWeekSchedule.fromFirestore(Map<String, dynamic> data) {
+    final status = (data['status'] ?? '').toString().trim().toLowerCase();
+    return _TermWeekSchedule(
+      officialWeekNumber: _readOfficialWeekNumber(data['officialWeekNumber']),
+      countInAttendance: data['countInAttendance'] == true,
+      isBreak: status == 'break',
+      startDate: _readOptionalDate(data['startDate']),
+      endDate: _readOptionalDate(data['endDate']),
+    );
+  }
+
+  static int _readOfficialWeekNumber(dynamic value) {
+    if (value is int && value > 0) return value;
+    if (value is num && value > 0) return value.toInt();
+    final parsed = int.tryParse((value ?? '').toString());
+    if (parsed != null && parsed > 0) return parsed;
+    return 0;
+  }
+
+  static DateTime? _readOptionalDate(dynamic value) {
+    if (value is Timestamp) {
+      final d = value.toDate();
+      return DateTime(d.year, d.month, d.day);
+    }
+    if (value is DateTime) {
+      return DateTime(value.year, value.month, value.day);
+    }
+    if (value is String) {
+      final parsed = DateTime.tryParse(value.trim());
+      if (parsed == null) return null;
+      return DateTime(parsed.year, parsed.month, parsed.day);
     }
     return null;
   }

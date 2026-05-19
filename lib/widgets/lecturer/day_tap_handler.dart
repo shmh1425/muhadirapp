@@ -15,13 +15,39 @@ class DayTapHandler {
 
   /// معالجة الضغط على يوم في التقويم
   void handleDayTap(BuildContext context, CalendarDay day, List<LectureItem> allLectures) {
+    if (!repository.isWithinActiveTerm(day.date)) {
+      _showSnackBar(
+        context: context,
+        message: LecturerLanguageController.tr(
+          'هذا اليوم خارج نطاق الترم.',
+          'This date is outside the active term.',
+        ),
+        icon: Icons.event_busy,
+        backgroundColor: Colors.grey.shade600,
+      );
+      return;
+    }
+
+    if (repository.isScheduledLecturesExcluded(day.date)) {
+      _showSnackBar(
+        context: context,
+        message: LecturerLanguageController.tr(
+          'هذا اليوم إجازة أو غير محسوب للحضور.',
+          'This date is a holiday or non-attendance day.',
+        ),
+        icon: Icons.event_busy,
+        backgroundColor: Colors.grey.shade600,
+      );
+      return;
+    }
+
     switch (day.status) {
       case DayStatus.futureLocked:
         // 🔴 يوم مستقبلي: لا يفتح → تظهر رسالة "لا يمكن فتح هذا التاريخ الآن"
         _showSnackBar(
           context: context,
           message: LecturerLanguageController.tr(
-            'هذا تاريخ مستقبلي. لا توجد سجلات متاحة حالياً',
+            'هذا تاريخ مستقبلي. لا توجد سجلات متاحة',
             'This is a future date. No records available',
           ),
           icon: Icons.lock,
@@ -30,10 +56,12 @@ class DayTapHandler {
         break;
 
       case DayStatus.holiday:
-        // ⚪ عطلة: تظهر رسالة "عطلة رسمية"
         _showSnackBar(
           context: context,
-          message: LecturerLanguageController.tr('عطلة رسمية', 'Official holiday'),
+          message: LecturerLanguageController.tr(
+            'هذا اليوم إجازة أو غير محسوب للحضور.',
+            'This date is a holiday or non-attendance day.',
+          ),
           icon: Icons.event_busy,
           backgroundColor: Colors.grey.shade600,
         );
