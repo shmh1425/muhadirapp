@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'female_security_nav_bar.dart';
-import 'accepted_screen.dart';
-import 'rejected_students_screen.dart';
 import 'general_settings_screen.dart';
 import 'security_localization.dart';
+import 'security_nfc_verification_screen.dart';
+import 'security_records_screen.dart';
 import '../login_screen.dart';
 import '../../services/female_security_auth_service.dart';
 
@@ -157,20 +157,22 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
             ),
           ),
           bottomNavigationBar: FemaleSecurityNavBar(
-            selectedIndex: 3,
+            selectedIndex: 2,
             onItemTapped: (index) {
               if (index == 0) {
                 Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const AcceptedScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const SecurityRecordsScreen(),
+                  ),
                   (route) => false,
                 );
               } else if (index == 1) {
-                Navigator.of(context).pushReplacement(
+                Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => const RejectedStudentsScreen(),
+                    builder: (_) => const SecurityNfcVerificationScreen(),
                   ),
                 );
-              } else if (index == 3) {
+              } else if (index == 2) {
                 // already on settings
               }
             },

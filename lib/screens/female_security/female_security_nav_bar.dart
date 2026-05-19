@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'security_localization.dart';
+
 class FemaleSecurityNavBar extends StatelessWidget {
   const FemaleSecurityNavBar({
     super.key,
@@ -41,29 +43,25 @@ class FemaleSecurityNavBar extends StatelessWidget {
               child: Row(
                 children: [
                   _NavItem(
-                    icon: Icons.how_to_reg_outlined,
-                    activeIcon: Icons.how_to_reg,
+                    icon: Icons.list_alt_outlined,
+                    activeIcon: Icons.list_alt_rounded,
                     isActive: selectedIndex == 0,
+                    tooltip: SecurityLocalization.records,
                     onTap: () => onItemTapped(0),
                   ),
                   _NavItem(
-                    icon: Icons.person_off_outlined,
-                    activeIcon: Icons.person_off,
+                    icon: Icons.qr_code_scanner_rounded,
+                    activeIcon: Icons.qr_code_scanner_rounded,
                     isActive: selectedIndex == 1,
+                    tooltip: SecurityLocalization.scanVerification,
                     onTap: () => onItemTapped(1),
-                  ),
-                  _NavItem(
-                    icon: Icons.campaign_outlined,
-                    activeIcon: Icons.campaign,
-                    isActive: false,
-                    isEnabled: false,
-                    onTap: () => onItemTapped(2),
                   ),
                   _NavItem(
                     icon: Icons.manage_accounts_outlined,
                     activeIcon: Icons.manage_accounts,
-                    isActive: selectedIndex == 3,
-                    onTap: () => onItemTapped(3),
+                    isActive: selectedIndex == 2,
+                    tooltip: SecurityLocalization.settings,
+                    onTap: () => onItemTapped(2),
                   ),
                 ],
               ),
@@ -81,14 +79,14 @@ class _NavItem extends StatelessWidget {
     required this.activeIcon,
     required this.isActive,
     required this.onTap,
-    this.isEnabled = true,
+    required this.tooltip,
   });
 
   final IconData icon;
   final IconData activeIcon;
   final bool isActive;
   final VoidCallback onTap;
-  final bool isEnabled;
+  final String tooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -96,7 +94,7 @@ class _NavItem extends StatelessWidget {
 
     return Expanded(
       child: InkWell(
-        onTap: isEnabled ? onTap : null,
+        onTap: onTap,
         borderRadius: BorderRadius.circular(32),
         child: Center(
           child: AnimatedContainer(
@@ -128,15 +126,14 @@ class _NavItem extends StatelessWidget {
                     ]
                   : null,
             ),
-            child: Center(
-              child: Icon(
-                isActive ? activeIcon : icon,
-                size: iconSize,
-                color: isActive
-                    ? Colors.white
-                    : Colors.grey.shade600.withValues(
-                        alpha: isEnabled ? 1 : 0.38,
-                      ),
+            child: Tooltip(
+              message: tooltip,
+              child: Center(
+                child: Icon(
+                  isActive ? activeIcon : icon,
+                  size: iconSize,
+                  color: isActive ? Colors.white : Colors.grey.shade600,
+                ),
               ),
             ),
           ),

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../services/female_security/security_gate_scan_service.dart';
-import 'accepted_screen.dart';
 import 'female_security_nav_bar.dart';
-import 'rejected_students_screen.dart';
+import 'security_nfc_verification_screen.dart';
 import 'security_prefs.dart';
 import '../../theme/app_theme_controller.dart';
 import 'security_localization.dart';
+import 'security_records_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -72,20 +72,22 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
             ),
           ),
           bottomNavigationBar: FemaleSecurityNavBar(
-            selectedIndex: 3,
+            selectedIndex: 2,
             onItemTapped: (index) {
               if (index == 0) {
                 Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const AcceptedScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const SecurityRecordsScreen(),
+                  ),
                   (route) => false,
                 );
               } else if (index == 1) {
-                Navigator.of(context).pushReplacement(
+                Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => const RejectedStudentsScreen(),
+                    builder: (_) => const SecurityNfcVerificationScreen(),
                   ),
                 );
-              } else if (index == 3) {
+              } else if (index == 2) {
                 Navigator.of(context).maybePop();
               }
             },

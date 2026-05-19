@@ -13,16 +13,22 @@ class SecurityLocalization {
 
   static String tr(String ar, String en) => isEnglish ? en : ar;
 
+  static String get records => tr('السجلات', 'Records');
+  static String get scanVerification => tr('التحقق', 'Verification');
   static String get acceptedStudents => tr('المقبولين', 'Accepted Students');
   static String get rejectedStudents => tr('المرفوضين', 'Rejected Students');
+  static String get acceptedRecords => tr('المقبولات', 'Accepted');
+  static String get rejectedRecords => tr('المرفوضات', 'Rejected');
   static String get acceptedBannerStatus => tr('مقبول', 'Accepted');
   static String get acceptedStatus => tr('تم الدخول', 'Accepted');
   static String get rejectedStatus => tr('مرفوض', 'Rejected');
   static String get location => tr('الموقع', 'Location');
   static String get gate => tr('بوابة رقم', 'Gate');
   static String get date => tr('التاريخ', 'Date');
-  static String get searchHint =>
-      tr('بحث بالإسم أو الرقم الجامعي', 'Search by name or university ID');
+  static String get searchHint => tr(
+    'البحث باسم الطالبة أو الرقم الجامعي',
+    'Search by student name or university ID',
+  );
   static String get studentName => tr('اسم الطالب/ة', 'Student Name');
   static String get studentNameFemale => tr('اسم الطالبة', 'Student Name');
   static String get universityId => tr('الرقم الجامعي', 'University ID');
