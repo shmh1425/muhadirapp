@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models/lecturer/unified_lecturer_catalog.dart';
+import '../services/lecturer/lecturer_course_name_index.dart';
 
 /// Cache-first lecturer sections + course metadata (not attendance / NFC).
 class LecturerCatalogRepository {
@@ -51,6 +52,7 @@ class LecturerCatalogRepository {
     final key = lecturerId.trim();
     if (key.isEmpty) return;
     await _box.put(key, catalog.toHiveMap());
+    LecturerCourseNameIndex.instance.updateFromCatalog(catalog);
   }
 
   /// Hive-first: return cache immediately when present and refresh in background.
@@ -60,6 +62,7 @@ class LecturerCatalogRepository {
 
     final cached = getCachedCatalog(id);
     if (cached != null && !cached.isEmpty) {
+      LecturerCourseNameIndex.instance.updateFromCatalog(cached);
       unawaited(_refreshFromFirestoreAndCache(id));
       return cached;
     }

@@ -630,7 +630,7 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
         _sessionErrorMessage = null;
         _bluetoothBroadcastState = BluetoothBroadcastState.idle;
         _bluetoothBroadcastMessage ??= _tr(
-          'اضغطي بدء البث لإرسال إشارة البلوتوث.',
+          'اضغط على «بدء البث» لإرسال إشارة البلوتوث.',
           'Tap Start Broadcasting to send the Bluetooth signal.',
         );
       });
@@ -878,7 +878,7 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
     if (lower.contains('still getting ready') ||
         lower.contains('unable to start bluetooth broadcast')) {
       return _tr(
-        'تعذر بدء بث البلوتوث. تأكدي من تشغيل البلوتوث ثم حاولي مرة أخرى.',
+        'تعذر بدء بث البلوتوث. يرجى التأكد من تشغيل البلوتوث ثم المحاولة مرة أخرى.',
         'Unable to start Bluetooth broadcast. Make sure Bluetooth is on and try again.',
       );
     }
@@ -929,7 +929,7 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
     switch (error.code) {
       case BluetoothAttendanceErrorCode.missingLecturerSession:
         return _tr(
-          'انتهت جلسة المحاضر. سجّلي الدخول من جديد.',
+          'انتهت جلسة المحاضر. يرجى تسجيل الدخول من جديد.',
           'Lecturer session expired. Please log in again.',
         );
       case BluetoothAttendanceErrorCode.invalidInput:

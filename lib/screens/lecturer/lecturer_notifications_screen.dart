@@ -1,11 +1,19 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../models/external_student.dart';
 import '../../models/notifications/lecturer_notification.dart';
+import '../../services/attendance/manual_attendance_service.dart';
+import '../../utils/lecturer_notification_display.dart';
+import '../../utils/localized_firestore_fields.dart';
+import '../../repositories/lecturer_catalog_repository.dart';
+import '../../services/lecturer/lecturer_course_name_index.dart';
+import '../../services/lecturer_auth_service.dart';
 import '../../services/notifications/lecturer_notification_service.dart';
 import '../../widgets/lecturer/excuse_attachment_preview.dart';
 import '../../widgets/lecturer/excuse_rejection_reason_dialog.dart';
 import 'lecturer_language.dart';
+import 'lecturer_strings.dart';
 import 'widgets/directional_navigation_icon.dart';
 import 'widgets/modern_popup_dialog.dart';
 import 'widgets/profile_back_button.dart';
@@ -24,6 +32,23 @@ class _LecturerNotificationsScreenState
       LecturerNotificationService.instance;
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
+
+  @override
+  void initState() {
+    super.initState();
+    _warmCourseNameIndexFromCache();
+  }
+
+  void _warmCourseNameIndexFromCache() {
+    final lecturerId =
+        LecturerAuthService.instance.currentLecturer?.lecturerId.trim() ?? '';
+    if (lecturerId.isEmpty) return;
+    final catalog =
+        LecturerCatalogRepository.instance.getCachedCatalog(lecturerId);
+    if (catalog != null && !catalog.isEmpty) {
+      LecturerCourseNameIndex.instance.updateFromCatalog(catalog);
+    }
+  }
 
   void _goBack() {
     Navigator.of(context).pop();
@@ -328,19 +353,13 @@ class _LecturerNotificationsScreenState
             backgroundColor: const Color(0xFFF8FBFB),
             body: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
                 child: Column(
                   children: [
-                    const SizedBox(height: 6),
-                    Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: ProfileBackButton(onTap: _goBack),
-                    ),
-                    const SizedBox(height: 10),
-                    const SizedBox(height: 8),
+                    _buildPageTopBar(),
+                    const SizedBox(height: 12),
+                    _buildNotificationsHeroCard(),
+                    const SizedBox(height: 12),
                     Expanded(
                       child: StreamBuilder<List<LecturerNotification>>(
                         stream: _notificationService
@@ -361,9 +380,24 @@ class _LecturerNotificationsScreenState
                           if (snapshot.connectionState ==
                                   ConnectionState.waiting &&
                               !snapshot.hasData) {
-                            return const Center(
-                              child: CircularProgressIndicator(
-                                color: Color(0xFF006571),
+                            return Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const CircularProgressIndicator(
+                                    color: Color(0xFF006571),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    LecturerStrings.notificationsLoading(),
+                                    style: const TextStyle(
+                                      fontFamily: 'Cairo',
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF5F747A),
+                                    ),
+                                  ),
+                                ],
                               ),
                             );
                           }
@@ -404,10 +438,7 @@ class _LecturerNotificationsScreenState
                                     size: 18,
                                   ),
                                   label: Text(
-                                    _tr(
-                                      'حذف كل الإشعارات',
-                                      'Delete all notifications',
-                                    ),
+                                    LecturerStrings.notificationsDeleteAll(),
                                     style: const TextStyle(
                                       fontFamily: 'Cairo',
                                       fontWeight: FontWeight.w700,
@@ -429,8 +460,13 @@ class _LecturerNotificationsScreenState
                                         icon: Icons.notifications_none_rounded,
                                       )
                                     : ListView.builder(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 8,
+                                        padding: EdgeInsets.fromLTRB(
+                                          0,
+                                          8,
+                                          0,
+                                          MediaQuery.paddingOf(context)
+                                                  .bottom +
+                                              88,
                                         ),
                                         itemCount: grouped.length,
                                         itemBuilder: (context, index) {
@@ -458,6 +494,95 @@ class _LecturerNotificationsScreenState
           ),
         );
       },
+    );
+  }
+
+  Widget _buildPageTopBar() {
+    const backSlotSize = 38.0;
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: SizedBox(
+        height: 44,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: ProfileBackButton(onTap: _goBack),
+            ),
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: backSlotSize + 8),
+                child: Text(
+                  LecturerStrings.notificationsTitle(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF213236),
+                    height: 1.25,
+                  ),
+                ),
+              ),
+            ),
+            const Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: SizedBox(width: backSlotSize, height: backSlotSize),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationsHeroCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0B8793), Color(0xFF005B66)],
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF006571).withValues(alpha: 0.24),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.notifications_active_rounded,
+            color: Colors.white,
+            size: 24,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _tr(
+                'متابعة التنبيهات وطلبات الأعذار',
+                'Track alerts and excuse requests',
+              ),
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 12.5,
+                color: Colors.white.withValues(alpha: 0.92),
+                fontWeight: FontWeight.w600,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -489,8 +614,10 @@ class _NotificationOverviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    String tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
-    return Container(
+    return ValueListenableBuilder<LecturerLanguage>(
+      valueListenable: LecturerLanguageController.notifier,
+      builder: (context, language, _) {
+        return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -506,7 +633,7 @@ class _NotificationOverviewCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            tr('نظرة سريعة', 'Quick Overview'),
+            LecturerStrings.notificationsQuickOverview(language: language),
             style: const TextStyle(
               fontFamily: 'Cairo',
               fontWeight: FontWeight.w800,
@@ -520,21 +647,21 @@ class _NotificationOverviewCard extends StatelessWidget {
             runSpacing: 8,
             children: [
               _StatPill(
-                label: tr('غير مقروءة', 'Unread'),
+                label: LecturerStrings.notificationsUnread(language: language),
                 value: unreadCount,
                 bg: const Color(0xFFFFF2F2),
                 fg: const Color(0xFFD32F2F),
                 icon: Icons.mark_email_unread_outlined,
               ),
               _StatPill(
-                label: tr('طلبات الأعذار', 'Excuses'),
+                label: LecturerStrings.notificationsExcuses(language: language),
                 value: excuseCount,
                 bg: const Color(0xFFFFF8E8),
                 fg: const Color(0xFFB07A06),
                 icon: Icons.rule_folder_outlined,
               ),
               _StatPill(
-                label: tr('تنبيهات اليوم', 'Today'),
+                label: LecturerStrings.notificationsToday(language: language),
                 value: todayCount,
                 bg: const Color(0xFFE8F7F2),
                 fg: const Color(0xFF0B8060),
@@ -544,6 +671,8 @@ class _NotificationOverviewCard extends StatelessWidget {
           ),
         ],
       ),
+        );
+      },
     );
   }
 }
@@ -736,22 +865,13 @@ class _NotificationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = _styles[_mapType(item)]!;
-    String tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
-    String localizedCategory(String label) {
-      switch (label) {
-        case 'أكاديمي':
-          return tr('أكاديمي', 'Academic');
-        case 'شخصي':
-          return tr('شخصي', 'Personal');
-        case 'الطلاب':
-          return tr('الطلاب', 'Students');
-        default:
-          return label;
-      }
-    }
+    return ValueListenableBuilder<LecturerLanguage>(
+      valueListenable: LecturerLanguageController.notifier,
+      builder: (context, language, _) {
+        final isArabic = language == LecturerLanguage.arabic;
+        final style = _styles[_mapType(item)]!;
 
-    return Container(
+        return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -786,11 +906,10 @@ class _NotificationCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  LecturerLanguageController.isArabic
-                      ? item.titleAr
-                      : (item.titleEn.isEmpty ? item.titleAr : item.titleEn),
-                  maxLines: 1,
+                  item.displayTitle(isArabic: isArabic),
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.start,
                   style: const TextStyle(
                     fontWeight: FontWeight.w800,
                     color: Color(0xFF0E4F59),
@@ -801,7 +920,7 @@ class _NotificationCard extends StatelessWidget {
               ),
               if (!item.isRead)
                 Container(
-                  margin: const EdgeInsets.only(right: 6),
+                  margin: const EdgeInsetsDirectional.only(end: 6),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
                     vertical: 4,
@@ -811,7 +930,7 @@ class _NotificationCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
-                    tr('جديد', 'New'),
+                    LecturerStrings.notificationsNew(language: language),
                     style: const TextStyle(
                       fontFamily: 'Cairo',
                       fontSize: 10,
@@ -826,7 +945,11 @@ class _NotificationCard extends StatelessWidget {
                   Icons.delete_outline_rounded,
                   color: Color(0xFFE53935),
                 ),
-                tooltip: tr('حذف الإشعار', 'Delete notification'),
+                tooltip: LecturerLanguageController.tr(
+                  'حذف الإشعار',
+                  'Delete notification',
+                  language: language,
+                ),
               ),
             ],
           ),
@@ -834,15 +957,17 @@ class _NotificationCard extends StatelessWidget {
           Row(
             children: [
               _metaChip(
-                localizedCategory(_categoryLabel(item)),
+                _categoryLabel(item, language: language),
                 const Color(0xFFEAF6F7),
                 const Color(0xFF006571),
               ),
               const SizedBox(width: 6),
               _metaChip(
                 item.isExcuseRequest
-                    ? tr('طلب عذر', 'Excuse request')
-                    : _typeLabel(_mapType(item)),
+                    ? LecturerStrings.notificationsExcuseRequest(
+                        language: language,
+                      )
+                    : _typeLabel(_mapType(item), language: language),
                 style.soft,
                 style.accent,
               ),
@@ -850,11 +975,10 @@ class _NotificationCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            LecturerLanguageController.isArabic
-                ? item.messageAr
-                : (item.messageEn.isEmpty ? item.messageAr : item.messageEn),
-            maxLines: 2,
+            item.displayMessage(isArabic: isArabic),
+            maxLines: 4,
             overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.start,
             style: const TextStyle(
               fontSize: 12.5,
               color: Colors.black87,
@@ -873,7 +997,7 @@ class _NotificationCard extends StatelessWidget {
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  '${_relativeTime(item.createdAt)} · ${_formatDate(item.createdAt)}',
+                  '${_relativeTime(item.createdAt, language: language)} · ${_formatDate(item.createdAt, language: language)}',
                   style: const TextStyle(
                     fontSize: 11.5,
                     color: Colors.black54,
@@ -886,6 +1010,8 @@ class _NotificationCard extends StatelessWidget {
           ),
         ],
       ),
+        );
+      },
     );
   }
 
@@ -900,17 +1026,28 @@ class _NotificationCard extends StatelessWidget {
     return _NotificationType.info;
   }
 
-  String _categoryLabel(LecturerNotification notification) {
-    if (notification.isAcademic) return 'أكاديمي';
-    if (notification.isPersonalLectureAction) return 'شخصي';
-    return 'الطلاب';
+  String _categoryLabel(
+    LecturerNotification notification, {
+    required LecturerLanguage language,
+  }) {
+    if (notification.isAcademic) {
+      return LecturerStrings.notificationsAcademic(language: language);
+    }
+    if (notification.isPersonalLectureAction) {
+      return LecturerStrings.notificationsPersonal(language: language);
+    }
+    return LecturerStrings.notificationsStudents(language: language);
   }
 
-  String _formatDate(DateTime? value) {
+  String _formatDate(
+    DateTime? value, {
+    required LecturerLanguage language,
+  }) {
     if (value == null) {
       return LecturerLanguageController.tr(
         'تاريخ غير متوفر',
         'Date unavailable',
+        language: language,
       );
     }
     final d = value.toLocal();
@@ -919,32 +1056,40 @@ class _NotificationCard extends StatelessWidget {
     return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')} $hh:$mm';
   }
 
-  String _relativeTime(DateTime? value) {
+  String _relativeTime(
+    DateTime? value, {
+    required LecturerLanguage language,
+  }) {
     if (value == null) {
-      return LecturerLanguageController.tr('الآن', 'Now');
+      return LecturerLanguageController.tr('الآن', 'Now', language: language);
     }
     final now = DateTime.now();
     final diff = now.difference(value.toLocal());
-    if (diff.inMinutes < 1) return LecturerLanguageController.tr('الآن', 'Now');
+    if (diff.inMinutes < 1) {
+      return LecturerLanguageController.tr('الآن', 'Now', language: language);
+    }
     if (diff.inMinutes < 60) {
       return LecturerLanguageController.tr(
         'قبل ${diff.inMinutes} دقيقة',
         '${diff.inMinutes}m ago',
+        language: language,
       );
     }
     if (diff.inHours < 24) {
       return LecturerLanguageController.tr(
         'قبل ${diff.inHours} ساعة',
         '${diff.inHours}h ago',
+        language: language,
       );
     }
     if (diff.inDays < 7) {
       return LecturerLanguageController.tr(
         'قبل ${diff.inDays} يوم',
         '${diff.inDays}d ago',
+        language: language,
       );
     }
-    return LecturerLanguageController.tr('أقدم', 'Older');
+    return LecturerStrings.notificationsOlder(language: language);
   }
 
   Widget _metaChip(String text, Color bg, Color fg) {
@@ -966,17 +1111,19 @@ class _NotificationCard extends StatelessWidget {
     );
   }
 
-  String _typeLabel(_NotificationType type) {
-    String tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
+  String _typeLabel(
+    _NotificationType type, {
+    required LecturerLanguage language,
+  }) {
     switch (type) {
       case _NotificationType.success:
-        return tr('نجاح', 'Success');
+        return LecturerStrings.notificationsSuccess(language: language);
       case _NotificationType.error:
-        return tr('تنبيه', 'Alert');
+        return LecturerStrings.notificationsAlert(language: language);
       case _NotificationType.warning:
-        return tr('تحذير', 'Warning');
+        return LecturerStrings.notificationsWarning(language: language);
       case _NotificationType.info:
-        return tr('معلومة', 'Info');
+        return LecturerStrings.notificationsInfo(language: language);
     }
   }
 }
@@ -1014,6 +1161,7 @@ class _LecturerNotificationDetailsScreenState
     }
 
     final excuseId = notification.excuseRequestId.trim();
+    _ResolvedExcuseData? resolved;
     try {
       final snap = await FirebaseFirestore.instance
           .collection('excuse_requests')
@@ -1025,25 +1173,42 @@ class _LecturerNotificationDetailsScreenState
         debugPrint(
           '[LecturerNotifications] details source=live excuse_requests docId=$excuseId',
         );
-        return _ResolvedExcuseData.fromLive(
+        resolved = _ResolvedExcuseData.fromLive(
           notification: notification,
           liveData: data,
         );
+      } else {
+        debugPrint(
+          '[LecturerNotifications] details source=fallback snapshot docId=$excuseId (live missing)',
+        );
+        resolved = _ResolvedExcuseData.fromSnapshot(notification: notification);
       }
-      debugPrint(
-        '[LecturerNotifications] details source=fallback snapshot docId=$excuseId (live missing)',
-      );
-      return _ResolvedExcuseData.fromSnapshot(notification: notification);
     } on FirebaseException catch (e, st) {
       debugPrint(
         '[LecturerNotifications] details source=fallback snapshot docId=$excuseId error=$e\n$st',
       );
-      return _ResolvedExcuseData.fromSnapshot(notification: notification);
+      resolved = _ResolvedExcuseData.fromSnapshot(notification: notification);
     } catch (e, st) {
       debugPrint(
         '[LecturerNotifications] details source=fallback snapshot docId=$excuseId error=$e\n$st',
       );
-      return _ResolvedExcuseData.fromSnapshot(notification: notification);
+      resolved = _ResolvedExcuseData.fromSnapshot(notification: notification);
+    }
+
+    final studentId = resolved.details.studentId;
+    if (studentId <= 0) return resolved;
+
+    try {
+      final profiles = await ManualAttendanceService.instance
+          .fetchStudentProfilesByIds({studentId});
+      final profile = profiles[studentId];
+      if (profile == null) return resolved;
+      return resolved.copyWith(studentProfile: profile);
+    } catch (e, st) {
+      debugPrint(
+        '[LecturerNotifications] details student profile fetch failed studentId=$studentId error=$e\n$st',
+      );
+      return resolved;
     }
   }
 
@@ -1054,15 +1219,20 @@ class _LecturerNotificationDetailsScreenState
 
     return ValueListenableBuilder<LecturerLanguage>(
       valueListenable: LecturerLanguageController.notifier,
-      builder: (context, _, __) => Directionality(
-        textDirection: LecturerLanguageController.direction(),
+      builder: (context, language, __) {
+        final isArabic = language == LecturerLanguage.arabic;
+        return Directionality(
+        textDirection: LecturerLanguageController.direction(language),
         child: Scaffold(
           backgroundColor: Colors.white,
           appBar: AppBar(
             backgroundColor: Colors.white,
             elevation: 0,
             leading: IconButton(
-              icon: const Icon(Icons.close, color: primaryColor),
+              icon: const LecturerDirectionalBackIcon(
+                color: primaryColor,
+                size: 22,
+              ),
               onPressed: () => Navigator.pop(context),
             ),
             centerTitle: true,
@@ -1112,11 +1282,7 @@ class _LecturerNotificationDetailsScreenState
                           children: [
                             const SizedBox(height: 8),
                             Text(
-                              LecturerLanguageController.isArabic
-                                  ? notification.titleAr
-                                  : (notification.titleEn.isEmpty
-                                        ? notification.titleAr
-                                        : notification.titleEn),
+                              notification.displayTitle(isArabic: isArabic),
                               style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w700,
@@ -1126,11 +1292,7 @@ class _LecturerNotificationDetailsScreenState
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              LecturerLanguageController.isArabic
-                                  ? notification.messageAr
-                                  : (notification.messageEn.isEmpty
-                                        ? notification.messageAr
-                                        : notification.messageEn),
+                              notification.displayMessage(isArabic: isArabic),
                               style: const TextStyle(
                                 fontSize: 14,
                                 color: Colors.black87,
@@ -1140,7 +1302,7 @@ class _LecturerNotificationDetailsScreenState
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              _formatDate(notification.createdAt),
+                              _formatDate(notification.createdAt, language: language),
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: Colors.black54,
@@ -1162,7 +1324,10 @@ class _LecturerNotificationDetailsScreenState
                                 ),
                               if (resolved != null) ...[
                                 _ExcusePreviewCard(
+                                  notification: notification,
                                   details: resolved.details,
+                                  studentProfile: resolved.studentProfile,
+                                  isArabic: isArabic,
                                   onPreviewAttachment: () =>
                                       _showAttachmentPreviewDialog(
                                         context,
@@ -1278,7 +1443,8 @@ class _LecturerNotificationDetailsScreenState
             },
           ),
         ),
-      ),
+      );
+      },
     );
   }
 
@@ -1578,11 +1744,15 @@ class _LecturerNotificationDetailsScreenState
     }
   }
 
-  String _formatDate(DateTime? value) {
+  String _formatDate(
+    DateTime? value, {
+    required LecturerLanguage language,
+  }) {
     if (value == null) {
       return LecturerLanguageController.tr(
         'تاريخ غير متوفر',
         'Date unavailable',
+        language: language,
       );
     }
     final d = value.toLocal();
@@ -1594,16 +1764,30 @@ class _LecturerNotificationDetailsScreenState
 
 class _ExcusePreviewCard extends StatelessWidget {
   const _ExcusePreviewCard({
+    required this.notification,
     required this.details,
+    required this.studentProfile,
+    required this.isArabic,
     required this.onPreviewAttachment,
   });
 
+  final LecturerNotification notification;
   final _NotificationExcuseDetails details;
+  final ExternalStudent? studentProfile;
+  final bool isArabic;
   final VoidCallback onPreviewAttachment;
 
   @override
   Widget build(BuildContext context) {
     String tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
+    final courseName = LecturerNotificationDisplay.resolveCourseName(
+      notification,
+      isArabic: isArabic,
+    );
+    final studentName = details.localizedStudentName(
+      isArabic: isArabic,
+      profile: studentProfile,
+    );
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
@@ -1621,13 +1805,16 @@ class _ExcusePreviewCard extends StatelessWidget {
           ),
           _previewRow(tr('التوقيت', 'Time'), details.submissionTime),
           const SizedBox(height: 8),
-          _previewRow(tr('اسم الطالب', 'Student name'), details.studentName),
+          _previewRow(tr('اسم الطالب', 'Student name'), studentName),
           _previewRow(
             tr('رقمه الجامعي', 'Academic number'),
             details.academicNumber,
           ),
-          _previewRow(tr('المقرر', 'Course'), details.courseName),
-          _previewRow(tr('الشعبة', 'Section'), details.section),
+          _previewRow(tr('المقرر', 'Course'), courseName),
+          _previewRow(
+            tr('الشعبة', 'Section'),
+            details.section,
+          ),
           _previewRow(
             tr('تاريخ المحاضرة', 'Lecture date'),
             details.lectureDate,
@@ -1671,39 +1858,7 @@ class _ExcusePreviewCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          _previewRow(
-            tr('اسم المرفق', 'Attachment name'),
-            details.attachmentName == '-'
-                ? tr('غير متوفر', 'Unavailable')
-                : details.attachmentName,
-          ),
-          const SizedBox(height: 6),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: details.attachmentUrl == '-'
-                  ? null
-                  : onPreviewAttachment,
-              icon: const Icon(
-                Icons.attachment_rounded,
-                color: Color(0xFF006571),
-              ),
-              label: Text(
-                tr('فتح المرفق', 'Open attachment'),
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  color: Color(0xFF006571),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFF006571)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ),
+          ..._buildAttachmentSection(tr),
         ],
       ),
     );
@@ -1715,6 +1870,68 @@ class _ExcusePreviewCard extends StatelessWidget {
       return tr('لا يوجد نص عذر مرفق', 'No excuse text provided');
     }
     return text;
+  }
+
+  String _normalizedAttachmentUrl() {
+    final raw = details.attachmentUrl.trim();
+    if (raw.isEmpty || raw == '-') return '';
+    return raw;
+  }
+
+  String _normalizedAttachmentName() {
+    final raw = details.attachmentName.trim();
+    if (raw.isEmpty || raw == '-') return '';
+    return raw;
+  }
+
+  bool get _hasValidAttachmentUrl =>
+      ExcuseAttachmentPreview.isValidAttachmentUrl(_normalizedAttachmentUrl());
+
+  List<Widget> _buildAttachmentSection(String Function(String, String) tr) {
+    if (!_hasValidAttachmentUrl) {
+      return [
+        Text(
+          tr('لم يتم إرفاق أي مرفق.', 'No attachment was provided.'),
+          style: const TextStyle(
+            fontFamily: 'Cairo',
+            fontSize: 13,
+            color: Color(0xFF64748B),
+            height: 1.4,
+          ),
+        ),
+      ];
+    }
+
+    final name = _normalizedAttachmentName();
+    return [
+      if (name.isNotEmpty)
+        _previewRow(tr('اسم المرفق', 'Attachment name'), name),
+      if (name.isNotEmpty) const SizedBox(height: 6),
+      Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: OutlinedButton.icon(
+          onPressed: onPreviewAttachment,
+          icon: const Icon(
+            Icons.attachment_rounded,
+            color: Color(0xFF006571),
+          ),
+          label: Text(
+            tr('فتح المرفق', 'Open attachment'),
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              color: Color(0xFF006571),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          style: OutlinedButton.styleFrom(
+            side: const BorderSide(color: Color(0xFF006571)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+      ),
+    ];
   }
 
   Widget _previewRow(String label, String value) {
@@ -1797,7 +2014,10 @@ class _NotificationExcuseDetails {
   const _NotificationExcuseDetails({
     required this.submissionDate,
     required this.submissionTime,
+    required this.studentId,
     required this.studentName,
+    required this.studentNameAr,
+    required this.studentNameEn,
     required this.academicNumber,
     required this.courseName,
     required this.section,
@@ -1812,7 +2032,10 @@ class _NotificationExcuseDetails {
 
   final String submissionDate;
   final String submissionTime;
+  final int studentId;
   final String studentName;
+  final String studentNameAr;
+  final String studentNameEn;
   final String academicNumber;
   final String courseName;
   final String section;
@@ -1827,7 +2050,10 @@ class _NotificationExcuseDetails {
   _NotificationExcuseDetails copyWith({
     String? submissionDate,
     String? submissionTime,
+    int? studentId,
     String? studentName,
+    String? studentNameAr,
+    String? studentNameEn,
     String? academicNumber,
     String? courseName,
     String? section,
@@ -1842,7 +2068,10 @@ class _NotificationExcuseDetails {
     return _NotificationExcuseDetails(
       submissionDate: submissionDate ?? this.submissionDate,
       submissionTime: submissionTime ?? this.submissionTime,
+      studentId: studentId ?? this.studentId,
       studentName: studentName ?? this.studentName,
+      studentNameAr: studentNameAr ?? this.studentNameAr,
+      studentNameEn: studentNameEn ?? this.studentNameEn,
       academicNumber: academicNumber ?? this.academicNumber,
       courseName: courseName ?? this.courseName,
       section: section ?? this.section,
@@ -1869,20 +2098,6 @@ class _NotificationExcuseDetails {
       return fallback;
     }
 
-    String readLocalized({
-      required String arKey,
-      required String enKey,
-      String fallback = '',
-    }) {
-      final primary = LecturerLanguageController.isArabic ? arKey : enKey;
-      final secondary = LecturerLanguageController.isArabic ? enKey : arKey;
-      final value = read(primary);
-      if (value.isNotEmpty) return value;
-      final fallbackValue = read(secondary);
-      if (fallbackValue.isNotEmpty) return fallbackValue;
-      return fallback;
-    }
-
     final lectureDate = notification.lectureDate;
     final rawLectureDate = read('lectureDate');
     String lectureDateText = _normalizeDateText(rawLectureDate);
@@ -1891,18 +2106,24 @@ class _NotificationExcuseDetails {
       lectureDateText = _dateOnly(lectureDate);
     }
 
+    final studentNameAr = read('studentNameAr', fallback: read('nameAr'));
+    final studentNameEn = read('studentNameEn', fallback: read('nameEn'));
+    final studentNameSnapshot = read('studentName', fallback: '-');
+    final studentId = _parseStudentId(
+      snapshot: snapshot,
+      details: details,
+      academicNumberText: read('academicNumber'),
+    );
+
     return _NotificationExcuseDetails(
       submissionDate: read('submissionDate', fallback: '-'),
       submissionTime: read('submissionTime', fallback: '-'),
-      studentName: read('studentName', fallback: '-'),
+      studentId: studentId,
+      studentName: studentNameSnapshot,
+      studentNameAr: studentNameAr,
+      studentNameEn: studentNameEn,
       academicNumber: read('academicNumber', fallback: '-'),
-      courseName: readLocalized(
-        arKey: 'courseNameAr',
-        enKey: 'courseNameEn',
-        fallback: notification.courseName.isEmpty
-            ? '-'
-            : notification.courseName,
-      ),
+      courseName: read('courseName', fallback: notification.courseName),
       section: read(
         'sectionId',
         fallback: notification.section.isEmpty
@@ -1952,11 +2173,61 @@ class _NotificationExcuseDetails {
     if (date == null) return '';
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
+
+  String localizedStudentName({
+    required bool isArabic,
+    ExternalStudent? profile,
+  }) {
+    if (isArabic) {
+      if (studentNameAr.isNotEmpty) return studentNameAr;
+      final profileAr = profile?.nameAr.trim() ?? '';
+      if (profileAr.isNotEmpty) return profileAr;
+      final profileEn = profile?.name.trim() ?? '';
+      if (profileEn.isNotEmpty) return profileEn;
+      if (studentNameEn.isNotEmpty) return studentNameEn;
+      return studentName;
+    }
+
+    if (studentNameEn.isNotEmpty) return studentNameEn;
+    final profileEn = profile?.name.trim() ?? '';
+    if (profileEn.isNotEmpty) return profileEn;
+    if (studentName.isNotEmpty &&
+        !LocalizedFirestoreFields.containsArabicScript(studentName)) {
+      return studentName;
+    }
+    if (studentNameAr.isNotEmpty) return studentNameAr;
+    return studentName;
+  }
+
+  static int _parseStudentId({
+    required Map<String, dynamic> snapshot,
+    required Map<String, dynamic> details,
+    required String academicNumberText,
+  }) {
+    int parse(dynamic value) {
+      if (value == null) return 0;
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.tryParse(value.toString().trim()) ?? 0;
+    }
+
+    final fromSnapshot = parse(snapshot['studentId']);
+    if (fromSnapshot > 0) return fromSnapshot;
+
+    final fromDetails = parse(details['studentId']);
+    if (fromDetails > 0) return fromDetails;
+
+    final fromAcademic = parse(academicNumberText);
+    if (fromAcademic > 0) return fromAcademic;
+
+    return parse(details['academicNumber']);
+  }
 }
 
 class _ResolvedExcuseData {
   const _ResolvedExcuseData({
     required this.details,
+    required this.studentProfile,
     required this.status,
     required this.rejectionReason,
     required this.reviewedBy,
@@ -1965,11 +2236,33 @@ class _ResolvedExcuseData {
   });
 
   final _NotificationExcuseDetails details;
+  final ExternalStudent? studentProfile;
   final String status;
   final String rejectionReason;
   final String reviewedBy;
   final String reviewedAtText;
   final String decisionHistorySummary;
+
+  _ResolvedExcuseData copyWith({
+    _NotificationExcuseDetails? details,
+    ExternalStudent? studentProfile,
+    String? status,
+    String? rejectionReason,
+    String? reviewedBy,
+    String? reviewedAtText,
+    String? decisionHistorySummary,
+  }) {
+    return _ResolvedExcuseData(
+      details: details ?? this.details,
+      studentProfile: studentProfile ?? this.studentProfile,
+      status: status ?? this.status,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
+      reviewedBy: reviewedBy ?? this.reviewedBy,
+      reviewedAtText: reviewedAtText ?? this.reviewedAtText,
+      decisionHistorySummary:
+          decisionHistorySummary ?? this.decisionHistorySummary,
+    );
+  }
 
   factory _ResolvedExcuseData.fromSnapshot({
     required LecturerNotification notification,
@@ -1980,6 +2273,7 @@ class _ResolvedExcuseData {
     final history = _historySummary(snapshot['decisionHistory']);
     return _ResolvedExcuseData(
       details: details,
+      studentProfile: null,
       status: _status(details.status),
       rejectionReason: (snapshot['rejectionReason'] ?? '').toString().trim(),
       reviewedBy: (snapshot['reviewedBy'] ?? '').toString().trim(),
@@ -1995,18 +2289,6 @@ class _ResolvedExcuseData {
     String readLive(String key) => (liveData[key] ?? '').toString().trim();
     final base = _NotificationExcuseDetails.fromNotification(notification);
     final liveReason = readLive('reasonText');
-    String localizedLiveCourseName() {
-      final primary = LecturerLanguageController.isArabic
-          ? readLive('courseNameAr')
-          : readLive('courseNameEn');
-      if (primary.isNotEmpty) return primary;
-
-      final fallback = LecturerLanguageController.isArabic
-          ? readLive('courseNameEn')
-          : readLive('courseNameAr');
-      return fallback.isNotEmpty ? fallback : base.courseName;
-    }
-
     final snapshotReason =
         (notification.excuseRequestSnapshot['reasonText'] ?? '')
             .toString()
@@ -2017,6 +2299,11 @@ class _ResolvedExcuseData {
     final resolvedReason = liveReason.isNotEmpty
         ? liveReason
         : (snapshotReason.isNotEmpty ? snapshotReason : detailsReason);
+    final liveStudentId = _NotificationExcuseDetails._parseStudentId(
+      snapshot: liveData,
+      details: notification.excuseDetails,
+      academicNumberText: readLive('studentId'),
+    );
     final details = base.copyWith(
       lectureDate:
           _NotificationExcuseDetails._normalizeDateText(
@@ -2043,7 +2330,19 @@ class _ResolvedExcuseData {
       section: readLive('sectionId').isEmpty
           ? base.section
           : readLive('sectionId'),
-      courseName: localizedLiveCourseName(),
+      courseName: readLive('courseName').isEmpty
+          ? base.courseName
+          : readLive('courseName'),
+      studentId: liveStudentId > 0 ? liveStudentId : base.studentId,
+      studentNameAr: readLive('studentNameAr').isEmpty
+          ? readLive('nameAr')
+          : readLive('studentNameAr'),
+      studentNameEn: readLive('studentNameEn').isEmpty
+          ? readLive('nameEn')
+          : readLive('studentNameEn'),
+      studentName: readLive('studentName').isEmpty
+          ? base.studentName
+          : readLive('studentName'),
       academicNumber: readLive('studentId').isEmpty
           ? base.academicNumber
           : readLive('studentId'),
@@ -2054,6 +2353,7 @@ class _ResolvedExcuseData {
 
     return _ResolvedExcuseData(
       details: details,
+      studentProfile: null,
       status: _status((liveData['status'] ?? details.status).toString()),
       rejectionReason: (liveData['rejectionReason'] ?? '').toString().trim(),
       reviewedBy: (liveData['reviewedBy'] ?? '').toString().trim(),

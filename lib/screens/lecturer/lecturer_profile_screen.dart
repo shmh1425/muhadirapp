@@ -11,22 +11,99 @@ import 'lecturer_my_lectures_screen.dart';
 import 'lecturer_navigation.dart';
 import 'lecturer_notifications_screen.dart';
 import '../../services/lecturer_auth_service.dart';
+import '../../models/external_lecturer_model.dart';
 import '../../services/lecturer/lecturer_attendance_sessions_warm_cache.dart';
 import 'lecturer_screen_session_memory.dart';
 import 'widgets/modern_popup_dialog.dart';
 
 class LecturerProfile {
-  final String name;
+  final String nameAr;
+  final String nameEn;
   final String email;
   final String college;
+  final String collegeAr;
+  final String collegeEn;
   final String department;
+  final String departmentAr;
+  final String departmentEn;
 
   const LecturerProfile({
-    required this.name,
+    required this.nameAr,
+    required this.nameEn,
     required this.email,
     required this.college,
+    this.collegeAr = '',
+    this.collegeEn = '',
     required this.department,
+    this.departmentAr = '',
+    this.departmentEn = '',
   });
+
+  /// Backward-compatible single name (Arabic preferred).
+  String get name => nameAr.trim().isNotEmpty ? nameAr : nameEn;
+
+  String displayName({bool? isArabic}) {
+    final arabic = isArabic ?? LecturerLanguageController.isArabic;
+    if (arabic) {
+      return nameAr.trim().isNotEmpty
+          ? nameAr
+          : (nameEn.trim().isNotEmpty ? nameEn : name);
+    }
+    return nameEn.trim().isNotEmpty
+        ? nameEn
+        : (nameAr.trim().isNotEmpty ? nameAr : name);
+  }
+
+  Map<String, dynamic> get _localizationMap => {
+        'nameAr': nameAr,
+        'nameEn': nameEn,
+        'college': college,
+        'collegeAr': collegeAr,
+        'collegeEn': collegeEn,
+        'department': department,
+        'departmentAr': departmentAr,
+        'departmentEn': departmentEn,
+      };
+
+  String displayCollege({bool? isArabic}) {
+    return LecturerLanguageController.localizedCollege(
+      _localizationMap,
+      language: isArabic == null
+          ? null
+          : (isArabic ? LecturerLanguage.arabic : LecturerLanguage.english),
+      fallback: college.trim(),
+    );
+  }
+
+  String displayDepartment({bool? isArabic}) {
+    return LecturerLanguageController.localizedDepartment(
+      _localizationMap,
+      language: isArabic == null
+          ? null
+          : (isArabic ? LecturerLanguage.arabic : LecturerLanguage.english),
+      fallback: department.trim(),
+    );
+  }
+
+  factory LecturerProfile.fromLecturer(
+    ExternalLecturerModel lecturer, {
+    String fallbackName = '',
+  }) {
+    final fb = fallbackName.trim();
+    final ar = lecturer.nameAr.trim();
+    final en = lecturer.nameEn.trim();
+    return LecturerProfile(
+      nameAr: ar.isNotEmpty ? ar : fb,
+      nameEn: en.isNotEmpty ? en : fb,
+      email: lecturer.email,
+      college: lecturer.college,
+      collegeAr: lecturer.collegeAr,
+      collegeEn: lecturer.collegeEn,
+      department: lecturer.department,
+      departmentAr: lecturer.departmentAr,
+      departmentEn: lecturer.departmentEn,
+    );
+  }
 }
 
 class LecturerProfileScreen extends StatefulWidget {
@@ -46,6 +123,39 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
   bool get _isArabic => LecturerLanguageController.isArabic;
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
+
+  String _resolveLecturerDisplayName(LecturerProfile profile) {
+    final fromAuth =
+        LecturerAuthService.instance.currentLecturer?.displayNameFor(_isArabic);
+    if (fromAuth != null && fromAuth.trim().isNotEmpty) {
+      return fromAuth;
+    }
+    return profile.displayName(isArabic: _isArabic);
+  }
+
+  String _resolveCollege(LecturerProfile profile) {
+    final fromAuth =
+        LecturerAuthService.instance.currentLecturer?.displayCollegeFor(_isArabic);
+    if (fromAuth != null && fromAuth.trim().isNotEmpty) {
+      return fromAuth.trim();
+    }
+    final fromProfile = profile.displayCollege(isArabic: _isArabic).trim();
+    if (fromProfile.isNotEmpty) return fromProfile;
+    return _tr('غير محدد', 'Not specified');
+  }
+
+  String _resolveDepartment(LecturerProfile profile) {
+    final fromAuth =
+        LecturerAuthService.instance.currentLecturer?.displayDepartmentFor(
+          _isArabic,
+        );
+    if (fromAuth != null && fromAuth.trim().isNotEmpty) {
+      return fromAuth.trim();
+    }
+    final fromProfile = profile.displayDepartment(isArabic: _isArabic).trim();
+    if (fromProfile.isNotEmpty) return fromProfile;
+    return _tr('غير محدد', 'Not specified');
+  }
 
   String _resolveLecturerPhotoUrl(Map<String, dynamic>? data) {
     final photoUrl = (data?['photoUrl'] ?? '').toString().trim();
@@ -156,10 +266,7 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
           child: ModernPopupDialog(
             title: Text(
               _tr('تأكيد تسجيل الخروج', 'Confirm Logout'),
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontWeight: FontWeight.w800,
-              ),
+              textAlign: TextAlign.center,
             ),
             accentColor: const Color(0xFFD32F2F),
             actions: [
@@ -180,7 +287,7 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
                 'هل أنت متأكد أنك تريد تسجيل الخروج؟',
                 'Are you sure you want to log out?',
               ),
-              style: const TextStyle(fontFamily: 'Cairo', height: 1.4),
+              textAlign: TextAlign.center,
             ),
           ),
         );
@@ -354,7 +461,7 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          lecturer.name,
+                          _resolveLecturerDisplayName(lecturer),
                           style: const TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
@@ -374,21 +481,25 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          lecturer.college,
+                          _resolveCollege(lecturer),
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.white.withValues(alpha: 0.95),
                             fontFamily: 'Cairo',
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${_tr('القسم', 'Department')}: ${lecturer.department}',
+                          '${_tr('القسم', 'Department')}: ${_resolveDepartment(lecturer)}',
                           style: TextStyle(
                             fontSize: 13,
                             color: Colors.white.withValues(alpha: 0.9),
                             fontFamily: 'Cairo',
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),

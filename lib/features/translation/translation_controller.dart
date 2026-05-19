@@ -24,6 +24,12 @@ class TranslationController extends ChangeNotifier {
   Locale get locale =>
       _translateToEnglish ? const Locale('en') : const Locale('ar');
 
+  /// Bilingual helper used across login, admin, and role screens.
+  String tr(String ar, String en) => _translateToEnglish ? en : ar;
+
+  /// Label on the language chip: target language after tap.
+  String get languageSwitchTarget => _translateToEnglish ? 'عربي' : 'EN';
+
   void toggle() {
     setTranslateToEnglish(!_translateToEnglish);
   }
@@ -38,8 +44,12 @@ class TranslationController extends ChangeNotifier {
   Future<void> loadSavedPreference() async {
     final box = await Hive.openBox<dynamic>(_boxName);
     _box = box;
-    _translateToEnglish =
+    final saved =
         box.get(_translateToEnglishKey, defaultValue: false) == true;
+    if (_translateToEnglish != saved) {
+      _translateToEnglish = saved;
+      notifyListeners();
+    }
   }
 
   Future<void> _savePreference(bool toEnglish) async {

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/translation/translation_controller.dart';
+import '../features/translation/widgets/language_toggle_button.dart';
 import '../features/translation/widgets/t_text.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -36,8 +37,9 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
 
-  String _tr(String ar, String en) =>
-      TranslationController.instance.translateToEnglish ? en : ar;
+  TranslationController get _translation => TranslationController.instance;
+
+  String _tr(String ar, String en) => _translation.tr(ar, en);
 
   @override
   void dispose() {
@@ -80,7 +82,10 @@ class _LoginScreenState extends State<LoginScreen> {
       if (uid == null) {
         throw FirebaseAuthException(
           code: 'user-not-found',
-          message: 'لم يتم العثور على مستخدم مسجل.',
+          message: _tr(
+            'لم يتم العثور على مستخدم مسجل.',
+            'No registered user was found.',
+          ),
         );
       }
 
@@ -131,14 +136,9 @@ class _LoginScreenState extends State<LoginScreen> {
       final lecturer = await LecturerAuthService.instance
           .verifyEmailAndGetLecturer(normalizedEmail);
       if (lecturer != null) {
-        final displayName = lecturer.nameAr.trim().isNotEmpty
-            ? lecturer.nameAr
-            : lecturer.nameEn;
-        final profile = LecturerProfile(
-          name: displayName.isNotEmpty ? displayName : 'محاضر',
-          email: lecturer.email,
-          college: lecturer.college,
-          department: lecturer.department,
+        final profile = LecturerProfile.fromLecturer(
+          lecturer,
+          fallbackName: _tr('محاضر', 'Lecturer'),
         );
         ChatbotProvider.instance.clearChat();
         unawaited(
@@ -273,38 +273,26 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final translation = TranslationController.instance;
     return AnimatedBuilder(
-      animation: translation,
+      animation: _translation,
       builder: (context, _) {
-        final titleLogin = translation.translateToEnglish
-            ? 'Sign in'
-            : 'تسجيل الدخول';
-        final titleApp = translation.translateToEnglish
-            ? 'In Muhadir app'
-            : 'في تطبيق محضر';
-        final labelEmail = translation.translateToEnglish
-            ? 'University email:'
-            : 'الإيميل الجامعي :';
-        final labelPassword = translation.translateToEnglish
-            ? 'Password:'
-            : 'الرقم السري :';
-        final forgot = translation.translateToEnglish
-            ? 'Forgot password?'
-            : 'نسيت كلمة المرور؟';
-        final terms = translation.translateToEnglish
-            ? 'By signing in, you agree to the Terms of Use and Privacy Policy.'
-            : 'بدخولك إلى هذا التطبيق، فإنك توافق على شروط الاستخدام وسياسة الخصوصية.';
-        final termsError = translation.translateToEnglish
-            ? 'You must agree to the terms of use'
-            : 'يجب الموافقة على شروط الاستخدام';
-        final btnLogin = translation.translateToEnglish
-            ? 'Sign in'
-            : 'تسجيل الدخول';
-        final languageTarget = translation.translateToEnglish ? 'عربي' : 'EN';
+        final titleLogin = _tr('تسجيل الدخول', 'Sign in');
+        final titleApp = _tr('في تطبيق محضر', 'In Muhadir app');
+        final labelEmail = _tr('الإيميل الجامعي :', 'University email:');
+        final labelPassword = _tr('الرقم السري :', 'Password:');
+        final forgot = _tr('نسيت كلمة المرور؟', 'Forgot password?');
+        final terms = _tr(
+          'بدخولك إلى هذا التطبيق، فإنك توافق على شروط الاستخدام وسياسة الخصوصية.',
+          'By signing in, you agree to the Terms of Use and Privacy Policy.',
+        );
+        final termsError = _tr(
+          'يجب الموافقة على شروط الاستخدام',
+          'You must agree to the terms of use',
+        );
+        final btnLogin = _tr('تسجيل الدخول', 'Sign in');
 
         return Directionality(
-          textDirection: translation.textDirection,
+          textDirection: _translation.textDirection,
           child: Scaffold(
             backgroundColor: Colors.white,
             body: SafeArea(
@@ -319,45 +307,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         height: 230,
                         fit: BoxFit.cover,
                       ),
-                      PositionedDirectional(
+                      const PositionedDirectional(
                         top: 12,
                         end: 12,
-                        child: Tooltip(
-                          message: translation.toggleLabel,
-                          child: Material(
-                            color: Colors.white.withValues(alpha: 0.92),
-                            borderRadius: BorderRadius.circular(24),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(24),
-                              onTap: translation.toggle,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.language,
-                                      color: Color(0xFF006571),
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      languageTarget,
-                                      style: const TextStyle(
-                                        color: Color(0xFF006571),
-                                        fontWeight: FontWeight.w700,
-                                        fontFamily: 'Cairo',
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
+                        child: LanguageToggleButton(),
                       ),
                     ],
                   ),

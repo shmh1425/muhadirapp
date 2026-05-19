@@ -1,6 +1,9 @@
 /// موديل بيانات المحاضرة
 class LectureItem {
   final String courseName;
+  /// Bilingual Firestore names (for notifications / snapshots).
+  final String? courseNameAr;
+  final String? courseNameEn;
   final String crn;
   final String hall;
   final String section;
@@ -16,6 +19,8 @@ class LectureItem {
 
   LectureItem({
     required this.courseName,
+    this.courseNameAr,
+    this.courseNameEn,
     required this.crn,
     required this.hall,
     required this.section,

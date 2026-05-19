@@ -17,6 +17,7 @@ import 'home_screen.dart';
 import 'services_screen.dart';
 import '../login_screen.dart';
 import '../../features/translation/translation_controller.dart';
+import '../../features/translation/widgets/language_toggle_button.dart';
 import '../../features/translation/widgets/t_text.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -237,10 +238,8 @@ class SettingsScreen extends StatelessWidget {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  IconButton(
-                                    onPressed: translation.toggle,
-                                    icon: const Icon(Icons.language, color: Color(0xFF006571)),
-                                    tooltip: translation.toggleLabel,
+                                  const LanguageToggleButton(
+                                    style: LanguageToggleStyle.icon,
                                   ),
                                   NotificationBell(
                                     onTap: () {

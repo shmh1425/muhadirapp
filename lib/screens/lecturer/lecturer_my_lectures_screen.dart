@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/lecturer/lecture_item.dart';
 import '../../providers/lecturer_catalog_providers.dart';
+import '../../utils/lecturer_activity_localization.dart';
 import 'lecturer_language.dart';
 import 'widgets/directional_navigation_icon.dart';
 import 'widgets/modern_popup_dialog.dart';
@@ -89,17 +90,11 @@ class _LecturerMyLecturesScreenState
                       ),
                     )
                   : Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const SizedBox(height: 6),
-                          Align(
-                            alignment: AlignmentDirectional.centerStart,
-                            child: ProfileBackButton(onTap: _goBack),
-                          ),
+                          _buildPageTopBar(),
                           const SizedBox(height: 12),
                           _buildModernHeaderCard(),
                           const SizedBox(height: 12),
@@ -114,10 +109,51 @@ class _LecturerMyLecturesScreenState
     );
   }
 
+  Widget _buildPageTopBar() {
+    const backSlotSize = 38.0;
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: SizedBox(
+        height: 44,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: ProfileBackButton(onTap: _goBack),
+            ),
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: backSlotSize + 8),
+                child: Text(
+                  _tr('محاضراتي', 'My Lectures'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF213236),
+                    height: 1.25,
+                  ),
+                ),
+              ),
+            ),
+            const Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: SizedBox(width: backSlotSize, height: backSlotSize),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildModernHeaderCard() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFF0B8793), Color(0xFF005B66)],
@@ -134,6 +170,7 @@ class _LecturerMyLecturesScreenState
         ],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const Icon(
             Icons.calendar_month_rounded,
@@ -142,32 +179,18 @@ class _LecturerMyLecturesScreenState
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _tr('محاضراتي', 'My Lectures'),
-                  style: const TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _tr(
-                    'عرض بطاقات حديث ومنظّم حسب الأيام',
-                    'Modern card-based view organized by day',
-                  ),
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 12,
-                    color: Colors.white.withValues(alpha: 0.88),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+            child: Text(
+              _tr(
+                'عرض بطاقات حديث ومنظّم حسب الأيام',
+                'Modern card-based view organized by day',
+              ),
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 12.5,
+                color: Colors.white.withValues(alpha: 0.92),
+                fontWeight: FontWeight.w600,
+                height: 1.35,
+              ),
             ),
           ),
         ],
@@ -224,7 +247,7 @@ class _LecturerMyLecturesScreenState
           for (final day in _dayOrder)
             if ((grouped[day] ?? []).isNotEmpty)
               _buildDayCardsSection(day: day, lectures: grouped[day]!),
-          const SizedBox(height: 18),
+          const SizedBox(height: 24),
         ],
       ),
     );
@@ -310,8 +333,7 @@ class _LecturerMyLecturesScreenState
   }
 
   Widget _buildLectureCard(LectureItem lecture) {
-    final activity = lecture.activity.trim().toLowerCase();
-    final isPractical = activity == 'عملي' || activity == 'lab';
+    final isPractical = LecturerActivityLocalization.isPractical(lecture.activity);
     final accentStart = isPractical ? const Color(0xFF2A9DA7) : _primaryColor;
     final accentEnd = isPractical
         ? const Color(0xFF167B83)
@@ -402,7 +424,9 @@ class _LecturerMyLecturesScreenState
                         ),
                         _buildInfoPill(
                           icon: Icons.school_outlined,
-                          label: lecture.activity,
+                          label: LecturerActivityLocalization.label(
+                            lecture.activity,
+                          ),
                         ),
                       ],
                     ),
@@ -467,7 +491,7 @@ class _LecturerMyLecturesScreenState
                 _detailRow(_tr('الموقع', 'Location'), lecture.location!.trim()),
               _detailRow(
                 _tr('النوع', 'Type'),
-                _activityLabel(lecture.activity),
+                LecturerActivityLocalization.label(lecture.activity),
               ),
               _detailRow(
                 _tr('اليوم', 'Day'),
@@ -551,16 +575,4 @@ class _LecturerMyLecturesScreenState
     return LecturerLanguageController.dayNameFromWeekday(weekday);
   }
 
-  String _activityLabel(String activity) {
-    switch (activity.trim().toLowerCase()) {
-      case 'عملي':
-      case 'lab':
-        return _tr('عملي', 'Lab');
-      case 'نظري':
-      case 'theory':
-        return _tr('نظري', 'Theory');
-      default:
-        return activity;
-    }
-  }
 }

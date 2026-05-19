@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../features/translation/translation_controller.dart';
+import '../../utils/localized_firestore_fields.dart';
 
 enum LecturerLanguage { arabic, english }
 
@@ -82,6 +83,97 @@ class LecturerLanguageController {
       default:
         return tr('غير محدد', 'Unknown', language: language);
     }
+  }
+
+  static String localizedCourseName(
+    Map<String, dynamic> data, {
+    LecturerLanguage? language,
+    String fallback = '',
+  }) {
+    return LocalizedFirestoreFields.localizedCourseName(
+      data,
+      isArabic: (language ?? current) == LecturerLanguage.arabic,
+      fallback: fallback,
+    );
+  }
+
+  static String localizedPersonName(
+    Map<String, dynamic> data, {
+    LecturerLanguage? language,
+    String fallback = '',
+  }) {
+    return LocalizedFirestoreFields.localizedPersonName(
+      data,
+      isArabic: (language ?? current) == LecturerLanguage.arabic,
+      fallback: fallback,
+    );
+  }
+
+  static String localizedActivity(String raw, {LecturerLanguage? language}) {
+    return LocalizedFirestoreFields.localizedActivity(
+      raw,
+      isArabic: (language ?? current) == LecturerLanguage.arabic,
+      tr: (ar, en) => tr(ar, en, language: language),
+    );
+  }
+
+  static String localizedNotificationTitle(
+    Map<String, dynamic> data, {
+    LecturerLanguage? language,
+    String fallback = '',
+  }) {
+    return LocalizedFirestoreFields.localizedNotificationTitle(
+      data,
+      isArabic: (language ?? current) == LecturerLanguage.arabic,
+      fallback: fallback,
+    );
+  }
+
+  static String localizedNotificationMessage(
+    Map<String, dynamic> data, {
+    LecturerLanguage? language,
+    String fallback = '',
+  }) {
+    return LocalizedFirestoreFields.localizedNotificationMessage(
+      data,
+      isArabic: (language ?? current) == LecturerLanguage.arabic,
+      fallback: fallback,
+    );
+  }
+
+  static String localizedCollege(
+    Map<String, dynamic> data, {
+    LecturerLanguage? language,
+    String fallback = '',
+  }) {
+    return LocalizedFirestoreFields.localizedCollege(
+      data,
+      isArabic: (language ?? current) == LecturerLanguage.arabic,
+      fallback: fallback,
+    );
+  }
+
+  static String localizedDepartment(
+    Map<String, dynamic> data, {
+    LecturerLanguage? language,
+    String fallback = '',
+  }) {
+    return LocalizedFirestoreFields.localizedDepartment(
+      data,
+      isArabic: (language ?? current) == LecturerLanguage.arabic,
+      fallback: fallback,
+    );
+  }
+
+  static String localizedSectionLabel(
+    String section, {
+    LecturerLanguage? language,
+  }) {
+    return LocalizedFirestoreFields.localizedSectionLabel(
+      section,
+      isArabic: (language ?? current) == LecturerLanguage.arabic,
+      tr: (ar, en) => tr(ar, en, language: language),
+    );
   }
 
   static String dayNameFromArabic(

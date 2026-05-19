@@ -13,6 +13,7 @@ class DirectionalPreviousIcon extends StatelessWidget {
       isRtl ? Icons.chevron_right : Icons.chevron_left,
       size: size,
       color: color,
+      textDirection: TextDirection.ltr,
     );
   }
 }
@@ -30,6 +31,7 @@ class DirectionalNextIcon extends StatelessWidget {
       isRtl ? Icons.chevron_left : Icons.chevron_right,
       size: size,
       color: color,
+      textDirection: TextDirection.ltr,
     );
   }
 }

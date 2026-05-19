@@ -8,6 +8,7 @@ import 'lecturer_nav_bar.dart';
 import 'lecturer_home_screen.dart';
 import 'lecturer_language.dart';
 import 'lecturer_qr_screen.dart';
+import '../../services/lecturer_auth_service.dart';
 import 'lecturer_profile_screen.dart';
 
 /// Shell واحد للتنقل: يحتوي على الـ Bottom Nav وثلاثة تبويبات (Profile, QR, Home).
@@ -79,7 +80,8 @@ class _LecturerMainShellState extends ConsumerState<LecturerMainShell> {
         final profile =
             widget.profile ??
             LecturerProfile(
-              name: LecturerLanguageController.tr('محاضر', 'Lecturer'),
+              nameAr: LecturerLanguageController.tr('محاضر', 'Lecturer'),
+              nameEn: LecturerLanguageController.tr('محاضر', 'Lecturer'),
               email: 'lecturer@uqu.edu.sa',
               college: LecturerLanguageController.tr(
                 'كلية الحاسبات',
@@ -87,6 +89,11 @@ class _LecturerMainShellState extends ConsumerState<LecturerMainShell> {
               ),
               department: LecturerLanguageController.tr('غير محدد', 'Unknown'),
             );
+        final lecturerDisplayName =
+            LecturerAuthService.instance.currentLecturer?.displayNameFor(
+              LecturerLanguageController.isArabic,
+            ) ??
+            profile.displayName();
 
         return PopScope(
           canPop: false,
@@ -108,7 +115,7 @@ class _LecturerMainShellState extends ConsumerState<LecturerMainShell> {
                   _buildTabNavigator(1, const LecturerQrScreen(lecture: null)),
                   _buildTabNavigator(
                     2,
-                    LecturerHomeScreen(lecturerName: profile.name),
+                    LecturerHomeScreen(lecturerName: lecturerDisplayName),
                   ),
                 ],
               ),

@@ -84,10 +84,14 @@ class LecturerCatalogRow {
     final loc = location?.trim();
     return LectureItem(
       courseName: display.isNotEmpty ? display : crn,
+      courseNameAr: nameAr.isNotEmpty ? nameAr : null,
+      courseNameEn: nameEn.isNotEmpty ? nameEn : null,
       crn: crn,
       hall: hall.trim().isNotEmpty ? hall.trim() : '—',
       section: sectionNum.trim().isNotEmpty ? sectionNum.trim() : '1',
-      activity: activity.trim().isNotEmpty ? activity.trim() : 'نظري',
+      activity: activity.trim().isNotEmpty
+          ? activity.trim()
+          : (isArabic ? 'نظري' : 'Theory'),
       startTime: startTime,
       isDouble: isDouble,
       dayOfWeek: dayOfWeek,

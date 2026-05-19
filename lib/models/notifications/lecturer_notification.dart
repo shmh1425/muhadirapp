@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../utils/lecturer_notification_display.dart';
+import '../../utils/localized_firestore_fields.dart';
+
 enum LecturerNotificationCategory { academic, personal, students }
 
 class LecturerNotification {
@@ -19,6 +22,8 @@ class LecturerNotification {
     required this.recipientsCount,
     required this.courseCode,
     required this.courseName,
+    required this.courseNameAr,
+    required this.courseNameEn,
     required this.section,
     required this.sectionId,
     required this.lectureDate,
@@ -48,6 +53,8 @@ class LecturerNotification {
   final int? recipientsCount;
   final String courseCode;
   final String courseName;
+  final String courseNameAr;
+  final String courseNameEn;
   final String section;
   final String sectionId;
   final DateTime? lectureDate;
@@ -91,7 +98,9 @@ class LecturerNotification {
       delayMinutes: _safeIntNullable(data['delayMinutes']),
       recipientsCount: _safeIntNullable(data['recipientsCount']),
       courseCode: (data['courseCode'] ?? '').toString().trim(),
-      courseName: (data['courseName'] ?? '').toString().trim(),
+      courseName: _parseCourseNameSnapshot(data),
+      courseNameAr: _parseCourseNameAr(data),
+      courseNameEn: _parseCourseNameEn(data),
       section: (data['section'] ?? '').toString().trim(),
       sectionId: (data['sectionId'] ?? '').toString().trim(),
       lectureDate: parseDate(data['lectureDate']),
@@ -144,6 +153,60 @@ class LecturerNotification {
   String get statusFromSnapshot {
     return (excuseRequestSnapshot['status'] ?? '').toString().trim().toLowerCase();
   }
+
+  Map<String, dynamic> get _localizationMap => {
+        'titleAr': titleAr,
+        'titleEn': titleEn,
+        'messageAr': messageAr,
+        'messageEn': messageEn,
+        'courseNameAr': courseNameAr,
+        'courseNameEn': courseNameEn,
+        'courseName': courseName,
+      };
+
+  String localizedCourseName({required bool isArabic}) {
+    return LocalizedFirestoreFields.localizedCourseName(
+      _localizationMap,
+      isArabic: isArabic,
+      fallback: courseCode,
+    );
+  }
+
+  String displayTitle({required bool isArabic}) =>
+      LecturerNotificationDisplay.title(this, isArabic: isArabic);
+
+  String displayMessage({required bool isArabic}) =>
+      LecturerNotificationDisplay.message(this, isArabic: isArabic);
+}
+
+String _parseCourseNameSnapshot(Map<String, dynamic> data) {
+  return (data['courseName'] ?? '').toString().trim();
+}
+
+String _parseCourseNameAr(Map<String, dynamic> data) {
+  final explicit = (data['courseNameAr'] ?? data['courseName_Ar'] ?? '')
+      .toString()
+      .trim();
+  if (explicit.isNotEmpty) return explicit;
+  final snapshot = _parseCourseNameSnapshot(data);
+  if (snapshot.isNotEmpty &&
+      LocalizedFirestoreFields.containsArabicScript(snapshot)) {
+    return snapshot;
+  }
+  return '';
+}
+
+String _parseCourseNameEn(Map<String, dynamic> data) {
+  final explicit = (data['courseNameEn'] ?? data['courseName_En'] ?? '')
+      .toString()
+      .trim();
+  if (explicit.isNotEmpty) return explicit;
+  final snapshot = _parseCourseNameSnapshot(data);
+  if (snapshot.isNotEmpty &&
+      !LocalizedFirestoreFields.containsArabicScript(snapshot)) {
+    return snapshot;
+  }
+  return '';
 }
 
 Map<String, dynamic> _safeMap(dynamic value) {

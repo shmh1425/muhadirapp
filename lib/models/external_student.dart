@@ -65,6 +65,15 @@ class ExternalStudent {
   /// للعرض في الواجهة: الاسم العربي إن وُجد وإلا الإنجليزي
   String get displayName => nameAr.trim().isNotEmpty ? nameAr : name;
 
+  String displayNameFor(bool isArabic) {
+    final ar = nameAr.trim();
+    final en = name.trim();
+    if (isArabic) {
+      return ar.isNotEmpty ? ar : (en.isNotEmpty ? en : '$studentId');
+    }
+    return en.isNotEmpty ? en : (ar.isNotEmpty ? ar : '$studentId');
+  }
+
   /// يطابق قيم `gender` في Firestore (مثل `F` / `f` / `female`).
   bool get isFemale {
     final g = gender.trim().toLowerCase();

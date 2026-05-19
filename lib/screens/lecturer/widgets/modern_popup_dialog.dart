@@ -11,6 +11,22 @@ class ModernPopupDialog extends StatelessWidget {
     this.accentColor = const Color(0xFF006571),
   });
 
+  static const TextStyle _titleStyle = TextStyle(
+    fontFamily: 'Cairo',
+    fontSize: 16,
+    fontWeight: FontWeight.w800,
+    color: Color(0xFF213236),
+    height: 1.25,
+  );
+
+  static const TextStyle _bodyStyle = TextStyle(
+    fontFamily: 'Cairo',
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    color: Color(0xFF475569),
+    height: 1.45,
+  );
+
   final Widget title;
   final Widget child;
   final List<Widget> actions;
@@ -48,9 +64,17 @@ class ModernPopupDialog extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            title,
+            DefaultTextStyle(
+              style: _titleStyle.copyWith(color: accentColor),
+              textAlign: TextAlign.center,
+              child: Center(child: title),
+            ),
             const SizedBox(height: 12),
-            child,
+            DefaultTextStyle(
+              style: _bodyStyle,
+              textAlign: TextAlign.center,
+              child: Center(child: child),
+            ),
             const SizedBox(height: 14),
             Row(
               children: [

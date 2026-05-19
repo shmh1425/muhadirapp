@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'login_screen.dart';
 import '../features/translation/translation_controller.dart';
+import '../features/translation/widgets/language_toggle_button.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -74,13 +75,13 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     return AnimatedBuilder(
       animation: translation,
       builder: (context, _) {
-        final en = translation.translateToEnglish;
-        final titleWelcome = en ? 'Welcome' : 'مرحباً بكم';
-        final titleApp = en ? 'To the Muhadir app' : 'في تطبيق محضر';
-        final description = en
-            ? 'Sign in with your university account to record attendance easily via NFC, QR code, or your lecturer\'s Bluetooth signal — a smart, reliable attendance experience.'
-            : 'سجّل دخولك باستخدام حسابك الجامعي لتأكيد حضورك بسهولة عبر تقنية NFC أو مسح رمز QR أو إشارة البلوتوث الخاصة بالمحاضر، وكن جزءًا من تجربة حضور ذكية وموثوقة.';
-        final btnLogin = en ? 'Sign in' : 'تسجيل الدخول';
+        final titleWelcome = translation.tr('مرحباً بكم', 'Welcome');
+        final titleApp = translation.tr('في تطبيق محضر', 'To the Muhadir app');
+        final description = translation.tr(
+          'سجّل دخولك باستخدام حسابك الجامعي لتأكيد حضورك بسهولة عبر تقنية NFC أو مسح رمز QR أو إشارة البلوتوث الخاصة بالمحاضر، وكن جزءًا من تجربة حضور ذكية وموثوقة.',
+          'Sign in with your university account to record attendance easily via NFC, QR code, or your lecturer\'s Bluetooth signal — a smart, reliable attendance experience.',
+        );
+        final btnLogin = translation.tr('تسجيل الدخول', 'Sign in');
 
         return Directionality(
           textDirection: translation.textDirection,
@@ -92,16 +93,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                 child: Column(
                   children: [
-                    Align(
-                      alignment: Alignment.topRight,
-                      child: IconButton(
-                        onPressed: translation.toggle,
-                        tooltip: translation.toggleLabel,
-                        icon: const Icon(
-                          Icons.language,
-                          color: Color(0xFF006571),
-                        ),
-                      ),
+                    const Align(
+                      alignment: AlignmentDirectional.topEnd,
+                      child: LanguageToggleButton(),
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -145,7 +139,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                               ),
                               const SizedBox(height: 12),
                               Text(
-                                en ? slide.labelEn : slide.labelAr,
+                                translation.translateToEnglish
+                                    ? slide.labelEn
+                                    : slide.labelAr,
                                 style: const TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w600,
