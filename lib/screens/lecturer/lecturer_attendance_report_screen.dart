@@ -3,18 +3,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/attendance/manual_attendance_record.dart';
+import '../../models/external_student.dart';
 import '../../models/attendance/manual_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../models/lecturer/unified_lecturer_catalog.dart';
 import '../../providers/lecturer_catalog_providers.dart';
+import '../../services/attendance/attendance_report_term_service.dart';
 import '../../services/attendance/attendance_session_export_service.dart';
+import '../../widgets/lecturer/attendance_export_format_picker.dart';
 import '../../services/attendance/manual_attendance_service.dart';
 import '../../services/lecturer/calendar_sync_service.dart';
 import '../../services/lecturer/lecture_repository.dart';
 import '../../services/lecturer/lecturer_attendance_sessions_warm_cache.dart';
 import '../../services/lecturer_auth_service.dart';
+import '../../utils/localized_firestore_fields.dart';
 import '../../utils/shared/time_utils.dart';
 import 'lecturer_language.dart';
+import 'lecturer_strings.dart';
 import 'lecturer_navigation.dart';
 import 'widgets/directional_navigation_icon.dart';
 import 'widgets/modern_popup_dialog.dart';
@@ -81,6 +86,7 @@ class _LecturerAttendanceReportScreenState
   DateTime _calendarSelectedDate = DateTime.now();
 
   List<_LectureAttendanceGroup> _groups = <_LectureAttendanceGroup>[];
+  List<int> _reportableWeekNumbers = <int>[];
   bool _isRefreshingReport = false;
   bool _isLoadingRecords = false;
   Set<String> _loadedRecordSessionIds = <String>{};
@@ -100,8 +106,105 @@ class _LecturerAttendanceReportScreenState
   String? _selectedSessionId;
   _StatusFilter _statusFilter = _StatusFilter.all;
   Map<String, _AttendanceStatus> _draftStatuses = <String, _AttendanceStatus>{};
+  Map<int, ExternalStudent> _studentProfiles = {};
+  Map<String, _BilingualCourseNames> _catalogNamesBySection = {};
+  Map<String, _BilingualCourseNames> _catalogNamesByCode = {};
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
+
+  void _indexCatalogCourseNames(UnifiedLecturerCatalog catalog) {
+    final bySection = <String, _BilingualCourseNames>{};
+    final byCode = <String, _BilingualCourseNames>{};
+    for (final row in catalog.rows) {
+      final ar = row.courseNameAr.trim();
+      final en = row.courseNameEn.trim();
+      final sectionId = row.sectionId.trim();
+      final code = row.courseCode.trim();
+      if (sectionId.isNotEmpty) {
+        bySection[sectionId] = _BilingualCourseNames(ar: ar, en: en);
+      }
+      if (code.isNotEmpty) {
+        final prev = byCode[code];
+        byCode[code] = _BilingualCourseNames(
+          ar: ar.isNotEmpty ? ar : (prev?.ar ?? ''),
+          en: en.isNotEmpty ? en : (prev?.en ?? ''),
+        );
+      }
+    }
+    _catalogNamesBySection = bySection;
+    _catalogNamesByCode = byCode;
+  }
+
+  String _groupCourseTitle(_LectureAttendanceGroup group) =>
+      group.localizedCourseTitle();
+
+  LectureItem? _lectureForGroup(_LectureAttendanceGroup group) {
+    final base = group.lecture;
+    if (base == null) return null;
+    final title = group.localizedCourseTitle();
+    return LectureItem(
+      courseName: title,
+      courseNameAr: group.courseNameAr.trim().isNotEmpty
+          ? group.courseNameAr
+          : base.courseNameAr,
+      courseNameEn: group.courseNameEn.trim().isNotEmpty
+          ? group.courseNameEn
+          : base.courseNameEn,
+      crn: base.crn,
+      hall: base.hall,
+      section: base.section,
+      activity: base.activity,
+      startTime: base.startTime,
+      isDouble: base.isDouble,
+      dayOfWeek: base.dayOfWeek,
+      sectionId: base.sectionId,
+      location: base.location,
+      scheduleEndTime: base.scheduleEndTime,
+    );
+  }
+
+  String _localizedStudentName(int studentId, String snapshotName) {
+    final profile = _studentProfiles[studentId];
+    if (profile != null) {
+      return profile.displayNameFor(LecturerLanguageController.isArabic);
+    }
+    final trimmed = snapshotName.trim();
+    if (trimmed.isNotEmpty) return trimmed;
+    return studentId > 0 ? '$studentId' : _tr('غير متوفر', 'N/A');
+  }
+
+  Future<void> _refreshStudentProfilesFromGroups() async {
+    final ids = <int>{};
+    for (final g in _groups) {
+      for (final s in g.students) {
+        if (s.studentId > 0) ids.add(s.studentId);
+      }
+    }
+    if (ids.isEmpty) return;
+    try {
+      final profiles =
+          await _manualAttendanceService.fetchStudentProfilesByIds(ids);
+      if (!mounted) return;
+      setState(() {
+        _studentProfiles = profiles;
+        _groups = _groups
+            .map(
+              (g) => g.copyWith(
+                students: g.students
+                    .map(
+                      (s) => s.copyWith(
+                        name: _localizedStudentName(s.studentId, s.name),
+                      ),
+                    )
+                    .toList(),
+              ),
+            )
+            .toList();
+      });
+    } catch (_) {
+      // Keep snapshot names if lookup fails.
+    }
+  }
 
   @override
   void initState() {
@@ -175,6 +278,22 @@ class _LecturerAttendanceReportScreenState
   }
 
   void _onLecturerLanguageChanged() {
+    setState(() {
+      _groups = _groups
+          .map(
+            (g) => g.copyWith(
+              courseName: _groupCourseTitle(g),
+              students: g.students
+                  .map(
+                    (s) => s.copyWith(
+                      name: _localizedStudentName(s.studentId, s.name),
+                    ),
+                  )
+                  .toList(),
+            ),
+          )
+          .toList();
+    });
     unawaited(_syncReportLabelsFromCatalog());
   }
 
@@ -185,6 +304,7 @@ class _LecturerAttendanceReportScreenState
           ? asyncCat.requireValue
           : await ref.read(lecturerUnifiedCatalogProvider.future);
       if (!mounted || _groups.isEmpty) return;
+      _indexCatalogCourseNames(catalog);
       final lectures = catalog.toLectureItems(
         isArabic: LecturerLanguageController.isArabic,
       );
@@ -197,38 +317,62 @@ class _LecturerAttendanceReportScreenState
       setState(() {
         _groups = _groups.map((g) {
           final sid = g.sectionId.trim();
-          final lec = sid.isNotEmpty ? bySection[sid] : null;
-          final nextLecture = lec ?? g.lecture;
-          final courseName =
-              (nextLecture?.courseName.trim().isNotEmpty ?? false)
-              ? nextLecture!.courseName
-              : g.courseName;
-          final courseCode = (nextLecture?.crn.trim().isNotEmpty ?? false)
-              ? nextLecture!.crn.trim()
-              : g.courseCode;
-          final section = (nextLecture?.section.trim().isNotEmpty ?? false)
-              ? nextLecture!.section
-              : g.section;
-          return _LectureAttendanceGroup(
-            sessionId: g.sessionId,
-            lecture: nextLecture,
-            courseName: courseName,
-            courseCode: courseCode,
-            section: section,
-            sectionId: g.sectionId,
-            dayOfWeek: g.dayOfWeek,
-            weekNumber: g.weekNumber,
-            lectureDate: g.lectureDate,
-            startTime: g.startTime,
-            timeRange: g.timeRange,
-            students: g.students,
+          final nextLecture = sid.isNotEmpty ? bySection[sid] : g.lecture;
+          final names = _resolveBilingualCourseNames(
+            sectionId: sid,
+            courseCode: (nextLecture?.crn.trim().isNotEmpty ?? false)
+                ? nextLecture!.crn.trim()
+                : g.courseCode,
+            sessionCourseName: g.courseNameEn.isNotEmpty
+                ? g.courseNameEn
+                : g.courseName,
           );
+          final updated = g.copyWith(
+            lecture: nextLecture ?? g.lecture,
+            courseNameAr: names.ar,
+            courseNameEn: names.en,
+            courseCode: (nextLecture?.crn.trim().isNotEmpty ?? false)
+                ? nextLecture!.crn.trim()
+                : g.courseCode,
+            section: (nextLecture?.section.trim().isNotEmpty ?? false)
+                ? nextLecture!.section
+                : g.section,
+          );
+          return updated.copyWith(courseName: _groupCourseTitle(updated));
         }).toList();
       });
       _saveAttendanceReportNavCache();
     } catch (_) {
       // Keep cached sessions; labels fall back to last loaded values.
     }
+  }
+
+  _BilingualCourseNames _resolveBilingualCourseNames({
+    required String sectionId,
+    required String courseCode,
+    required String sessionCourseName,
+  }) {
+    final fromSection = sectionId.isNotEmpty
+        ? _catalogNamesBySection[sectionId]
+        : null;
+    final fromCode =
+        courseCode.isNotEmpty ? _catalogNamesByCode[courseCode] : null;
+
+    var ar = fromSection?.ar ?? fromCode?.ar ?? '';
+    var en = fromSection?.en ?? fromCode?.en ?? '';
+
+    final snapshot = sessionCourseName.trim();
+    if (en.isEmpty && snapshot.isNotEmpty) {
+      en = snapshot;
+    }
+    if (ar.isEmpty && en.isNotEmpty) {
+      ar = en;
+    }
+    if (en.isEmpty && ar.isNotEmpty) {
+      en = ar;
+    }
+
+    return _BilingualCourseNames(ar: ar, en: en);
   }
 
   Set<String> _targetSessionIdsForRecordsLoad() {
@@ -284,9 +428,10 @@ class _LecturerAttendanceReportScreenState
         return _StudentAttendanceRecord(
           id: record.recordId,
           studentId: record.studentId,
-          name: record.studentName.trim().isNotEmpty
-              ? record.studentName
-              : record.studentId.toString(),
+          name: _localizedStudentName(
+            record.studentId,
+            record.studentName,
+          ),
           academicNumber: record.studentId.toString(),
           time: timeText(record),
           status: _statusFromManual(record.status),
@@ -294,26 +439,16 @@ class _LecturerAttendanceReportScreenState
       }).toList();
 
       updated.add(
-        _LectureAttendanceGroup(
-          sessionId: g.sessionId,
-          lecture: g.lecture,
-          courseName: g.courseName,
-          courseCode: g.courseCode,
-          section: g.section,
-          sectionId: g.sectionId,
-          dayOfWeek: g.dayOfWeek,
-          weekNumber: g.weekNumber,
-          lectureDate: g.lectureDate,
-          startTime: g.startTime,
-          timeRange: g.timeRange,
-          students: students,
-        ),
+        g.copyWith(students: students),
       );
     }
     _groups = updated;
+    unawaited(_refreshStudentProfilesFromGroups());
   }
 
-  int get _currentWeekNumber => _calendarRepository.getWeekNumber(_calendarNow);
+  int get _currentWeekNumber => _calendarRepository.getOfficialWeekNumber(
+        _calendarNow,
+      );
   int get _effectiveWeekNumber => _weekIsAuto
       ? _currentWeekNumber
       : (_selectedWeekNumber ?? _currentWeekNumber);
@@ -338,7 +473,7 @@ class _LecturerAttendanceReportScreenState
           : group.courseName.trim();
       map.putIfAbsent(
         key,
-        () => _CourseOption(code: key, label: group.courseName.trim()),
+        () => _CourseOption(code: key, label: _groupCourseTitle(group)),
       );
     }
     final options = map.values.toList()
@@ -346,19 +481,7 @@ class _LecturerAttendanceReportScreenState
     return options;
   }
 
-  List<int> get _weekOptionsForSelectedCourse {
-    final source = _isCourseSelected
-        ? _groups.where((group) {
-            final key = group.courseCode.trim().isNotEmpty
-                ? group.courseCode.trim()
-                : group.courseName.trim();
-            return key == _selectedCourseCode;
-          })
-        : _groups;
-    final weeks = source.map((group) => group.weekNumber).toSet().toList()
-      ..sort();
-    return weeks;
-  }
+  List<int> get _weekOptionsForSelectedCourse => _reportableWeekNumbers;
 
   List<_LectureAttendanceGroup> get _filteredGroups {
     var list = _groups.where((group) {
@@ -436,6 +559,7 @@ class _LecturerAttendanceReportScreenState
       sectionIds,
     );
     if (warm == null) return null;
+    _indexCatalogCourseNames(cat);
     final groups = _buildGroupsFromFirestore(
       sessions: warm,
       recordsBySession: const <String, List<ManualAttendanceRecord>>{},
@@ -485,37 +609,40 @@ class _LecturerAttendanceReportScreenState
         ref.read(lecturerUnifiedCatalogProvider.future),
       ]);
       _calendarNow = _calendarRepository.currentDateTime;
+      _reportableWeekNumbers = List<int>.generate(
+        _calendarRepository.manageLecturesWeekUpperBound,
+        (index) => index + 1,
+      );
       if (_weekIsAuto) {
         _selectedDayOfWeek = _calendarNow.weekday;
       }
       final catalog = ref.read(lecturerUnifiedCatalogProvider).requireValue;
+      _indexCatalogCourseNames(catalog);
       final lectures = catalog.toLectureItems(
         isArabic: LecturerLanguageController.isArabic,
       );
       final lectureBySection = <String, LectureItem>{};
+      final lectureBySectionAndStart = <String, LectureItem>{};
       final sectionIds = <String>{};
       for (final lecture in lectures) {
         final sectionId = (lecture.sectionId ?? '').trim();
         if (sectionId.isEmpty) continue;
         sectionIds.add(sectionId);
         lectureBySection[sectionId] = lecture;
+        lectureBySectionAndStart['$sectionId|${lecture.startTime.trim()}'] =
+            lecture;
       }
 
-      final lecturerIdForWarm =
-          LecturerAuthService.instance.currentLecturer?.lecturerId.trim() ?? '';
-      final warmSessions = lecturerIdForWarm.isNotEmpty
-          ? LecturerAttendanceSessionsWarmCache.takeMatching(
-              lecturerIdForWarm,
-              sectionIds,
-            )
-          : null;
       final sessions =
-          warmSessions ??
-          await _manualAttendanceService.getSessionsForSectionIds(sectionIds);
+          await AttendanceReportTermService.instance.syncAndLoadSectionSessions(
+        lectures: lectures,
+        calendar: _calendarRepository,
+      );
       final groups = _buildGroupsFromFirestore(
         sessions: sessions,
         recordsBySession: const <String, List<ManualAttendanceRecord>>{},
         lectureBySection: lectureBySection,
+        lectureBySectionAndStart: lectureBySectionAndStart,
       );
 
       if (!mounted) return;
@@ -570,6 +697,7 @@ class _LecturerAttendanceReportScreenState
     required List<ManualAttendanceSession> sessions,
     required Map<String, List<ManualAttendanceRecord>> recordsBySession,
     required Map<String, LectureItem> lectureBySection,
+    Map<String, LectureItem> lectureBySectionAndStart = const {},
   }) {
     final groups = <_LectureAttendanceGroup>[];
     for (final session in sessions) {
@@ -581,18 +709,33 @@ class _LecturerAttendanceReportScreenState
       final records =
           recordsBySession[session.sessionId] ??
           const <ManualAttendanceRecord>[];
-      final lecture = lectureBySection[session.sectionId];
-      final courseName = session.courseName.trim().isNotEmpty
-          ? session.courseName
-          : (lecture?.courseName ?? session.sectionId);
+      final lectureKey =
+          '${session.sectionId.trim()}|${session.lectureStartTime.trim()}';
+      final lecture = lectureBySectionAndStart[lectureKey] ??
+          lectureBySection[session.sectionId];
+      final sectionId = session.sectionId.trim();
       final courseCode = (session.courseCode ?? '').trim().isNotEmpty
           ? (session.courseCode ?? '').trim()
           : lecture?.crn.trim() ?? '';
+      final names = _resolveBilingualCourseNames(
+        sectionId: sectionId,
+        courseCode: courseCode,
+        sessionCourseName: session.courseName,
+      );
+      final courseName = LocalizedFirestoreFields.localizedCourseName(
+        <String, dynamic>{
+          'courseNameAr': names.ar,
+          'courseNameEn': names.en,
+          'courseName': session.courseName,
+        },
+        isArabic: LecturerLanguageController.isArabic,
+        fallback: courseCode.isNotEmpty ? courseCode : sectionId,
+      );
       final sectionLabel = session.sectionLabel.trim().isNotEmpty
           ? session.sectionLabel
           : (lecture?.section ?? '-');
-      final sectionId = session.sectionId.trim().isNotEmpty
-          ? session.sectionId.trim()
+      final resolvedSectionId = sectionId.isNotEmpty
+          ? sectionId
           : (lecture?.sectionId ?? '').trim();
       final effectiveWeekday = effectiveDate.weekday;
       final students = records
@@ -600,9 +743,10 @@ class _LecturerAttendanceReportScreenState
             (record) => _StudentAttendanceRecord(
               id: record.recordId,
               studentId: record.studentId,
-              name: record.studentName.trim().isNotEmpty
-                  ? record.studentName
-                  : record.studentId.toString(),
+              name: _localizedStudentName(
+                record.studentId,
+                record.studentName,
+              ),
               academicNumber: record.studentId.toString(),
               time: _timeTextForRecord(record, session),
               status: _statusFromManual(record.status),
@@ -615,13 +759,15 @@ class _LecturerAttendanceReportScreenState
           sessionId: session.sessionId,
           lecture: lecture,
           courseName: courseName,
+          courseNameAr: names.ar,
+          courseNameEn: names.en,
           courseCode: courseCode,
           section: sectionLabel,
-          sectionId: sectionId,
+          sectionId: resolvedSectionId,
           dayOfWeek: effectiveWeekday,
           weekNumber:
               session.officialWeekNumber ??
-              _calendarRepository.getWeekNumber(effectiveDate),
+              _calendarRepository.getOfficialWeekNumber(effectiveDate),
           lectureDate: effectiveDate,
           startTime: session.lectureStartTime,
           timeRange: '${session.lectureStartTime} - ${session.lectureEndTime}',
@@ -638,7 +784,26 @@ class _LecturerAttendanceReportScreenState
       final bMinutes = bTime.$1 * 60 + bTime.$2;
       return aMinutes.compareTo(bMinutes);
     });
-    return groups;
+    return groups.where(_isReportableAttendanceGroup).toList();
+  }
+
+  bool _isReportableAttendanceGroup(_LectureAttendanceGroup group) {
+    if (!_calendarRepository.isWithinActiveTerm(group.lectureDate)) {
+      return false;
+    }
+    if (_calendarRepository.isScheduledLecturesExcluded(group.lectureDate)) {
+      return false;
+    }
+    final lecture = group.lecture;
+    if (lecture != null &&
+        _manualAttendanceService.isLectureStillOpenForReporting(
+          lecture,
+          group.lectureDate,
+          now: _calendarNow,
+        )) {
+      return false;
+    }
+    return true;
   }
 
   String _timeTextForRecord(
@@ -738,14 +903,14 @@ class _LecturerAttendanceReportScreenState
     }
   }
 
-  Future<void> _exportActiveSessionCsv(_LectureAttendanceGroup group) async {
+  Future<void> _exportActiveSession(_LectureAttendanceGroup group) async {
     if (_isExporting) return;
     if (_isEditMode && _hasPendingChanges) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             _tr(
-              'احفظي تعديلات الحضور قبل التصدير.',
+              'يرجى حفظ تعديلات الحضور قبل التصدير.',
               'Save attendance changes before exporting.',
             ),
           ),
@@ -753,10 +918,15 @@ class _LecturerAttendanceReportScreenState
       );
       return;
     }
+    final format = await showAttendanceExportFormatPicker(context);
+    if (format == null || !mounted) return;
+
     setState(() => _isExporting = true);
     try {
-      await AttendanceSessionExportService.instance.exportSessionCsvAndShare(
+      await AttendanceSessionExportService.instance.exportSessionAndShare(
         group.sessionId,
+        format: format,
+        isArabic: LecturerLanguageController.isArabic,
       );
     } catch (e) {
       if (mounted) {
@@ -778,7 +948,12 @@ class _LecturerAttendanceReportScreenState
     if (lecture == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_tr('اختاري محاضرة أولاً.', 'Select a lecture first.')),
+          content: Text(
+            _tr(
+              'يرجى اختيار محاضرة أولاً.',
+              'Please select a lecture first.',
+            ),
+          ),
         ),
       );
       return;
@@ -860,7 +1035,7 @@ class _LecturerAttendanceReportScreenState
               children: [
                 Text(
                   _tr(
-                    'اختاري الإجراء للمحاضرة في ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                    'يرجى اختيار الإجراء للمحاضرة في ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
                     'Choose action for lecture on ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
                   ),
                   style: const TextStyle(
@@ -889,7 +1064,7 @@ class _LecturerAttendanceReportScreenState
       case _AttendanceCalendarAction.exportCsv:
         final g = existingGroup;
         if (g != null) {
-          await _exportActiveSessionCsv(g);
+          await _exportActiveSession(g);
         }
         break;
       case _AttendanceCalendarAction.preview:
@@ -958,7 +1133,7 @@ class _LecturerAttendanceReportScreenState
                 dialogContext,
               ).pop(_AttendanceCalendarAction.exportCsv),
               icon: const Icon(Icons.share_rounded, size: 18),
-              label: Text(_tr('تصدير CSV', 'Export CSV'), style: labelStyle),
+              label: Text(_tr('تصدير', 'Export'), style: labelStyle),
             ),
           ],
         ],
@@ -998,7 +1173,7 @@ class _LecturerAttendanceReportScreenState
               dialogContext,
             ).pop(_AttendanceCalendarAction.exportCsv),
             icon: const Icon(Icons.share_rounded, size: 18),
-            label: Text(_tr('تصدير CSV', 'Export CSV'), style: labelStyle),
+            label: Text(_tr('تصدير', 'Export'), style: labelStyle),
           ),
         ],
       );
@@ -1035,7 +1210,7 @@ class _LecturerAttendanceReportScreenState
           group.startTime.trim() == lecture.startTime.trim()) {
         return group;
       }
-      if (group.courseName.trim() == lecture.courseName.trim() &&
+      if (sectionId.isEmpty &&
           group.section.trim() == lecture.section.trim() &&
           group.startTime.trim() == lecture.startTime.trim()) {
         return group;
@@ -1079,7 +1254,7 @@ class _LecturerAttendanceReportScreenState
         );
         _selectedCourseCode = found.courseCode.trim().isNotEmpty
             ? found.courseCode.trim()
-            : found.courseName.trim();
+            : _groupCourseTitle(found);
         _selectedWeekNumber = found.weekNumber;
         _calendarSelectedDate = DateTime(
           found.lectureDate.year,
@@ -1345,7 +1520,7 @@ class _LecturerAttendanceReportScreenState
             accentColor: _primary,
             title: _tr('ملخص الحضور', 'Attendance Summary'),
             subtitle:
-                '${group.courseName} • ${_dayName(group.dayOfWeek)} • ${group.timeRange} • ${_tr('الشعبة', 'Section')} ${group.section}',
+                '${_groupCourseTitle(group)} • ${_dayName(group.dayOfWeek)} • ${group.timeRange} • ${_tr('الشعبة', 'Section')} ${group.section}',
             onClose: () => Navigator.pop(ctx),
             margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
             padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
@@ -1583,8 +1758,8 @@ class _LecturerAttendanceReportScreenState
     Navigator.of(context).pop();
   }
 
-  /// تصدير CSV متاح فقط لجلسة محددة وبعد حفظ أي تعديلات معلّقة.
-  bool _canTapExportCsv(_LectureAttendanceGroup? g) {
+  /// التصدير متاح فقط لجلسة محددة وبعد حفظ أي تعديلات معلّقة.
+  bool _canTapExport(_LectureAttendanceGroup? g) {
     if (g == null || _isExporting || _isSaving) return false;
     if (_isEditMode && _hasPendingChanges) return false;
     return true;
@@ -1638,10 +1813,7 @@ class _LecturerAttendanceReportScreenState
                       builder: (context, constraints) {
                         return SingleChildScrollView(
                           physics: const BouncingScrollPhysics(),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
+                          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
                           child: Column(
                             children: [
                               if (_isLoadingRecords || _isRefreshingReport)
@@ -1653,14 +1825,10 @@ class _LecturerAttendanceReportScreenState
                                     backgroundColor: Color(0xFFE6F1F2),
                                   ),
                                 ),
-                              const SizedBox(height: 6),
-                              Align(
-                                alignment: AlignmentDirectional.centerStart,
-                                child: ProfileBackButton(onTap: _goBack),
-                              ),
-                              const SizedBox(height: 10),
+                              _buildPageTopBar(),
+                              const SizedBox(height: 12),
                               _buildReportHeroCard(),
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 12),
                               if (_showLegacyReportPanel) ...[
                                 _buildFilters(),
                                 const SizedBox(height: 10),
@@ -1694,10 +1862,51 @@ class _LecturerAttendanceReportScreenState
     );
   }
 
+  Widget _buildPageTopBar() {
+    const backSlotSize = 38.0;
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: SizedBox(
+        height: 44,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: ProfileBackButton(onTap: _goBack),
+            ),
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: backSlotSize + 8),
+                child: Text(
+                  LecturerStrings.reportTitle(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF213236),
+                    height: 1.25,
+                  ),
+                ),
+              ),
+            ),
+            const Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: SizedBox(width: backSlotSize, height: backSlotSize),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildReportHeroCard() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFF0B8793), Color(0xFF005B66)],
@@ -1714,36 +1923,20 @@ class _LecturerAttendanceReportScreenState
         ],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const Icon(Icons.fact_check_rounded, color: Colors.white, size: 24),
           const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _tr('تقرير الحضور', 'Attendance Report'),
-                  style: const TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _tr(
-                    'فلترة التقرير واختيار المحاضرة',
-                    'Filter the report and choose lecture',
-                  ),
-                  style: TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 12,
-                    color: Colors.white.withValues(alpha: 0.88),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+            child: Text(
+              LecturerStrings.reportFilterSubtitle(),
+              style: TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 12.5,
+                color: Colors.white.withValues(alpha: 0.92),
+                fontWeight: FontWeight.w600,
+                height: 1.35,
+              ),
             ),
           ),
         ],
@@ -1833,7 +2026,7 @@ class _LecturerAttendanceReportScreenState
                 const Icon(Icons.tune_rounded, color: Colors.white, size: 17),
                 const SizedBox(width: 6),
                 Text(
-                  _tr('فلترة التقرير', 'Report Filters'),
+                  LecturerStrings.reportFilters(),
                   style: const TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 12.6,
@@ -1847,8 +2040,8 @@ class _LecturerAttendanceReportScreenState
           const SizedBox(height: 12),
           _buildFilterSectionTitle(
             icon: Icons.auto_stories_rounded,
-            title: _tr('المقرر', 'Course'),
-            hint: _tr('اختاري المقرر لعرض الأسابيع', 'Choose course first'),
+            title: LecturerStrings.reportCourse(),
+            hint: LecturerStrings.reportChooseCourseFirst(),
           ),
           const SizedBox(height: 8),
           if (courses.isEmpty)
@@ -1860,7 +2053,7 @@ class _LecturerAttendanceReportScreenState
           const SizedBox(height: 12),
           _buildFilterSectionTitle(
             icon: Icons.view_week_rounded,
-            title: _tr('الأسبوع', 'Week'),
+            title: LecturerStrings.reportWeek(),
             hint: _tr('اختياري لتضييق النتائج', 'Optional to narrow results'),
           ),
           const SizedBox(height: 8),
@@ -1888,7 +2081,7 @@ class _LecturerAttendanceReportScreenState
                 });
               },
               icon: const Icon(Icons.refresh_rounded, size: 16),
-              label: Text(_tr('إعادة ضبط الفلتر', 'Reset filters')),
+              label: Text(LecturerStrings.reportResetFilters()),
               style: TextButton.styleFrom(
                 foregroundColor: const Color(0xFF5A757C),
                 textStyle: const TextStyle(
@@ -1936,7 +2129,7 @@ class _LecturerAttendanceReportScreenState
         child: DropdownButton<String?>(
           isExpanded: true,
           value: _selectedCourseCode,
-          hint: Text(_tr('اختاري المقرر', 'Select course')),
+          hint: Text(_tr('اختر المقرر', 'Select course')),
           icon: const Icon(
             Icons.keyboard_arrow_down_rounded,
             color: Color(0xFF006571),
@@ -2072,7 +2265,7 @@ class _LecturerAttendanceReportScreenState
               ),
               const SizedBox(width: 8),
               Text(
-                _tr('محاضرات الأسبوع', 'Week Lectures'),
+                LecturerStrings.reportWeekLectures(),
                 style: const TextStyle(
                   fontFamily: 'Cairo',
                   fontWeight: FontWeight.w800,
@@ -2084,9 +2277,7 @@ class _LecturerAttendanceReportScreenState
           const SizedBox(height: 8),
           ...sessions.map((session) {
             final selected = _selectedSessionId == session.sessionId;
-            final mainTitle = session.courseName.trim().isNotEmpty
-                ? session.courseName.trim()
-                : '${_tr('الشعبة', 'Section')} ${session.section}';
+            final mainTitle = _groupCourseTitle(session);
             final subTitle =
                 '${_dayName(session.dayOfWeek)} • ${session.timeRange}';
             return Padding(
@@ -2135,10 +2326,11 @@ class _LecturerAttendanceReportScreenState
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                mainTitle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                            Text(
+                              mainTitle,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.start,
                                 style: TextStyle(
                                   fontFamily: 'Cairo',
                                   fontSize: 13.1,
@@ -2175,7 +2367,9 @@ class _LecturerAttendanceReportScreenState
                                       borderRadius: BorderRadius.circular(999),
                                     ),
                                     child: Text(
-                                      '${_tr('الشعبة', 'Section')} ${session.section}',
+                                      LecturerLanguageController.localizedSectionLabel(
+                                        session.section,
+                                      ),
                                       style: const TextStyle(
                                         fontFamily: 'Cairo',
                                         fontSize: 10.6,
@@ -2293,7 +2487,7 @@ class _LecturerAttendanceReportScreenState
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: canExport
-                    ? () => _exportActiveSessionCsv(group)
+                    ? () => _exportActiveSession(group)
                     : null,
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(44),
@@ -2363,8 +2557,8 @@ class _LecturerAttendanceReportScreenState
       icon = Icons.event_busy_rounded;
     } else if (!_hasSelectedSession) {
       message = _tr(
-        'اختاري محاضرة من القائمة لبدء التقرير.',
-        'Select a lecture card from the list to start the report.',
+        'يرجى اختيار محاضرة من القائمة لبدء التقرير.',
+        'Please select a lecture from the list to start the report.',
       );
       icon = Icons.library_books_rounded;
     } else {
@@ -2419,7 +2613,7 @@ class _LecturerAttendanceReportScreenState
     _LectureAttendanceGroup group, {
     required bool viewOnly,
   }) async {
-    final lecture = group.lecture;
+    final lecture = _lectureForGroup(group);
     if (lecture == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2457,7 +2651,7 @@ class _LecturerAttendanceReportScreenState
   Future<void> _openExcuseManagementForGroup(
     _LectureAttendanceGroup group,
   ) async {
-    final lecture = group.lecture;
+    final lecture = _lectureForGroup(group);
     if (lecture == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2501,9 +2695,10 @@ class _LecturerAttendanceReportScreenState
             children: [
               Expanded(
                 child: Text(
-                  group.courseName,
-                  maxLines: 1,
+                  _groupCourseTitle(group),
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.start,
                   style: const TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 14,
@@ -2598,17 +2793,17 @@ class _LecturerAttendanceReportScreenState
                 child: Tooltip(
                   message: _isEditMode && _hasPendingChanges
                       ? _tr(
-                          'احفظي التعديلات قبل التصدير.',
+                          'يرجى حفظ التعديلات قبل التصدير.',
                           'Save changes before export.',
                         )
                       : _tr(
-                          'تصدير حضور هذه الجلسة CSV',
-                          'Export this session as CSV',
+                          'تصدير حضور هذه الجلسة',
+                          'Export this session attendance',
                         ),
                   child: OutlinedButton.icon(
-                    onPressed: !_canTapExportCsv(group)
+                    onPressed: !_canTapExport(group)
                         ? null
-                        : () => _exportActiveSessionCsv(group),
+                        : () => _exportActiveSession(group),
                     icon: _isExporting
                         ? const SizedBox(
                             width: 18,
@@ -2617,7 +2812,7 @@ class _LecturerAttendanceReportScreenState
                           )
                         : const Icon(Icons.share_rounded, size: 18),
                     label: Text(
-                      _tr('تصدير CSV', 'Export CSV'),
+                      _tr('تصدير', 'Export'),
                       style: const TextStyle(
                         fontFamily: 'Cairo',
                         fontWeight: FontWeight.w800,
@@ -3087,8 +3282,8 @@ class _LecturerAttendanceReportScreenState
               const SizedBox(height: 6),
               Text(
                 _tr(
-                  'اختاري المحاضرة ثم اليوم من التقويم لفتح إجراء الحضور مباشرة.',
-                  'Choose lecture then day from calendar to open attendance actions directly.',
+                  'يرجى اختيار المحاضرة ثم اليوم من التقويم لفتح إجراء الحضور مباشرة.',
+                  'Select a lecture, then a day on the calendar, to open attendance actions.',
                 ),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
@@ -3225,7 +3420,10 @@ class _AttendanceDayActionScreen extends StatelessWidget {
               elevation: 0,
               leading: IconButton(
                 onPressed: () => Navigator.of(context).pop(),
-                icon: const LecturerDirectionalBackIcon(size: 18),
+                icon: const LecturerDirectionalBackIcon(
+                  size: 18,
+                  color: Color(0xFF24383D),
+                ),
                 color: const Color(0xFF24383D),
               ),
               title: Text(
@@ -3251,8 +3449,8 @@ class _AttendanceDayActionScreen extends StatelessWidget {
                   ),
                   child: Text(
                     tr(
-                      'الأسبوع: $weekNumber • اختاري المحاضرة ثم حددي الإجراء المناسب',
-                      'Week: $weekNumber • Choose lecture then the proper action',
+                      'الأسبوع: $weekNumber • يرجى اختيار المحاضرة ثم تحديد الإجراء المناسب',
+                      'Week: $weekNumber • Select a lecture, then choose the appropriate action',
                     ),
                     style: const TextStyle(
                       fontFamily: 'Cairo',
@@ -3293,7 +3491,7 @@ class _AttendanceDayActionScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            group.courseName,
+                            group.localizedCourseTitle(),
                             style: const TextStyle(
                               fontFamily: 'Cairo',
                               fontSize: 15,
@@ -3567,11 +3765,20 @@ enum _StatusFilter { all, present, absent, excused, late }
 
 enum _AttendanceStatus { pending, present, absent, excused, late }
 
+class _BilingualCourseNames {
+  const _BilingualCourseNames({required this.ar, required this.en});
+
+  final String ar;
+  final String en;
+}
+
 class _LectureAttendanceGroup {
   _LectureAttendanceGroup({
     required this.sessionId,
     required this.lecture,
     required this.courseName,
+    this.courseNameAr = '',
+    this.courseNameEn = '',
     required this.courseCode,
     required this.section,
     required this.sectionId,
@@ -3586,6 +3793,8 @@ class _LectureAttendanceGroup {
   final String sessionId;
   final LectureItem? lecture;
   final String courseName;
+  final String courseNameAr;
+  final String courseNameEn;
   final String courseCode;
   final String section;
   final String sectionId;
@@ -3596,11 +3805,52 @@ class _LectureAttendanceGroup {
   final String timeRange;
   final List<_StudentAttendanceRecord> students;
 
+  String localizedCourseTitle({bool? isArabic}) {
+    return LocalizedFirestoreFields.localizedCourseName(
+      <String, dynamic>{
+        'courseNameAr': courseNameAr,
+        'courseNameEn': courseNameEn,
+        'courseName': courseName,
+      },
+      isArabic: isArabic ?? LecturerLanguageController.isArabic,
+      fallback: courseCode.trim().isNotEmpty ? courseCode : sectionId,
+    );
+  }
+
+  _LectureAttendanceGroup copyWith({
+    LectureItem? lecture,
+    String? courseName,
+    String? courseNameAr,
+    String? courseNameEn,
+    String? courseCode,
+    String? section,
+    List<_StudentAttendanceRecord>? students,
+  }) {
+    return _LectureAttendanceGroup(
+      sessionId: sessionId,
+      lecture: lecture ?? this.lecture,
+      courseName: courseName ?? this.courseName,
+      courseNameAr: courseNameAr ?? this.courseNameAr,
+      courseNameEn: courseNameEn ?? this.courseNameEn,
+      courseCode: courseCode ?? this.courseCode,
+      section: section ?? this.section,
+      sectionId: sectionId,
+      dayOfWeek: dayOfWeek,
+      weekNumber: weekNumber,
+      lectureDate: lectureDate,
+      startTime: startTime,
+      timeRange: timeRange,
+      students: students ?? this.students,
+    );
+  }
+
   _LectureAttendanceGroup deepCopy() {
     return _LectureAttendanceGroup(
       sessionId: sessionId,
       lecture: lecture,
       courseName: courseName,
+      courseNameAr: courseNameAr,
+      courseNameEn: courseNameEn,
       courseCode: courseCode,
       section: section,
       sectionId: sectionId,
@@ -3637,6 +3887,17 @@ class _StudentAttendanceRecord {
   final String academicNumber;
   String time;
   _AttendanceStatus status;
+
+  _StudentAttendanceRecord copyWith({String? name}) {
+    return _StudentAttendanceRecord(
+      id: id,
+      studentId: studentId,
+      name: name ?? this.name,
+      academicNumber: academicNumber,
+      time: time,
+      status: status,
+    );
+  }
 
   _StudentAttendanceRecord deepCopy() {
     return _StudentAttendanceRecord(

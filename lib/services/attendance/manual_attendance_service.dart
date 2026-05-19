@@ -2,10 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../models/attendance/manual_attendance_record.dart';
 import '../../models/attendance/manual_attendance_session.dart';
+import '../../models/external_student.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../models/term_week.dart';
 import '../../repositories/academic_term_repository.dart';
 import '../lecturer_auth_service.dart';
+import '../../utils/lecture_action_eligibility.dart';
 import 'attendance_status_policy.dart';
 
 class ManualEnrollmentStudent {
@@ -31,6 +33,12 @@ class ManualAttendanceService {
   static const String _sessionsCollection = 'manual_attendance_sessions';
   static const String _recordsCollection = 'manual_attendance_records';
   static const String _enrollmentsCollection = 'student_section_enrollments';
+
+  static const String attendanceMethodDefaultPresent = 'default_present';
+  static const String defaultPresentReasonLecturerNoOpen =
+      'lecturer_did_not_open_session';
+  static const String defaultPresentRecordSource = 'default_present_policy';
+  static const String createdBySystem = 'system';
 
   static String buildSessionId({
     required String sectionId,
@@ -134,6 +142,34 @@ class ManualAttendanceService {
     return roster;
   }
 
+  static const String _studentsCollection = 'external_students';
+
+  /// Bilingual student profiles for lecturer attendance / excuse UIs.
+  Future<Map<int, ExternalStudent>> fetchStudentProfilesByIds(
+    Set<int> studentIds,
+  ) async {
+    final ids = studentIds.where((id) => id > 0).toList();
+    if (ids.isEmpty) return {};
+
+    final result = <int, ExternalStudent>{};
+    const chunkSize = 30;
+    for (var i = 0; i < ids.length; i += chunkSize) {
+      final chunk = ids.sublist(i, (i + chunkSize).clamp(0, ids.length));
+      final snap = await _firestore
+          .collection(_studentsCollection)
+          .where('studentId', whereIn: chunk)
+          .get();
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final student = ExternalStudent.fromMap(data);
+        if (student.studentId > 0) {
+          result[student.studentId] = student;
+        }
+      }
+    }
+    return result;
+  }
+
   Stream<List<ManualAttendanceRecord>> watchStudentRecords(int studentId) {
     return _firestore
         .collection(_recordsCollection)
@@ -159,6 +195,15 @@ class ManualAttendanceService {
     final snap = await _firestore.collection(_sessionsCollection).doc(id).get();
     if (!snap.exists) return null;
     return ManualAttendanceSession.fromDocumentSnapshot(snap);
+  }
+
+  /// Raw session fields for export metadata (e.g. default-present flags).
+  Future<Map<String, dynamic>?> getSessionRawDataById(String sessionId) async {
+    final id = sessionId.trim();
+    if (id.isEmpty) return null;
+    final snap = await _firestore.collection(_sessionsCollection).doc(id).get();
+    if (!snap.exists) return null;
+    return snap.data();
   }
 
   Future<List<ManualAttendanceSession>> getSessionsForSectionIds(
@@ -203,7 +248,15 @@ class ManualAttendanceService {
     const finalizeBatchSize = 8;
     for (final batch in _chunk(ids, finalizeBatchSize)) {
       await Future.wait(
-        batch.map((id) => finalizeSessionPendingAsAbsent(id)),
+        batch.map((id) async {
+          final snap =
+              await _firestore.collection(_sessionsCollection).doc(id).get();
+          final data = snap.data();
+          if (data != null && _isDefaultPresentSessionData(data)) {
+            return;
+          }
+          await finalizeSessionPendingAsAbsent(id);
+        }),
       );
     }
 
@@ -355,6 +408,68 @@ class ManualAttendanceService {
     return pendingSnapshot.docs.length;
   }
 
+  /// True while the lecture end is still in the future (do not report/materialize).
+  bool isLectureStillOpenForReporting(
+    LectureItem lecture,
+    DateTime lectureDate, {
+    DateTime? now,
+  }) {
+    return LectureActionEligibility.isLectureItemActionable(
+      lecture: lecture,
+      lectureDate: lectureDate,
+      now: now ?? DateTime.now(),
+    );
+  }
+
+  /// Persists a default-present session + present records for an ended lecture
+  /// with no lecturer-opened session. Idempotent; never overwrites real sessions
+  /// or existing records.
+  Future<String?> ensureDefaultPresentSessionForEndedLecture({
+    required LectureItem lecture,
+    required DateTime lectureDate,
+    DateTime? now,
+  }) async {
+    final sectionId = (lecture.sectionId ?? '').trim();
+    if (sectionId.isEmpty) return null;
+
+    final date = _normalizedDate(lectureDate);
+    final current = now ?? DateTime.now();
+    if (isLectureStillOpenForReporting(lecture, date, now: current)) {
+      return null;
+    }
+
+    final sessionId = buildSessionId(
+      sectionId: sectionId,
+      sessionDate: date,
+      lectureStartTime: lecture.startTime,
+    );
+    final sessionRef = _firestore.collection(_sessionsCollection).doc(sessionId);
+    final existingSnap = await sessionRef.get();
+
+    if (existingSnap.exists) {
+      final data = existingSnap.data() ?? <String, dynamic>{};
+      if (_isOpenedManualSessionData(data)) {
+        return sessionId;
+      }
+      await _ensureDefaultPresentRecordsForSession(
+        sessionId: sessionId,
+        sectionId: sectionId,
+        lecture: lecture,
+        date: date,
+        existingSessionData: data,
+      );
+      return sessionId;
+    }
+
+    await _createDefaultPresentSessionWithRecords(
+      sessionId: sessionId,
+      sectionId: sectionId,
+      lecture: lecture,
+      date: date,
+    );
+    return sessionId;
+  }
+
   Future<bool> finalizeSessionPendingAsAbsent(
     String sessionId, {
     DateTime? currentTime,
@@ -365,6 +480,10 @@ class ManualAttendanceService {
     final sessionRef = _firestore.collection(_sessionsCollection).doc(id);
     final sessionSnap = await sessionRef.get();
     if (!sessionSnap.exists || sessionSnap.data() == null) {
+      return false;
+    }
+
+    if (_isDefaultPresentSessionData(sessionSnap.data()!)) {
       return false;
     }
 
@@ -444,6 +563,10 @@ class ManualAttendanceService {
     final sessionOpenedAt = existingOpenedAt is Timestamp
         ? existingOpenedAt.toDate()
         : now;
+    final lecturerId =
+        LecturerAuthService.instance.currentLecturer?.lecturerId.trim() ?? '';
+    final convertingFromDefaultPresent = existingSessionSnap.exists &&
+        _isDefaultPresentSessionData(existingSessionData);
 
     final termLabel = (sectionData['term'] ?? '').toString();
     final termId = (sectionData['termId'] ?? '').toString().trim();
@@ -462,16 +585,32 @@ class ManualAttendanceService {
       'lectureDay': date.day,
       'dateKey': _dateKey(date),
       'attendanceMethod': 'manual',
-      'lecturerId':
-          LecturerAuthService.instance.currentLecturer?.lecturerId ?? '',
+      'lecturerId': lecturerId,
       'sessionOpenedAt': Timestamp.fromDate(sessionOpenedAt),
+      'sessionWasOpened': true,
+      'autoGenerated': false,
+      'defaultPresentPolicyApplied': false,
+      'defaultReason': FieldValue.delete(),
       'term': termLabel,
       'updatedAt': FieldValue.serverTimestamp(),
       'attendanceFinalized': false,
     };
 
+    if (lecturerId.isNotEmpty) {
+      payload['openedBy'] = lecturerId;
+    }
+
     if (!existingSessionSnap.exists) {
       payload['createdAt'] = FieldValue.serverTimestamp();
+      if (lecturerId.isNotEmpty) {
+        payload['createdBy'] = lecturerId;
+      }
+    } else if (convertingFromDefaultPresent) {
+      if (lecturerId.isNotEmpty) {
+        payload['createdBy'] = lecturerId;
+      } else {
+        payload['createdBy'] = FieldValue.delete();
+      }
     }
 
     if (termId.isNotEmpty) {
@@ -620,6 +759,239 @@ class ManualAttendanceService {
     }
 
     await commitBatch();
+  }
+
+  static bool _isRealOpenedAttendanceMethod(String method) {
+    switch (method.trim().toLowerCase()) {
+      case 'manual':
+      case 'qr':
+      case 'nfc':
+      case 'bluetooth':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  static bool _isDefaultPresentSessionData(Map<String, dynamic> data) {
+    if (data['sessionWasOpened'] == true) return false;
+    final method = (data['attendanceMethod'] ?? '').toString().trim();
+    if (_isRealOpenedAttendanceMethod(method)) return false;
+    if (data['defaultPresentPolicyApplied'] == true) return true;
+    if (method == attendanceMethodDefaultPresent) return true;
+    return data['autoGenerated'] == true && data['sessionWasOpened'] == false;
+  }
+
+  static bool _isOpenedManualSessionData(Map<String, dynamic> data) {
+    if (data['sessionWasOpened'] == true) return true;
+    final method = (data['attendanceMethod'] ?? '').toString().trim();
+    if (_isRealOpenedAttendanceMethod(method)) return true;
+    if (_isDefaultPresentSessionData(data)) return false;
+    if (method.isEmpty) {
+      return data['sessionOpenedAt'] != null;
+    }
+    return method != attendanceMethodDefaultPresent;
+  }
+
+  Future<void> _createDefaultPresentSessionWithRecords({
+    required String sessionId,
+    required String sectionId,
+    required LectureItem lecture,
+    required DateTime date,
+  }) async {
+    final sessionRef = _firestore.collection(_sessionsCollection).doc(sessionId);
+    final termPayload = await _termMetadataForSession(sectionId, date);
+    final nowStamp = FieldValue.serverTimestamp();
+
+    await sessionRef.set(<String, dynamic>{
+      'sessionId': sessionId,
+      'sectionId': sectionId,
+      'courseName': lecture.courseName,
+      'courseCode': lecture.crn,
+      'section': lecture.section,
+      'lectureStartTime': lecture.startTime,
+      'lectureEndTime': lecture.endTime,
+      'lectureDate': Timestamp.fromDate(date),
+      'lectureDayOfWeek': date.weekday,
+      'lectureYear': date.year,
+      'lectureMonth': date.month,
+      'lectureDay': date.day,
+      'dateKey': _dateKey(date),
+      'lecturerId':
+          LecturerAuthService.instance.currentLecturer?.lecturerId ?? '',
+      'attendanceMethod': attendanceMethodDefaultPresent,
+      'sessionWasOpened': false,
+      'autoGenerated': true,
+      'defaultPresentPolicyApplied': true,
+      'defaultReason': defaultPresentReasonLecturerNoOpen,
+      'createdBy': createdBySystem,
+      'attendanceFinalized': true,
+      'sessionOpenedAt': null,
+      'createdAt': nowStamp,
+      'updatedAt': nowStamp,
+      ...termPayload,
+    });
+
+    await _ensureDefaultPresentRecordsForSession(
+      sessionId: sessionId,
+      sectionId: sectionId,
+      lecture: lecture,
+      date: date,
+      existingSessionData: const <String, dynamic>{},
+    );
+  }
+
+  Future<void> _ensureDefaultPresentRecordsForSession({
+    required String sessionId,
+    required String sectionId,
+    required LectureItem lecture,
+    required DateTime date,
+    required Map<String, dynamic> existingSessionData,
+  }) async {
+    if (_isOpenedManualSessionData(existingSessionData)) {
+      return;
+    }
+
+    final roster = await getActiveSectionRoster(sectionId);
+    if (roster.isEmpty) return;
+
+    final existingSnapshot = await _firestore
+        .collection(_recordsCollection)
+        .where('sessionId', isEqualTo: sessionId)
+        .get();
+    final existingStudentIds = existingSnapshot.docs
+        .map((d) => _safeInt(d.data()['studentId']))
+        .toSet();
+
+    final attendanceTime = lecture.startTime.trim().isNotEmpty
+        ? lecture.startTime.trim()
+        : _hhmm(date);
+
+    WriteBatch batch = _firestore.batch();
+    var ops = 0;
+
+    Future<void> commitBatch() async {
+      if (ops == 0) return;
+      await batch.commit();
+      batch = _firestore.batch();
+      ops = 0;
+    }
+
+    for (final student in roster) {
+      if (student.studentId <= 0 ||
+          existingStudentIds.contains(student.studentId)) {
+        continue;
+      }
+      final recordId = '${sessionId}_${student.studentId}';
+      batch.set(
+        _firestore.collection(_recordsCollection).doc(recordId),
+        <String, dynamic>{
+          'recordId': recordId,
+          'sessionId': sessionId,
+          'sectionId': sectionId,
+          'studentId': student.studentId,
+          'studentDocId': student.studentDocId,
+          'studentName': student.studentName,
+          'studentEmail': student.studentEmail,
+          'courseName': lecture.courseName,
+          'courseCode': lecture.crn,
+          'section': lecture.section,
+          'lectureDate': Timestamp.fromDate(date),
+          'lectureYear': date.year,
+          'lectureMonth': date.month,
+          'lectureDay': date.day,
+          'lectureDayOfWeek': date.weekday,
+          'dateKey': _dateKey(date),
+          'lectureStartTime': lecture.startTime,
+          'lectureEndTime': lecture.endTime,
+          'attendanceTime': attendanceTime,
+          'status': ManualAttendanceRecord.statusToString(
+            ManualAttendanceStatus.present,
+          ),
+          'attendanceMethod': attendanceMethodDefaultPresent,
+          'source': defaultPresentRecordSource,
+          'sessionWasOpened': false,
+          'autoGenerated': true,
+          'defaultPresentPolicyApplied': true,
+          'defaultReason': defaultPresentReasonLecturerNoOpen,
+          'createdBy': createdBySystem,
+          'updatedByRole': createdBySystem,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+      );
+      ops++;
+      if (ops >= 450) {
+        await commitBatch();
+      }
+    }
+
+    await commitBatch();
+
+    await sessionRefMergeDefaultPresent(sessionId);
+  }
+
+  Future<void> sessionRefMergeDefaultPresent(String sessionId) async {
+    await _firestore.collection(_sessionsCollection).doc(sessionId).set(
+      <String, dynamic>{
+        'updatedAt': FieldValue.serverTimestamp(),
+        'attendanceFinalized': true,
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+  Future<Map<String, dynamic>> _termMetadataForSession(
+    String sectionId,
+    DateTime date,
+  ) async {
+    final payload = <String, dynamic>{};
+    try {
+      final sectionSnap =
+          await _firestore.collection('sections').doc(sectionId).get();
+      final sectionData = sectionSnap.data() ?? <String, dynamic>{};
+      final termLabel = (sectionData['term'] ?? '').toString();
+      if (termLabel.isNotEmpty) {
+        payload['term'] = termLabel;
+      }
+      final termId = (sectionData['termId'] ?? '').toString().trim();
+      if (termId.isEmpty) return payload;
+
+      final term = await AcademicTermRepository.instance.getTerm(termId);
+      if (term == null) {
+        payload['termId'] = termId;
+        return payload;
+      }
+      payload['termId'] = termId;
+      final weeks = await AcademicTermRepository.instance.getWeeks(termId);
+      final officialWeekNumber = _officialWeekFromDate(
+        term.startDate,
+        date,
+        term.officialWeeksCount,
+      );
+      payload['officialWeekNumber'] = officialWeekNumber;
+      TermWeek? week;
+      for (final w in weeks) {
+        if (w.officialWeekNumber == officialWeekNumber) {
+          week = w;
+          break;
+        }
+      }
+      var countInAttendance = false;
+      if (week != null) {
+        payload['effectiveWeekNumber'] = week.effectiveWeekNumber;
+        countInAttendance = week.countInAttendance;
+      }
+      if (countInAttendance) {
+        final dateExcluded = await AcademicTermRepository.instance
+            .isDateExcludedFromAttendance(termId, date);
+        if (dateExcluded) countInAttendance = false;
+      }
+      payload['countInAttendance'] = countInAttendance;
+    } catch (_) {
+      // Optional metadata only.
+    }
+    return payload;
   }
 
   static String _dateKey(DateTime value) {
