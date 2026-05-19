@@ -17,6 +17,7 @@ import '../providers/lecturer_catalog_providers.dart';
 import '../services/student_auth_service.dart';
 import '../services/lecturer_auth_service.dart';
 import '../services/lecturer/lecturer_cold_start_warmup.dart';
+import '../services/notifications/fcm_token_service.dart';
 import '../features/chatbot/providers/chatbot_provider.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -89,6 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
           .get();
       if (adminDoc.exists) {
         ChatbotProvider.instance.clearChat();
+        unawaited(FcmTokenService.instance.registerDeviceToken(role: 'admin'));
         if (!mounted) return;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
@@ -116,6 +118,9 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
         ChatbotProvider.instance.clearChat();
+        unawaited(
+          FcmTokenService.instance.registerDeviceToken(role: 'security'),
+        );
         if (!mounted) return;
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const FemaleSecurityHomeScreen()),
@@ -136,6 +141,12 @@ class _LoginScreenState extends State<LoginScreen> {
           department: lecturer.department,
         );
         ChatbotProvider.instance.clearChat();
+        unawaited(
+          FcmTokenService.instance.registerDeviceToken(
+            role: 'lecturer',
+            lecturerId: lecturer.lecturerId,
+          ),
+        );
         if (!mounted) return;
         final container = ProviderScope.containerOf(context);
         container.invalidate(lecturerUnifiedCatalogProvider);
@@ -155,6 +166,12 @@ class _LoginScreenState extends State<LoginScreen> {
           .verifyEmailAndGetStudent(normalizedEmail);
       if (student != null) {
         ChatbotProvider.instance.clearChat();
+        unawaited(
+          FcmTokenService.instance.registerDeviceToken(
+            role: 'student',
+            studentId: student.studentId,
+          ),
+        );
         if (!mounted) return;
         try {
           final container = ProviderScope.containerOf(context);

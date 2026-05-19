@@ -422,6 +422,17 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && request.auth.uid == uid;
     }
 
+    // FCM readiness proof: each authenticated user can manage only their own
+    // device token documents. Sending push notifications must remain server-side.
+    match /user_device_tokens/{uid}/tokens/{tokenId} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow create, update: if isSignedIn() &&
+          request.auth.uid == uid &&
+          request.resource.data.uid == uid &&
+          request.resource.data.token == tokenId;
+      allow delete: if isSignedIn() && request.auth.uid == uid;
+    }
+
     // Security gate metadata used to scope scans to assigned gates.
     match /campus_gates/{gateId} {
       allow read: if isActiveSecurityStaff();
