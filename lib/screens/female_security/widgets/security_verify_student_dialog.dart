@@ -7,6 +7,7 @@ const _kTealLight = Color(0xFF27A2A9);
 const _kTextDark = Color(0xFF2D2D2D);
 const _kTextMuted = Color(0xFF757575);
 const _kRejectRed = Color(0xFFD32F2F);
+const _kPrivacyBg = Color(0xFFEFF8F8);
 
 class StudentGateScanResult {
   const StudentGateScanResult({
@@ -78,6 +79,7 @@ class _SecurityVerifyDialogBody extends StatefulWidget {
 class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
   SecurityRejectionReason? _selectedReason;
   bool _isSavingAcceptedScan = false;
+  bool _showFullDetails = false;
 
   @override
   Widget build(BuildContext context) {
@@ -91,32 +93,41 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
           child: Material(
             color: Colors.white,
             borderRadius: BorderRadius.circular(18),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildHeader(context),
-                  const SizedBox(height: 12),
-                  _buildCardIcon(),
-                  const SizedBox(height: 10),
-                  Text(
-                    SecurityLocalization.cardDataSectionTitle,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: _kTealLight,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.86,
+              ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildHeader(context),
+                    const SizedBox(height: 12),
+                    _buildCardIcon(),
+                    const SizedBox(height: 10),
+                    Text(
+                      SecurityLocalization.cardDataSectionTitle,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontFamily: 'Cairo',
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: _kTealLight,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  _buildStudentInfo(),
-                  const SizedBox(height: 12),
-                  _buildRejectionReasonField(),
-                  const SizedBox(height: 16),
-                  _buildButtons(),
-                ],
+                    const SizedBox(height: 8),
+                    _buildPrivacyNotice(),
+                    const SizedBox(height: 10),
+                    _buildStudentInfo(),
+                    const SizedBox(height: 10),
+                    _buildDetailsToggle(),
+                    const SizedBox(height: 12),
+                    _buildRejectionReasonField(),
+                    const SizedBox(height: 16),
+                    _buildButtons(),
+                  ],
+                ),
               ),
             ),
           ),
@@ -236,24 +247,30 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
       children: [
         _infoRow(
           '${SecurityLocalization.studentNameFemale}:',
-          widget.result.fullName,
+          _showFullDetails
+              ? widget.result.fullName
+              : _shortName(widget.result.fullName),
           valueStyle: nameValueStyle,
           labelStyle: labelStyle,
         ),
         const SizedBox(height: 8),
         _infoRow(
           '${SecurityLocalization.universityId}:',
-          widget.result.universityId,
+          _showFullDetails
+              ? widget.result.universityId
+              : _maskTrailing(widget.result.universityId),
           valueStyle: valueStyle,
           labelStyle: labelStyle,
         ),
-        const SizedBox(height: 8),
-        _infoRow(
-          '${SecurityLocalization.major}:',
-          widget.result.major,
-          valueStyle: valueStyle,
-          labelStyle: labelStyle,
-        ),
+        if (_showFullDetails) ...[
+          const SizedBox(height: 8),
+          _infoRow(
+            '${SecurityLocalization.major}:',
+            widget.result.major,
+            valueStyle: valueStyle,
+            labelStyle: labelStyle,
+          ),
+        ],
         const SizedBox(height: 8),
         _infoRow(
           '${SecurityLocalization.scanTime}:',
@@ -262,6 +279,84 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
           labelStyle: labelStyle,
         ),
       ],
+    );
+  }
+
+  Widget _buildPrivacyNotice() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: _kPrivacyBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _kTealLight.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        textDirection: SecurityLocalization.direction,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.visibility_off_outlined,
+            color: _kTealLight,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  SecurityLocalization.confidentialMode,
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _kTealLight,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  SecurityLocalization.sensitiveInfoHiddenForPrivacy,
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 11,
+                    color: _kTextMuted,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailsToggle() {
+    return Align(
+      alignment: SecurityLocalization.isEnglish
+          ? Alignment.centerLeft
+          : Alignment.centerRight,
+      child: TextButton.icon(
+        onPressed: () => setState(() => _showFullDetails = !_showFullDetails),
+        icon: Icon(
+          _showFullDetails
+              ? Icons.visibility_off_outlined
+              : Icons.visibility_outlined,
+          size: 18,
+          color: _kTealLight,
+        ),
+        label: Text(
+          _showFullDetails
+              ? SecurityLocalization.hideDetails
+              : SecurityLocalization.showDetails,
+          style: const TextStyle(
+            fontFamily: 'Cairo',
+            fontWeight: FontWeight.w700,
+            color: _kTealLight,
+          ),
+        ),
+      ),
     );
   }
 
@@ -312,11 +407,7 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
         const SizedBox(width: 6),
         Flexible(
           fit: FlexFit.loose,
-          child: Text(
-            value,
-            textAlign: TextAlign.start,
-            style: valueStyle,
-          ),
+          child: Text(value, textAlign: TextAlign.start, style: valueStyle),
         ),
       ],
     );
@@ -402,17 +493,29 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
   }
 }
 
+String _shortName(String name) {
+  final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
+  final visible = parts.take(2).join(' ');
+  return visible.isEmpty ? name : visible;
+}
+
+String _maskTrailing(String value, {int visibleDigits = 4}) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return '';
+  final visibleCount = trimmed.length < visibleDigits
+      ? trimmed.length
+      : visibleDigits;
+  final suffix = trimmed.substring(trimmed.length - visibleCount);
+  return '•••• $suffix';
+}
+
 class _GatePhotoFallback extends StatelessWidget {
   const _GatePhotoFallback();
 
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: Icon(
-        Icons.badge_outlined,
-        size: 36,
-        color: _kTealLight,
-      ),
+      child: Icon(Icons.badge_outlined, size: 36, color: _kTealLight),
     );
   }
 }

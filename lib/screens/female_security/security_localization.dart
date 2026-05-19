@@ -128,6 +128,17 @@ class SecurityLocalization {
       tr('التحقق من البطاقة', 'Card verification');
   static String get cardDataSectionTitle =>
       tr('بيانات البطاقة', 'Card details');
+  static String get confidentialMode =>
+      tr('وضع العرض السري', 'Confidential mode');
+  static String get showDetails => tr('عرض التفاصيل', 'Show details');
+  static String get hideDetails => tr('إخفاء التفاصيل', 'Hide details');
+  static String get sensitiveInfoHiddenForPrivacy => tr(
+    'تم إخفاء بعض البيانات الحساسة حفاظاً على الخصوصية',
+    'Sensitive information is hidden for privacy',
+  );
+  static String get studentIdentityDetails =>
+      tr('تفاصيل هوية الطالبة', 'Student identity details');
+  static String get protectedField => tr('مخفي للخصوصية', 'Hidden for privacy');
   static String get confirmEntry => tr('تأكيد الدخول', 'Confirm entry');
   static String get rejectEntry => tr('رفض الدخول', 'Reject entry');
   static String get nfcGateVerificationSubtitle => tr(

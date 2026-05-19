@@ -17,7 +17,7 @@ const _kGreyBorder = Color(0xFFE0E0E0);
 // SecurityCardPreviewScreen
 // ─────────────────────────────────────────────────────────────────────────────
 
-class SecurityCardPreviewScreen extends StatelessWidget {
+class SecurityCardPreviewScreen extends StatefulWidget {
   const SecurityCardPreviewScreen({
     super.key,
     required this.student,
@@ -26,6 +26,14 @@ class SecurityCardPreviewScreen extends StatelessWidget {
 
   final StudentCardInfo student;
   final bool isAccepted;
+
+  @override
+  State<SecurityCardPreviewScreen> createState() =>
+      _SecurityCardPreviewScreenState();
+}
+
+class _SecurityCardPreviewScreenState extends State<SecurityCardPreviewScreen> {
+  bool _showDetails = false;
 
   @override
   Widget build(BuildContext context) {
@@ -44,6 +52,8 @@ class SecurityCardPreviewScreen extends StatelessWidget {
                   const SizedBox(height: 8),
                   _buildStatusPill(),
                   const SizedBox(height: 18),
+                  _buildConfidentialBanner(),
+                  const SizedBox(height: 12),
                   _buildCard(context),
                 ],
               ),
@@ -88,7 +98,7 @@ class SecurityCardPreviewScreen extends StatelessWidget {
   }
 
   Widget _buildStatusPill() {
-    final isAcceptedStyle = isAccepted;
+    final isAcceptedStyle = widget.isAccepted;
     final borderColor = isAcceptedStyle ? _kTealLight : _kRejectRed;
     final fillColor = isAcceptedStyle
         ? _kTealLight.withValues(alpha: 0.08)
@@ -161,11 +171,7 @@ class SecurityCardPreviewScreen extends StatelessWidget {
           ),
         ],
       ),
-      child: const Icon(
-        Icons.badge_outlined,
-        size: 38,
-        color: _kTealLight,
-      ),
+      child: const Icon(Icons.badge_outlined, size: 38, color: _kTealLight),
     );
   }
 
@@ -190,22 +196,30 @@ class SecurityCardPreviewScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(student.fullName, textAlign: TextAlign.center, style: boldStyle),
+        Text(
+          _showDetails
+              ? widget.student.fullName
+              : _shortName(widget.student.fullName),
+          textAlign: TextAlign.center,
+          style: boldStyle,
+        ),
         const SizedBox(height: 6),
         Text(
-          student.universityId,
+          _showDetails
+              ? widget.student.universityId
+              : _maskTrailing(widget.student.universityId),
           textAlign: TextAlign.center,
           style: boldStyle,
         ),
         const SizedBox(height: 10),
         Text(
-          '${SecurityLocalization.entryTime}: ${student.entryTime}',
+          '${SecurityLocalization.entryTime}: ${widget.student.entryTime}',
           style: regularStyle,
         ),
         const SizedBox(height: 4),
-        Text(student.dayLabel, style: regularStyle),
+        Text(widget.student.dayLabel, style: regularStyle),
         const SizedBox(height: 4),
-        Text(student.dateLabel, style: regularStyle),
+        Text(widget.student.dateLabel, style: regularStyle),
         const SizedBox(height: 10),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 5),
@@ -214,7 +228,7 @@ class SecurityCardPreviewScreen extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
-            student.attendanceStatus,
+            widget.student.attendanceStatus,
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -223,21 +237,188 @@ class SecurityCardPreviewScreen extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        Text(student.college, style: boldStyle),
-        const SizedBox(height: 4),
-        Text(student.major, style: regularStyle),
-        const SizedBox(height: 4),
-        Text(student.degree, style: regularStyle),
-        const SizedBox(height: 6),
-        Text(student.nationality, style: boldStyle),
-        const SizedBox(height: 4),
-        Text(student.extraId, style: boldStyle),
+        const SizedBox(height: 10),
+        _buildDetailsToggle(),
+        AnimatedCrossFade(
+          duration: const Duration(milliseconds: 180),
+          crossFadeState: _showDetails
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
+          firstChild: _buildProtectedSummary(regularStyle),
+          secondChild: _buildAcademicDetails(boldStyle, regularStyle),
+        ),
         const SizedBox(height: 14),
         Divider(height: 1, color: _kGreyBorder),
         const SizedBox(height: 12),
-        Text(student.gateLabel, textAlign: TextAlign.center, style: mutedStyle),
+        Text(
+          widget.student.gateLabel,
+          textAlign: TextAlign.center,
+          style: mutedStyle,
+        ),
       ],
     );
   }
+
+  Widget _buildConfidentialBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: _kTealLight.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _kTealLight.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        textDirection: SecurityLocalization.direction,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.visibility_off_outlined,
+            color: _kTealLight,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  SecurityLocalization.confidentialMode,
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 13,
+                    color: _kTealLight,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  SecurityLocalization.sensitiveInfoHiddenForPrivacy,
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 12,
+                    color: _kTextMuted,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailsToggle() {
+    return TextButton.icon(
+      onPressed: () => setState(() => _showDetails = !_showDetails),
+      icon: Icon(
+        _showDetails
+            ? Icons.visibility_off_outlined
+            : Icons.visibility_outlined,
+        color: _kTealLight,
+        size: 18,
+      ),
+      label: Text(
+        _showDetails
+            ? SecurityLocalization.hideDetails
+            : SecurityLocalization.showDetails,
+        style: const TextStyle(
+          fontFamily: 'Cairo',
+          fontWeight: FontWeight.w700,
+          color: _kTealLight,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProtectedSummary(TextStyle style) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Text(
+        SecurityLocalization.studentIdentityDetails,
+        textAlign: TextAlign.center,
+        style: style.copyWith(color: _kTextMuted),
+      ),
+    );
+  }
+
+  Widget _buildAcademicDetails(TextStyle boldStyle, TextStyle regularStyle) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        children: [
+          Text(
+            widget.student.college,
+            textAlign: TextAlign.center,
+            style: boldStyle,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            widget.student.major,
+            textAlign: TextAlign.center,
+            style: regularStyle,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            widget.student.degree,
+            textAlign: TextAlign.center,
+            style: regularStyle,
+          ),
+          const SizedBox(height: 8),
+          _ProtectedInfoRow(label: SecurityLocalization.protectedField),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProtectedInfoRow extends StatelessWidget {
+  const _ProtectedInfoRow({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: _kGreyBorder.withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        textDirection: SecurityLocalization.direction,
+        children: [
+          const Icon(Icons.lock_outline_rounded, size: 15, color: _kTextMuted),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              fontSize: 11,
+              color: _kTextMuted,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _shortName(String name) {
+  final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
+  final visible = parts.take(2).join(' ');
+  return visible.isEmpty ? name : visible;
+}
+
+String _maskTrailing(String value, {int visibleDigits = 4}) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return '';
+  final visibleCount = trimmed.length < visibleDigits
+      ? trimmed.length
+      : visibleDigits;
+  final suffix = trimmed.substring(trimmed.length - visibleCount);
+  return '•••• $suffix';
 }
