@@ -59,6 +59,12 @@ class StudentRepository {
   /// Network-first with Hive fallback:
   /// always tries Firestore so admin deletes (course/section/enrollment) show up;
   /// uses cache only when the fetch fails.
+  ///
+  /// `weeklySlots` are parsed from Firestore `sections.schedule` using the same
+  /// duration rules as [AttendancePlannedSummary.weeklyMinutesFromSectionSchedule]
+  /// (see [StudentAttendanceMetaRepository.weeklyMinutesFromSlots]).
+  /// Absence % denominators always reload from Firestore via
+  /// [SectionAbsencePlanningRepository], not from Hive alone.
   Future<List<CourseModel>> getStudentCourses(String studentId) async {
     final sid = studentId.trim();
     if (sid.isEmpty) return const <CourseModel>[];

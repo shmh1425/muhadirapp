@@ -8,9 +8,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/attendance_schedule_slot.dart';
 import '../../models/attendance/manual_attendance_record.dart';
 import '../../providers/courses_providers.dart';
-import '../../repositories/academic_term_context_repository.dart';
 import '../../repositories/student_attendance_meta_repository.dart';
 import '../../services/attendance/manual_attendance_service.dart';
+import '../../services/attendance/section_absence_planning_context.dart';
+import '../../services/attendance/student_section_absence_service.dart';
 import '../../services/student_auth_service.dart';
 import 'components/custom_nav_bar_icons.dart';
 import 'components/notification_bell.dart';
@@ -40,8 +41,9 @@ class _AttendanceTrackingScreenState
   StreamSubscription<List<ManualAttendanceRecord>>? _recordsSubscription;
 
   List<_AttendanceRecord> _records = <_AttendanceRecord>[];
-  Map<String, int> _codeToWeeklyMinutes = <String, int>{};
-  Map<String, int> _sectionIdToWeeklyMinutes = <String, int>{};
+  /// Firestore-backed denominators (sections.schedule + academic_terms).
+  Map<String, SectionAbsencePlanningContext> _planningBySectionId =
+      <String, SectionAbsencePlanningContext>{};
   String? _selectedCourse;
   final Set<String> _selectedWeeks = <String>{};
   bool _allWeeksMode = true; // "الكل" toggle state
@@ -125,23 +127,49 @@ class _AttendanceTrackingScreenState
 
   Future<void> _loadAcademicTermContext() async {
     try {
-      final ctx = await AcademicTermContextRepository.instance
-          .loadCurrentWeekContext()
-          .timeout(const Duration(seconds: 8), onTimeout: () => null);
-      if (ctx == null) return;
+      final weeks = await StudentSectionAbsenceService.instance
+          .loadSemesterTeachingWeeks()
+          .timeout(const Duration(seconds: 8), onTimeout: () => 15);
       if (!mounted) return;
-      setState(() {
-        _semesterWeeksCount = ctx.weeks;
-        _semesterStartDate = ctx.start ?? _semesterStartDate;
-      });
+      setState(() => _semesterWeeksCount = weeks);
       if (kDebugMode) {
         debugPrint(
-          '[AttendanceTracking] term context weeks=$_semesterWeeksCount start=$_semesterStartDate',
+          '[AttendanceTracking] term weeks (Firestore)=$_semesterWeeksCount',
         );
       }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[AttendanceTracking] _loadAcademicTermContext FAILED: $e');
+      }
+    }
+  }
+
+  Future<void> _refreshFirestorePlanning(
+    List<ManualAttendanceRecord> records,
+  ) async {
+    final sectionToCode = <String, String>{};
+    for (final r in records) {
+      final sid = r.sectionId.trim();
+      if (sid.isEmpty) continue;
+      sectionToCode[sid] = (r.courseCode ?? '').trim();
+    }
+    try {
+      final weeks = await StudentSectionAbsenceService.instance
+          .loadSemesterTeachingWeeks()
+          .timeout(const Duration(seconds: 8), onTimeout: () => _semesterWeeksCount);
+      final planning = sectionToCode.isEmpty
+          ? const <String, SectionAbsencePlanningContext>{}
+          : await StudentSectionAbsenceService.instance
+              .loadPlanningForSections(sectionToCode)
+              .timeout(const Duration(seconds: 12), onTimeout: () => _planningBySectionId);
+      if (!mounted) return;
+      setState(() {
+        _semesterWeeksCount = weeks;
+        _planningBySectionId = planning;
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[AttendanceTracking] _refreshFirestorePlanning FAILED: $e');
       }
     }
   }
@@ -195,8 +223,6 @@ class _AttendanceTrackingScreenState
               if (!mounted) return;
               setState(() {
                 _records = deduped;
-                _codeToWeeklyMinutes = metaMaps.codeToWeeklyMinutes;
-                _sectionIdToWeeklyMinutes = metaMaps.sectionIdToWeeklyMinutes;
                 _isLoading = false;
                 _loadError = null;
                 _syncSelectedWeeksWithAvailable();
@@ -207,6 +233,7 @@ class _AttendanceTrackingScreenState
                   _selectedCourse = courses.first;
                 }
               });
+              unawaited(_refreshFirestorePlanning(records));
             } catch (e, st) {
               if (kDebugMode) {
                 debugPrint('[AttendanceTracking] stream handler error: $e\n$st');
@@ -715,8 +742,7 @@ class _AttendanceTrackingScreenState
       selectedWeeks: _selectedWeeks,
       allWeeks: _weeks,
       weeksCountForTerm: _semesterWeeksCount,
-      codeToWeeklyMinutes: _codeToWeeklyMinutes,
-      sectionIdToWeeklyMinutes: _sectionIdToWeeklyMinutes,
+      planningBySectionId: _planningBySectionId,
       allWeeksMode: _allWeeksMode,
     );
   }
@@ -1279,8 +1305,7 @@ class _CourseSummaryCard extends StatelessWidget {
     required this.selectedWeeks,
     required this.allWeeks,
     required this.weeksCountForTerm,
-    required this.codeToWeeklyMinutes,
-    required this.sectionIdToWeeklyMinutes,
+    required this.planningBySectionId,
     required this.allWeeksMode,
   });
 
@@ -1290,34 +1315,13 @@ class _CourseSummaryCard extends StatelessWidget {
   final Set<String> selectedWeeks;
   final List<String> allWeeks;
   final int weeksCountForTerm;
-  final Map<String, int> codeToWeeklyMinutes;
-  final Map<String, int> sectionIdToWeeklyMinutes;
+  final Map<String, SectionAbsencePlanningContext> planningBySectionId;
   final bool allWeeksMode;
 
   /// عرض النسبة كعدد صحيح (تقريب أقرب) ليتوافق مع فهم المستخدم والوسط في الدائرة.
   int _truncatePct(double v) {
     if (!v.isFinite || v <= 0) return 0;
     return v.floor().clamp(0, 100);
-  }
-
-  int _minutesFromTimeRange(String timeRange) {
-    final parts = timeRange.split('-');
-    if (parts.length != 2) return 0;
-    int? toMinutes(String s) {
-      final p = s.trim().split(':');
-      if (p.length < 2) return null;
-      final h = int.tryParse(p[0].trim());
-      final m = int.tryParse(p[1].trim());
-      if (h == null || m == null) return null;
-      return h * 60 + m;
-    }
-
-    final start = toMinutes(parts[0]);
-    final end = toMinutes(parts[1]);
-    if (start == null || end == null) return 0;
-    final diff = end - start;
-    final minutes = diff >= 0 ? diff : (diff + 24 * 60);
-    return minutes.clamp(0, 24 * 60);
   }
 
   bool _matchesCourse(_AttendanceRecord r) {
@@ -1338,57 +1342,23 @@ class _CourseSummaryCard extends StatelessWidget {
     return filtered;
   }
 
-  int _filteredWeeksCount() {
-    if (allWeeks.isEmpty) return weeksCountForTerm;
-    if (allWeeksMode) return weeksCountForTerm;
-    return selectedWeeks.length.clamp(1, weeksCountForTerm);
-  }
-
-  int _weeklyMinutesFromDb(List<_AttendanceRecord> records) {
-    int weekly = 0;
-    // Priority: section schedule-derived weekly minutes
-    final sectionIds = records
-        .map((r) => (r.sectionId ?? '').trim())
-        .where((s) => s.isNotEmpty)
-        .toSet()
-        .toList();
-    for (final sid in sectionIds) {
-      final v = sectionIdToWeeklyMinutes[sid];
-      if (v != null && v > weekly) weekly = v;
-    }
-
-    // Fallback: course schedule-derived weekly minutes (or explicit weekly hours if present)
-    if (weekly <= 0) {
-      final codes = records
-          .map((r) => r.courseCode)
-          .whereType<String>()
-          .map((c) => c.trim())
-          .where((c) => c.isNotEmpty)
-          .toSet()
-          .toList();
-      for (final code in codes) {
-        final v = codeToWeeklyMinutes[code];
-        if (v != null && v > weekly) weekly = v;
-      }
-    }
-    return weekly;
-  }
-
-  int _weeklyMinutesFallback(List<_AttendanceRecord> records) {
-    final byWeek = <String, Map<String, int>>{};
-    for (final r in records) {
-      final minutes = _minutesFromTimeRange(r.timeRange);
-      if (minutes <= 0) continue;
-      final sessionKey =
-          '${r.courseKey}|${r.lectureDate.toIso8601String()}|${r.timeRange}';
-      byWeek.putIfAbsent(r.weekKey, () => <String, int>{})[sessionKey] = minutes;
-    }
-    int maxMinutes = 0;
-    for (final sessions in byWeek.values) {
-      final total = sessions.values.fold<int>(0, (a, b) => a + b);
-      maxMinutes = math.max(maxMinutes, total);
-    }
-    return maxMinutes;
+  static List<Map<String, dynamic>> _recordsToMaps(List<_AttendanceRecord> records) {
+    return records.map((r) {
+      final parts = r.timeRange.split('-');
+      final start = parts.isNotEmpty ? parts[0].trim() : '';
+      final end = parts.length > 1 ? parts[1].trim() : '';
+      return <String, dynamic>{
+        'status': r.status,
+        'sectionId': r.sectionId ?? '',
+        'courseCode': r.courseCode ?? '',
+        'courseName': r.courseName,
+        'lectureStartTime': start,
+        'lectureEndTime': end,
+        'lectureYear': r.lectureDate.year,
+        'lectureMonth': r.lectureDate.month,
+        'lectureDay': r.lectureDate.day,
+      };
+    }).toList();
   }
 
   @override
@@ -1396,90 +1366,33 @@ class _CourseSummaryCard extends StatelessWidget {
     final records = _filteredCourseRecords();
     if (records.isEmpty) return const SizedBox.shrink();
 
-    final weeklyFromDb = _weeklyMinutesFromDb(records);
-    final weeklyFallback = _weeklyMinutesFallback(records);
-    final weekly = weeklyFromDb > 0 ? weeklyFromDb : weeklyFallback;
-    // Denominator weeks are ALWAYS the full effective teaching weeks for term.
-    // Week filter affects the numerator (which records are included), not the denominator.
-    final denomWeeks = weeksCountForTerm;
+    final courseRecordsAll = allRecords.where(_matchesCourse).toList();
+    final sectionIds = courseRecordsAll
+        .map((r) => (r.sectionId ?? '').trim())
+        .where((s) => s.isNotEmpty);
+    final primaryCode = courseRecordsAll
+            .map((r) => r.courseCode?.trim())
+            .whereType<String>()
+            .where((c) => c.isNotEmpty)
+            .firstOrNull ??
+        '';
 
-    // Compute minutes per status from the actual lecture time range so that:
-    // - Excused % = (excusedHours / totalTermHours) * 100
-    // - Unexcused % = (unexcusedHours / totalTermHours) * 100
-    // - Total absence % = sum of both
-    //
-    // If timeRange can't be parsed, fall back to an estimated session duration.
-    int sessionsPerWeek = 0;
-    final byWeek = <String, Set<String>>{};
-    for (final r in records) {
-      final key = '${r.courseKey}|${r.lectureDate.toIso8601String()}|${r.timeRange}';
-      byWeek.putIfAbsent(r.weekKey, () => <String>{}).add(key);
-    }
-    for (final s in byWeek.values) {
-      if (s.length > sessionsPerWeek) sessionsPerWeek = s.length;
-    }
-    final estimatedSessionMinutes =
-        (weekly > 0 && sessionsPerWeek > 0) ? (weekly / sessionsPerWeek) : 120.0;
+    final breakdown = StudentSectionAbsenceService.instance
+        .computeCardPercentages(
+      records: _recordsToMaps(records),
+      planningBySectionId: planningBySectionId,
+      sectionIdsForWeekly: sectionIds,
+      primaryCourseCode: primaryCode,
+      semesterWeeksCount: weeksCountForTerm,
+    );
 
-    int minutesFor(_AttendanceRecord r) {
-      final m = _minutesFromTimeRange(r.timeRange);
-      if (m > 0) return m;
-      return estimatedSessionMinutes.round();
-    }
-
-    int sumWhere(bool Function(_AttendanceRecord) p) => records
-        .where(p)
-        .fold<int>(0, (s, r) => s + minutesFor(r));
-
-    final presentMinutes = sumWhere((r) => r.status == 'present');
-    final excusedMinutes = sumWhere((r) => r.status == 'excused');
-    final unexcusedMinutes =
-        sumWhere((r) => r.status == 'unexcused' || r.status == 'absent');
-    final lateMinutes = sumWhere((r) => r.status == 'late');
-
-    final totalPlannedMinutes =
-        (weekly > 0 && denomWeeks > 0) ? (weekly * denomWeeks) : 0;
-
-    if (kDebugMode) {
-      final courseCodes = records
-          .map((r) => r.courseCode?.trim())
-          .whereType<String>()
-          .where((c) => c.isNotEmpty)
-          .toSet()
-          .toList()
-        ..sort();
-      final dbWeeklyByCode = <String, int>{};
-      for (final c in courseCodes) {
-        final v = codeToWeeklyMinutes[c];
-        if (v != null) dbWeeklyByCode[c] = v;
-      }
-
-      debugPrint(
-        '[AttendanceTracking] course="$courseLabel" '
-        'courseCodes=$courseCodes '
-        'dbWeeklyByCode=$dbWeeklyByCode '
-        'weeklyFromDb=$weeklyFromDb '
-        'weeklyFallback=$weeklyFallback '
-        'weeklyUsed=$weekly '
-        'sessionsPerWeek=$sessionsPerWeek '
-        'estimatedSessionMinutes=$estimatedSessionMinutes '
-        'weeksForDenominator=$denomWeeks '
-        'totalPlannedMinutes=$totalPlannedMinutes',
-      );
-    }
-
-    double pct(int minutes) => totalPlannedMinutes <= 0
-        ? 0
-        : (minutes / totalPlannedMinutes) * 100;
-
-    final excusedPct = pct(excusedMinutes);
-    final unexcusedPct = pct(unexcusedMinutes);
-    final totalAbsencePct = pct(excusedMinutes + unexcusedMinutes);
+    final excusedPct = breakdown.excusedPct;
+    final unexcusedPct = breakdown.unexcusedPct;
+    final totalAbsencePct = breakdown.totalAbsencePct;
     final unexcusedOverLimit = unexcusedPct > 15;
     final totalOverLimit = totalAbsencePct > 25;
     final excusedOverLimit = excusedPct > 25;
-    final academicDeprivation =
-        unexcusedOverLimit || excusedOverLimit || totalOverLimit;
+    final academicDeprivation = breakdown.isAcademicallyDeprived;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1513,7 +1426,7 @@ class _CourseSummaryCard extends StatelessWidget {
                 _LegendRow(
                   color: const Color(0xFF006571),
                   label: 'الحضور',
-                  percentage: pct(presentMinutes),
+                  percentage: breakdown.presentPct,
                 ),
                 const SizedBox(height: 8),
                 _LegendRow(
@@ -1533,7 +1446,7 @@ class _CourseSummaryCard extends StatelessWidget {
                 _LegendRow(
                   color: const Color(0xFFFFC107),
                   label: 'تأخير',
-                  percentage: pct(lateMinutes),
+                  percentage: breakdown.latePct,
                 ),
                 const SizedBox(height: 8),
                 _LegendRow(

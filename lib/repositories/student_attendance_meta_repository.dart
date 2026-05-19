@@ -2,37 +2,31 @@ import '../models/attendance_schedule_slot.dart';
 import '../models/attendance/manual_attendance_record.dart';
 import '../models/course_model.dart';
 import '../models/course_weekly_slot.dart';
+import '../services/attendance/attendance_planned_summary.dart';
 
 /// In-memory maps for attendance UI derived from [CourseModel] (Hive / unified path).
 ///
-/// No Firestore — replaces N+1 `courses`/`sections` reads in [AttendanceTrackingScreen].
+/// Schedule labels/slots only — **absence % denominators** use
+/// [SectionAbsencePlanningRepository] (Firestore `sections.schedule`), not these maps.
 class StudentAttendanceMetaRepository {
   StudentAttendanceMetaRepository._();
   static final StudentAttendanceMetaRepository instance =
       StudentAttendanceMetaRepository._();
 
-  static int? _hmToMinutes(String? s) {
-    final raw = (s ?? '').trim();
-    if (raw.isEmpty) return null;
-    final parts = raw.split(':');
-    if (parts.length < 2) return null;
-    final h = int.tryParse(parts[0].trim());
-    final m = int.tryParse(parts[1].trim());
-    if (h == null || m == null) return null;
-    return (h.clamp(0, 23) * 60) + m.clamp(0, 59);
-  }
-
+  /// Same formula as Firestore `sections.schedule` via
+  /// [AttendancePlannedSummary.weeklyMinutesFromSectionSchedule] (Hive cache must match).
   static int weeklyMinutesFromSlots(List<CourseWeeklySlot> slots) {
-    var total = 0;
-    for (final row in slots) {
-      final start = _hmToMinutes(row.normalizedStartTime);
-      final end = _hmToMinutes(row.normalizedEndTime);
-      if (start == null || end == null) continue;
-      final diff = end - start;
-      final minutes = diff >= 0 ? diff : (diff + 24 * 60);
-      if (minutes > 0 && minutes <= 12 * 60) total += minutes;
-    }
-    return total;
+    if (slots.isEmpty) return 0;
+    final schedule = slots
+        .map(
+          (w) => <String, dynamic>{
+            'dayOfWeek': w.dayOfWeek,
+            'startTime': w.normalizedStartTime,
+            'endTime': w.normalizedEndTime,
+          },
+        )
+        .toList();
+    return AttendancePlannedSummary.weeklyMinutesFromSectionSchedule(schedule);
   }
 
   /// Same tuple shape as legacy `_fetchCourseMetaForRecords` return type.
