@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/attendance/manual_attendance_record.dart';
+import '../../models/external_student.dart';
 import '../../models/excuse/excuse_request.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../services/attendance/manual_attendance_service.dart';
@@ -11,6 +12,7 @@ import '../../services/excuse/excuse_service.dart';
 import '../../widgets/lecturer/excuse_attachment_preview.dart';
 import '../../widgets/lecturer/excuse_rejection_reason_dialog.dart';
 import 'lecturer_language.dart';
+import 'widgets/directional_navigation_icon.dart';
 import 'widgets/modern_popup_dialog.dart';
 import 'widgets/profile_back_button.dart';
 
@@ -47,6 +49,7 @@ class _LecturerExcuseManagementScreenState
 
   List<ExcuseRequest> _excuses = const [];
   List<ManualAttendanceRecord> _records = const [];
+  Map<int, ExternalStudent> _studentProfiles = {};
   bool _seenExcuseSnapshot = false;
   bool _seenRecordsSnapshot = false;
   String? _excuseStreamError;
@@ -120,12 +123,39 @@ class _LecturerExcuseManagementScreenState
   }
 
   String _excuseCourseName(ExcuseRequest item) {
-    final ar = item.courseNameAr.trim();
-    final en = item.courseNameEn.trim();
-    if (LecturerLanguageController.isArabic) {
-      return ar.isNotEmpty ? ar : (en.isNotEmpty ? en : _lecture.courseName);
+    return LecturerLanguageController.localizedCourseName(
+      <String, dynamic>{
+        'courseNameAr': item.courseNameAr,
+        'courseNameEn': item.courseNameEn,
+      },
+      fallback: _lecture.courseName,
+    );
+  }
+
+  String _localizedStudentName(int studentId, String snapshotName) {
+    final profile = _studentProfiles[studentId];
+    if (profile != null) {
+      return profile.displayNameFor(LecturerLanguageController.isArabic);
     }
-    return en.isNotEmpty ? en : (ar.isNotEmpty ? ar : _lecture.courseName);
+    final trimmed = snapshotName.trim();
+    if (trimmed.isNotEmpty) return trimmed;
+    return studentId > 0 ? '$studentId' : _tr('غير متوفر', 'N/A');
+  }
+
+  Future<void> _refreshStudentProfiles() async {
+    final ids = <int>{
+      ..._records.map((r) => r.studentId),
+      ..._sectionScopedExcuses.map((e) => e.studentId),
+    }.where((id) => id > 0).toSet();
+    if (ids.isEmpty) return;
+    try {
+      final profiles =
+          await _manualAttendanceService.fetchStudentProfilesByIds(ids);
+      if (!mounted) return;
+      setState(() => _studentProfiles = profiles);
+    } catch (_) {
+      // Keep snapshot names on lookup failure.
+    }
   }
 
   String get _lectureTimeRange {
@@ -146,9 +176,15 @@ class _LecturerExcuseManagementScreenState
   Map<int, String> get _nameByStudentId {
     final m = <int, String>{};
     for (final r in _records) {
-      m[r.studentId] = r.studentName.trim().isNotEmpty
-          ? r.studentName
-          : '${r.studentId}';
+      m[r.studentId] = _localizedStudentName(
+        r.studentId,
+        r.studentName,
+      );
+    }
+    for (final entry in _studentProfiles.entries) {
+      m[entry.key] = entry.value.displayNameFor(
+        LecturerLanguageController.isArabic,
+      );
     }
     return m;
   }
@@ -196,9 +232,11 @@ class _LecturerExcuseManagementScreenState
     final names = _nameByStudentId;
     final rows = <_ExcuseViewRow>[];
     for (final e in _sectionScopedExcuses) {
-      final nm = (e.studentName?.trim().isNotEmpty ?? false)
+      final snapshot = (e.studentName?.trim().isNotEmpty ?? false)
           ? e.studentName!.trim()
-          : (names[e.studentId] ?? '${e.studentId}');
+          : '';
+      final nm = names[e.studentId] ??
+          _localizedStudentName(e.studentId, snapshot);
       rows.add(
         _ExcuseViewRow(
           request: e,
@@ -257,6 +295,7 @@ class _LecturerExcuseManagementScreenState
               _excuseStreamError = null;
               _pruneStaged();
             });
+            unawaited(_refreshStudentProfiles());
           },
           onError: (Object e) {
             debugPrint('[LecturerExcuseManagement] excuse stream failed: $e');
@@ -276,6 +315,7 @@ class _LecturerExcuseManagementScreenState
               _records = list;
               _seenRecordsSnapshot = true;
             });
+            unawaited(_refreshStudentProfiles());
           },
           onError: (Object e) {
             debugPrint('[LecturerExcuseManagement] records stream failed: $e');
@@ -326,12 +366,13 @@ class _LecturerExcuseManagementScreenState
                     ),
                   ],
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      _tr('قرار العذر', 'Excuse decision'),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        _tr('قرار العذر', 'Excuse decision'),
                       style: const TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 18,
@@ -361,7 +402,9 @@ class _LecturerExcuseManagementScreenState
                         ),
                       ),
                     ],
-                    if ((item.attachmentUrl ?? '').trim().isNotEmpty) ...[
+                    if (_isValidAttachmentUrl(
+                      (item.attachmentUrl ?? '').trim(),
+                    )) ...[
                       const SizedBox(height: 14),
                       SizedBox(
                         width: double.infinity,
@@ -448,7 +491,8 @@ class _LecturerExcuseManagementScreenState
                         ),
                       ),
                     ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -715,25 +759,16 @@ class _LecturerExcuseManagementScreenState
                         ),
                       ),
                       const SizedBox(height: 4),
-                      if (!hasAttachment)
+                      if (!hasAttachment || !validAttachmentUrl)
                         Text(
-                          _tr('لا يوجد مرفق مرفوع.', 'No attachment uploaded.'),
+                          _tr(
+                            'لم يتم إرفاق أي مرفق.',
+                            'No attachment was provided.',
+                          ),
                           style: const TextStyle(
                             fontFamily: 'Cairo',
                             fontSize: 13,
                             color: Color(0xFF64748B),
-                          ),
-                        )
-                      else if (!validAttachmentUrl)
-                        Text(
-                          _tr(
-                            'رابط المرفق غير صالح.',
-                            'Invalid attachment link.',
-                          ),
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            fontSize: 13,
-                            color: Color(0xFFB91C1C),
                           ),
                         )
                       else
@@ -1331,7 +1366,7 @@ class _LecturerExcuseManagementScreenState
           _buildFilterSectionTitle(
             icon: Icons.rule_rounded,
             title: _tr('حالة العذر', 'Excuse status'),
-            hint: _tr('اختاري حالة الطلبات', 'Filter review requests'),
+            hint: _tr('اختر حالة الطلبات', 'Select request status'),
           ),
           const SizedBox(height: 8),
           Container(
@@ -1498,152 +1533,179 @@ class _LecturerExcuseManagementScreenState
           border: Border.all(color: const Color(0xFFDDE6E8)),
         ),
         child: list.isEmpty
-            ? Align(
-                alignment: Alignment.topCenter,
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 22,
+            ? ListView(
+                padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+                children: [
+                  _buildEmptyFilterPlaceholder(),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildExcuseTableHeader(),
+                  Expanded(
+                    child: ListView.separated(
+                      padding: EdgeInsets.zero,
+                      itemCount: list.length,
+                      separatorBuilder: (_, __) => const Divider(
+                        height: 1,
+                        color: Color(0xFFE8EFF1),
+                      ),
+                      itemBuilder: (context, index) {
+                        return _buildExcuseTableRow(list[index], index);
+                      },
                     ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF7FAFB),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: const Color(0xFFE0ECEE)),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE8F4F5),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: const Icon(
-                            Icons.search_off_rounded,
-                            color: _primary,
-                            size: 23,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          _tr(
-                            'لا يوجد طلاب في هذا الفلتر.',
-                            'No students in this filter.',
-                          ),
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            color: Color(0xFF455D63),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _tr(
-                            'جرّبي تغيير حالة العذر أو إعادة ضبط الفلتر.',
-                            'Try another status or reset the filter.',
-                          ),
-                          style: const TextStyle(
-                            fontFamily: 'Cairo',
-                            color: Color(0xFF7A9097),
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  static const TextStyle _excuseTableHeaderStyle = TextStyle(
+    fontFamily: 'Cairo',
+    fontSize: 11,
+    fontWeight: FontWeight.w800,
+    color: Color(0xFF4A6066),
+  );
+
+  Widget _buildExcuseTableHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: const BoxDecoration(
+        color: Color(0xFFF1F6F7),
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(13),
+          topRight: Radius.circular(13),
+        ),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 28,
+            child: Text(
+              '#',
+              textAlign: TextAlign.center,
+              style: _excuseTableHeaderStyle,
+            ),
+          ),
+          Expanded(
+            flex: 5,
+            child: Text(
+              _tr('الطالب', 'Student'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _excuseTableHeaderStyle,
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(
+              _tr('الرقم', 'ID'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: _excuseTableHeaderStyle,
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              _tr('الحالة', 'Status'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: _excuseTableHeaderStyle,
+            ),
+          ),
+          SizedBox(
+            width: 44,
+            child: Text(
+              _tr('عرض', 'View'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: _excuseTableHeaderStyle,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExcuseTableRow(_ExcuseViewRow row, int index) {
+    final eff = _effectiveStatus(row.request);
+
+    return Material(
+      color: index.isEven ? Colors.white : const Color(0xFFFCFEFE),
+      child: InkWell(
+        onTap: () => _onViewRow(row),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 28,
+                child: Text(
+                  '${index + 1}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF5E6C70),
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 5,
+                child: Text(
+                  row.displayName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF213236),
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 3,
+                child: Directionality(
+                  textDirection: TextDirection.ltr,
+                  child: Text(
+                    row.academicId,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 11,
+                      color: Color(0xFF55666B),
                     ),
                   ),
                 ),
-              )
-            : ListView.builder(
-                padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
-                itemCount: list.length,
-                itemBuilder: (context, index) {
-                  return _buildExcuseModernCard(list[index], index);
-                },
               ),
-      ),
-    );
-  }
-
-  Widget _buildExcuseModernCard(_ExcuseViewRow row, int index) {
-    final eff = _effectiveStatus(row.request);
-    final fg = _statusChipFg(eff);
-    final border = index.isEven
-        ? const Color(0xFFDDE6E8)
-        : const Color(0xFFE8EFF1);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => _onViewRow(row),
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+              Expanded(
+                flex: 2,
+                child: Center(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: _buildStatusChip(eff),
+                  ),
+                ),
               ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: fg,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
+              const SizedBox(
+                width: 44,
+                child: Center(
+                  child: LecturerDirectionalForwardIcon(
+                    size: 22,
+                    color: Color(0xFF006571),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      row.displayName,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontFamily: 'Cairo',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF213236),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _excuseMetaPill(
-                    label: _tr('ID', 'ID'),
-                    value: row.academicId,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _buildStatusChip(eff),
-                  _excuseMetaPill(
-                    label: _tr('العذر', 'Excuse'),
-                    value: _tr('عرض التفاصيل', 'View details'),
-                  ),
-                ],
+                ),
               ),
             ],
           ),
@@ -1652,37 +1714,60 @@ class _LecturerExcuseManagementScreenState
     );
   }
 
-  Widget _excuseMetaPill({required String label, required String value}) {
+  Widget _buildEmptyFilterPlaceholder() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF4F8F9),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFDDE8EA)),
+        color: const Color(0xFFF7FAFB),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE0ECEE)),
       ),
-      child: RichText(
-        text: TextSpan(
-          children: [
-            TextSpan(
-              text: '$label: ',
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF4E646A),
-              ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE8F4F5),
+              borderRadius: BorderRadius.circular(12),
             ),
-            TextSpan(
-              text: value,
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11.5,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF223C43),
-              ),
+            child: const Icon(
+              Icons.search_off_rounded,
+              color: _primary,
+              size: 21,
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _tr(
+              'لا يوجد طلاب في هذا الفلتر.',
+              'No students in this filter.',
+            ),
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              color: Color(0xFF455D63),
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _tr(
+              'يمكن تجربة تغيير حالة العذر أو إعادة ضبط الفلتر.',
+              'Try changing the excuse status or reset the filter.',
+            ),
+            style: const TextStyle(
+              fontFamily: 'Cairo',
+              color: Color(0xFF7A9097),
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }

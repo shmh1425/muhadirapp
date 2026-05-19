@@ -345,7 +345,7 @@ class _LecturerNfcSessionManagementScreenState
       case NfcAttendanceErrorCode.missingLecturerCard:
         return _tr(
           'لا توجد بطاقة NFC مرتبطة بحسابك. يرجى إضافتها من صفحة الأدمن.',
-          'No NFC card is assigned to your lecturer account yet.',
+          'No NFC card is linked to your account. Please add it from the Admin page.',
         );
       case NfcAttendanceErrorCode.invalidInput:
         return _tr(
@@ -528,8 +528,8 @@ class _LecturerNfcSessionManagementScreenState
                       Text(
                         (_lecturerCardId == null || _lecturerCardId!.isEmpty)
                             ? _tr(
-                                'غير مضافة بعد (أضيفيها من صفحة الأدمن)',
-                                'Not assigned yet (set it from Admin page)',
+                                'غير مضافة بعد (يرجى إضافتها من صفحة الأدمن)',
+                                'Not assigned yet (please add it from the Admin page)',
                               )
                             : _lecturerCardId!,
                         style: TextStyle(
@@ -567,7 +567,7 @@ class _LecturerNfcSessionManagementScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          _tr('1) اختاري المقرر', '1) Select course'),
+          _tr('1) اختر المقرر', '1) Select course'),
           style: const TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w700,
@@ -617,7 +617,7 @@ class _LecturerNfcSessionManagementScreenState
                       const Spacer(),
                       Text(
                         _tr(
-                          'اضغطي لاختيار المقرر',
+                          'اضغط لاختيار المقرر',
                           'Tap to select this course',
                         ),
                         style: const TextStyle(
@@ -643,7 +643,7 @@ class _LecturerNfcSessionManagementScreenState
       return _infoCard(
         icon: Icons.touch_app_outlined,
         message: _tr(
-          'اختاري مقرر أولاً لعرض التقويم.',
+          'يرجى اختيار مقرر أولاً لعرض التقويم.',
           'Select a course first to show its calendar.',
         ),
       );
@@ -657,7 +657,7 @@ class _LecturerNfcSessionManagementScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          _tr('2) اختاري اليوم', '2) Select day'),
+          _tr('2) اختر اليوم', '2) Select day'),
           style: const TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w700,

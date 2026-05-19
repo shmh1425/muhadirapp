@@ -17,17 +17,32 @@ import '../../services/admin/admin_auth_service.dart';
 import '../../services/admin/admin_user_image_service.dart';
 import '../../services/attendance/nfc_attendance_service.dart';
 import '../../features/translation/translation_controller.dart';
+import '../../features/translation/widgets/language_toggle_button.dart';
 import '../../features/translation/widgets/t_text.dart';
 
 String _firebaseErrorMessage(FirebaseException e) {
+  final t = TranslationController.instance;
   return switch (e.code) {
-    'permission-denied' =>
+    'permission-denied' => t.tr(
       'ما عندك صلاحية تنفيذ العملية. تأكدي من Firestore Rules.',
-    'failed-precondition' =>
+      'You do not have permission for this action. Check Firestore Rules.',
+    ),
+    'failed-precondition' => t.tr(
       'الاستعلام يحتاج إعداد إضافي (غالباً Firestore Index).',
-    'unavailable' => 'الخدمة غير متاحة حالياً. تأكدي من الاتصال بالإنترنت.',
-    'not-found' => 'العنصر المطلوب غير موجود.',
-    _ => 'خطأ Firebase (${e.code}) ${e.message ?? ''}'.trim(),
+      'This query needs extra setup, usually a Firestore index.',
+    ),
+    'unavailable' => t.tr(
+      'الخدمة غير متاحة حالياً. تأكدي من الاتصال بالإنترنت.',
+      'The service is unavailable right now. Check your internet connection.',
+    ),
+    'not-found' => t.tr(
+      'العنصر المطلوب غير موجود.',
+      'The requested item was not found.',
+    ),
+    _ => t.tr(
+      'خطأ Firebase (${e.code}) ${e.message ?? ''}'.trim(),
+      'Firebase error (${e.code}) ${e.message ?? ''}'.trim(),
+    ),
   };
 }
 
@@ -145,6 +160,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             appBar: AppBar(
               title: const TText('لوحة تحكم الأدمن'),
               actions: [
+                const LanguageToggleButton(
+                  style: LanguageToggleStyle.icon,
+                  iconColor: Colors.white,
+                ),
                 IconButton(
                   onPressed: _isSigningOut ? null : _onSignOut,
                   icon: _isSigningOut
@@ -154,7 +173,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.logout),
-                  tooltip: 'تسجيل خروج',
+                  tooltip: translation.tr('تسجيل خروج', 'Sign out'),
                 ),
               ],
               bottom: TabBar(
