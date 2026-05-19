@@ -45,6 +45,7 @@ dependencies:
   http: ^1.2.2
   flutter_dotenv: ^5.2.0
   share_plus: ^10.1.4
+  pdf: ^3.11.3
   # Direct dependency so path_provider is registered with the app (share/XFile may use it).
   path_provider: ^2.1.5
   url_launcher: ^6.3.2

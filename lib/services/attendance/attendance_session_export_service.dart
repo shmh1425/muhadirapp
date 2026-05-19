@@ -6,57 +6,105 @@ import 'package:flutter/services.dart'
     show MissingPluginException, PlatformException;
 import 'package:share_plus/share_plus.dart';
 
-import '../../models/attendance/manual_attendance_record.dart';
 import '../../models/attendance/manual_attendance_session.dart';
-import '../../repositories/lecturer_catalog_repository.dart';
-import '../lecturer_auth_service.dart';
-import 'manual_attendance_service.dart';
+import '../../screens/lecturer/lecturer_language.dart';
+import 'export/attendance_session_export_csv_builder.dart';
+import 'export/attendance_session_export_format.dart';
+import 'export/attendance_session_export_model.dart';
+import 'export/attendance_session_export_pdf_builder.dart';
 
-/// Phase 1: single-session CSV export from authoritative Firestore attendance data.
+/// Localized single-session attendance export (CSV + PDF) from Firestore.
 class AttendanceSessionExportService {
   AttendanceSessionExportService._();
   static final AttendanceSessionExportService instance =
       AttendanceSessionExportService._();
 
-  final ManualAttendanceService _manual = ManualAttendanceService.instance;
-
-  /// Loads [manual_attendance_sessions] + [manual_attendance_records] for [sessionId],
-  /// verifies the current lecturer owns [session.sectionId], builds UTF-8 CSV with BOM,
-  /// and opens the system share sheet ([XFile.fromData] — works on web without `dart:io`).
+  /// Builds export data and shares the selected [format].
   ///
-  /// iOS note: when sharing XFile.fromData, file name must be passed via
-  /// fileNameOverrides (the `name` in XFile.fromData is ignored on most platforms).
-  Future<void> exportSessionCsvAndShare(String sessionId) async {
-    final sid = sessionId.trim();
-    if (sid.isEmpty) {
-      throw StateError('sessionId is empty');
+  /// Language follows [isArabic] when set; otherwise [LecturerLanguageController].
+  ///
+  /// **Pending finalization (unchanged):** [ManualAttendanceService.getRecordsForSessionIds]
+  /// may still finalize pending records to absent before read (except default-present sessions).
+  Future<void> exportSessionAndShare(
+    String sessionId, {
+    required AttendanceSessionExportFormat format,
+    bool? isArabic,
+  }) async {
+    final model = await AttendanceSessionExportModelBuilder.build(
+      sessionId: sessionId,
+      isArabic: isArabic,
+    );
+
+    switch (format) {
+      case AttendanceSessionExportFormat.csv:
+        await _shareCsv(model);
+        break;
+      case AttendanceSessionExportFormat.pdf:
+        await _sharePdf(model);
+        break;
     }
+  }
 
-    final session = await _manual.getSessionById(sid);
-    if (session == null) {
-      throw StateError('Session not found');
-    }
+  /// Backward-compatible CSV-only export.
+  Future<void> exportSessionCsvAndShare(
+    String sessionId, {
+    bool? isArabic,
+  }) =>
+      exportSessionAndShare(
+        sessionId,
+        format: AttendanceSessionExportFormat.csv,
+        isArabic: isArabic,
+      );
 
-    final owns = await _currentLecturerOwnsSection(session.sectionId);
-    if (!owns) {
-      throw StateError('Not authorized to export this session');
-    }
+  Future<void> exportSessionPdfAndShare(
+    String sessionId, {
+    bool? isArabic,
+  }) =>
+      exportSessionAndShare(
+        sessionId,
+        format: AttendanceSessionExportFormat.pdf,
+        isArabic: isArabic,
+      );
 
-    final grouped = await _manual.getRecordsForSessionIds({sid});
-    final records = List<ManualAttendanceRecord>.from(
-      grouped[sid] ?? const <ManualAttendanceRecord>[],
-    )..sort((a, b) => a.studentName.compareTo(b.studentName));
+  Future<void> _shareCsv(AttendanceSessionExportModel model) async {
+    final csv = AttendanceSessionExportCsvBuilder.build(model);
+    final filename = _buildFilename(model.session, 'csv');
+    final bytes = _utf8WithBom(csv);
+    await _shareBytes(
+      bytes: bytes,
+      filename: filename,
+      mimeType: 'text/csv',
+      plainTextFallback: csv,
+    );
+  }
 
-    final csv = _buildCsv(session: session, records: records);
-    final filename = _buildFilename(session);
-    final raw = utf8.encode(csv);
+  Future<void> _sharePdf(AttendanceSessionExportModel model) async {
+    final pdfBytes = await AttendanceSessionExportPdfBuilder.build(model);
+    final filename = _buildFilename(model.session, 'pdf');
+    await _shareBytes(
+      bytes: pdfBytes,
+      filename: filename,
+      mimeType: 'application/pdf',
+    );
+  }
+
+  Uint8List _utf8WithBom(String text) {
+    final raw = utf8.encode(text);
     final bytes = Uint8List(3 + raw.length);
     bytes[0] = 0xEF;
     bytes[1] = 0xBB;
     bytes[2] = 0xBF;
     bytes.setRange(3, bytes.length, raw);
+    return bytes;
+  }
 
-    final xFile = XFile.fromData(bytes, mimeType: 'text/csv');
+  Future<void> _shareBytes({
+    required Uint8List bytes,
+    required String filename,
+    required String mimeType,
+    String? plainTextFallback,
+  }) async {
+    final xFile = XFile.fromData(bytes, mimeType: mimeType);
 
     try {
       await Share.shareXFiles(
@@ -65,34 +113,20 @@ class AttendanceSessionExportService {
         fileNameOverrides: [filename],
       );
     } catch (e) {
-      // share_plus may call path_provider for temp files; channel can be missing after
-      // hot reload or until a full native rebuild. Some embedders wrap as PlatformException.
       if (kIsWeb) rethrow;
       final usePlainShare =
-          e is MissingPluginException ||
-          (e is PlatformException &&
-              (e.code == 'channel-error' ||
-                  (e.message?.contains('No implementation found') ?? false) ||
-                  (e.message?.contains('getTemporaryDirectory') ?? false)));
+          plainTextFallback != null &&
+          (e is MissingPluginException ||
+              (e is PlatformException &&
+                  (e.code == 'channel-error' ||
+                      (e.message?.contains('No implementation found') ?? false) ||
+                      (e.message?.contains('getTemporaryDirectory') ?? false))));
       if (!usePlainShare) rethrow;
-      await Share.share(csv, subject: filename);
+      await Share.share(plainTextFallback, subject: filename);
     }
   }
 
-  Future<bool> _currentLecturerOwnsSection(String sectionId) async {
-    final want = sectionId.trim();
-    if (want.isEmpty) return false;
-    final lecturerId =
-        LecturerAuthService.instance.currentLecturer?.lecturerId.trim() ?? '';
-    if (lecturerId.isEmpty) return false;
-    final catalog =
-        await LecturerCatalogRepository.instance.getCatalogForLecturer(
-      lecturerId,
-    );
-    return catalog.sectionIds.contains(want);
-  }
-
-  String _buildFilename(ManualAttendanceSession session) {
+  String _buildFilename(ManualAttendanceSession session, String extension) {
     final d = session.lectureDate;
     final dateKey =
         '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
@@ -102,7 +136,7 @@ class AttendanceSessionExportService {
     final shortSid = session.sessionId.length > 8
         ? session.sessionId.substring(0, 8)
         : session.sessionId;
-    return 'Attendance_${cc}_${sec}_${dateKey}_${startKey}_$shortSid.csv';
+    return 'Attendance_${cc}_${sec}_${dateKey}_${startKey}_$shortSid.$extension';
   }
 
   String _sanitizeFilePart(String raw) {
@@ -116,125 +150,5 @@ class AttendanceSessionExportService {
         .replaceAll(RegExp(r'^_+|_+$'), '');
     if (asciiSafe.isEmpty) return 'na';
     return asciiSafe.length > 32 ? asciiSafe.substring(0, 32) : asciiSafe;
-  }
-
-  String _buildCsv({
-    required ManualAttendanceSession session,
-    required List<ManualAttendanceRecord> records,
-  }) {
-    final buf = StringBuffer();
-    final now = DateTime.now().toUtc();
-
-    void meta(String k, String v) {
-      buf.writeln('${_escapeCsv(k)},${_escapeCsv(v)}');
-    }
-
-    buf.writeln('${_escapeCsv('SECTION')},${_escapeCsv('METADATA')}');
-    meta('exportGeneratedAtUtc', now.toIso8601String());
-    meta('sessionId', session.sessionId);
-    meta('sectionId', session.sectionId);
-    meta('courseName', session.courseName);
-    if (session.courseCode != null && session.courseCode!.isNotEmpty) {
-      meta('courseCode', session.courseCode!);
-    }
-    meta('sectionLabel', session.sectionLabel);
-    meta(
-      'lectureDate',
-      '${session.lectureDate.year}-${session.lectureDate.month.toString().padLeft(2, '0')}-${session.lectureDate.day.toString().padLeft(2, '0')}',
-    );
-    meta('lectureStartTime', session.lectureStartTime);
-    meta('lectureEndTime', session.lectureEndTime);
-    meta('dayOfWeek', '${session.dayOfWeek}');
-    if (session.termId != null && session.termId!.isNotEmpty) {
-      meta('termId', session.termId!);
-    }
-    if (session.officialWeekNumber != null) {
-      meta('officialWeekNumber', '${session.officialWeekNumber}');
-    }
-    if (session.effectiveWeekNumber != null) {
-      meta('effectiveWeekNumber', '${session.effectiveWeekNumber}');
-    }
-    meta('countInAttendance', '${session.countInAttendance}');
-    meta('attendanceFinalized', '${session.attendanceFinalized}');
-    if (session.lecturerId != null && session.lecturerId!.isNotEmpty) {
-      meta('sessionLecturerId', session.lecturerId!);
-    }
-
-    int pending = 0, p = 0, a = 0, e = 0, l = 0;
-    for (final r in records) {
-      switch (r.status) {
-        case ManualAttendanceStatus.pending:
-          pending++;
-          break;
-        case ManualAttendanceStatus.present:
-          p++;
-          break;
-        case ManualAttendanceStatus.absent:
-          a++;
-          break;
-        case ManualAttendanceStatus.excused:
-          e++;
-          break;
-        case ManualAttendanceStatus.late:
-          l++;
-          break;
-      }
-    }
-    final total = records.length;
-
-    buf.writeln();
-    buf.writeln('${_escapeCsv('SECTION')},${_escapeCsv('SUMMARY')}');
-    meta('totalStudents', '$total');
-    meta('pendingCount', '$pending');
-    meta('presentCount', '$p');
-    meta('absentCount', '$a');
-    meta('excusedCount', '$e');
-    meta('lateCount', '$l');
-    if (total > 0) {
-      meta('presentPct', ((p / total) * 100).toStringAsFixed(2));
-      meta('absentPct', ((a / total) * 100).toStringAsFixed(2));
-      meta('excusedPct', ((e / total) * 100).toStringAsFixed(2));
-      meta('latePct', ((l / total) * 100).toStringAsFixed(2));
-    }
-
-    buf.writeln();
-    buf.writeln('${_escapeCsv('SECTION')},${_escapeCsv('STUDENTS')}');
-    buf.writeln(
-      [
-        'recordId',
-        'studentId',
-        'studentName',
-        'status',
-        'attendanceTime',
-        'courseCode',
-        'lectureStartTime',
-        'lectureEndTime',
-      ].map(_escapeCsv).join(','),
-    );
-
-    for (final r in records) {
-      buf.writeln(
-        [
-          _escapeCsv(r.recordId),
-          _escapeCsv('${r.studentId}'),
-          _escapeCsv(r.studentName),
-          _escapeCsv(ManualAttendanceRecord.statusToString(r.status)),
-          _escapeCsv(r.attendanceTime),
-          _escapeCsv(r.courseCode ?? ''),
-          _escapeCsv(r.lectureStartTime),
-          _escapeCsv(r.lectureEndTime),
-        ].join(','),
-      );
-    }
-
-    return buf.toString();
-  }
-
-  String _escapeCsv(String value) {
-    final s = value.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
-    if (s.contains(',') || s.contains('"') || s.contains('\n')) {
-      return '"${s.replaceAll('"', '""')}"';
-    }
-    return s;
   }
 }

@@ -1,0 +1,1 @@
+enum AttendanceSessionExportFormat { csv, pdf }
