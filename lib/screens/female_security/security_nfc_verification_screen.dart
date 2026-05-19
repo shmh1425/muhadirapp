@@ -9,6 +9,9 @@ import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 
 import '../../providers/security_scan_providers.dart';
 import '../../services/female_security/security_gate_scan_service.dart';
+import '../../services/geo/campus_geo_check_mode.dart';
+import '../../services/geo/geo_fence_outcome.dart';
+import '../../services/geo/student_campus_geo_guard.dart';
 import '../../services/nfc/nfc_tag_identifier.dart';
 import '../../services/student/student_gate_payload.dart';
 import 'security_localization.dart';
@@ -49,6 +52,7 @@ class _SecurityNfcVerificationScreenState
   StreamSubscription<Barcode>? _qrScanSub;
   bool _isQrProcessing = false;
   bool _qrPermissionDenied = false;
+  bool _isGeoChecking = false;
 
   late final AnimationController _pulseController;
 
@@ -190,11 +194,116 @@ class _SecurityNfcVerificationScreenState
       return;
     }
 
+    final geoAudit = await _verifyGateLocation();
+    if (geoAudit == null) {
+      return;
+    }
+
     await _resolveProfile(
       lookupKey,
       gateClientRev: parsed?.gateCardRev,
       gateRotatingSlot: parsed?.rotatingSlot,
+      geoAudit: geoAudit,
     );
+  }
+
+  Future<SecurityGateGeoAudit?> _verifyGateLocation() async {
+    if (kDebugMode) {
+      debugPrint('SECURITY_GEOFENCE_CHECK_START');
+    }
+
+    setState(() {
+      _isGeoChecking = true;
+      _statusError = false;
+      _statusMessage = SecurityLocalization.qrProcessing;
+      _outcomeBanner = _GateOutcomeBanner.none;
+    });
+
+    if (kIsWeb) {
+      final audit = SecurityGateGeoAudit(
+        locationVerified: false,
+        geoFenceStatus: 'unavailable',
+        geoCheckedAt: DateTime.now(),
+      );
+      _blockForGeoFence(
+        message: SecurityLocalization.gateLocationUnsupported,
+        reason: audit.geoFenceStatus,
+      );
+      return null;
+    }
+
+    final blocked = await StudentCampusGeoGuard.blockingOutcome(
+      mode: CampusGeoCheckMode.girlsSecurityGate,
+    );
+    if (!mounted) return null;
+
+    if (blocked == null) {
+      final audit = SecurityGateGeoAudit(
+        locationVerified: true,
+        geoFenceStatus: 'inside',
+        geoCheckedAt: DateTime.now(),
+      );
+      if (kDebugMode) {
+        debugPrint('SECURITY_GEOFENCE_CHECK_SUCCESS');
+      }
+      setState(() {
+        _isGeoChecking = false;
+        _statusError = false;
+        _statusMessage = null;
+        _outcomeBanner = _GateOutcomeBanner.none;
+      });
+      return audit;
+    }
+
+    final reason = _geoFenceStatus(blocked);
+    _blockForGeoFence(message: _geoFenceMessage(blocked), reason: reason);
+    return null;
+  }
+
+  void _blockForGeoFence({required String message, required String reason}) {
+    if (kDebugMode) {
+      debugPrint('SECURITY_GEOFENCE_CHECK_BLOCKED reason=$reason');
+    }
+    if (!mounted) return;
+    setState(() {
+      _isGeoChecking = false;
+      _isScanning = false;
+      _isQrProcessing = false;
+      _gateDecisionDialogPending = false;
+      _statusError = true;
+      _statusMessage = message;
+      _outcomeBanner = _GateOutcomeBanner.none;
+    });
+  }
+
+  String _geoFenceStatus(GeoFenceOutcome outcome) {
+    switch (outcome) {
+      case GeoFenceOutcome.inside:
+        return 'inside';
+      case GeoFenceOutcome.outsideCampus:
+        return 'outside';
+      case GeoFenceOutcome.permissionDenied:
+        return 'permissionDenied';
+      case GeoFenceOutcome.locationServiceDisabled:
+        return 'locationServiceDisabled';
+      case GeoFenceOutcome.locationUnavailable:
+        return 'unavailable';
+    }
+  }
+
+  String _geoFenceMessage(GeoFenceOutcome outcome) {
+    switch (outcome) {
+      case GeoFenceOutcome.inside:
+        return '';
+      case GeoFenceOutcome.permissionDenied:
+        return SecurityLocalization.gateLocationPermissionRequired;
+      case GeoFenceOutcome.locationServiceDisabled:
+        return SecurityLocalization.gateLocationServicesDisabled;
+      case GeoFenceOutcome.outsideCampus:
+        return SecurityLocalization.gateVerificationOutsideCampus;
+      case GeoFenceOutcome.locationUnavailable:
+        return SecurityLocalization.gateLocationUnsupported;
+    }
   }
 
   Future<void> _checkNfc() async {
@@ -242,6 +351,7 @@ class _SecurityNfcVerificationScreenState
     String id, {
     int? gateClientRev,
     int? gateRotatingSlot,
+    required SecurityGateGeoAudit geoAudit,
   }) async {
     if (gateRotatingSlot != null &&
         !StudentGatePayload.isRotatingSlotAccepted(gateRotatingSlot)) {
@@ -295,12 +405,15 @@ class _SecurityNfcVerificationScreenState
     if (p != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        unawaited(_openVerifyDialog(p));
+        unawaited(_openVerifyDialog(p, geoAudit));
       });
     }
   }
 
-  Future<void> _openVerifyDialog(SecurityStudentProfile profile) async {
+  Future<void> _openVerifyDialog(
+    SecurityStudentProfile profile,
+    SecurityGateGeoAudit geoAudit,
+  ) async {
     try {
       final reasons = await ref
           .read(securityRepositoryProvider)
@@ -355,6 +468,7 @@ class _SecurityNfcVerificationScreenState
               : SecurityVerificationDecision.rejected(
                   decision.rejectionReason!,
                 ),
+          geoAudit: geoAudit,
         );
         if (!mounted) return;
         setState(() {
@@ -440,7 +554,6 @@ class _SecurityNfcVerificationScreenState
   Future<void> _startScan() async {
     if (_isScanning || !_nfcAvailable) return;
     setState(() {
-      _isScanning = true;
       _statusError = false;
       _statusMessage = null;
       _lastReadId = null;
@@ -448,11 +561,21 @@ class _SecurityNfcVerificationScreenState
       _outcomeBanner = _GateOutcomeBanner.none;
     });
 
+    final geoAudit = await _verifyGateLocation();
+    if (!mounted || geoAudit == null) return;
+
+    setState(() {
+      _isScanning = true;
+      _statusError = false;
+      _statusMessage = null;
+      _outcomeBanner = _GateOutcomeBanner.none;
+    });
+
     if (!mounted) return;
-    await _runNfcDiscoverySession();
+    await _runNfcDiscoverySession(geoAudit);
   }
 
-  Future<void> _runNfcDiscoverySession() async {
+  Future<void> _runNfcDiscoverySession(SecurityGateGeoAudit geoAudit) async {
     bool handled = false;
     final sessionDone = Completer<void>();
     final pollingOptions = Platform.isIOS
@@ -491,6 +614,7 @@ class _SecurityNfcVerificationScreenState
               parsed.lookupKey,
               gateClientRev: parsed.gateCardRev,
               gateRotatingSlot: parsed.rotatingSlot,
+              geoAudit: geoAudit,
             );
           } else {
             final id = NfcTagIdentifier.extractNormalizedId(tag);
@@ -505,7 +629,7 @@ class _SecurityNfcVerificationScreenState
               if (!sessionDone.isCompleted) sessionDone.complete();
               return;
             }
-            await _resolveProfile(id);
+            await _resolveProfile(id, geoAudit: geoAudit);
           }
           if (!sessionDone.isCompleted) sessionDone.complete();
         },
@@ -803,7 +927,20 @@ class _SecurityNfcVerificationScreenState
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (_isScanning) ...[
+              if (_isGeoChecking) ...[
+                const CircularProgressIndicator(color: _kStudentTealDark),
+                const SizedBox(height: 14),
+                Text(
+                  SecurityLocalization.qrProcessing,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 13,
+                    color: _kTextMuted,
+                    height: 1.35,
+                  ),
+                ),
+              ] else if (_isScanning) ...[
                 const CircularProgressIndicator(color: _kStudentTealDark),
                 const SizedBox(height: 14),
                 Text(
@@ -844,7 +981,8 @@ class _SecurityNfcVerificationScreenState
                   width: 210,
                   height: 44,
                   child: FilledButton(
-                    onPressed: (_nfcAvailable && !_isScanning)
+                    onPressed:
+                        (_nfcAvailable && !_isScanning && !_isGeoChecking)
                         ? _startScan
                         : null,
                     style: FilledButton.styleFrom(
@@ -978,7 +1116,7 @@ class _SecurityNfcVerificationScreenState
             overlayColor: Colors.black54,
           ),
         ),
-        if (_isQrProcessing)
+        if (_isQrProcessing || _isGeoChecking)
           ColoredBox(
             color: Colors.black38,
             child: Center(

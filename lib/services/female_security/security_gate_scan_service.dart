@@ -300,6 +300,18 @@ class SecurityVerificationDecision {
   final String? persistedScanId;
 }
 
+class SecurityGateGeoAudit {
+  const SecurityGateGeoAudit({
+    required this.locationVerified,
+    required this.geoFenceStatus,
+    required this.geoCheckedAt,
+  });
+
+  final bool locationVerified;
+  final String geoFenceStatus;
+  final DateTime geoCheckedAt;
+}
+
 class DuplicateAcceptedGateScanException implements Exception {
   const DuplicateAcceptedGateScanException({
     required this.studentId,
@@ -733,14 +745,14 @@ class FemaleSecurityGateScanService {
 
     var reasonText = '';
     if (latestRejected != null) {
-      reasonText =
-          (latestRejected.data()?['rejectionReasonText'] ?? '').toString().trim();
+      reasonText = (latestRejected.data()?['rejectionReasonText'] ?? '')
+          .toString()
+          .trim();
     }
     if (reasonText.isEmpty) {
       for (final doc in snapshot.docs) {
         if ((doc.data()['status'] ?? '').toString() != 'rejected') continue;
-        final t =
-            (doc.data()['rejectionReasonText'] ?? '').toString().trim();
+        final t = (doc.data()['rejectionReasonText'] ?? '').toString().trim();
         if (t.isNotEmpty) reasonText = t;
       }
     }
@@ -752,6 +764,7 @@ class FemaleSecurityGateScanService {
     required SecurityStudentProfile student,
     required SecurityGateOption gate,
     required SecurityVerificationDecision decision,
+    SecurityGateGeoAudit? geoAudit,
   }) async {
     if (decision.isApproved &&
         (decision.persistedScanId?.isNotEmpty ?? false)) {
@@ -786,7 +799,7 @@ class FemaleSecurityGateScanService {
     final scanRef = _firestore.collection('student_gate_scans').doc();
 
     final rejectionReason = decision.rejectionReason;
-    await scanRef.set({
+    final scanData = <String, dynamic>{
       'scanId': scanRef.id,
       'studentId': student.studentId,
       'universityId': student.universityId,
@@ -821,7 +834,24 @@ class FemaleSecurityGateScanService {
       'isArchived': false,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    };
+
+    if (geoAudit != null) {
+      scanData.addAll({
+        'locationVerified': geoAudit.locationVerified,
+        'geoFenceStatus': geoAudit.geoFenceStatus,
+        'geoCheckedAt': Timestamp.fromDate(geoAudit.geoCheckedAt),
+      });
+      if (kDebugMode) {
+        debugPrint(
+          'SECURITY_GEOFENCE_AUDIT_ATTACHED '
+          'status=${geoAudit.geoFenceStatus} '
+          'verified=${geoAudit.locationVerified}',
+        );
+      }
+    }
+
+    await scanRef.set(scanData);
   }
 }
 

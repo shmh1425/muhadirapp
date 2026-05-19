@@ -217,6 +217,22 @@ class SecurityLocalization {
     'انتهت صلاحية رمز البطاقة. اطلبي من الطالبة إبقاء شاشة البطاقة مفتوحة ثم المسح من جديد.',
     'This gate code has expired. Ask the student to keep the card screen open, then scan again.',
   );
+  static String get gateLocationPermissionRequired => tr(
+    'يلزم السماح بالوصول للموقع للتحقق من البوابة',
+    'Location permission is required for gate verification.',
+  );
+  static String get gateLocationServicesDisabled => tr(
+    'يرجى تفعيل خدمات الموقع قبل التحقق من الدخول',
+    'Please enable location services before gate verification.',
+  );
+  static String get gateVerificationOutsideCampus => tr(
+    'لا يمكن تنفيذ التحقق خارج نطاق الحرم الجامعي',
+    'Gate verification is only allowed within campus boundaries.',
+  );
+  static String get gateLocationUnsupported => tr(
+    'تعذر التحقق من الموقع على هذا الجهاز. استخدمي تطبيق الأمن على جهاز مدعوم.',
+    'Location verification is unavailable on this device. Use the security app on a supported device.',
+  );
 
   static String dayName(DateTime date) {
     final ar = [
