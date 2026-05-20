@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/external_lecturer_model.dart';
 import '../repositories/external_lecturer_repository.dart';
+import 'auth/app_session_store.dart';
 
 /// خدمة تحقق المحاضر من مجموعة external_lecturers بالإيميل فقط.
 class LecturerAuthService {
@@ -29,7 +30,12 @@ class LecturerAuthService {
     return _currentLecturer;
   }
 
-  void logout() {
+  void restoreFromCache(ExternalLecturerModel lecturer) {
+    _currentLecturer = lecturer;
+  }
+
+  Future<void> logout() async {
     _currentLecturer = null;
+    await AppSessionStore.instance.clear();
   }
 }

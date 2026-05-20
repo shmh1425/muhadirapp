@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'cached_user_network_image.dart';
 import 'web_network_image_blur_stub.dart'
     if (dart.library.html) 'web_network_image_blur_web.dart';
 
@@ -28,12 +29,10 @@ class WebNetworkImageBlur extends StatelessWidget {
   Widget build(BuildContext context) {
     // If not web, or blur is off, just use default image.
     if (!kIsWeb || blurSigma <= 0) {
-      return Image.network(
-        url,
+      return CachedUserNetworkImage(
+        imageUrl: url,
         fit: fit,
-        errorBuilder: (context, error, stackTrace) {
-          return onErrorFallback ?? const SizedBox.shrink();
-        },
+        errorWidget: onErrorFallback ?? const SizedBox.shrink(),
       );
     }
 

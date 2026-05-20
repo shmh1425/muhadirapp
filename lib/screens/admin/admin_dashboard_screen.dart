@@ -8,6 +8,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 
+import '../../shared/profile/user_profile_image_url.dart';
+import '../../shared/widgets/cached_user_network_image.dart';
 import 'admin_profile_image_management_tab.dart';
 import '../../models/academic_term.dart';
 import '../../models/calendar_exception.dart';
@@ -445,17 +447,22 @@ class _AdminStudentsTabState extends State<_AdminStudentsTab> {
                         final email = (data['email'] ?? '').toString();
                         final level = (data['level'] ?? '').toString();
                         final major = (data['major'] ?? '').toString();
-                        final photoUrl =
+                        final rawPhoto =
                             (data['photoUrl'] ?? data['photo_url'] ?? '')
                                 .toString();
+                        final photoUrl = UserProfileImageUrl.buildCacheUrl(
+                          rawPhoto,
+                          photoVersion: UserProfileImageUrl.pickPhotoVersion(
+                            data,
+                          ),
+                        );
 
                         return ListTile(
                           leading: CircleAvatar(
                             radius: 22,
                             backgroundColor: const Color(0x11006571),
-                            foregroundImage: photoUrl.trim().isNotEmpty
-                                ? NetworkImage(photoUrl)
-                                : null,
+                            foregroundImage:
+                                cachedUserImageProvider(photoUrl),
                             child: photoUrl.trim().isEmpty
                                 ? const Icon(
                                     Icons.person,
@@ -758,18 +765,20 @@ class _AdminLecturersTabState extends State<_AdminLecturersTab> {
                     final cardId = (data['lecturerCardId'] ?? '')
                         .toString()
                         .trim();
-                    final photoUrl =
+                    final rawPhoto =
                         (data['photoUrl'] ?? data['photo_url'] ?? '')
                             .toString();
+                    final photoUrl = UserProfileImageUrl.buildCacheUrl(
+                      rawPhoto,
+                      photoVersion: UserProfileImageUrl.pickPhotoVersion(data),
+                    );
                     final isUploading = _uploadingLecturerIds.contains(doc.id);
 
                     return ListTile(
                       leading: CircleAvatar(
                         radius: 22,
                         backgroundColor: const Color(0x11006571),
-                        foregroundImage: photoUrl.trim().isNotEmpty
-                            ? NetworkImage(photoUrl)
-                            : null,
+                        foregroundImage: cachedUserImageProvider(photoUrl),
                         child: photoUrl.trim().isEmpty
                             ? const Icon(Icons.person, color: Color(0xFF006571))
                             : null,

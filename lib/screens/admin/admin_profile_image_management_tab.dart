@@ -4,6 +4,9 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../shared/profile/user_profile_image_url.dart';
+import '../../shared/widgets/cached_user_network_image.dart';
+
 enum AdminProfileRole { student, lecturer, security }
 
 extension _AdminProfileRoleX on AdminProfileRole {
@@ -128,19 +131,13 @@ class _AdminProfileImageManagementTabState
     AdminProfileRole role,
   ) {
     String safe(dynamic value) => (value ?? '').toString().trim();
-    String withVersion(String rawUrl, dynamic versionValue) {
-      final url = rawUrl.trim();
-      if (url.isEmpty) return '';
-      final version = (versionValue ?? '').toString().trim();
-      if (version.isEmpty) return url;
-      final separator = url.contains('?') ? '&' : '?';
-      return '$url${separator}v=$version';
-    }
-
     final rawPhotoUrl = safe(data['photoUrl']).isNotEmpty
         ? safe(data['photoUrl'])
         : safe(data['photoURL']);
-    final photoUrl = withVersion(rawPhotoUrl, data['photoVersion']);
+    final photoUrl = UserProfileImageUrl.buildCacheUrl(
+      rawPhotoUrl,
+      photoVersion: UserProfileImageUrl.pickPhotoVersion(data),
+    );
 
     if (role == AdminProfileRole.student) {
       final studentId = safe(data['studentId']).isNotEmpty
@@ -395,9 +392,8 @@ class _AdminProfileImageManagementTabState
               leading: CircleAvatar(
                 radius: 24,
                 backgroundColor: const Color(0xFFE3F2F3),
-                backgroundImage: selectedUser.photoUrl.isNotEmpty
-                    ? NetworkImage(selectedUser.photoUrl)
-                    : null,
+                backgroundImage:
+                    cachedUserImageProvider(selectedUser.photoUrl),
                 child: selectedUser.photoUrl.isEmpty
                     ? const Icon(Icons.person, color: Color(0xFF006571))
                     : null,

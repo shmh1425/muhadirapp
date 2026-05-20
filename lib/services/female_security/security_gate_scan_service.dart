@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../screens/female_security/models/student_card_info.dart';
+import '../../shared/profile/user_profile_image_url.dart';
 import '../attendance/nfc_attendance_service.dart';
 
 class SecurityGateOption {
@@ -134,9 +135,10 @@ class SecurityStudentProfile {
   String? get displayPhotoUrl {
     final raw = (photoUrl ?? '').trim();
     if (raw.isEmpty) return null;
-    final version = photoVersion.trim();
-    if (version.isEmpty) return raw;
-    return '$raw${raw.contains('?') ? '&' : '?'}v=$version';
+    return UserProfileImageUrl.buildCacheUrl(
+      raw,
+      photoVersion: photoVersion,
+    );
   }
 
   factory SecurityStudentProfile.fromMap(

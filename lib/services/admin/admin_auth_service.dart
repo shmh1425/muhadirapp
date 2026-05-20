@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import '../auth/app_session_store.dart';
+
 class AdminAuthService {
   AdminAuthService._();
   static final AdminAuthService instance = AdminAuthService._();
@@ -53,5 +55,8 @@ class AdminAuthService {
     return true;
   }
 
-  Future<void> signOut() => _auth.signOut();
+  Future<void> signOut() async {
+    await _auth.signOut();
+    await AppSessionStore.instance.clear();
+  }
 }

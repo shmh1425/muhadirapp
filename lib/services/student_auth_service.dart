@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../repositories/student_repository.dart';
 import '../models/external_student.dart';
+import 'auth/app_session_store.dart';
 
 /// خدمة التحقق من الطالب وعرض بياناته
 /// تبحث في مجموعة external_students بالإيميل فقط (بدون باسورد)
@@ -14,6 +15,15 @@ class StudentAuthService {
 
   /// الطالب المسجل حالياً (إن وجد)
   ExternalStudent? get currentStudent => _currentStudent;
+
+  /// Firestore doc id for the active student (session restore / persistence).
+  String? get currentStudentDocIdForSession => _currentStudentDocId;
+
+  /// Restores in-memory student state from a persisted offline snapshot.
+  void restoreFromCache(ExternalStudent student, {String? docId}) {
+    _currentStudent = student;
+    _currentStudentDocId = docId?.trim().isNotEmpty == true ? docId : null;
+  }
 
   /// Apply a live Firestore snapshot to the currently logged-in student.
   /// Returns the updated student, or null if snapshot is invalid.
@@ -149,5 +159,6 @@ class StudentAuthService {
     }
     _currentStudent = null;
     _currentStudentDocId = null;
+    await AppSessionStore.instance.clear();
   }
 }
