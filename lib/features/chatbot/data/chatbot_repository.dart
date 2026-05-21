@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../../services/attendance/attendance_planned_summary.dart';
 import '../../../../services/student_auth_service.dart';
+import '../../../../utils/localized_firestore_fields.dart';
 import '../models/attendance_context.dart';
 
 /// Fetches real attendance data from Firestore for the chatbot.
@@ -182,10 +183,15 @@ class ChatbotRepository {
             (sectionData['courseCode'] ?? sectionData['courseId'] ?? '')
                 .toString()
                 .trim();
-        final courseName =
-            (sectionData['courseName'] ?? '').toString().trim();
+        final sectionNameAr =
+            (sectionData['courseName_Ar'] ?? sectionData['courseNameAr'] ?? '')
+                .toString()
+                .trim();
+        final sectionNameEn =
+            (sectionData['courseName'] ?? sectionData['courseNameEn'] ?? '')
+                .toString()
+                .trim();
 
-        String courseNameAr = '';
         int creditHours = 0;
         Map<String, dynamic> courseMapForHours = <String, dynamic>{};
         if (courseCode.isNotEmpty) {
@@ -195,10 +201,6 @@ class ChatbotRepository {
               .get();
           if (courseDoc.exists) {
             courseMapForHours = courseDoc.data() ?? <String, dynamic>{};
-            courseNameAr =
-                (courseMapForHours['courseName_Ar'] ?? courseMapForHours['courseNameAr'] ?? '')
-                    .toString()
-                    .trim();
             creditHours = (courseMapForHours['creditHours'] as num?)?.toInt() ?? 0;
           }
           if (courseCode.isNotEmpty &&
@@ -209,9 +211,27 @@ class ChatbotRepository {
             if (wm > 0) codeToWeeklyMinutesCache[courseCode] = wm;
           }
         }
-        final displayCourseName =
-            courseNameAr.isNotEmpty ? courseNameAr : courseName;
-        if (displayCourseName.isEmpty) continue;
+
+        final mergedNames = <String, dynamic>{...courseMapForHours};
+        if (sectionNameAr.isNotEmpty) {
+          mergedNames['courseName_Ar'] = sectionNameAr;
+          mergedNames['courseNameAr'] = sectionNameAr;
+        }
+        if (sectionNameEn.isNotEmpty) {
+          mergedNames['courseName'] = sectionNameEn;
+        }
+
+        final courseNameAr = LocalizedFirestoreFields.localizedCourseName(
+          mergedNames,
+          isArabic: true,
+          fallback: courseCode,
+        );
+        final courseName = LocalizedFirestoreFields.localizedCourseName(
+          mergedNames,
+          isArabic: false,
+          fallback: courseCode,
+        );
+        if (courseNameAr.isEmpty && courseName.isEmpty) continue;
 
         // C) Collect course + lecturer + schedule info
         final lecturerId = (sectionData['lecturerId'] ?? sectionData['instructorId'] ?? '')

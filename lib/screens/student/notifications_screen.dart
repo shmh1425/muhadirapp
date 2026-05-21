@@ -424,6 +424,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             course: n.courseName.isEmpty ? (t.translateToEnglish ? 'Course' : 'المقرر') : n.courseName,
             dateText: _dateTextFor(n),
             timeRange: _timeRangeFor(n),
+            attachmentUrl: n.attachmentUrl,
+            attachmentName: n.attachmentName,
           ),
         ),
       );

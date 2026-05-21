@@ -1,10 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'components/custom_nav_bar_icons.dart';
 import 'components/notification_bell.dart';
 import 'components/student_back_chevron_icon.dart';
+import '../../widgets/lecturer/excuse_attachment_preview.dart';
 import 'home_screen.dart';
 import 'settings_screen.dart';
 import 'submit_excuse_screen.dart';
@@ -17,6 +17,8 @@ class PendingDetailScreen extends StatefulWidget {
   final String course;
   final String dateText;
   final String timeRange;
+  final String? attachmentUrl;
+  final String? attachmentName;
 
   const PendingDetailScreen({
     super.key,
@@ -25,6 +27,8 @@ class PendingDetailScreen extends StatefulWidget {
     required this.course,
     required this.dateText,
     required this.timeRange,
+    this.attachmentUrl,
+    this.attachmentName,
   });
 
   @override
@@ -39,11 +43,13 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
         DateTime lectureDate,
         String timeRange
       })?> _attendanceMetaFuture;
+  late final Future<({String url, String name})?> _excuseAttachmentFallbackFuture;
 
   @override
   void initState() {
     super.initState();
     _attendanceMetaFuture = _fetchAttendanceMeta();
+    _excuseAttachmentFallbackFuture = _fetchExcuseAttachmentFromRequests();
   }
 
   Stream<Map<String, dynamic>?> _watchLatestPendingSubmission() {
@@ -127,25 +133,83 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
     }
   }
 
-  Future<void> _openAttachment(BuildContext context, String url) async {
+  Future<({String url, String name})?> _fetchExcuseAttachmentFromRequests() async {
+    final rid = widget.attendanceRecordId.trim();
+    if (rid.isEmpty || widget.studentId <= 0) return null;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('excuse_requests')
+          .where('studentId', isEqualTo: widget.studentId)
+          .where('attendanceRecordId', isEqualTo: rid)
+          .get();
+      if (snap.docs.isEmpty) return null;
+
+      DateTime? submittedAtOf(Map<String, dynamic> d) {
+        final s = d['submittedAt'];
+        if (s is Timestamp) return s.toDate();
+        final c = d['createdAt'];
+        if (c is Timestamp) return c.toDate();
+        return null;
+      }
+
+      QueryDocumentSnapshot<Map<String, dynamic>>? best;
+      DateTime? bestTs;
+      for (final doc in snap.docs) {
+        final url = (doc.data()['attachmentUrl'] ?? '').toString().trim();
+        if (url.isEmpty) continue;
+        final t = submittedAtOf(doc.data());
+        if (best == null || (t != null && (bestTs == null || t.isAfter(bestTs)))) {
+          best = doc;
+          bestTs = t;
+        }
+      }
+      final picked = best ?? snap.docs.first;
+      final data = picked.data();
+      final url = (data['attachmentUrl'] ?? '').toString().trim();
+      if (url.isEmpty) return null;
+      final name = (data['attachmentName'] ?? '').toString().trim();
+      return (url: url, name: name);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _openAttachmentPreview(
+    BuildContext context,
+    String url,
+    String? name,
+  ) async {
     final u = url.trim();
     if (u.isEmpty) return;
-    final uri = Uri.tryParse(u);
-    if (uri == null) return;
-    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!ok && context.mounted) {
-      final t = TranslationController.instance;
-      final td = t.textDirection;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            t.translateToEnglish ? 'Could not open the file.' : 'تعذر فتح الملف.',
-            textDirection: td,
-          ),
-          backgroundColor: const Color(0xFFB71C1C),
-        ),
-      );
-    }
+    final t = TranslationController.instance;
+    await ExcuseAttachmentPreview.showAttachmentPreviewDialog(
+      context: context,
+      attachmentUrl: u,
+      attachmentName: (name ?? '').trim(),
+      tr: (ar, en) => t.translateToEnglish ? en : ar,
+      textDirection: t.textDirection,
+      logTag: '[StudentExcusePreview]',
+    );
+  }
+
+  String _resolveAttachmentUrl({
+    required String streamUrl,
+    required String? fallbackUrl,
+  }) {
+    if (streamUrl.trim().isNotEmpty) return streamUrl.trim();
+    final initial = (widget.attachmentUrl ?? '').trim();
+    if (initial.isNotEmpty) return initial;
+    return (fallbackUrl ?? '').trim();
+  }
+
+  String _resolveAttachmentName({
+    required String streamName,
+    required String? fallbackName,
+  }) {
+    if (streamName.trim().isNotEmpty) return streamName.trim();
+    final initial = (widget.attachmentName ?? '').trim();
+    if (initial.isNotEmpty) return initial;
+    return (fallbackName ?? '').trim();
   }
 
   @override
@@ -209,23 +273,39 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
                             ((data['excuseText'] ?? data['reasonText']) ?? '')
                                 .toString()
                                 .trim();
-                        final attachmentName =
+                        final streamAttachmentName =
                             (data['attachmentName'] ?? '').toString().trim();
-                        final attachmentUrl =
+                        final streamAttachmentUrl =
                             (data['attachmentUrl'] ?? '').toString().trim();
 
-                        return SingleChildScrollView(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 16,
-                          ),
-                          child: _buildDetailCard(
-                            context,
-                            excuseText: excuseText,
-                            attachmentName: attachmentName,
-                            attachmentUrl: attachmentUrl,
-                            translateToEnglish: translation.translateToEnglish,
-                          ),
+                        return FutureBuilder<({String url, String name})?>(
+                          future: _excuseAttachmentFallbackFuture,
+                          builder: (context, fallbackSnap) {
+                            final fallback = fallbackSnap.data;
+                            final attachmentUrl = _resolveAttachmentUrl(
+                              streamUrl: streamAttachmentUrl,
+                              fallbackUrl: fallback?.url,
+                            );
+                            final attachmentName = _resolveAttachmentName(
+                              streamName: streamAttachmentName,
+                              fallbackName: fallback?.name,
+                            );
+
+                            return SingleChildScrollView(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 16,
+                              ),
+                              child: _buildDetailCard(
+                                context,
+                                excuseText: excuseText,
+                                attachmentName: attachmentName,
+                                attachmentUrl: attachmentUrl,
+                                translateToEnglish:
+                                    translation.translateToEnglish,
+                              ),
+                            );
+                          },
                         );
                       },
                     ),
@@ -404,42 +484,64 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
           const SizedBox(height: 24),
           Align(
             alignment: AlignmentDirectional.centerStart,
-            child: GestureDetector(
-              onTap: attachmentUrl.trim().isEmpty
-                  ? null
-                  : () => _openAttachment(context, attachmentUrl),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF5F5F5),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.description_outlined,
-                      color: Color(0xFF616161),
-                      size: 24,
-                    ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: attachmentUrl.trim().isEmpty
+                    ? null
+                    : () => _openAttachmentPreview(
+                          context,
+                          attachmentUrl,
+                          attachmentName.isNotEmpty ? attachmentName : null,
+                        ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF5F5F5),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.description_outlined,
+                          color: Color(0xFF616161),
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      TText(
+                        attachmentName.isNotEmpty
+                            ? attachmentName
+                            : (translateToEnglish ? 'Attachment' : 'مرفق العذر'),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: attachmentUrl.trim().isEmpty
+                              ? Colors.grey.shade400
+                              : const Color(0xFF006571),
+                          decoration: attachmentUrl.trim().isEmpty
+                              ? TextDecoration.none
+                              : TextDecoration.underline,
+                        ),
+                      ),
+                      if (attachmentUrl.trim().isNotEmpty) ...<Widget>[
+                        const SizedBox(width: 8),
+                        TText(
+                          translateToEnglish ? 'Preview' : 'معاينة',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF006571),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  TText(
-                    attachmentName.isNotEmpty
-                        ? attachmentName
-                        : (translateToEnglish ? 'Attachment' : 'عذر'),
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: attachmentUrl.trim().isEmpty
-                          ? Colors.grey.shade400
-                          : const Color(0xFF006571),
-                      decoration: attachmentUrl.trim().isEmpty
-                          ? TextDecoration.none
-                          : TextDecoration.underline,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),

@@ -761,6 +761,8 @@ class _ExcuseCard extends StatelessWidget {
             course: item.course,
             dateText: item.dateText,
             timeRange: item.timeRange,
+            attachmentUrl: item.attachmentUrl,
+            attachmentName: item.attachmentName,
           ),
         ),
       );

@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'components/notification_bell.dart';
 import 'components/custom_nav_bar_icons.dart';
 import 'components/student_back_chevron_icon.dart';
-import 'excuse_attachment_preview_screen.dart';
 import 'home_screen.dart';
 import 'submit_excuse_screen.dart';
 import 'settings_screen.dart';
+import '../../features/translation/translation_controller.dart';
+import '../../widgets/lecturer/excuse_attachment_preview.dart';
 
 class RejectionDetailScreen extends StatelessWidget {
   final String course;
@@ -235,17 +236,15 @@ class RejectionDetailScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 onTap: (attachmentUrl ?? '').trim().isEmpty
                     ? null
-                    : () {
-                        Navigator.push<void>(
-                          context,
-                          MaterialPageRoute<void>(
-                            builder: (_) => ExcuseAttachmentPreviewScreen(
-                              url: attachmentUrl!.trim(),
-                              displayName: attachmentName?.trim().isNotEmpty == true
-                                  ? attachmentName!.trim()
-                                  : null,
-                            ),
-                          ),
+                    : () async {
+                        final t = TranslationController.instance;
+                        await ExcuseAttachmentPreview.showAttachmentPreviewDialog(
+                          context: context,
+                          attachmentUrl: attachmentUrl!.trim(),
+                          attachmentName: attachmentName?.trim() ?? '',
+                          tr: (ar, en) => t.translateToEnglish ? en : ar,
+                          textDirection: t.textDirection,
+                          logTag: '[StudentExcusePreview]',
                         );
                       },
                 child: Padding(

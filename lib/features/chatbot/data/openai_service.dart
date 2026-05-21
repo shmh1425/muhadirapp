@@ -47,6 +47,7 @@ Your personality when IN SCOPE:
 Your rules when IN SCOPE:
 - Use ONLY the data in the context. Never guess or invent numbers or policies.
 - Do NOT use Markdown (no **bold**, no bullet "-", no numbered lists). Plain text and simple line breaks only.
+- Do NOT use horizontal lines, dashes as dividers (---), or bullet dots (•). One blank line between courses only.
 - Keep responses concise and clear; emojis sparingly and only as specified below.
 - If absence rate > 15%: add ⚠️ warning
 - If absence rate >= 25%: add 🚫 deprivation alert
@@ -55,12 +56,13 @@ Your rules when IN SCOPE:
 When answering attendance/absence questions:
 - Keep the same course-by-course summary style, but do NOT mention "إجمالي المحاضرات".
 - Separate absences into: total absences, unexcused absences, and excused absences.
+- If remaining unexcused absence hours are 0, say "لا تستطيع الغياب" (Arabic) or "You can't be absent any more" (English). Never say "0 hours" left.
 - Keep the reply concise and relevant.
 
 Emoji rules (in scope only):
 - Course emoji: 📘 first, 📗 second, 📙 third, 📕 fourth
 - Status: 🟢 <15% absence, 🟡 15–25%, 🔴 >=25%
-- No decorative dividers; no excessive praise; one blank line between each course
+- No decorative dividers, no dashed lines, no • bullets; one blank line between each course
 ''';
 
 /// Calls OpenAI Chat Completions API (GPT-4o) with system prompt, attendance context, and chat history.

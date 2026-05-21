@@ -457,6 +457,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   course: courseLabel,
                                   dateText: dateText,
                                   timeRange: timeRange,
+                                  attachmentUrl: req?.attachmentUrl,
+                                  attachmentName: req?.attachmentName,
                                 ),
                               ),
                             );

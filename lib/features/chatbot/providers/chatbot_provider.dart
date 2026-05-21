@@ -59,14 +59,14 @@ String _riskLabelEn(double u) {
 String _absenceSessionsLine(int sessions, double hours) {
   final h = hours.toStringAsFixed(1);
   if (sessions <= 0) {
-    return '• الغياب: — ($h ساعة)';
+    return 'الغياب: $h ساعة';
   }
   final sessWord = sessions == 1
       ? 'جلسة واحدة'
       : sessions == 2
           ? '2 جلسة'
           : '$sessions جلسات';
-  return '• الغياب: $sessWord ($h ساعة)';
+  return 'الغياب: $sessWord ($h ساعة)';
 }
 
 String _remainingLineCompact(String label, double remHours, double avgH) {
@@ -211,14 +211,43 @@ class ChatbotProvider extends ChangeNotifier {
   bool _isAbsenceQuickQuery(String text) {
     final t = text.trim().toLowerCase();
     if (t.isEmpty) return false;
-    // Arabic quick queries
-    if (t.contains('كم غيابي') || t == 'غيابي' || t == 'كم الغياب' || t == 'كم غياب') {
+
+    // Arabic — تقرير غياب كامل أو متبقي
+    if (t.contains('كم غيابي') ||
+        t == 'غيابي' ||
+        t == 'كم الغياب' ||
+        t == 'كم غياب') {
       return true;
     }
-    // English quick queries
-    if (t.contains('how many absences') || t == 'absences' || t == 'my absences') {
+    if (t.contains('غياب') &&
+        (t.contains('باقي') ||
+            t.contains('متبقي') ||
+            t.contains('بقي') ||
+            t.contains('فاضل') ||
+            t.contains('باقٍ'))) {
       return true;
     }
+    if (t.contains('غياب') && t.contains('مادة')) {
+      return true;
+    }
+
+    // English
+    if (t.contains('how many absences') ||
+        t == 'absences' ||
+        t == 'my absences') {
+      return true;
+    }
+    if (t.contains('absence') &&
+        (t.contains('remaining') ||
+            t.contains('left') ||
+            t.contains('how much') ||
+            t.contains('how many'))) {
+      return true;
+    }
+    if (t.contains('absence') && t.contains('course')) {
+      return true;
+    }
+
     return false;
   }
 
@@ -235,10 +264,47 @@ class ChatbotProvider extends ChangeNotifier {
     bool containsLatin(String s) => RegExp(r'[A-Za-z]').hasMatch(s);
     final english = englishUi || containsLatin(userMessage);
 
+    String courseLabel(CourseAttendanceSummary c) => c.localizedName(isArabic: !english);
+
     CourseAttendanceSummary? pickCourseByMention() {
       for (final c in courses) {
-        final name = c.displayName.toLowerCase();
-        if (name.isNotEmpty && t.contains(name)) return c;
+        for (final name in <String>[c.courseNameAr, c.courseName, c.displayName]) {
+          final n = name.toLowerCase().trim();
+          if (n.isNotEmpty && t.contains(n)) return c;
+        }
+      }
+
+      CourseAttendanceSummary? best;
+      var bestScore = 0;
+      for (final c in courses) {
+        final name = c.displayName.toLowerCase().trim();
+        if (name.isEmpty) continue;
+        final tokens = name
+            .split(RegExp(r'[\s،,\-–/]+'))
+            .map((w) => w.trim())
+            .where((w) => w.length >= 3)
+            .toList();
+        var score = 0;
+        for (final tok in tokens) {
+          if (t.contains(tok)) score++;
+        }
+        if (score > bestScore) {
+          bestScore = score;
+          best = c;
+        }
+      }
+      if (best != null && bestScore >= 2) return best;
+
+      if (courses.length == 1) {
+        final only = courses.first;
+        final name = only.displayName.toLowerCase().trim();
+        if (name.isNotEmpty) {
+          final tokens = name
+              .split(RegExp(r'[\s،,\-–/]+'))
+              .map((w) => w.trim())
+              .where((w) => w.length >= 3);
+          if (tokens.any((tok) => t.contains(tok))) return only;
+        }
       }
       return null;
     }
@@ -292,24 +358,40 @@ class ChatbotProvider extends ChangeNotifier {
 
       if (!english) {
         final canUnexHours = (!remUnex.isFinite || remUnex <= 0) ? 0 : remUnex.floor();
-        final canLine = inDeprivation ? '' : '\nتقدر تغيب $canUnexHours ساعات تقريباً';
-        return '${courseEmojiFor(c)} ${c.displayName}\n\n'
-            '• بدون عذر: ${unexPct.toStringAsFixed(1)}% من أصل $maxU%\n'
-            '• بعذر: ${excPct.toStringAsFixed(1)}% من أصل $dep%\n'
-            '• الإجمالي: ${totalPct.toStringAsFixed(1)}% من أصل $dep%\n'
+        final String canLine;
+        if (inDeprivation) {
+          canLine = '';
+        } else if (canUnexHours <= 0) {
+          canLine = '\nلا تستطيع الغياب';
+        } else {
+          canLine = '\nتقدر تغيب $canUnexHours ساعات تقريباً';
+        }
+        return '${courseEmojiFor(c)} ${courseLabel(c)}\n\n'
+            'بدون عذر: ${unexPct.toStringAsFixed(1)}% من أصل $maxU%\n'
+            'بعذر: ${excPct.toStringAsFixed(1)}% من أصل $dep%\n'
+            'الإجمالي: ${totalPct.toStringAsFixed(1)}% من أصل $dep%\n'
             '${_absenceSessionsLine(absenceSessions, absH)}\n\n'
             'الحالة: $rLabel${inDeprivation ? '\n🚫 حرمان أكاديمي' : ''}$canLine';
       }
 
       final absSessionsLine = absenceSessions <= 0
-          ? '• Absences: — (${absH.toStringAsFixed(1)} h)'
-          : '• Absences: $absenceSessions sessions (${absH.toStringAsFixed(1)} h)';
-      return '${courseEmojiFor(c)} ${c.displayName}\n\n'
-          '• Unexcused: ${unexPct.toStringAsFixed(1)}% (cap $maxU%)\n'
-          '• Excused: ${excPct.toStringAsFixed(1)}% (cap $dep%)\n'
-          '• Total: ${totalPct.toStringAsFixed(1)}% (cap $dep%)\n'
+          ? 'Absences: ${absH.toStringAsFixed(1)} h'
+          : 'Absences: $absenceSessions sessions (${absH.toStringAsFixed(1)} h)';
+      final canUnexHours = (!remUnex.isFinite || remUnex <= 0) ? 0 : remUnex.floor();
+      final String canLine;
+      if (inDeprivation) {
+        canLine = '';
+      } else if (canUnexHours <= 0) {
+        canLine = "\nYou can't be absent any more";
+      } else {
+        canLine = '\nYou can miss about $canUnexHours more hours';
+      }
+      return '${courseEmojiFor(c)} ${courseLabel(c)}\n\n'
+          'Unexcused: ${unexPct.toStringAsFixed(1)}% (cap $maxU%)\n'
+          'Excused: ${excPct.toStringAsFixed(1)}% (cap $dep%)\n'
+          'Total: ${totalPct.toStringAsFixed(1)}% (cap $dep%)\n'
           '$absSessionsLine\n\n'
-          'Status: $rLabel${inDeprivation ? '\n🚫 Academic deprivation' : ''}';
+          'Status: $rLabel${inDeprivation ? '\n🚫 Academic deprivation' : ''}$canLine';
     }
 
     if (courses.isEmpty) {
@@ -345,7 +427,7 @@ class ChatbotProvider extends ChangeNotifier {
     final parts = <String>[...header];
     for (var i = 0; i < courses.length; i++) {
       if (i > 0) {
-        parts.add('-------------------------------------------------');
+        parts.add('');
       }
       parts.add(oneCourse(courses[i]));
     }
@@ -429,8 +511,7 @@ class ChatbotProvider extends ChangeNotifier {
               })
           .toList();
 
-      // For "كم غيابي؟" style questions, respond deterministically and concise
-      // without going through the LLM prompt formatting.
+      // تقرير غياب منسّق (مثل «كم غيابي؟» و«كم باقي لي غياب؟») بدون LLM.
       if (_isAbsenceQuickQuery(text) && attendanceContextObj != null) {
         final reply = _formatAbsenceQuickReply(
           userMessage: text,

@@ -114,8 +114,8 @@ class ExcuseAttachmentPreview {
                                     errorBuilder: (_, __, ___) => Center(
                                       child: Text(
                                         tr(
-                                          'تعذر معاينة المرفق.\nيمكنك فتحه في تبويب جديد.',
-                                          'Could not preview attachment.\nYou can open it in a new tab.',
+                                          'تعذر معاينة المرفق.\nيمكنك فتحه في المستعرض.',
+                                          'Could not preview attachment.\nYou can open it in the browser.',
                                         ),
                                         textAlign: TextAlign.center,
                                         style: const TextStyle(
@@ -137,8 +137,8 @@ class ExcuseAttachmentPreview {
                                         padding: const EdgeInsets.all(16),
                                         child: Text(
                                           tr(
-                                            'معاينة PDF داخل التطبيق على الويب تتطلب إعداد CORS صحيح في Firebase Storage.\nيمكنك فتح الملف في تبويب جديد.',
-                                            'In-app PDF preview on Web requires proper Firebase Storage CORS configuration.\nYou can open the file in a new tab.',
+                                            'معاينة PDF داخل التطبيق على الويب تتطلب إعداد CORS صحيح في Firebase Storage.\nيمكنك فتح الملف في المستعرض.',
+                                            'In-app PDF preview on Web requires proper Firebase Storage CORS configuration.\nYou can open the file in the browser.',
                                           ),
                                           textAlign: TextAlign.center,
                                           style: const TextStyle(
@@ -189,8 +189,8 @@ class ExcuseAttachmentPreview {
                               child: Center(
                                 child: Text(
                                   tr(
-                                    'هذا النوع من الملفات لا يدعم المعاينة المدمجة حالياً.\nيمكنك فتحه في تبويب جديد.',
-                                    'This file type is not supported for inline preview.\nYou can open it in a new tab.',
+                                    'هذا النوع من الملفات لا يدعم المعاينة المدمجة حالياً.\nيمكنك فتحه في المستعرض.',
+                                    'This file type is not supported for inline preview.\nYou can open it in the browser.',
                                   ),
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(
@@ -222,7 +222,7 @@ class ExcuseAttachmentPreview {
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
-                            tr('فتح في تبويب جديد', 'Open in new tab'),
+                            tr('فتح في المستعرض', 'Open in browser'),
                             style: const TextStyle(
                               fontFamily: 'Cairo',
                               fontWeight: FontWeight.w700,

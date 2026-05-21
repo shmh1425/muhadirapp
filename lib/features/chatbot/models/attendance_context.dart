@@ -50,7 +50,16 @@ class CourseAttendanceSummary {
   final bool isWarning;
   final bool isDeprivation;
 
-  String get displayName => courseNameAr.trim().isNotEmpty ? courseNameAr : courseName;
+  /// Arabic label for student UI and structured chatbot replies.
+  String get displayName =>
+      courseNameAr.trim().isNotEmpty ? courseNameAr.trim() : courseName.trim();
+
+  String localizedName({required bool isArabic}) {
+    if (isArabic) return displayName;
+    final en = courseName.trim();
+    if (en.isNotEmpty) return en;
+    return displayName;
+  }
 }
 
 /// Full attendance context for the logged-in student (for OpenAI).
