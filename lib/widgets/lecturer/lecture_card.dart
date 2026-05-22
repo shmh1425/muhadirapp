@@ -21,17 +21,25 @@ class LectureCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     String tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = colorScheme.surface;
+    final borderColor = colorScheme.outlineVariant.withValues(
+      alpha: isDark ? 0.34 : 1,
+    );
+    final titleColor = colorScheme.onSurface;
+    final secondaryTextColor = colorScheme.onSurfaceVariant;
 
     final content = Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE8E8E8), width: 1),
+        border: Border.all(color: borderColor, width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
+            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.04),
+            blurRadius: isDark ? 14 : 10,
             offset: const Offset(0, 2),
           ),
         ],
@@ -42,10 +50,10 @@ class LectureCard extends StatelessWidget {
           // Course name
           Text(
             lecture.courseName,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF222222),
+              color: titleColor,
               fontFamily: 'Cairo',
               height: 1.3,
             ),
@@ -56,6 +64,7 @@ class LectureCard extends StatelessWidget {
             children: [
               Expanded(
                 child: _buildDetailItem(
+                  context,
                   Icons.location_on_outlined,
                   '${tr('القاعة', 'Hall')} ${lecture.hall}',
                 ),
@@ -63,6 +72,7 @@ class LectureCard extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: _buildDetailItem(
+                  context,
                   Icons.group_outlined,
                   '${tr('الشعبة', 'Section')} ${lecture.section}',
                 ),
@@ -76,15 +86,15 @@ class LectureCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF0F7F8),
+                  color: colorScheme.primary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   lecture.crn,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF006571),
+                    color: colorScheme.primary,
                     fontFamily: 'Cairo',
                   ),
                 ),
@@ -93,15 +103,15 @@ class LectureCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF5F5F5),
+                  color: colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   LecturerActivityLocalization.label(lecture.activity),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF666666),
+                    color: secondaryTextColor,
                     fontFamily: 'Cairo',
                   ),
                 ),
@@ -116,6 +126,7 @@ class LectureCard extends StatelessWidget {
               children: [
                 if (onTap != null)
                   _buildActionChip(
+                    context: context,
                     label: tr('حضر', 'Attend'),
                     icon: Icons.play_arrow_rounded,
                     filled: true,
@@ -123,6 +134,7 @@ class LectureCard extends StatelessWidget {
                   ),
                 if (onDelayTap != null)
                   _buildActionChip(
+                    context: context,
                     label: tr('تأخير المحاضرة', 'Delay Lecture'),
                     icon: Icons.schedule_rounded,
                     filled: false,
@@ -130,6 +142,7 @@ class LectureCard extends StatelessWidget {
                   ),
                 if (onCancelTap != null)
                   _buildActionChip(
+                    context: context,
                     label: tr('إلغاء المحاضرة', 'Cancel Lecture'),
                     icon: Icons.cancel_outlined,
                     filled: false,
@@ -159,6 +172,7 @@ class LectureCard extends StatelessWidget {
   }
 
   Widget _buildActionChip({
+    required BuildContext context,
     required String label,
     required IconData icon,
     required bool filled,
@@ -167,10 +181,15 @@ class LectureCard extends StatelessWidget {
     Color? customBorderColor,
     Color? customBackgroundColor,
   }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final borderRadius = BorderRadius.circular(10);
-    final textColor = customTextColor ?? const Color(0xFF006571);
-    final borderColor = customBorderColor ?? const Color(0xFFD8E3E6);
-    final backgroundColor = customBackgroundColor ?? const Color(0xFFF5F8F9);
+    final textColor = customTextColor ?? colorScheme.primary;
+    final borderColor =
+        customBorderColor ??
+        colorScheme.outlineVariant.withValues(alpha: isDark ? 0.42 : 1);
+    final backgroundColor =
+        customBackgroundColor ?? colorScheme.primary.withValues(alpha: 0.08);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -213,17 +232,18 @@ class LectureCard extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailItem(IconData icon, String text) {
+  Widget _buildDetailItem(BuildContext context, IconData icon, String text) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Row(
       children: [
-        Icon(icon, size: 16, color: const Color(0xFF006571)),
+        Icon(icon, size: 16, color: colorScheme.primary),
         const SizedBox(width: 6),
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
-              color: Color(0xFF666666),
+              color: colorScheme.onSurfaceVariant,
               fontFamily: 'Cairo',
             ),
             maxLines: 1,

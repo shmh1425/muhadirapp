@@ -36,20 +36,25 @@ class MonthlyCalendar extends StatelessWidget {
 
         return Column(
           children: [
-            _buildMonthHeader(monthName, yearText),
+            _buildMonthHeader(context, monthName, yearText),
             const SizedBox(height: 16),
-            _buildWeekDaysHeader(),
+            _buildWeekDaysHeader(context),
             const SizedBox(height: 8),
-            _buildCalendarGrid(),
+            _buildCalendarGrid(context),
             const SizedBox(height: 16),
-            _buildColorLegend(),
+            _buildColorLegend(context),
           ],
         );
       },
     );
   }
 
-  Widget _buildMonthHeader(String monthName, String year) {
+  Widget _buildMonthHeader(
+    BuildContext context,
+    String monthName,
+    String year,
+  ) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -69,19 +74,19 @@ class MonthlyCalendar extends StatelessWidget {
           children: [
             Text(
               monthName,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF222222),
+                color: colorScheme.onSurface,
                 fontFamily: 'Cairo',
               ),
             ),
             Text(
               year,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF666666),
+                color: colorScheme.onSurfaceVariant,
                 fontFamily: 'Cairo',
               ),
             ),
@@ -102,7 +107,8 @@ class MonthlyCalendar extends StatelessWidget {
     );
   }
 
-  Widget _buildWeekDaysHeader() {
+  Widget _buildWeekDaysHeader(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final weekDays = LecturerLanguageController.isArabic
         ? const [
             'الاحد',
@@ -121,10 +127,10 @@ class MonthlyCalendar extends StatelessWidget {
           child: Center(
             child: Text(
               day,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: Color(0xFF999999),
+                color: colorScheme.onSurfaceVariant,
                 fontFamily: 'Cairo',
               ),
             ),
@@ -134,7 +140,7 @@ class MonthlyCalendar extends StatelessWidget {
     );
   }
 
-  Widget _buildCalendarGrid() {
+  Widget _buildCalendarGrid(BuildContext context) {
     // الحصول على أول يوم في الشهر
     final firstDayOfMonth = DateTime(currentMonth.year, currentMonth.month, 1);
     // الحصول على آخر يوم في الشهر
@@ -165,7 +171,9 @@ class MonthlyCalendar extends StatelessWidget {
     for (int day = 1; day <= daysInMonth; day++) {
       final date = DateTime(currentMonth.year, currentMonth.month, day);
       final calendarDay = _findCalendarDay(date);
-      dayWidgets.add(_buildDayCell(calendarDay ?? _createDefaultDay(date)));
+      dayWidgets.add(
+        _buildDayCell(context, calendarDay ?? _createDefaultDay(date)),
+      );
     }
 
     // حساب عدد الصفوف المطلوبة
@@ -235,7 +243,9 @@ class MonthlyCalendar extends StatelessWidget {
     );
   }
 
-  Widget _buildDayCell(CalendarDay day) {
+  Widget _buildDayCell(BuildContext context, CalendarDay day) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isToday = day.isToday;
     final dayNumber = LecturerLanguageController.isArabic
         ? HijriConverter.toArabicNumber(day.date.day)
@@ -288,8 +298,8 @@ class MonthlyCalendar extends StatelessWidget {
           boxShadow: hasLectures && !isHoliday
               ? [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 4,
+                    color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.05),
+                    blurRadius: isDark ? 8 : 4,
                     offset: const Offset(0, 2),
                   ),
                 ]
@@ -309,6 +319,7 @@ class MonthlyCalendar extends StatelessWidget {
                     ? Colors.white
                     : _getTextColor(
                         status,
+                        colorScheme: colorScheme,
                         holidayType: visualHolidayType,
                         isLectureDay: isLectureDay,
                       ),
@@ -329,6 +340,7 @@ class MonthlyCalendar extends StatelessWidget {
   /// لون النص حسب حالة اليوم
   Color _getTextColor(
     DayStatus status, {
+    required ColorScheme colorScheme,
     String? holidayType,
     bool isLectureDay = false,
   }) {
@@ -345,7 +357,7 @@ class MonthlyCalendar extends StatelessWidget {
         return const Color(0xFF1B5E20);
       default:
         if (isLectureDay) return const Color(0xFF1B5E20);
-        return const Color(0xFF222222);
+        return colorScheme.onSurface;
     }
   }
 
@@ -425,14 +437,15 @@ class MonthlyCalendar extends StatelessWidget {
   }
 
   /// دليل الألوان (Legend) — يوضح معنى كل لون
-  Widget _buildColorLegend() {
+  Widget _buildColorLegend(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final monthHolidayTypes = _collectHolidayTypes();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9F9F9),
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE0E0E0), width: 1),
+        border: Border.all(color: colorScheme.outlineVariant, width: 1),
       ),
       child: Wrap(
         spacing: 20,
@@ -440,11 +453,13 @@ class MonthlyCalendar extends StatelessWidget {
         alignment: WrapAlignment.center,
         children: [
           _legendItem(
+            context,
             const Color(0xFF006571),
             _tr('اليوم الحالي', 'Today'),
             true,
           ),
           _legendItem(
+            context,
             _lectureDayFillColor(),
             _tr(
               'داخل آخر أسبوعين (قابل للتعديل)',
@@ -453,22 +468,26 @@ class MonthlyCalendar extends StatelessWidget {
             false,
           ),
           _legendItem(
+            context,
             DayStatus.viewOnly.color,
             _tr('أقدم من أسبوعين (عرض فقط)', 'Older than 2 weeks (view only)'),
             false,
           ),
           _legendItem(
+            context,
             DayStatus.futureLocked.color,
             _tr('تاريخ مستقبلي (مغلق)', 'Future date (locked)'),
             false,
           ),
           _legendItem(
+            context,
             _holidayFillColor('weekend'),
             _tr('عطلة', 'Holiday'),
             false,
           ),
           ...monthHolidayTypes.map(
             (type) => _legendItem(
+              context,
               _holidayFillColor(type),
               _holidayLabel(type),
               false,
@@ -619,7 +638,13 @@ class MonthlyCalendar extends StatelessWidget {
     }
   }
 
-  Widget _legendItem(Color color, String label, bool isToday) {
+  Widget _legendItem(
+    BuildContext context,
+    Color color,
+    String label,
+    bool isToday,
+  ) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -637,10 +662,10 @@ class MonthlyCalendar extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w500,
-            color: Color(0xFF666666),
+            color: colorScheme.onSurfaceVariant,
             fontFamily: 'Cairo',
           ),
         ),
@@ -662,26 +687,30 @@ class _MonthNavButton extends StatelessWidget {
   final String label;
   final Widget icon;
   final VoidCallback onPressed;
+
   /// When false, uses original icon-then-label layout (السابق).
   final bool labelBeforeIcon;
 
-  ButtonStyle get _buttonStyle => FilledButton.styleFrom(
-        backgroundColor: const Color(0xFFE6F3F5),
-        foregroundColor: const Color(0xFF006571),
-        elevation: 0,
-        minimumSize: const Size(96, 44),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: const BorderSide(color: Color(0xFFB8DDE2)),
-        ),
-      );
+  ButtonStyle _buttonStyle(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return FilledButton.styleFrom(
+      backgroundColor: colorScheme.primary.withValues(alpha: 0.12),
+      foregroundColor: colorScheme.primary,
+      elevation: 0,
+      minimumSize: const Size(96, 44),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.28)),
+      ),
+    );
+  }
 
   TextStyle get _labelStyle => const TextStyle(
-        fontFamily: 'Cairo',
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-      );
+    fontFamily: 'Cairo',
+    fontSize: 12,
+    fontWeight: FontWeight.w700,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -690,26 +719,20 @@ class _MonthNavButton extends StatelessWidget {
       child: labelBeforeIcon
           ? FilledButton(
               onPressed: onPressed,
-              style: _buttonStyle,
+              style: _buttonStyle(context),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(label, style: _labelStyle),
                   const SizedBox(width: 6),
-                  IconTheme(
-                    data: const IconThemeData(size: 22),
-                    child: icon,
-                  ),
+                  IconTheme(data: const IconThemeData(size: 22), child: icon),
                 ],
               ),
             )
           : FilledButton.icon(
               onPressed: onPressed,
-              style: _buttonStyle,
-              icon: IconTheme(
-                data: const IconThemeData(size: 22),
-                child: icon,
-              ),
+              style: _buttonStyle(context),
+              icon: IconTheme(data: const IconThemeData(size: 22), child: icon),
               label: Text(label, style: _labelStyle),
             ),
     );

@@ -19,6 +19,8 @@ class FemaleSecurityNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return SafeArea(
       top: false,
       child: Padding(
@@ -30,12 +32,12 @@ class FemaleSecurityNavBar extends StatelessWidget {
             child: Container(
               height: _pillHeight,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: colorScheme.surface,
                 borderRadius: BorderRadius.circular(36),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 18,
+                    color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.08),
+                    blurRadius: isDark ? 22 : 18,
                     offset: const Offset(0, 8),
                   ),
                 ],
@@ -47,6 +49,7 @@ class FemaleSecurityNavBar extends StatelessWidget {
                     activeIcon: Icons.list_alt_rounded,
                     isActive: selectedIndex == 0,
                     tooltip: SecurityLocalization.records,
+                    inactiveColor: colorScheme.onSurfaceVariant,
                     onTap: () => onItemTapped(0),
                   ),
                   _NavItem(
@@ -54,6 +57,7 @@ class FemaleSecurityNavBar extends StatelessWidget {
                     activeIcon: Icons.qr_code_scanner_rounded,
                     isActive: selectedIndex == 1,
                     tooltip: SecurityLocalization.scanVerification,
+                    inactiveColor: colorScheme.onSurfaceVariant,
                     onTap: () => onItemTapped(1),
                   ),
                   _NavItem(
@@ -61,6 +65,7 @@ class FemaleSecurityNavBar extends StatelessWidget {
                     activeIcon: Icons.manage_accounts,
                     isActive: selectedIndex == 2,
                     tooltip: SecurityLocalization.settings,
+                    inactiveColor: colorScheme.onSurfaceVariant,
                     onTap: () => onItemTapped(2),
                   ),
                 ],
@@ -80,6 +85,7 @@ class _NavItem extends StatelessWidget {
     required this.isActive,
     required this.onTap,
     required this.tooltip,
+    required this.inactiveColor,
   });
 
   final IconData icon;
@@ -87,6 +93,7 @@ class _NavItem extends StatelessWidget {
   final bool isActive;
   final VoidCallback onTap;
   final String tooltip;
+  final Color inactiveColor;
 
   @override
   Widget build(BuildContext context) {
@@ -132,7 +139,7 @@ class _NavItem extends StatelessWidget {
                 child: Icon(
                   isActive ? activeIcon : icon,
                   size: iconSize,
-                  color: isActive ? Colors.white : Colors.grey.shade600,
+                  color: isActive ? Colors.white : inactiveColor,
                 ),
               ),
             ),

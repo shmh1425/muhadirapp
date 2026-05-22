@@ -20,6 +20,8 @@ class LectureDetailCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     String tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final timeRange = TimeUtils.formatTimeRange(
       lecture.startTime,
@@ -52,12 +54,17 @@ class LectureDetailCard extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 16),
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: colorScheme.surface,
             borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: colorScheme.outlineVariant.withValues(
+                alpha: isDark ? 0.34 : 0.8,
+              ),
+            ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 8,
+                color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.05),
+                blurRadius: isDark ? 14 : 8,
                 offset: const Offset(0, 2),
               ),
             ],
@@ -71,10 +78,10 @@ class LectureDetailCard extends StatelessWidget {
                 children: [
                   Text(
                     timeRange,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF222222),
+                      color: colorScheme.onSurface,
                       fontFamily: 'Cairo',
                     ),
                   ),
@@ -91,10 +98,10 @@ class LectureDetailCard extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 lecture.courseName,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF222222),
+                  color: colorScheme.onSurface,
                   fontFamily: 'Cairo',
                   height: 1.3,
                 ),
@@ -148,19 +155,20 @@ class _DetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 18, color: Colors.grey.shade600),
+          Icon(icon, size: 18, color: colorScheme.onSurfaceVariant),
           const SizedBox(width: 8),
           Expanded(
             child: RichText(
               text: TextSpan(
                 style: TextStyle(
                   fontSize: 14,
-                  color: Colors.grey.shade700,
+                  color: colorScheme.onSurfaceVariant,
                   fontFamily: 'Cairo',
                 ),
                 children: [
@@ -168,7 +176,7 @@ class _DetailRow extends StatelessWidget {
                     text: '$label: ',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade800,
+                      color: colorScheme.onSurface,
                     ),
                   ),
                   TextSpan(text: value),

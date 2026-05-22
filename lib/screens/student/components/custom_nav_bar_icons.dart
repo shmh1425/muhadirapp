@@ -17,6 +17,8 @@ class CustomNavBarIcons extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mirrorForEnglish = TranslationController.instance.translateToEnglish;
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return SizedBox(
       height: _barHeight + (_circleSize / 2) + 12,
       child: Stack(
@@ -26,12 +28,12 @@ class CustomNavBarIcons extends StatelessWidget {
             height: _barHeight,
             margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: colorScheme.surface,
               borderRadius: BorderRadius.circular(36),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 18,
+                  color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.08),
+                  blurRadius: isDark ? 22 : 18,
                   offset: const Offset(0, 8),
                 ),
               ],
@@ -45,16 +47,22 @@ class CustomNavBarIcons extends StatelessWidget {
                   _NavItem(
                     icon: Icons.person_outline,
                     isActive: selectedIndex == 0,
+                    activeColor: colorScheme.primary,
+                    inactiveColor: colorScheme.onSurfaceVariant,
                     onTap: () => onItemTapped(0),
                   ),
                   _NavItem(
                     icon: Icons.grid_view,
                     isActive: selectedIndex == 1,
+                    activeColor: colorScheme.primary,
+                    inactiveColor: colorScheme.onSurfaceVariant,
                     onTap: () => onItemTapped(1),
                   ),
                   _NavItem(
                     icon: Icons.home,
                     isActive: selectedIndex == 2,
+                    activeColor: colorScheme.primary,
+                    inactiveColor: colorScheme.onSurfaceVariant,
                     onTap: () => onItemTapped(2),
                   ),
                 ],
@@ -136,14 +144,17 @@ class _NavItem extends StatelessWidget {
   const _NavItem({
     required this.icon,
     required this.isActive,
+    required this.activeColor,
+    required this.inactiveColor,
     required this.onTap,
   });
 
   final IconData icon;
   final bool isActive;
+  final Color activeColor;
+  final Color inactiveColor;
   final VoidCallback onTap;
 
-  static const _activeColor = Color(0xFF006571);
   static const _iconSize = 24.0;
 
   @override
@@ -155,7 +166,11 @@ class _NavItem extends StatelessWidget {
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 160),
             opacity: isActive ? 0.0 : 1.0,
-            child: Icon(icon, size: _iconSize, color: _activeColor),
+            child: Icon(
+              icon,
+              size: _iconSize,
+              color: isActive ? activeColor : inactiveColor,
+            ),
           ),
         ),
       ),
