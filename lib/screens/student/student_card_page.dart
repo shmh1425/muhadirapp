@@ -24,13 +24,13 @@ class StudentCardPage extends StatelessWidget {
         return Directionality(
           textDirection: translation.textDirection,
           child: Scaffold(
-            backgroundColor: const Color(0xFFF8F9FA),
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             body: SafeArea(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Container(
-                    color: Colors.white,
+                    color: Theme.of(context).colorScheme.surface,
                     padding: const EdgeInsets.fromLTRB(12, 4, 16, 8),
                     child: Row(
                       children: [
@@ -69,40 +69,43 @@ class StudentCardPage extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                      if (student != null)
-                        StudentDigitalIdCard(student: student)
-                      else
-                        _buildMissingStudentCard(),
-                      if (kDebugMode) ...[
-                        const SizedBox(height: 12),
-                        const StudentGeoDebugToggle(),
-                      ],
-                      if (student != null &&
-                          student.studentId > 0 &&
-                          student.isFemale)
-                        StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                          stream: StudentAuthService.instance
-                              .watchCurrentStudentDoc(),
-                          builder: (context, snap) {
-                            final rev = (snap.data?.data()?['gateCardRev'] as num?)
-                                    ?.toInt() ??
-                                int.tryParse(
-                                  snap.data
-                                          ?.data()?['gateCardRev']
-                                          ?.toString() ??
-                                      '',
-                                ) ??
-                                0;
-                            return Padding(
-                              padding: const EdgeInsets.only(top: 20),
-                              child: StudentGateModePanel(
-                                studentId: student.studentId,
-                                gateCardRev: rev,
-                              ),
-                            );
-                          },
-                        ),
-                      const SizedBox(height: 20),
+                          if (student != null)
+                            StudentDigitalIdCard(student: student)
+                          else
+                            _buildMissingStudentCard(),
+                          if (kDebugMode) ...[
+                            const SizedBox(height: 12),
+                            const StudentGeoDebugToggle(),
+                          ],
+                          if (student != null &&
+                              student.studentId > 0 &&
+                              student.isFemale)
+                            StreamBuilder<
+                              DocumentSnapshot<Map<String, dynamic>>
+                            >(
+                              stream: StudentAuthService.instance
+                                  .watchCurrentStudentDoc(),
+                              builder: (context, snap) {
+                                final rev =
+                                    (snap.data?.data()?['gateCardRev'] as num?)
+                                        ?.toInt() ??
+                                    int.tryParse(
+                                      snap.data
+                                              ?.data()?['gateCardRev']
+                                              ?.toString() ??
+                                          '',
+                                    ) ??
+                                    0;
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 20),
+                                  child: StudentGateModePanel(
+                                    studentId: student.studentId,
+                                    gateCardRev: rev,
+                                  ),
+                                );
+                              },
+                            ),
+                          const SizedBox(height: 20),
                           _buildElectronicWalletSection(context, student),
                         ],
                       ),
@@ -118,38 +121,47 @@ class StudentCardPage extends StatelessWidget {
   }
 
   Widget _buildMissingStudentCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: const TText(
-        'لا توجد بيانات بطاقة',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontFamily: 'Cairo',
-          fontSize: 16,
-          color: Color(0xFF757575),
+    return Builder(
+      builder: (context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+        ),
+        child: TText(
+          'لا توجد بيانات بطاقة',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontFamily: 'Cairo',
+            fontSize: 16,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildElectronicWalletSection(BuildContext context, ExternalStudent? student) {
+  Widget _buildElectronicWalletSection(
+    BuildContext context,
+    ExternalStudent? student,
+  ) {
     final nameAr = (student?.nameAr ?? '').trim();
     final nameEn = student?.name ?? '-';
     final studentId = student?.studentId.toString() ?? '-';
     final email = student?.email ?? '-';
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -233,6 +245,7 @@ class StudentCardPage extends StatelessWidget {
     final valueAlign = valueDir == TextDirection.ltr
         ? TextAlign.left
         : TextAlign.right;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Directionality(
       textDirection: baseDir,
@@ -241,7 +254,7 @@ class StudentCardPage extends StatelessWidget {
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: Colors.grey.withValues(alpha: 0.1),
+              color: colorScheme.outlineVariant.withValues(alpha: 0.6),
               width: 1,
             ),
           ),
@@ -255,9 +268,9 @@ class StudentCardPage extends StatelessWidget {
                   TText(
                     label,
                     textAlign: labelAlign,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
-                      color: Colors.black54,
+                      color: colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w400,
                       fontFamily: 'Tajawal',
                     ),
@@ -270,9 +283,9 @@ class StudentCardPage extends StatelessWidget {
                         ? Text(
                             value,
                             textAlign: valueAlign,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 15,
-                              color: Colors.black,
+                              color: colorScheme.onSurface,
                               fontWeight: FontWeight.w600,
                               fontFamily: 'Cairo',
                             ),
@@ -280,9 +293,9 @@ class StudentCardPage extends StatelessWidget {
                         : TText(
                             value,
                             textAlign: valueAlign,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 15,
-                              color: Colors.black,
+                              color: colorScheme.onSurface,
                               fontWeight: FontWeight.w600,
                               fontFamily: 'Cairo',
                             ),
@@ -328,7 +341,7 @@ class StudentCardPage extends StatelessWidget {
                   color: Color(0xFF006571),
                 ),
               ),
-            )
+            ),
           ],
         ),
       ),

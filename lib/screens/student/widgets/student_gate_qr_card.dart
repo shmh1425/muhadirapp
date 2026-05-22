@@ -191,22 +191,28 @@ class _StudentGateQrCardState extends State<StudentGateQrCard>
     const framePad = 12.0;
     final boxSide = qrSize + framePad * 2;
     const borderRadius = 14.0;
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF27A2A9).withValues(
-              alpha: (widget.embeddedInIdCard && !widget.contentOnly) ? 0.12 : 0.06,
+              alpha: (widget.embeddedInIdCard && !widget.contentOnly)
+                  ? 0.12
+                  : 0.06,
             ),
-            blurRadius: (widget.embeddedInIdCard && !widget.contentOnly) ? 16 : 12,
+            blurRadius: (widget.embeddedInIdCard && !widget.contentOnly)
+                ? 16
+                : 12,
             offset: const Offset(0, 4),
           ),
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -273,11 +279,11 @@ class _StudentGateQrCardState extends State<StudentGateQrCard>
           Text(
             _formatDate(),
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 14,
               fontWeight: FontWeight.w500,
-              color: Color(0xFF2D2D2D),
+              color: colorScheme.onSurface,
               height: 1.2,
             ),
           ),
@@ -289,7 +295,7 @@ class _StudentGateQrCardState extends State<StudentGateQrCard>
               style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 11,
-                color: Colors.grey.shade600,
+                color: colorScheme.onSurfaceVariant,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -316,7 +322,7 @@ class _StudentGateQrCardState extends State<StudentGateQrCard>
               style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 10,
-                color: Colors.grey.shade600,
+                color: colorScheme.onSurfaceVariant,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -371,11 +377,11 @@ class _StudentGateQrCardState extends State<StudentGateQrCard>
           children: [
             Text(
               _tr('رمز الدخول (QR)', 'Gate QR code'),
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'Cairo',
                 fontWeight: FontWeight.w700,
                 fontSize: 15,
-                color: Color(0xFF00525D),
+                color: Theme.of(context).colorScheme.primary,
               ),
             ),
             const SizedBox(height: 6),
@@ -388,7 +394,7 @@ class _StudentGateQrCardState extends State<StudentGateQrCard>
                 fontFamily: 'Cairo',
                 fontSize: 12,
                 height: 1.35,
-                color: Colors.grey.shade700,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 14),

@@ -12,10 +12,7 @@ import '../../../shared/widgets/web_network_image_blur.dart';
 
 /// Digital student ID: photo, name, academics (QR and NFC are separate sections).
 class StudentDigitalIdCard extends StatefulWidget {
-  const StudentDigitalIdCard({
-    super.key,
-    required this.student,
-  });
+  const StudentDigitalIdCard({super.key, required this.student});
 
   final ExternalStudent student;
 
@@ -110,25 +107,28 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
     return AnimatedBuilder(
       animation: TranslationController.instance,
       builder: (context, _) {
-
         return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
           stream: StudentAuthService.instance.watchCurrentStudentDoc(),
           builder: (context, snap) {
             final data = snap.data?.data() ?? const <String, dynamic>{};
             var photoUrlRaw =
-                (data['photoUrl'] ?? data['photoURL'] ?? data['photo_url'] ?? '')
+                (data['photoUrl'] ??
+                        data['photoURL'] ??
+                        data['photo_url'] ??
+                        '')
                     .toString()
                     .trim();
             if (photoUrlRaw.isEmpty) {
               photoUrlRaw = s.photoUrl.trim();
             }
-            var photoVersion =
-                (data['photoVersion'] ?? s.photoVersion).toString().trim();
+            var photoVersion = (data['photoVersion'] ?? s.photoVersion)
+                .toString()
+                .trim();
             final imageUrl = photoUrlRaw.isEmpty
                 ? ''
                 : photoVersion.isEmpty
-                    ? photoUrlRaw
-                    : '$photoUrlRaw${photoUrlRaw.contains('?') ? '&' : '?'}v=$photoVersion';
+                ? photoUrlRaw
+                : '$photoUrlRaw${photoUrlRaw.contains('?') ? '&' : '?'}v=$photoVersion';
 
             final deptEnRaw = s.departmentSafe.trim();
             final deptArRaw = s.departmentArSafe.trim();
@@ -179,19 +179,17 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
 
             final isEnUi = TranslationController.instance.translateToEnglish;
             // Expanded Column follows ambient RTL; force LTR here so end == visual right next to photo.
-            final headerColumnCross =
-                isEnUi ? CrossAxisAlignment.start : CrossAxisAlignment.end;
-            final headerAlign =
-                isEnUi ? TextAlign.left : TextAlign.right;
+            final headerColumnCross = isEnUi
+                ? CrossAxisAlignment.start
+                : CrossAxisAlignment.end;
+            final headerAlign = isEnUi ? TextAlign.left : TextAlign.right;
 
-            final displayName =
-                isEnUi
-                    ? (nameEn.isNotEmpty ? nameEn : nameAr)
-                    : (nameAr.isNotEmpty ? nameAr : nameEn);
+            final displayName = isEnUi
+                ? (nameEn.isNotEmpty ? nameEn : nameAr)
+                : (nameAr.isNotEmpty ? nameAr : nameEn);
 
             final nameBlock = Directionality(
-              textDirection:
-                  isEnUi ? TextDirection.ltr : TextDirection.rtl,
+              textDirection: isEnUi ? TextDirection.ltr : TextDirection.rtl,
               child: Text(
                 displayName,
                 textAlign: headerAlign,
@@ -290,7 +288,7 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
               width: double.infinity,
               height: _cardHeight,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: _darkTeal.withValues(alpha: 0.22),
@@ -465,7 +463,11 @@ class _CardProfilePhotoContent extends StatelessWidget {
             : WebHtmlElementStrategy.never,
         errorBuilder: (_, __, ___) => ColoredBox(
           color: const Color(0xFFECEFF1),
-          child: Icon(Icons.person, size: iconSz, color: const Color(0xFF9AA0A6)),
+          child: Icon(
+            Icons.person,
+            size: iconSz,
+            color: const Color(0xFF9AA0A6),
+          ),
         ),
         loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) {
@@ -496,7 +498,7 @@ class _CardProfilePhotoContent extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           border: Border.all(color: borderColor, width: borderW),
         ),
         child: ClipOval(

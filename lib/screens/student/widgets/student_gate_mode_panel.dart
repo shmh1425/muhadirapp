@@ -114,16 +114,17 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
     return AnimatedBuilder(
       animation: TranslationController.instance,
       builder: (context, _) {
+        final colorScheme = Theme.of(context).colorScheme;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Center(
               child: TText(
                 _tr('البوابة الأمنية', 'Security gate'),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF222222),
+                  color: colorScheme.onSurface,
                   fontFamily: 'Cairo',
                 ),
               ),
@@ -133,10 +134,10 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
               Center(
                 child: TText(
                   modeTitle,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF35565E),
+                    color: colorScheme.onSurfaceVariant,
                     fontFamily: 'Cairo',
                   ),
                 ),
@@ -147,7 +148,7 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
                   width: 200,
                   height: 42,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE1F7F7),
+                    color: colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(22),
                   ),
                   padding: const EdgeInsets.all(4),
@@ -177,8 +178,9 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
             Container(
               width: double.infinity,
               decoration: BoxDecoration(
-                color: const Color(0xFFE6FBFB),
+                color: colorScheme.surface,
                 borderRadius: BorderRadius.circular(26),
+                border: Border.all(color: colorScheme.outlineVariant),
               ),
               padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
               child: _iosShowsNfcUnsupportedCard
@@ -293,7 +295,7 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
           margin: const EdgeInsets.symmetric(horizontal: 6),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: const Color(0xFFCCE8EA)),
           ),
@@ -303,8 +305,8 @@ class _StudentGateModePanelState extends State<StudentGateModePanel> {
               'Show this code to the gate reader.',
             ),
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Color(0xFF35565E),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
               fontSize: 13,
               fontFamily: 'Cairo',
               fontWeight: FontWeight.w600,

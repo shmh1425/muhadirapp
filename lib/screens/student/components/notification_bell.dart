@@ -14,6 +14,7 @@ class NotificationBell extends StatelessWidget {
     final studentId =
         StudentAuthService.instance.currentStudent?.studentId ?? 0;
     final service = StudentNotificationsService.instance;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return InkWell(
       onTap: onTap,
@@ -24,9 +25,9 @@ class NotificationBell extends StatelessWidget {
           Container(
             width: size,
             height: size,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.white,
+              color: colorScheme.surface,
             ),
             child: const Icon(
               Icons.notifications_outlined,
@@ -57,7 +58,7 @@ class NotificationBell extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: const Color(0xFFE53935),
                       borderRadius: BorderRadius.circular(badgeSize),
-                      border: Border.all(color: Colors.white, width: 2),
+                      border: Border.all(color: colorScheme.surface, width: 2),
                     ),
                     alignment: Alignment.center,
                     child: FittedBox(

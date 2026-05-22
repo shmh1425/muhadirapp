@@ -19,9 +19,79 @@ import '../login_screen.dart';
 import '../../features/translation/translation_controller.dart';
 import '../../features/translation/widgets/language_toggle_button.dart';
 import '../../features/translation/widgets/t_text.dart';
+import '../../theme/app_theme_controller.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
+
+  String _themeModeLabel(ThemeMode mode, bool isEnglish) {
+    return switch (mode) {
+      ThemeMode.system => isEnglish ? 'System' : 'النظام',
+      ThemeMode.light => isEnglish ? 'Light' : 'فاتح',
+      ThemeMode.dark => isEnglish ? 'Dark' : 'داكن',
+    };
+  }
+
+  Widget _buildThemeModeTile(BuildContext context) {
+    final translation = TranslationController.instance;
+    final isEnglish = translation.translateToEnglish;
+    final scheme = Theme.of(context).colorScheme;
+
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: appThemeMode,
+      builder: (context, mode, _) {
+        return _SettingsTile(
+          child: Row(
+            children: [
+              Icon(Icons.contrast_rounded, color: scheme.primary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    isEnglish ? 'Appearance' : 'المظهر',
+                    textAlign: TextAlign.start,
+                    style: TextStyle(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'Cairo',
+                    ),
+                  ),
+                ),
+              ),
+              DropdownButtonHideUnderline(
+                child: DropdownButton<ThemeMode>(
+                  value: mode,
+                  dropdownColor: scheme.surface,
+                  icon: Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: scheme.onSurface.withValues(alpha: 0.7),
+                  ),
+                  items: [ThemeMode.system, ThemeMode.light, ThemeMode.dark]
+                      .map(
+                        (m) => DropdownMenuItem<ThemeMode>(
+                          value: m,
+                          child: Text(
+                            _themeModeLabel(m, isEnglish),
+                            style: TextStyle(
+                              color: scheme.onSurface,
+                              fontFamily: 'Cairo',
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) setThemeMode(value);
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   void _onItemTapped(BuildContext context, int index) {
     if (index == 0) {
@@ -60,36 +130,49 @@ class SettingsScreen extends StatelessWidget {
     }
 
     final majorArNormalized = normalizeMajorAr(majorAr, majorEn);
-    final majorDisplay =
-        isEn ? majorEn : (majorArNormalized.isNotEmpty ? majorArNormalized : majorEn);
+    final majorDisplay = isEn
+        ? majorEn
+        : (majorArNormalized.isNotEmpty ? majorArNormalized : majorEn);
 
     final nameEn = student.name.trim();
     final nameArTrim = student.nameAr.trim();
     // Arabic UI: secondary line English. English UI: secondary line Arabic.
     final secondaryName = isEn
-        ? (nameArTrim.isNotEmpty ? nameArTrim : (nameEn.isNotEmpty ? nameEn : '-'))
-        : (nameEn.isNotEmpty ? nameEn : (nameArTrim.isNotEmpty ? nameArTrim : '-'));
+        ? (nameArTrim.isNotEmpty
+              ? nameArTrim
+              : (nameEn.isNotEmpty ? nameEn : '-'))
+        : (nameEn.isNotEmpty
+              ? nameEn
+              : (nameArTrim.isNotEmpty ? nameArTrim : '-'));
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          secondaryName,
-          style: const TextStyle(
-            color: Color(0xFF444444),
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
+        Builder(
+          builder: (context) => Text(
+            secondaryName,
+            style: TextStyle(
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.75),
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
           ),
-          textAlign: TextAlign.center,
         ),
         const SizedBox(height: 6),
-        TText(
-          majorDisplay,
-          style: const TextStyle(
-            color: Color(0xFF444444),
-            fontSize: 14,
+        Builder(
+          builder: (context) => TText(
+            majorDisplay,
+            style: TextStyle(
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.75),
+              fontSize: 14,
+            ),
+            textAlign: TextAlign.center,
           ),
-          textAlign: TextAlign.center,
         ),
       ],
     );
@@ -106,7 +189,7 @@ class SettingsScreen extends StatelessWidget {
             return Directionality(
               textDirection: translation.textDirection,
               child: AlertDialog(
-                backgroundColor: Colors.white,
+                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -117,18 +200,18 @@ class SettingsScreen extends StatelessWidget {
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFB71C1C).withOpacity(0.12),
+                        color: const Color(0xFFB71C1C).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(Icons.logout, color: Color(0xFFB71C1C)),
                     ),
                     const SizedBox(height: 12),
-                    const TText(
+                    TText(
                       'هل أنت متأكد أنك تريد تسجيل الخروج؟',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF111827),
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -142,7 +225,9 @@ class SettingsScreen extends StatelessWidget {
                           await StudentAuthService.instance.logout();
                           if (!context.mounted) return;
                           Navigator.of(context).pushAndRemoveUntil(
-                            MaterialPageRoute(builder: (_) => const LoginScreen()),
+                            MaterialPageRoute(
+                              builder: (_) => const LoginScreen(),
+                            ),
                             (_) => false,
                           );
                         },
@@ -192,16 +277,19 @@ class SettingsScreen extends StatelessWidget {
       stream: StudentAuthService.instance.watchCurrentStudentDoc(),
       builder: (context, snapshot) {
         if (snapshot.hasData) {
-          StudentAuthService.instance.applyCurrentStudentSnapshot(snapshot.data!);
+          StudentAuthService.instance.applyCurrentStudentSnapshot(
+            snapshot.data!,
+          );
         }
 
         return AnimatedBuilder(
           animation: translation,
           builder: (context, _) {
+            final scheme = Theme.of(context).colorScheme;
             return Directionality(
               textDirection: translation.textDirection,
               child: Scaffold(
-                backgroundColor: Colors.white,
+                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
                 floatingActionButton: const ChatFAB(),
                 bottomNavigationBar: NavBarSettingsArabic(
                   selectedIndex: 0,
@@ -209,7 +297,10 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 body: SafeArea(
                   child: ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 20,
+                    ),
                     children: [
                       Row(
                         children: [
@@ -220,10 +311,10 @@ class SettingsScreen extends StatelessWidget {
                                 translation.translateToEnglish
                                     ? 'Personal Profile'
                                     : 'الملف الشخصي',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 22,
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFF006571),
+                                  color: scheme.primary,
                                 ),
                                 textAlign: TextAlign.center,
                                 maxLines: 1,
@@ -246,7 +337,8 @@ class SettingsScreen extends StatelessWidget {
                                       Navigator.push(
                                         context,
                                         MaterialPageRoute(
-                                          builder: (_) => const NotificationsScreen(),
+                                          builder: (_) =>
+                                              const NotificationsScreen(),
                                         ),
                                       );
                                     },
@@ -263,15 +355,16 @@ class SettingsScreen extends StatelessWidget {
                       Center(
                         child: Builder(
                           builder: (context) {
-                            final s = StudentAuthService.instance.currentStudent;
+                            final s =
+                                StudentAuthService.instance.currentStudent;
                             final nameAr = s?.nameAr ?? '';
                             final nameDisplay = nameAr.isNotEmpty
                                 ? nameAr
                                 : (s?.name ?? 'لم يتم تحميل البيانات');
                             return TText(
                               nameDisplay,
-                              style: const TextStyle(
-                                color: Color(0xFF006571),
+                              style: TextStyle(
+                                color: scheme.primary,
                                 fontWeight: FontWeight.w600,
                                 fontSize: 18,
                               ),
@@ -289,7 +382,7 @@ class SettingsScreen extends StatelessWidget {
                         child: _SettingsTile(
                           child: Row(
                             children: [
-                              const Icon(Icons.language, color: Color(0xFF006571)),
+                              Icon(Icons.language, color: scheme.primary),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Align(
@@ -306,43 +399,52 @@ class SettingsScreen extends StatelessWidget {
                       const SizedBox(height: 12),
                       const _NotificationPermissionTile(),
                       const SizedBox(height: 12),
+                      _buildThemeModeTile(context),
+                      const SizedBox(height: 12),
                       Builder(
                         builder: (context) {
-                          final gender = (StudentAuthService.instance.currentStudent?.gender ?? '')
-                              .trim()
-                              .toLowerCase();
+                          final gender =
+                              (StudentAuthService
+                                          .instance
+                                          .currentStudent
+                                          ?.gender ??
+                                      '')
+                                  .trim()
+                                  .toLowerCase();
                           final isFemale = gender == 'f' || gender == 'female';
                           if (!isFemale) {
                             if (AppSettings.instance.blurProfileImage.value) {
-                              AppSettings.instance.blurProfileImage.value = false;
+                              AppSettings.instance.blurProfileImage.value =
+                                  false;
                             }
                             return const SizedBox.shrink();
                           }
                           return Column(
                             children: [
                               ValueListenableBuilder<bool>(
-                                valueListenable: AppSettings.instance.blurProfileImage,
+                                valueListenable:
+                                    AppSettings.instance.blurProfileImage,
                                 builder: (context, isBlurred, child) {
                                   final showPhoto = !isBlurred;
                                   return _SettingsTile(
                                     child: Row(
                                       children: [
-                                        const Icon(
+                                        Icon(
                                           Icons.account_circle_outlined,
-                                          color: Color(0xFF006571),
+                                          color: scheme.primary,
                                         ),
                                         const SizedBox(width: 12),
                                         Expanded(
                                           child: Align(
-                                            alignment:
-                                                AlignmentDirectional.centerStart,
+                                            alignment: AlignmentDirectional
+                                                .centerStart,
                                             child: Text(
                                               translation.translateToEnglish
                                                   ? 'Show Personal Photo'
                                                   : 'إظهار الصورة الشخصية',
                                               textAlign: TextAlign.start,
-                                              style: const TextStyle(
-                                                color: Color(0xFF006571),
+                                              style: TextStyle(
+                                                color: scheme.primary,
                                               ),
                                             ),
                                           ),
@@ -350,10 +452,13 @@ class SettingsScreen extends StatelessWidget {
                                         Switch(
                                           value: showPhoto,
                                           onChanged: (value) {
-                                            AppSettings.instance.blurProfileImage
-                                                .value = !value;
+                                            AppSettings
+                                                    .instance
+                                                    .blurProfileImage
+                                                    .value =
+                                                !value;
                                           },
-                                          activeColor: const Color(0xFF006571),
+                                          activeThumbColor: scheme.primary,
                                         ),
                                       ],
                                     ),
@@ -408,7 +513,8 @@ class _NotificationPermissionTile extends StatefulWidget {
       _NotificationPermissionTileState();
 }
 
-class _NotificationPermissionTileState extends State<_NotificationPermissionTile>
+class _NotificationPermissionTileState
+    extends State<_NotificationPermissionTile>
     with WidgetsBindingObserver {
   final DeviceNotificationPermissionService _permissions =
       DeviceNotificationPermissionService.instance;
@@ -449,9 +555,7 @@ class _NotificationPermissionTileState extends State<_NotificationPermissionTile
       final status = await _permissions.requestEnable();
       if (!mounted) return;
       if (status.isGranted || status.isLimited) {
-        _showSnack(
-          _en ? 'Notifications enabled.' : 'تم تفعيل الإشعارات.',
-        );
+        _showSnack(_en ? 'Notifications enabled.' : 'تم تفعيل الإشعارات.');
         return;
       }
       if (status.isPermanentlyDenied) {
@@ -531,79 +635,51 @@ class _NotificationPermissionTileState extends State<_NotificationPermissionTile
   Widget build(BuildContext context) {
     final translation = TranslationController.instance;
     return AnimatedBuilder(
-      animation: Listenable.merge([translation, _permissions.notificationsEnabled]),
+      animation: Listenable.merge([
+        translation,
+        _permissions.notificationsEnabled,
+      ]),
       builder: (context, _) {
         final enabled = _permissions.notificationsEnabled.value;
         final supported = _permissions.isSupported;
+        final scheme = Theme.of(context).colorScheme;
 
         return _SettingsTile(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Icon(Icons.notifications_outlined, color: Color(0xFF006571)),
+              Icon(Icons.notifications_outlined, color: scheme.primary),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   _en ? 'Notifications' : 'الإشعارات',
-                  style: const TextStyle(
-                    color: Color(0xFF006571),
+                  style: TextStyle(
+                    color: scheme.primary,
                     fontWeight: FontWeight.w600,
                     fontFamily: 'Cairo',
                   ),
                 ),
               ),
               if (enabled == null && supported)
-                const SizedBox(
+                SizedBox(
                   width: 24,
                   height: 24,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Color(0xFF006571),
+                    color: scheme.primary,
                   ),
                 )
               else
                 Switch(
                   value: enabled ?? false,
                   onChanged: supported ? _onToggle : null,
-                  activeTrackColor: const Color(0xFF006571).withValues(alpha: 0.45),
-                  activeThumbColor: const Color(0xFF006571),
+                  activeTrackColor: scheme.primary.withValues(alpha: 0.45),
+                  activeThumbColor: scheme.primary,
                 ),
             ],
           ),
         );
       },
-    );
-  }
-}
-
-class _DataRow extends StatelessWidget {
-  const _DataRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Text(
-            '$label:',
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF006571),
-            ),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            textAlign: TextAlign.left,
-            style: const TextStyle(color: Color(0xFF444444)),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -615,14 +691,16 @@ class _SettingsTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.05),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),
@@ -680,4 +758,3 @@ class _LanguageToggleLabel extends StatelessWidget {
     );
   }
 }
-

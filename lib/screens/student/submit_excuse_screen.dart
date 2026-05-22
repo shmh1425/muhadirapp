@@ -17,7 +17,6 @@ import '../../services/excuse/excuse_attendance_merge.dart';
 import '../../models/excuse/excuse_request.dart';
 import '../../features/translation/translation_controller.dart';
 import '../../features/translation/widgets/t_text.dart';
-import '../../shared/theme/light_surface_theme.dart';
 
 class SubmitExcuseScreen extends StatefulWidget {
   final String? course;
@@ -91,16 +90,17 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
   }
 
   Future<void> _pickFile() async {
+    final scheme = Theme.of(context).colorScheme;
     final action = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (sheetContext) {
         final td = TranslationController.instance.textDirection;
         return Theme(
-          data: themeForLightSurface(),
+          data: Theme.of(sheetContext),
           child: Directionality(
             textDirection: td,
             child: SafeArea(
@@ -121,15 +121,17 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
                       margin: const EdgeInsets.only(bottom: 12),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
+                        color: scheme.outlineVariant,
                         borderRadius: BorderRadius.circular(99),
                       ),
                     ),
                     Text(
                       _en('اختر نوع المرفق', 'Choose attachment type'),
-                      style: lightSurfaceFieldTextStyle.copyWith(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
+                        color: scheme.onSurface,
+                        fontFamily: 'Cairo',
                       ),
                       textAlign: _textAlignStart,
                     ),
@@ -141,8 +143,10 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
                       ),
                       title: Text(
                         _en('صورة من المعرض', 'Photo from gallery'),
-                        style: lightSurfaceFieldTextStyle.copyWith(
+                        style: TextStyle(
                           fontWeight: FontWeight.w600,
+                          color: scheme.onSurface,
+                          fontFamily: 'Cairo',
                         ),
                       ),
                       onTap: () => Navigator.of(sheetContext).pop('gallery'),
@@ -154,8 +158,10 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
                       ),
                       title: Text(
                         _en('ملف PDF', 'PDF file'),
-                        style: lightSurfaceFieldTextStyle.copyWith(
+                        style: TextStyle(
                           fontWeight: FontWeight.w600,
+                          color: scheme.onSurface,
+                          fontFamily: 'Cairo',
                         ),
                       ),
                       onTap: () => Navigator.of(sheetContext).pop('pdf'),
@@ -406,6 +412,8 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
+        final colorScheme = Theme.of(context).colorScheme;
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         return Directionality(
           textDirection: td,
           child: Dialog(
@@ -414,11 +422,11 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
             child: Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: colorScheme.surface,
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: <BoxShadow>[
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
+                    color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.1),
                     blurRadius: 20,
                     offset: const Offset(0, 10),
                   ),
@@ -433,7 +441,7 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
                     child: IconButton(
                       icon: Icon(
                         Icons.close,
-                        color: Colors.grey.shade400,
+                        color: colorScheme.onSurfaceVariant,
                         size: 24,
                       ),
                       onPressed: () {
@@ -487,9 +495,9 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
         return Directionality(
           textDirection: translation.textDirection,
           child: Theme(
-            data: themeForLightSurface(),
+            data: Theme.of(context),
             child: Scaffold(
-              backgroundColor: Colors.white,
+              backgroundColor: Theme.of(context).scaffoldBackgroundColor,
               bottomNavigationBar: NavBarSettingsArabic(
                 selectedIndex: 1,
                 onItemTapped: (index) {
@@ -573,14 +581,16 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
   }
 
   Widget _buildDetailsCard() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(18),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -595,10 +605,10 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
               children: <Widget>[
                 TText(
                   widget.course ?? 'جودة البرمجيات',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1A1A1A),
+                    color: colorScheme.onSurface,
                   ),
                   textAlign: _textAlignStart,
                   maxLines: 2,
@@ -607,10 +617,10 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
                 const SizedBox(height: 4),
                 Text(
                   _displayDateLine(),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF1A1A1A),
+                    color: colorScheme.onSurface,
                   ),
                   textAlign: _textAlignStart,
                 ),
@@ -620,10 +630,10 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
           const SizedBox(width: 12),
           Text(
             widget.timeRange ?? '08:50-08:00',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF1A1A1A),
+              color: colorScheme.onSurface,
             ),
           ),
         ],
@@ -632,15 +642,17 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
   }
 
   Widget _buildFileUploadSection() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         TText(
           'إضافة ملف',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF1A1A1A),
+            color: colorScheme.onSurface,
           ),
           textAlign: _textAlignStart,
         ),
@@ -651,12 +663,12 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
             height: 120,
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F5F5),
+              color: colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.grey.shade300, width: 1),
+              border: Border.all(color: colorScheme.outlineVariant, width: 1),
               boxShadow: <BoxShadow>[
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
+                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -681,12 +693,12 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
                       ),
                     ],
                   )
-                : const Column(
+                : Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
                       Icon(
                         Icons.cloud_upload_outlined,
-                        color: Color(0xFF616161),
+                        color: colorScheme.onSurfaceVariant,
                         size: 48,
                       ),
                     ],
@@ -698,15 +710,17 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
   }
 
   Widget _buildTextInputSection() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         TText(
           'إضافة نص',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF1A1A1A),
+            color: colorScheme.onSurface,
           ),
           textAlign: _textAlignStart,
         ),
@@ -715,12 +729,12 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
           constraints: const BoxConstraints(minHeight: 150),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFFF5F5F5),
+            color: colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.grey.shade300, width: 1),
+            border: Border.all(color: colorScheme.outlineVariant, width: 1),
             boxShadow: <BoxShadow>[
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
+                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -738,12 +752,17 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
               hintText: _english
                   ? 'Type your excuse here…'
                   : 'اكتب نص العذر هنا...',
-              hintStyle: lightSurfaceFieldTextStyle.copyWith(
+              hintStyle: TextStyle(
                 fontSize: 14,
-                color: lightSurfaceFieldHintColor,
+                color: colorScheme.onSurfaceVariant,
+                fontFamily: 'Cairo',
               ),
             ),
-            style: lightSurfaceFieldTextStyle.copyWith(fontSize: 14),
+            style: TextStyle(
+              fontSize: 14,
+              color: colorScheme.onSurface,
+              fontFamily: 'Cairo',
+            ),
           ),
         ),
       ],

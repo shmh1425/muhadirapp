@@ -24,8 +24,6 @@ class ScheduleScreen extends ConsumerStatefulWidget {
 
 class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   static const Color _primaryColor = Color(0xFF006571);
-  static const Color _gridBorderColor = Color(0xFFE6E6E6);
-  static const Color _headerCellColor = Color(0xFFF3F5F6);
   static const double _timeColWidth = 52;
   static const double _rowHeight = 60;
 
@@ -99,7 +97,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
         return Directionality(
           textDirection: translation.textDirection,
           child: Scaffold(
-            backgroundColor: Colors.white,
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             floatingActionButton: const ChatFAB(),
             bottomNavigationBar: NavBarSettingsArabic(
               selectedIndex: 1,
@@ -156,10 +154,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
       child: Row(
         children: <Widget>[
           IconButton(
-            icon: StudentBackChevronIcon(
-              color: _primaryColor,
-              size: 16,
-            ),
+            icon: StudentBackChevronIcon(color: _primaryColor, size: 16),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
             onPressed: () => Navigator.of(context).maybePop(),
@@ -278,14 +273,16 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   }
 
   Widget _buildSemesterRow() {
-    return const Align(
-      alignment: Alignment.centerRight,
-      child: TText(
-        'الفصل الدراسي: الثاني 1447 هـ',
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w700,
-          color: Color(0xFF1A1A1A),
+    return Builder(
+      builder: (context) => Align(
+        alignment: Alignment.centerRight,
+        child: TText(
+          'الفصل الدراسي: الثاني 1447 هـ',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
         ),
       ),
     );
@@ -299,13 +296,14 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     final translation = TranslationController.instance;
     final isRtl = translation.textDirection == TextDirection.rtl;
     final tableHeight = timeSlots.length * _rowHeight;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: Container(
         decoration: BoxDecoration(
-          border: Border.all(color: _gridBorderColor, width: 1),
-          color: Colors.white,
+          border: Border.all(color: colorScheme.outlineVariant, width: 1),
+          color: colorScheme.surface,
         ),
         // اتجاه الرسم LTR ثابت؛ عمود الوقت يُوضع يمين/يسار حسب اللغة،
         // وترتيب أعمدة الأيام يُعكس في العربية حتى يكون الأحد يمين الجدول.
@@ -355,6 +353,8 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   Widget _buildDaysHeader(double dayWidth) {
     final translation = TranslationController.instance;
     final isRtl = translation.textDirection == TextDirection.rtl;
+    final colorScheme = Theme.of(context).colorScheme;
+    final headerColor = colorScheme.surfaceContainerHighest;
     return Directionality(
       textDirection: TextDirection.ltr,
       child: Row(
@@ -364,7 +364,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
               width: _timeColWidth,
               child: Container(
                 height: 48,
-                decoration: const BoxDecoration(color: _headerCellColor),
+                decoration: BoxDecoration(color: headerColor),
               ),
             ),
           ..._daysInTableOrder(isRtl).map((String day) {
@@ -373,14 +373,14 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
               child: Container(
                 height: 48,
                 alignment: Alignment.center,
-                decoration: const BoxDecoration(color: _headerCellColor),
+                decoration: BoxDecoration(color: headerColor),
                 child: TText(
                   day,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF1A1A1A),
+                    color: colorScheme.onSurface,
                   ),
                 ),
               ),
@@ -391,7 +391,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
               width: _timeColWidth,
               child: Container(
                 height: 48,
-                decoration: const BoxDecoration(color: _headerCellColor),
+                decoration: BoxDecoration(color: headerColor),
               ),
             ),
         ],
@@ -402,20 +402,22 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   Widget _buildTimeColumn(List<TimeSlot> timeSlots) {
     final translation = TranslationController.instance;
     final isRtl = translation.textDirection == TextDirection.rtl;
+    final colorScheme = Theme.of(context).colorScheme;
+    final headerColor = colorScheme.surfaceContainerHighest;
     return Column(
       children: timeSlots.map((TimeSlot slot) {
         return Container(
           height: _rowHeight,
           padding: const EdgeInsets.symmetric(horizontal: 4),
           alignment: isRtl ? Alignment.centerRight : Alignment.centerLeft,
-          decoration: const BoxDecoration(color: _headerCellColor),
+          decoration: BoxDecoration(color: headerColor),
           child: Text(
             _formatSlotLabel(slot),
             textAlign: isRtl ? TextAlign.right : TextAlign.left,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF1A1A1A),
+              color: colorScheme.onSurface,
             ),
           ),
         );
@@ -432,6 +434,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   ) {
     final firstSlotMinutes = _parseTimeToMinutes(timeSlots.first.start);
     const int slotMinutes = 60;
+    final gridBorderColor = Theme.of(context).colorScheme.outlineVariant;
 
     final dayCourses = courses.where((c) => c.day == day).toList();
     dayCourses.sort(
@@ -449,12 +452,12 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
               height: _rowHeight,
               decoration: BoxDecoration(
                 border: Border(
-                  left: const BorderSide(color: _gridBorderColor, width: 1),
+                  left: BorderSide(color: gridBorderColor, width: 1),
                   top: BorderSide(
-                    color: idx == 0 ? _gridBorderColor : Colors.transparent,
+                    color: idx == 0 ? gridBorderColor : Colors.transparent,
                     width: 1,
                   ),
-                  bottom: const BorderSide(color: _gridBorderColor, width: 1),
+                  bottom: BorderSide(color: gridBorderColor, width: 1),
                 ),
               ),
             );
@@ -477,8 +480,10 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
               .floor()
               .clamp(0, timeSlots.length - 1);
           final top = slotIndex * _rowHeight;
-          final visibleSlots =
-              (timeSlots.length - slotIndex).clamp(1, timeSlots.length);
+          final visibleSlots = (timeSlots.length - slotIndex).clamp(
+            1,
+            timeSlots.length,
+          );
           final blockHeight = slotCount.clamp(1, visibleSlots) * _rowHeight;
 
           return Positioned(
@@ -576,6 +581,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     showDialog(
       context: context,
       builder: (BuildContext context) {
+        final colorScheme = Theme.of(context).colorScheme;
         return Directionality(
           textDirection: translation.textDirection,
           child: Dialog(
@@ -588,7 +594,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
               constraints: const BoxConstraints(maxWidth: 320, maxHeight: 460),
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: colorScheme.surface,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: SingleChildScrollView(
@@ -619,10 +625,10 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         child: TText(
                           course.courseName,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF1A1A1A),
+                            color: colorScheme.onSurface,
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -655,11 +661,12 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   Widget _buildDetailRow(String label, String value) {
     final translation = TranslationController.instance;
     final isLtr = translation.textDirection == TextDirection.ltr;
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+          bottom: BorderSide(color: colorScheme.outlineVariant, width: 1),
         ),
       ),
       child: Row(
@@ -668,10 +675,10 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
           Expanded(
             child: TText(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF1A1A1A),
+                color: colorScheme.onSurface,
               ),
               textAlign: isLtr ? TextAlign.left : TextAlign.right,
               overflow: TextOverflow.ellipsis,
@@ -681,10 +688,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
           Expanded(
             child: TText(
               value,
-              style: const TextStyle(
-                fontSize: 13,
-                color: Color(0xFF1A1A1A),
-              ),
+              style: TextStyle(fontSize: 13, color: colorScheme.onSurface),
               textAlign: isLtr ? TextAlign.left : TextAlign.right,
               overflow: TextOverflow.ellipsis,
             ),

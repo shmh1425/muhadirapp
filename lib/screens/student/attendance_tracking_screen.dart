@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+// Existing attendance summary helpers include currently-unused derived metrics.
+// Keep them untouched in this visual-only dark-mode pass.
+// ignore_for_file: unused_element, unused_field, unused_local_variable
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,6 +45,7 @@ class _AttendanceTrackingScreenState
   StreamSubscription<List<ManualAttendanceRecord>>? _recordsSubscription;
 
   List<_AttendanceRecord> _records = <_AttendanceRecord>[];
+
   /// Firestore-backed denominators (sections.schedule + academic_terms).
   Map<String, SectionAbsencePlanningContext> _planningBySectionId =
       <String, SectionAbsencePlanningContext>{};
@@ -70,7 +75,9 @@ class _AttendanceTrackingScreenState
     }
   }
 
-  List<_AttendanceRecord> _dedupeAttendanceRecords(List<_AttendanceRecord> input) {
+  List<_AttendanceRecord> _dedupeAttendanceRecords(
+    List<_AttendanceRecord> input,
+  ) {
     // Collapse duplicates that represent the same session (same section/date/time).
     // If duplicates exist, keep the "best" status to avoid showing حاضر+غائب لنفس الجلسة.
     final map = <String, _AttendanceRecord>{};
@@ -106,7 +113,9 @@ class _AttendanceTrackingScreenState
       // Warm unified courses so the attendance stream callback does not block
       // on a cold Firestore path after the first snapshot.
       unawaited(
-        ref.read(studentUnifiedCoursesProvider(student.studentId.toString()).future),
+        ref.read(
+          studentUnifiedCoursesProvider(student.studentId.toString()).future,
+        ),
       );
     });
     _bootstrapAttendance();
@@ -156,12 +165,18 @@ class _AttendanceTrackingScreenState
     try {
       final weeks = await StudentSectionAbsenceService.instance
           .loadSemesterTeachingWeeks()
-          .timeout(const Duration(seconds: 8), onTimeout: () => _semesterWeeksCount);
+          .timeout(
+            const Duration(seconds: 8),
+            onTimeout: () => _semesterWeeksCount,
+          );
       final planning = sectionToCode.isEmpty
           ? const <String, SectionAbsencePlanningContext>{}
           : await StudentSectionAbsenceService.instance
-              .loadPlanningForSections(sectionToCode)
-              .timeout(const Duration(seconds: 12), onTimeout: () => _planningBySectionId);
+                .loadPlanningForSections(sectionToCode)
+                .timeout(
+                  const Duration(seconds: 12),
+                  onTimeout: () => _planningBySectionId,
+                );
       if (!mounted) return;
       setState(() {
         _semesterWeeksCount = weeks;
@@ -191,13 +206,12 @@ class _AttendanceTrackingScreenState
           (records) async {
             try {
               final unified = await ref.read(
-                studentUnifiedCoursesProvider(student.studentId.toString()).future,
+                studentUnifiedCoursesProvider(
+                  student.studentId.toString(),
+                ).future,
               );
-              final metaMaps =
-                  StudentAttendanceMetaRepository.instance.buildFromEnrollments(
-                unified.allCourses,
-                records,
-              );
+              final metaMaps = StudentAttendanceMetaRepository.instance
+                  .buildFromEnrollments(unified.allCourses, records);
               if (!mounted) return;
               final semesterStart =
                   _semesterStartDate ??
@@ -236,7 +250,9 @@ class _AttendanceTrackingScreenState
               unawaited(_refreshFirestorePlanning(records));
             } catch (e, st) {
               if (kDebugMode) {
-                debugPrint('[AttendanceTracking] stream handler error: $e\n$st');
+                debugPrint(
+                  '[AttendanceTracking] stream handler error: $e\n$st',
+                );
               }
               if (!mounted) return;
               setState(() {
@@ -287,8 +303,11 @@ class _AttendanceTrackingScreenState
     final sectionText = record.sectionLabel.trim().isEmpty
         ? '-'
         : record.sectionLabel;
-    final fallbackName = record.courseName.trim().isEmpty ? '—' : record.courseName.trim();
-    final courseName = (record.courseCode != null &&
+    final fallbackName = record.courseName.trim().isEmpty
+        ? '—'
+        : record.courseName.trim();
+    final courseName =
+        (record.courseCode != null &&
             codeToNameAr[record.courseCode!]?.trim().isNotEmpty == true)
         ? codeToNameAr[record.courseCode!]!.trim()
         : fallbackName;
@@ -311,7 +330,7 @@ class _AttendanceTrackingScreenState
     String endTime = record.lectureEndTime;
     final slots =
         sectionIdToScheduleSlots[record.sectionId.trim()] ??
-            const <AttendanceScheduleSlot>[];
+        const <AttendanceScheduleSlot>[];
     if (slots.isNotEmpty) {
       final daySlots = slots.where((s) => s.dayOfWeek == weekday).toList();
       if (daySlots.isNotEmpty) {
@@ -435,8 +454,8 @@ class _AttendanceTrackingScreenState
     final filtered = _records.where((record) {
       final type =
           (record.courseType.trim().isEmpty || record.courseType == '—')
-              ? 'نظري'
-              : record.courseType;
+          ? 'نظري'
+          : record.courseType;
       final courseMatch = _selectedCourse == null
           ? true
           : ('${record.course} $type'.trim() == _selectedCourse);
@@ -501,7 +520,9 @@ class _AttendanceTrackingScreenState
     // Prefer planned weekly minutes from `courses` (e.g. creditHours) when available.
     int weekly = 0;
     // Not used for per-course display anymore (kept for old single-summary fallback).
-    weekly = weekly > 0 ? weekly : _estimateWeeklyLectureMinutesForSelectedCourse();
+    weekly = weekly > 0
+        ? weekly
+        : _estimateWeeklyLectureMinutesForSelectedCourse();
     final weeks = _filteredWeeksCount;
     final expected = weekly * weeks;
     return expected < 0 ? 0 : expected;
@@ -543,19 +564,22 @@ class _AttendanceTrackingScreenState
 
   int get _totalAbsence => _excusedAbsence + _unexcusedAbsence;
 
-  double get _attendancePercentage =>
-      _totalPlannedMinutes == 0 ? 0 : (_presentMinutes / _totalPlannedMinutes) * 100;
-  double get _excusedPercentage =>
-      _totalPlannedMinutes == 0 ? 0 : (_excusedMinutes / _totalPlannedMinutes) * 100;
-  double get _unexcusedPercentage =>
-      _totalPlannedMinutes == 0 ? 0 : (_unexcusedMinutes / _totalPlannedMinutes) * 100;
-  double get _tardinessPercentage =>
-      _totalPlannedMinutes == 0 ? 0 : (_lateMinutes / _totalPlannedMinutes) * 100;
+  double get _attendancePercentage => _totalPlannedMinutes == 0
+      ? 0
+      : (_presentMinutes / _totalPlannedMinutes) * 100;
+  double get _excusedPercentage => _totalPlannedMinutes == 0
+      ? 0
+      : (_excusedMinutes / _totalPlannedMinutes) * 100;
+  double get _unexcusedPercentage => _totalPlannedMinutes == 0
+      ? 0
+      : (_unexcusedMinutes / _totalPlannedMinutes) * 100;
+  double get _tardinessPercentage => _totalPlannedMinutes == 0
+      ? 0
+      : (_lateMinutes / _totalPlannedMinutes) * 100;
 
-  double get _totalAbsencePercentage =>
-      _totalPlannedMinutes == 0
-          ? 0
-          : ((_excusedMinutes + _unexcusedMinutes) / _totalPlannedMinutes) * 100;
+  double get _totalAbsencePercentage => _totalPlannedMinutes == 0
+      ? 0
+      : ((_excusedMinutes + _unexcusedMinutes) / _totalPlannedMinutes) * 100;
 
   bool get _isTotalAbsenceOverLimit => _totalAbsencePercentage > 25;
   bool get _isExcusedAbsenceOverLimit => _excusedPercentage > 25;
@@ -569,7 +593,7 @@ class _AttendanceTrackingScreenState
       builder: (context, _) => Directionality(
         textDirection: translation.textDirection,
         child: Scaffold(
-          backgroundColor: Colors.white,
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           floatingActionButton: const ChatFAB(),
           bottomNavigationBar: NavBarSettingsArabic(
             selectedIndex: 1,
@@ -605,78 +629,82 @@ class _AttendanceTrackingScreenState
                       ],
                     )
                   : _loadError != null
-                      ? Column(
-                          children: <Widget>[
-                            _buildHeader(context),
-                            Expanded(
-                              child: Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
+                  ? Column(
+                      children: <Widget>[
+                        _buildHeader(context),
+                        Expanded(
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  TText(
+                                    _loadError!,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                      fontSize: 14,
+                                    ),
                                   ),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      TText(
-                                        _loadError!,
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(
-                                          color: Color(0xFF666666),
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      TextButton.icon(
-                                        onPressed: _bootstrapAttendance,
-                                        icon: const Icon(Icons.refresh_rounded),
-                                        label: const TText('إعادة المحاولة'),
-                                      ),
-                                    ],
+                                  const SizedBox(height: 12),
+                                  TextButton.icon(
+                                    onPressed: _bootstrapAttendance,
+                                    icon: const Icon(Icons.refresh_rounded),
+                                    label: const TText('إعادة المحاولة'),
                                   ),
-                                ),
+                                ],
                               ),
                             ),
-                          ],
-                        )
-                      : _records.isEmpty
-                          ? Column(
+                          ),
+                        ),
+                      ],
+                    )
+                  : _records.isEmpty
+                  ? Column(
+                      children: <Widget>[
+                        _buildHeader(context),
+                        Expanded(
+                          child: Center(
+                            child: TText(
+                              'لا توجد سجلات تحضير حتى الآن',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      children: <Widget>[
+                        _buildHeader(context),
+                        const SizedBox(height: 16),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            child: Column(
                               children: <Widget>[
-                                _buildHeader(context),
-                                Expanded(
-                                  child: Center(
-                                    child: TText(
-                                      'لا توجد سجلات تحضير حتى الآن',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        color: Color(0xFF9E9E9E),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            )
-                          : Column(
-                              children: <Widget>[
-                                _buildHeader(context),
+                                _buildCourseTabs(),
                                 const SizedBox(height: 16),
-                                Expanded(
-                                  child: SingleChildScrollView(
-                                    physics: const BouncingScrollPhysics(),
-                                    child: Column(
-                                      children: <Widget>[
-                                        _buildCourseTabs(),
-                                        const SizedBox(height: 16),
-                                        _buildAttendanceSummaryPerCourse(),
-                                        const SizedBox(height: 24),
-                                        _buildWeekFilterBar(),
-                                        const SizedBox(height: 24),
-                                        _buildAttendanceLog(),
-                                      ],
-                                    ),
-                                  ),
-                                ),
+                                _buildAttendanceSummaryPerCourse(),
+                                const SizedBox(height: 24),
+                                _buildWeekFilterBar(),
+                                const SizedBox(height: 24),
+                                _buildAttendanceLog(),
                               ],
                             ),
+                          ),
+                        ),
+                      ],
+                    ),
             ),
           ),
         ),
@@ -688,10 +716,7 @@ class _AttendanceTrackingScreenState
     return Row(
       children: <Widget>[
         IconButton(
-          icon: StudentBackChevronIcon(
-            color: _primaryColor,
-            size: 16,
-          ),
+          icon: StudentBackChevronIcon(color: _primaryColor, size: 16),
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
           onPressed: () => Navigator.of(context).maybePop(),
@@ -733,8 +758,8 @@ class _AttendanceTrackingScreenState
     if (courses.isEmpty) return const SizedBox.shrink();
     final selected =
         (_selectedCourse != null && courses.contains(_selectedCourse))
-            ? _selectedCourse!
-            : courses.first;
+        ? _selectedCourse!
+        : courses.first;
     return _CourseSummaryCard(
       courseLabel: selected,
       allRecords: _records,
@@ -754,6 +779,7 @@ class _AttendanceTrackingScreenState
     required String label,
     bool isOverLimit = false,
   }) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.start,
@@ -769,23 +795,25 @@ class _AttendanceTrackingScreenState
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: isOverLimit ? const Color(0xFFD32F2F) : const Color(0xFF1A1A1A),
+            color: isOverLimit
+                ? const Color(0xFFD32F2F)
+                : colorScheme.onSurface,
           ),
         ),
         const SizedBox(width: 6),
         Text(
           '$count',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF1A1A1A),
+            color: colorScheme.onSurface,
           ),
         ),
         const SizedBox(width: 6),
         Expanded(
           child: TText(
             label,
-            style: const TextStyle(fontSize: 11, color: Color(0xFF1A1A1A)),
+            style: TextStyle(fontSize: 11, color: colorScheme.onSurface),
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -799,16 +827,17 @@ class _AttendanceTrackingScreenState
 
     final selected =
         (_selectedCourse != null && courses.contains(_selectedCourse))
-            ? _selectedCourse!
-            : courses.first;
+        ? _selectedCourse!
+        : courses.first;
     if (selected != _selectedCourse) {
       _selectedCourse = selected;
     }
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
       height: 44,
       decoration: BoxDecoration(
-        color: _tabBackground,
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(22),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -831,15 +860,12 @@ class _AttendanceTrackingScreenState
                   borderRadius: BorderRadius.circular(22),
                   gradient: isActive
                       ? const LinearGradient(
-                          colors: <Color>[
-                            Color(0xFF27A2A9),
-                            Color(0xFF006571),
-                          ],
+                          colors: <Color>[Color(0xFF27A2A9), Color(0xFF006571)],
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                         )
                       : null,
-                  color: isActive ? null : Colors.white,
+                  color: isActive ? null : colorScheme.surface,
                 ),
                 alignment: Alignment.center,
                 child: TText(
@@ -847,7 +873,7 @@ class _AttendanceTrackingScreenState
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: isActive ? Colors.white : const Color(0xFF444444),
+                    color: isActive ? Colors.white : colorScheme.onSurface,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -863,14 +889,16 @@ class _AttendanceTrackingScreenState
     final weeks = _weeks;
     if (weeks.isEmpty) return const SizedBox.shrink();
     final allSelected = _allWeeksMode;
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(14),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -898,14 +926,11 @@ class _AttendanceTrackingScreenState
               child: Container(
                 width: 52,
                 height: 52,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 4,
-                  vertical: 4,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                 decoration: BoxDecoration(
                   color: allSelected
                       ? const Color(0xFF27A2A9)
-                      : Colors.grey.shade200,
+                      : colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 alignment: Alignment.center,
@@ -914,9 +939,7 @@ class _AttendanceTrackingScreenState
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: allSelected
-                        ? Colors.white
-                        : const Color(0xFF1A1A1A),
+                    color: allSelected ? Colors.white : colorScheme.onSurface,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -952,7 +975,7 @@ class _AttendanceTrackingScreenState
                   decoration: BoxDecoration(
                     color: isSelected
                         ? const Color(0xFF27A2A9)
-                        : Colors.grey.shade200,
+                        : colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   alignment: Alignment.center,
@@ -961,9 +984,7 @@ class _AttendanceTrackingScreenState
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
-                      color: isSelected
-                          ? Colors.white
-                          : const Color(0xFF1A1A1A),
+                      color: isSelected ? Colors.white : colorScheme.onSurface,
                     ),
                     textAlign: TextAlign.center,
                     maxLines: 2,
@@ -985,8 +1006,8 @@ class _AttendanceTrackingScreenState
     final filteredRecords = _records.where((record) {
       final type =
           (record.courseType.trim().isEmpty || record.courseType == '—')
-              ? 'نظري'
-              : record.courseType;
+          ? 'نظري'
+          : record.courseType;
       final courseMatch = _selectedCourse == null
           ? true
           : ('${record.course} $type'.trim() == _selectedCourse);
@@ -997,10 +1018,13 @@ class _AttendanceTrackingScreenState
     filteredRecords.sort((a, b) => b.lectureDate.compareTo(a.lectureDate));
 
     if (filteredRecords.isEmpty) {
-      return const Center(
+      return Center(
         child: TText(
           'لا توجد سجلات',
-          style: TextStyle(fontSize: 16, color: Color(0xFF9E9E9E)),
+          style: TextStyle(
+            fontSize: 16,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -1008,7 +1032,7 @@ class _AttendanceTrackingScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const Align(
+        Align(
           alignment: AlignmentDirectional.centerStart,
           child: TText(
             'سجل الحضور',
@@ -1016,7 +1040,7 @@ class _AttendanceTrackingScreenState
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF1A1A1A),
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ),
@@ -1027,7 +1051,8 @@ class _AttendanceTrackingScreenState
           itemCount: filteredRecords.length,
           itemBuilder: (BuildContext context, int index) {
             final record = filteredRecords[index];
-            final weekLabel = weekKeyToDisplay[record.weekKey] ?? record.weekKey;
+            final weekLabel =
+                weekKeyToDisplay[record.weekKey] ?? record.weekKey;
             return _AttendanceCard(record: record, weekLabel: weekLabel);
           },
         ),
@@ -1056,8 +1081,9 @@ class _DonutChartPainter extends CustomPainter {
 
     double startAngle = -math.pi / 2;
 
-    final totalAbsence =
-        (excusedPercentage + unexcusedPercentage).clamp(0, 100).toDouble();
+    final totalAbsence = (excusedPercentage + unexcusedPercentage)
+        .clamp(0, 100)
+        .toDouble();
     final denom = totalAbsence <= 0 ? 1.0 : totalAbsence;
 
     final excusedSweep = (excusedPercentage / denom) * 2 * math.pi;
@@ -1161,9 +1187,12 @@ class _AttendanceCard extends StatelessWidget {
     final isLtr = translation.textDirection == TextDirection.ltr;
     // RTL: Column's crossAxisAlignment.end aligns to visual LEFT — wrong for Arabic titles.
     final crossCenterBlock = CrossAxisAlignment.start;
-    final crossTimeBlock =
-        isLtr ? CrossAxisAlignment.start : CrossAxisAlignment.end;
+    final crossTimeBlock = isLtr
+        ? CrossAxisAlignment.start
+        : CrossAxisAlignment.end;
     final textAlign = isLtr ? TextAlign.left : TextAlign.right;
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final badge = Container(
       width: 46,
@@ -1205,17 +1234,17 @@ class _AttendanceCard extends StatelessWidget {
       children: <Widget>[
         Text(
           record.timeRange,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF1A1A1A),
+            color: colorScheme.onSurface,
           ),
           textAlign: textAlign,
         ),
         const SizedBox(height: 2),
         TText(
           'مدة المحاضرة',
-          style: const TextStyle(fontSize: 11, color: Color(0xFF1A1A1A)),
+          style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
           textAlign: textAlign,
         ),
       ],
@@ -1223,18 +1252,17 @@ class _AttendanceCard extends StatelessWidget {
 
     final details = Expanded(
       child: Align(
-        alignment:
-            isLtr ? Alignment.centerLeft : Alignment.centerRight,
+        alignment: isLtr ? Alignment.centerLeft : Alignment.centerRight,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: crossCenterBlock,
           children: <Widget>[
             TText(
               record.course,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF1A1A1A),
+                color: colorScheme.onSurface,
               ),
               textAlign: textAlign,
             ),
@@ -1243,18 +1271,15 @@ class _AttendanceCard extends StatelessWidget {
               (record.courseType.isEmpty || record.courseType == '—')
                   ? 'نظري'
                   : record.courseType,
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF1A1A1A),
-              ),
+              style: TextStyle(fontSize: 12, color: colorScheme.onSurface),
               textAlign: textAlign,
             ),
             const SizedBox(height: 2),
             TText(
               weekLabel,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: Color(0xFF1A1A1A),
+                color: colorScheme.onSurfaceVariant,
               ),
               textAlign: textAlign,
             ),
@@ -1267,11 +1292,11 @@ class _AttendanceCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -1325,8 +1350,9 @@ class _CourseSummaryCard extends StatelessWidget {
   }
 
   bool _matchesCourse(_AttendanceRecord r) {
-    final type =
-        (r.courseType.trim().isEmpty || r.courseType == '—') ? 'نظري' : r.courseType;
+    final type = (r.courseType.trim().isEmpty || r.courseType == '—')
+        ? 'نظري'
+        : r.courseType;
     return ('${r.course} $type'.trim() == courseLabel);
   }
 
@@ -1342,7 +1368,9 @@ class _CourseSummaryCard extends StatelessWidget {
     return filtered;
   }
 
-  static List<Map<String, dynamic>> _recordsToMaps(List<_AttendanceRecord> records) {
+  static List<Map<String, dynamic>> _recordsToMaps(
+    List<_AttendanceRecord> records,
+  ) {
     return records.map((r) {
       final parts = r.timeRange.split('-');
       final start = parts.isNotEmpty ? parts[0].trim() : '';
@@ -1370,7 +1398,8 @@ class _CourseSummaryCard extends StatelessWidget {
     final sectionIds = courseRecordsAll
         .map((r) => (r.sectionId ?? '').trim())
         .where((s) => s.isNotEmpty);
-    final primaryCode = courseRecordsAll
+    final primaryCode =
+        courseRecordsAll
             .map((r) => r.courseCode?.trim())
             .whereType<String>()
             .where((c) => c.isNotEmpty)
@@ -1379,12 +1408,12 @@ class _CourseSummaryCard extends StatelessWidget {
 
     final breakdown = StudentSectionAbsenceService.instance
         .computeCardPercentages(
-      records: _recordsToMaps(records),
-      planningBySectionId: planningBySectionId,
-      sectionIdsForWeekly: sectionIds,
-      primaryCourseCode: primaryCode,
-      semesterWeeksCount: weeksCountForTerm,
-    );
+          records: _recordsToMaps(records),
+          planningBySectionId: planningBySectionId,
+          sectionIdsForWeekly: sectionIds,
+          primaryCourseCode: primaryCode,
+          semesterWeeksCount: weeksCountForTerm,
+        );
 
     final excusedPct = breakdown.excusedPct;
     final unexcusedPct = breakdown.unexcusedPct;
@@ -1393,15 +1422,17 @@ class _CourseSummaryCard extends StatelessWidget {
     final totalOverLimit = totalAbsencePct > 25;
     final excusedOverLimit = excusedPct > 25;
     final academicDeprivation = breakdown.isAcademicallyDeprived;
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1416,10 +1447,10 @@ class _CourseSummaryCard extends StatelessWidget {
               children: [
                 TText(
                   courseLabel,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF1A1A1A),
+                    color: colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -1455,7 +1486,6 @@ class _CourseSummaryCard extends StatelessWidget {
                   percentage: totalAbsencePct,
                   isOverLimit: totalOverLimit,
                 ),
-                
               ],
             ),
           ),
@@ -1537,6 +1567,7 @@ class _LegendRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pctInt = _truncatePct(percentage);
+    final colorScheme = Theme.of(context).colorScheme;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1553,13 +1584,13 @@ class _LegendRow extends StatelessWidget {
             fontWeight: FontWeight.w700,
             color: isOverLimit
                 ? const Color(0xFFD32F2F)
-                : const Color(0xFF1A1A1A),
+                : colorScheme.onSurface,
           ),
         ),
         const SizedBox(width: 6),
         TText(
           label,
-          style: const TextStyle(fontSize: 11, color: Color(0xFF1A1A1A)),
+          style: TextStyle(fontSize: 11, color: colorScheme.onSurface),
         ),
       ],
     );

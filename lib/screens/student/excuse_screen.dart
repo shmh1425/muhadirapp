@@ -1,3 +1,6 @@
+// Existing tab constants are left intact in this visual-only dark-mode pass.
+// ignore_for_file: unused_field
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -45,7 +48,9 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
   String? _selectedCourse;
   String _selectedFilter = 'الكل';
 
-  static Map<String, String> _sectionIdToCourseNameAr(List<CourseModel> models) {
+  static Map<String, String> _sectionIdToCourseNameAr(
+    List<CourseModel> models,
+  ) {
     final out = <String, String>{};
     for (final c in models) {
       final sid = c.sectionId.trim();
@@ -77,28 +82,39 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
           r.status != ManualAttendanceStatus.excused) {
         continue;
       }
-      final isClosed = r.status == ManualAttendanceStatus.absent &&
-          ExcuseAttendanceMerge.isExcuseSubmissionClosedForAbsent(r.lectureDate);
+      final isClosed =
+          r.status == ManualAttendanceStatus.absent &&
+          ExcuseAttendanceMerge.isExcuseSubmissionClosedForAbsent(
+            r.lectureDate,
+          );
       final status = isClosed
           ? 'مغلق'
-          : (r.status == ManualAttendanceStatus.excused ? 'تم القبول' : 'معلقة');
+          : (r.status == ManualAttendanceStatus.excused
+                ? 'تم القبول'
+                : 'معلقة');
       final sectionId = r.sectionId.trim();
-      final courseNameAr = sectionId.isEmpty ? '' : (sectionIdToCourseNameAr[sectionId] ?? '');
+      final courseNameAr = sectionId.isEmpty
+          ? ''
+          : (sectionIdToCourseNameAr[sectionId] ?? '');
       final courseName = courseNameAr.trim().isNotEmpty
           ? courseNameAr.trim()
           : (r.courseName.trim().isEmpty ? '—' : r.courseName.trim());
-      items.add(_ExcuseItem(
-        course: courseName,
-        timeRange:
-            '${_formatHHmm(r.lectureStartTime)}-${_formatHHmm(r.lectureEndTime)}',
-        dateText: ExcuseAttendanceMerge.formatArabicLectureDate(r.lectureDate),
-        status: status,
-        rawDate: r.lectureDate,
-        sectionId: sectionId,
-        sessionId: r.sessionId,
-        attendanceRecordId: r.recordId,
-        rawStartTime: r.lectureStartTime,
-      ));
+      items.add(
+        _ExcuseItem(
+          course: courseName,
+          timeRange:
+              '${_formatHHmm(r.lectureStartTime)}-${_formatHHmm(r.lectureEndTime)}',
+          dateText: ExcuseAttendanceMerge.formatArabicLectureDate(
+            r.lectureDate,
+          ),
+          status: status,
+          rawDate: r.lectureDate,
+          sectionId: sectionId,
+          sessionId: r.sessionId,
+          attendanceRecordId: r.recordId,
+          rawStartTime: r.lectureStartTime,
+        ),
+      );
     }
     items.sort((a, b) => b.rawDate.compareTo(a.rawDate));
     return items;
@@ -133,14 +149,18 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
         request: req,
         pendingAttendanceRecordIds: pendingAttendanceRecordIds,
       );
-      final courseOverride = ExcuseAttendanceMerge.mergedCourseNameArOverride(req);
-      updated.add(item.copyWith(
-        course: courseOverride ?? item.course,
-        status: status,
-        rejectionReason: req?.rejectionReason,
-        attachmentUrl: req?.attachmentUrl,
-        attachmentName: req?.attachmentName,
-      ));
+      final courseOverride = ExcuseAttendanceMerge.mergedCourseNameArOverride(
+        req,
+      );
+      updated.add(
+        item.copyWith(
+          course: courseOverride ?? item.course,
+          status: status,
+          rejectionReason: req?.rejectionReason,
+          attachmentUrl: req?.attachmentUrl,
+          attachmentName: req?.attachmentName,
+        ),
+      );
     }
     return updated;
   }
@@ -188,19 +208,27 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
           return Directionality(
             textDirection: translation.textDirection,
             child: Scaffold(
-              backgroundColor: Colors.white,
+              backgroundColor: Theme.of(context).scaffoldBackgroundColor,
               body: SafeArea(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 16,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
                       _buildHeader(context),
                       const SizedBox(height: 24),
-                      const Center(
+                      Center(
                         child: TText(
                           'سجّل دخولك لعرض الأعذار المرتبطة بجدولك.',
-                          style: TextStyle(fontSize: 16, color: Color(0xFF666666)),
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -215,7 +243,7 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
         return Directionality(
           textDirection: translation.textDirection,
           child: Scaffold(
-            backgroundColor: Colors.white,
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             body: SafeArea(
               child: Builder(
                 builder: (context) {
@@ -236,16 +264,22 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
                   return StreamBuilder<List<ManualAttendanceRecord>>(
                     stream: _attendance.watchStudentRecords(student.studentId),
                     builder: (context, recordsSnap) {
-                      final records = recordsSnap.data ?? <ManualAttendanceRecord>[];
-                      final baseItems =
-                          _mapRecordsToExcuseItems(records, sectionIdToNameAr);
+                      final records =
+                          recordsSnap.data ?? <ManualAttendanceRecord>[];
+                      final baseItems = _mapRecordsToExcuseItems(
+                        records,
+                        sectionIdToNameAr,
+                      );
                       return StreamBuilder<List<ExcuseRequest>>(
-                        stream: _excuses.watchStudentRequests(student.studentId),
+                        stream: _excuses.watchStudentRequests(
+                          student.studentId,
+                        ),
                         builder: (context, reqSnap) {
                           return StreamBuilder<Set<String>>(
-                            stream: _excuses.watchPendingExcuseAttendanceRecordIds(
-                              student.studentId,
-                            ),
+                            stream: _excuses
+                                .watchPendingExcuseAttendanceRecordIds(
+                                  student.studentId,
+                                ),
                             builder: (context, pendingSnap) {
                               final piped = _applyExcusePipeline(
                                 records: records,
@@ -255,19 +289,27 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
                                     pendingSnap.data ?? <String>{},
                               );
 
-                              final List<_ExcuseItem> visibleItems = piped.where((item) {
-                                final bool matchCourse =
-                                    selectedCourse == null || item.course == selectedCourse;
-                                final String filterStatus =
-                                    _selectedFilter == 'رفع عذر' ? 'معلقة' : _selectedFilter;
-                                final bool matchFilter =
-                                    _selectedFilter == 'الكل' || item.status == filterStatus;
-                                return matchCourse && matchFilter;
-                              }).toList();
+                              final List<_ExcuseItem> visibleItems = piped
+                                  .where((item) {
+                                    final bool matchCourse =
+                                        selectedCourse == null ||
+                                        item.course == selectedCourse;
+                                    final String filterStatus =
+                                        _selectedFilter == 'رفع عذر'
+                                        ? 'معلقة'
+                                        : _selectedFilter;
+                                    final bool matchFilter =
+                                        _selectedFilter == 'الكل' ||
+                                        item.status == filterStatus;
+                                    return matchCourse && matchFilter;
+                                  })
+                                  .toList();
 
                               return ListView(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 16,
+                                ),
                                 children: <Widget>[
                                   _buildHeader(context),
                                   const SizedBox(height: 16),
@@ -280,10 +322,12 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
                                     child: selectedCourse == null
                                         ? TText(
                                             'الكل',
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 21,
                                               fontWeight: FontWeight.bold,
-                                              color: Color(0xFF1A1A1A),
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onSurface,
                                             ),
                                             textAlign: TextAlign.start,
                                             maxLines: 1,
@@ -291,10 +335,12 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
                                           )
                                         : TText(
                                             selectedCourse,
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 21,
                                               fontWeight: FontWeight.bold,
-                                              color: Color(0xFF1A1A1A),
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.onSurface,
                                             ),
                                             textAlign: TextAlign.start,
                                             maxLines: 1,
@@ -307,8 +353,13 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
                                           ConnectionState.waiting)
                                     LayoutBuilder(
                                       builder: (context, constraints) {
-                                        final h = MediaQuery.sizeOf(context).height;
-                                        final blockH = (h * 0.38).clamp(200.0, 400.0);
+                                        final h = MediaQuery.sizeOf(
+                                          context,
+                                        ).height;
+                                        final blockH = (h * 0.38).clamp(
+                                          200.0,
+                                          400.0,
+                                        );
                                         return SizedBox(
                                           height: blockH,
                                           width: double.infinity,
@@ -328,8 +379,13 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
                                   else if (visibleItems.isEmpty)
                                     LayoutBuilder(
                                       builder: (context, constraints) {
-                                        final h = MediaQuery.sizeOf(context).height;
-                                        final blockH = (h * 0.38).clamp(220.0, 440.0);
+                                        final h = MediaQuery.sizeOf(
+                                          context,
+                                        ).height;
+                                        final blockH = (h * 0.38).clamp(
+                                          220.0,
+                                          440.0,
+                                        );
                                         return SizedBox(
                                           height: blockH,
                                           width: double.infinity,
@@ -337,9 +393,11 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
                                             child: TText(
                                               'لا توجد',
                                               textAlign: TextAlign.center,
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 fontSize: 16,
-                                                color: Color(0xFF666666),
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.onSurfaceVariant,
                                                 height: 1.4,
                                               ),
                                             ),
@@ -377,10 +435,7 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
     return Row(
       children: <Widget>[
         IconButton(
-          icon: StudentBackChevronIcon(
-            color: _primaryColor,
-            size: 16,
-          ),
+          icon: StudentBackChevronIcon(color: _primaryColor, size: 16),
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
           onPressed: () => Navigator.of(context).maybePop(),
@@ -399,9 +454,7 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (_) => const NotificationsScreen(),
-              ),
+              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
             );
           },
         ),
@@ -411,18 +464,20 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
 
   Widget _buildCourseTabs(List<String> courses) {
     final tabs = <String>['الكل', ...courses];
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       height: 44,
       decoration: BoxDecoration(
-        color: _tabBackground,
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(22),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       child: RtlStartHorizontalFilter(
         children: tabs.map((String course) {
           final bool isAll = course == 'الكل';
-          final bool isActive =
-              isAll ? _selectedCourse == null : _selectedCourse == course;
+          final bool isActive = isAll
+              ? _selectedCourse == null
+              : _selectedCourse == course;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 2),
             child: _GradientTabChip(
@@ -460,13 +515,15 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
   }
 
   Widget _buildStatusFilters() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -475,56 +532,61 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: RtlStartHorizontalFilter(
         children: _filters.map((String filter) {
-            final bool isSelected = filter == _selectedFilter;
-            final Color filterColor = _getFilterColor(filter);
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: InkWell(
-                onTap: () {
-                  setState(() {
-                    if (isSelected) {
-                      _selectedFilter = 'الكل';
-                    } else {
-                      _selectedFilter = filter;
-                    }
-                  });
-                },
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isSelected ? filterColor : Colors.transparent,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      Text(
-                        _displayStatusFilter(filter),
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: isSelected
-                              ? (filter == 'الكل' ? Colors.black87 : Colors.white)
-                              : Colors.black87,
+          final bool isSelected = filter == _selectedFilter;
+          final Color filterColor = _getFilterColor(filter);
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: InkWell(
+              onTap: () {
+                setState(() {
+                  if (isSelected) {
+                    _selectedFilter = 'الكل';
+                  } else {
+                    _selectedFilter = filter;
+                  }
+                });
+              },
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: isSelected ? filterColor : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Text(
+                      _displayStatusFilter(filter),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isSelected
+                            ? (filter == 'الكل'
+                                  ? colorScheme.onSurface
+                                  : Colors.white)
+                            : colorScheme.onSurface,
+                      ),
+                    ),
+                    if (!isSelected && filter != 'الكل') ...<Widget>[
+                      const SizedBox(width: 6),
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: filterColor,
+                          shape: BoxShape.circle,
                         ),
                       ),
-                      if (!isSelected && filter != 'الكل') ...<Widget>[
-                        const SizedBox(width: 6),
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: filterColor,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      ],
                     ],
-                  ),
+                  ],
                 ),
               ),
-            );
-          }).toList(),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -543,6 +605,7 @@ class _GradientTabChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(22),
@@ -554,15 +617,12 @@ class _GradientTabChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(22),
           gradient: isActive
               ? const LinearGradient(
-                  colors: <Color>[
-                    Color(0xFF27A2A9),
-                    Color(0xFF006571),
-                  ],
+                  colors: <Color>[Color(0xFF27A2A9), Color(0xFF006571)],
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                 )
               : null,
-          color: isActive ? null : Colors.white,
+          color: isActive ? null : colorScheme.surface,
         ),
         alignment: Alignment.center,
         child: label.isEmpty
@@ -574,7 +634,7 @@ class _GradientTabChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : const Color(0xFF444444),
+                  color: isActive ? Colors.white : colorScheme.onSurface,
                 ),
               ),
       ),
@@ -669,21 +729,20 @@ class _ExcuseCard extends StatelessWidget {
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.5),
       builder: (BuildContext context) {
+        final colorScheme = Theme.of(context).colorScheme;
         return Directionality(
-          textDirection:
-              translateToEnglish ? TextDirection.ltr : TextDirection.rtl,
+          textDirection: translateToEnglish
+              ? TextDirection.ltr
+              : TextDirection.rtl,
           child: Dialog(
             backgroundColor: Colors.transparent,
             insetPadding: const EdgeInsets.symmetric(horizontal: 24),
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: colorScheme.surface,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Colors.grey.shade400,
-                  width: 1,
-                ),
+                border: Border.all(color: colorScheme.outlineVariant, width: 1),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -691,8 +750,8 @@ class _ExcuseCard extends StatelessWidget {
                 children: <Widget>[
                   TText(
                     'ملاحظة: الفترة الزمنية لتقديم العذر لهذه المحاضرة مغلقة لانتهائها، ولا يمكن تعديل أو إضافة أعذار جديدة.',
-                    style: const TextStyle(
-                      color: Color(0xFF1A1A1A),
+                    style: TextStyle(
+                      color: colorScheme.onSurface,
                       fontSize: 14,
                       height: 1.5,
                     ),
@@ -787,20 +846,19 @@ class _ExcuseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isClosed = item.status == 'مغلق';
-    
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.grey.shade300,
-          width: 1,
-        ),
+        border: Border.all(color: colorScheme.outlineVariant, width: 1),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -814,10 +872,10 @@ class _ExcuseCard extends StatelessWidget {
               alignment: AlignmentDirectional.centerStart,
               child: TText(
                 item.course,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF1A1A1A),
+                  color: colorScheme.onSurface,
                 ),
                 textAlign: TextAlign.start,
                 maxLines: 1,
@@ -837,22 +895,24 @@ class _ExcuseCard extends StatelessWidget {
                     item.timeRange.trim().isEmpty
                         ? '—'
                         : item.timeRange.trim().replaceAll('-', ' — '),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF1A1A1A),
+                      color: colorScheme.onSurface,
                     ),
                     textAlign: TextAlign.start,
                   ),
                   const SizedBox(height: 4),
                   Text(
                     translateToEnglish
-                        ? ExcuseAttendanceMerge.formatEnglishLectureDate(item.rawDate)
+                        ? ExcuseAttendanceMerge.formatEnglishLectureDate(
+                            item.rawDate,
+                          )
                         : item.dateText,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1A1A1A),
+                      color: colorScheme.onSurface,
                     ),
                     textAlign: TextAlign.start,
                   ),
@@ -887,7 +947,8 @@ class _ExcuseCard extends StatelessWidget {
                             textAlign: TextAlign.center,
                           ),
                         );
-                        final bool tappable = item.status == 'معلقة' ||
+                        final bool tappable =
+                            item.status == 'معلقة' ||
                             item.status == 'قيد الانتظار' ||
                             item.status == 'تم الرفض';
                         if (!tappable) {
@@ -914,17 +975,17 @@ class _ExcuseCard extends StatelessWidget {
                               width: 20,
                               height: 20,
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: colorScheme.surfaceContainerHighest,
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: Colors.grey.shade400,
+                                  color: colorScheme.outlineVariant,
                                   width: 1,
                                 ),
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.info_outline,
                                 size: 14,
-                                color: Color(0xFF616161),
+                                color: colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ),
@@ -941,4 +1002,3 @@ class _ExcuseCard extends StatelessWidget {
     );
   }
 }
-

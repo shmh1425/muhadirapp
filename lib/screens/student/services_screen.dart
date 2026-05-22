@@ -1,3 +1,6 @@
+// Existing optional sizing parameter is preserved to avoid UI API churn.
+// ignore_for_file: unused_element_parameter
+
 import 'package:flutter/material.dart';
 import 'components/notification_bell.dart';
 import 'notifications_screen.dart';
@@ -19,6 +22,7 @@ class ServicesScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     const primaryColor = Color(0xFF006571);
     final translation = TranslationController.instance;
+    final theme = Theme.of(context);
 
     return AnimatedBuilder(
       animation: translation,
@@ -26,7 +30,7 @@ class ServicesScreen extends StatelessWidget {
         return Directionality(
           textDirection: translation.textDirection,
           child: Scaffold(
-            backgroundColor: Colors.white,
+            backgroundColor: theme.scaffoldBackgroundColor,
             floatingActionButton: const ChatFAB(),
             bottomNavigationBar: NavBarSettingsArabic(
               selectedIndex: 1,
@@ -47,8 +51,10 @@ class ServicesScreen extends StatelessWidget {
             ),
             body: SafeArea(
               child: ListView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 16,
+                ),
                 children: [
                   Row(
                     children: [
@@ -196,8 +202,11 @@ class _ServiceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const primaryColor = Color(0xFF006571);
-    const cardColor = Color(0xFFF8F7F7);
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final primaryColor = colorScheme.primary;
+    final cardColor = colorScheme.surfaceContainerHighest;
     const borderGradient = LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
@@ -212,7 +221,8 @@ class _ServiceCard extends StatelessWidget {
     );
 
     final screenWidth = MediaQuery.of(context).size.width;
-    final cardWidth = width ??
+    final cardWidth =
+        width ??
         (isWide ? screenWidth - 24 * 2 : (screenWidth - 24 * 2 - 14) / 2);
 
     return GestureDetector(
@@ -237,7 +247,9 @@ class _ServiceCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(21),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
+                      color: Colors.black.withValues(
+                        alpha: isDark ? 0.2 : 0.03,
+                      ),
                       blurRadius: 8,
                       offset: const Offset(0, 4),
                     ),
@@ -264,7 +276,7 @@ class _ServiceCard extends StatelessWidget {
                         padding: const EdgeInsets.only(top: 16),
                         child: TText(
                           title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: primaryColor,
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -283,7 +295,10 @@ class _ServiceCard extends StatelessWidget {
                 height: 40,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF27A2A9), width: 1.2),
+                  border: Border.all(
+                    color: const Color(0xFF27A2A9),
+                    width: 1.2,
+                  ),
                   color: cardColor,
                 ),
                 child: ShaderMask(

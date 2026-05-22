@@ -36,7 +36,6 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   static const _textStrong = Color(0xFF111827);
-  static const _textMuted = Color(0xFF6B7280);
   int selectedIndex = 2; // Start with Home selected (index 2 for Home)
   final ManualAttendanceService _attendance = ManualAttendanceService.instance;
   final ExcuseService _excuses = ExcuseService.instance;
@@ -86,12 +85,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           context,
           MaterialPageRoute(builder: (_) => const SettingsScreen()),
         );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        selectedIndex = 2;
-      });
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          selectedIndex = 2;
+        });
         break;
       case 1: // Services/Grid (Center)
         await Future.delayed(const Duration(milliseconds: 180));
@@ -138,7 +137,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         return Directionality(
           textDirection: translation.textDirection,
           child: Scaffold(
-            backgroundColor: Colors.white,
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             floatingActionButton: const ChatFAB(),
             bottomNavigationBar: NavBarSettingsArabic(
               selectedIndex: selectedIndex,
@@ -181,160 +180,165 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                     ],
                   ),
-              const SizedBox(height: 30),
+                  const SizedBox(height: 30),
 
-              // زر التحضير الآن بعرض مرن (يتجنب overflow على الشاشات الصغيرة)
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 296),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 73,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF27A2A9), Color(0xFF006571)],
-                      stops: [0.25, 0.95], // 25% and 95%
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                    ),
-                    borderRadius: BorderRadius.circular(45),
+                  // زر التحضير الآن بعرض مرن (يتجنب overflow على الشاشات الصغيرة)
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 296),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 73,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF27A2A9), Color(0xFF006571)],
+                              stops: [0.25, 0.95], // 25% and 95%
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                            ),
+                            borderRadius: BorderRadius.circular(45),
+                          ),
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const NfcAttendanceScreen(),
+                                ),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              shadowColor: Colors.transparent,
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(45),
+                              ),
+                            ),
+                            child: TText(
+                              translation.translateToEnglish
+                                  ? 'Mark Attendance'
+                                  : 'التحضير الآن',
+                              style: const TextStyle(
+                                fontSize: 23,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                      child: ElevatedButton(
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+                  buildStudentCard(context),
+                  const SizedBox(height: 32),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const TText(
+                        'محاضرات اليوم:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: _textStrong,
+                        ),
+                      ),
+                      TextButton(
                         onPressed: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => const NfcAttendanceScreen(),
+                              builder: (_) => const ScheduleScreen(),
                             ),
                           );
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          shadowColor: Colors.transparent,
-                          padding: EdgeInsets.zero,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(45),
+                        style: ButtonStyle(
+                          foregroundColor:
+                              WidgetStateProperty.resolveWith<Color>((states) {
+                                if (states.contains(WidgetState.pressed)) {
+                                  return const Color(
+                                    0xFF006571,
+                                  ); // اللون عند الضغط
+                                }
+                                return const Color(0xFF006571); // اللون العادي
+                              }),
+                          overlayColor: WidgetStateProperty.all(
+                            const Color(0x22006571),
+                          ),
+                        ),
+                        child: const TText(
+                          ' الجدول الأسبوعي >',
+                          style: TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  _TodayLecturesStrip(
+                    studentId:
+                        StudentAuthService.instance.currentStudent?.studentId ??
+                        0,
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TText(
+                        translation.translateToEnglish
+                            ? 'Active absences:'
+                            : 'الغيابات النشطة:',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: _textStrong,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const ExcuseScreen(),
+                            ),
+                          );
+                        },
+                        style: ButtonStyle(
+                          foregroundColor:
+                              WidgetStateProperty.resolveWith<Color>((states) {
+                                if (states.contains(WidgetState.pressed)) {
+                                  return const Color(
+                                    0xFF006571,
+                                  ); // اللون عند الضغط
+                                }
+                                return const Color(0xFF006571); // اللون العادي
+                              }),
+                          overlayColor: WidgetStateProperty.all(
+                            const Color(0x22006571),
                           ),
                         ),
                         child: TText(
                           translation.translateToEnglish
-                              ? 'Mark Attendance'
-                              : 'التحضير الآن',
-                          style: const TextStyle(
-                            fontSize: 23,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
+                              ? 'Manage excuses >'
+                              : ' إدارة الأعذار >',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ),
-              ),
 
-              const SizedBox(height: 8),
-              buildStudentCard(context),
-              const SizedBox(height: 32),
+                  const SizedBox(height: 5),
 
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const TText(
-                    'محاضرات اليوم:',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: _textStrong,
-                    ),
+                  SizedBox(
+                    height: 160,
+                    child: _buildActiveAbsencesSection(context),
                   ),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ScheduleScreen(),
-                        ),
-                      );
-                    },
-                    style: ButtonStyle(
-                      foregroundColor:
-                          WidgetStateProperty.resolveWith<Color>((states) {
-                        if (states.contains(WidgetState.pressed)) {
-                          return const Color(0xFF006571); // اللون عند الضغط
-                        }
-                        return const Color(0xFF006571); // اللون العادي
-                      }),
-                      overlayColor: WidgetStateProperty.all(
-                        const Color(0x22006571),
-                      ),
-                    ),
-                    child: const TText(
-                      ' الجدول الأسبوعي >',
-                      style: TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-
-              _TodayLecturesStrip(
-                studentId:
-                    StudentAuthService.instance.currentStudent?.studentId ?? 0,
-              ),
-
-              const SizedBox(height: 8),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  TText(
-                    translation.translateToEnglish
-                        ? 'Active absences:'
-                        : 'الغيابات النشطة:',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: _textStrong,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ExcuseScreen(),
-                        ),
-                      );
-                    },
-                    style: ButtonStyle(
-                      foregroundColor:
-                          WidgetStateProperty.resolveWith<Color>((states) {
-                        if (states.contains(WidgetState.pressed)) {
-                          return const Color(0xFF006571); // اللون عند الضغط
-                        }
-                        return const Color(0xFF006571); // اللون العادي
-                      }),
-                      overlayColor: WidgetStateProperty.all(
-                        const Color(0x22006571),
-                      ),
-                    ),
-                    child: TText(
-                      translation.translateToEnglish
-                          ? 'Manage excuses >'
-                          : ' إدارة الأعذار >',
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 5),
-
-              SizedBox(
-                height: 160,
-                child: _buildActiveAbsencesSection(context),
-              ),
                 ],
               ),
             ),
@@ -345,7 +349,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildActiveAbsencesSection(BuildContext context) {
-    final studentId = StudentAuthService.instance.currentStudent?.studentId ?? 0;
+    final studentId =
+        StudentAuthService.instance.currentStudent?.studentId ?? 0;
     if (studentId <= 0) {
       return const SizedBox.shrink();
     }
@@ -357,36 +362,45 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           stream: _excuses.watchStudentRequests(studentId),
           builder: (context, reqSnap) {
             final requests = reqSnap.data ?? <ExcuseRequest>[];
-            final reqMap = ExcuseAttendanceMerge.indexRequestsByLectureKey(requests);
+            final reqMap = ExcuseAttendanceMerge.indexRequestsByLectureKey(
+              requests,
+            );
             return StreamBuilder<Set<String>>(
               stream: _excuses.watchPendingExcuseAttendanceRecordIds(studentId),
               builder: (context, pendingSnap) {
                 final pending = pendingSnap.data ?? <String>{};
-                final candidates = records
-                    .where((r) =>
-                        r.status == ManualAttendanceStatus.absent ||
-                        r.status == ManualAttendanceStatus.excused)
-                    .map((r) {
-                  final k = ExcuseAttendanceMerge.lectureKey(
-                    r.lectureDate,
-                    r.lectureStartTime,
-                    r.sectionId,
-                  );
-                  final req = reqMap[k];
-                  final merged = ExcuseAttendanceMerge.mergedStatus(
-                    attendance: r,
-                    request: req,
-                    pendingAttendanceRecordIds: pending,
-                  );
-                  return (record: r, merged: merged, request: req);
-                })
-                    .where((e) => _activeAbsenceStatuses.contains(e.merged))
-                    .toList()
-                  ..sort((a, b) {
-                    final byDate = b.record.lectureDate.compareTo(a.record.lectureDate);
-                    if (byDate != 0) return byDate;
-                    return b.record.lectureStartTime.compareTo(a.record.lectureStartTime);
-                  });
+                final candidates =
+                    records
+                        .where(
+                          (r) =>
+                              r.status == ManualAttendanceStatus.absent ||
+                              r.status == ManualAttendanceStatus.excused,
+                        )
+                        .map((r) {
+                          final k = ExcuseAttendanceMerge.lectureKey(
+                            r.lectureDate,
+                            r.lectureStartTime,
+                            r.sectionId,
+                          );
+                          final req = reqMap[k];
+                          final merged = ExcuseAttendanceMerge.mergedStatus(
+                            attendance: r,
+                            request: req,
+                            pendingAttendanceRecordIds: pending,
+                          );
+                          return (record: r, merged: merged, request: req);
+                        })
+                        .where((e) => _activeAbsenceStatuses.contains(e.merged))
+                        .toList()
+                      ..sort((a, b) {
+                        final byDate = b.record.lectureDate.compareTo(
+                          a.record.lectureDate,
+                        );
+                        if (byDate != 0) return byDate;
+                        return b.record.lectureStartTime.compareTo(
+                          a.record.lectureStartTime,
+                        );
+                      });
 
                 final shown = candidates.take(6).toList();
                 if (shown.isEmpty) {
@@ -413,13 +427,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     final req = e.request;
                     final courseLabel =
                         ExcuseAttendanceMerge.mergedCourseNameArOverride(req) ??
-                            (r.courseName.trim().isEmpty ? '—' : r.courseName.trim());
+                        (r.courseName.trim().isEmpty
+                            ? '—'
+                            : r.courseName.trim());
                     final dateText =
-                        ExcuseAttendanceMerge.formatArabicLectureDate(r.lectureDate);
+                        ExcuseAttendanceMerge.formatArabicLectureDate(
+                          r.lectureDate,
+                        );
                     final timeRange =
                         '${r.lectureStartTime}-${r.lectureEndTime}';
                     final badge = _badgeForMergedExcuseStatus(merged);
                     final card = buildLectureCard(
+                      context,
                       courseLabel,
                       r.sectionLabel,
                       r.lectureEndTime.isNotEmpty ? r.lectureEndTime : '—',
@@ -463,7 +482,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               ),
                             );
                           } else if (merged == 'تم الرفض') {
-                            final reason = req?.rejectionReason?.trim().isNotEmpty == true
+                            final reason =
+                                req?.rejectionReason?.trim().isNotEmpty == true
                                 ? req!.rejectionReason!.trim()
                                 : 'السبب: العذر غير مقبول - يُشترط تقديم عذر صحي رسمي.';
                             Navigator.push(
@@ -532,10 +552,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
-                  const StudentProfileAvatar(
-                    size: 48,
-                    borderWidth: 0,
-                  ),
+                    const StudentProfileAvatar(size: 48, borderWidth: 0),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -543,10 +560,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         children: [
                           Text(
                             (() {
-                              final s = StudentAuthService.instance.currentStudent;
+                              final s =
+                                  StudentAuthService.instance.currentStudent;
                               if (s == null) return '-';
-                              final isEn =
-                                  TranslationController.instance.translateToEnglish;
+                              final isEn = TranslationController
+                                  .instance
+                                  .translateToEnglish;
                               final ar = (s.nameAr).trim();
                               final en = (s.name).trim();
                               final chosen = isEn
@@ -567,7 +586,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           TText(
                             'رقم الطالب : ${StudentAuthService.instance.currentStudent?.studentId ?? '-'}',
                             style: const TextStyle(
-                                fontSize: 13, color: Colors.black54),
+                              fontSize: 13,
+                              color: Colors.black54,
+                            ),
                           ),
                         ],
                       ),
@@ -618,6 +639,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   static Widget buildLectureCard(
+    BuildContext context,
     String title,
     String section,
     String room, {
@@ -626,6 +648,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     double? fixedHeight,
   }) {
     final isEn = TranslationController.instance.translateToEnglish;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final strongText = scheme.onSurface;
+    final mutedText = scheme.onSurface.withValues(alpha: 0.68);
     final details = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -635,28 +661,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           textAlign: TextAlign.start,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 15,
             height: 1.25,
-            color: _textStrong,
+            color: strongText,
           ),
         ),
         const SizedBox(height: 6),
         TText(
           isEn ? 'Lecture' : 'نظري',
           textAlign: TextAlign.start,
-          style: const TextStyle(fontSize: 13, color: _textMuted, height: 1.2),
+          style: TextStyle(fontSize: 13, color: mutedText, height: 1.2),
         ),
         TText(
           isEn ? 'Section $section' : 'الشعبة $section',
           textAlign: TextAlign.start,
-          style: const TextStyle(fontSize: 13, color: _textMuted, height: 1.2),
+          style: TextStyle(fontSize: 13, color: mutedText, height: 1.2),
         ),
         TText(
           isEn ? 'Room $room' : 'القاعة $room',
           textAlign: TextAlign.start,
-          style: const TextStyle(fontSize: 13, color: _textMuted, height: 1.2),
+          style: TextStyle(fontSize: 13, color: mutedText, height: 1.2),
         ),
       ],
     );
@@ -686,12 +712,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       width: 220,
       height: fixedHeight,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE0E0E0), width: 1),
+        border: Border.all(
+          color: theme.brightness == Brightness.dark
+              ? Colors.white.withValues(alpha: 0.08)
+              : const Color(0xFFE0E0E0),
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(
+              alpha: theme.brightness == Brightness.dark ? 0.22 : 0.05,
+            ),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -772,7 +805,10 @@ class _TodayLecturesStrip extends ConsumerWidget {
 
     if (unifiedAsync.hasValue) {
       final unified = unifiedAsync.requireValue;
-      return SizedBox(height: 150, child: _lecturesFromUnified(context, unified));
+      return SizedBox(
+        height: 150,
+        child: _lecturesFromUnified(context, unified),
+      );
     }
 
     if (unifiedAsync.hasError) {
@@ -829,13 +865,12 @@ class _TodayLecturesStrip extends ConsumerWidget {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const ScheduleScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => const ScheduleScreen()),
               );
             },
             borderRadius: BorderRadius.circular(16),
             child: _HomeScreenState.buildLectureCard(
+              context,
               _title(row.model),
               _section(row.model),
               room,
