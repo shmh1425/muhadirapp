@@ -271,6 +271,161 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  bool _isValidRecoveryEmail(String email) {
+    final atIndex = email.indexOf('@');
+    if (atIndex <= 0 || atIndex == email.length - 1) return false;
+    return email.indexOf('.', atIndex + 2) != -1;
+  }
+
+  Future<void> _showPasswordRecoveryDialog() async {
+    final recoveryEmailController = TextEditingController(
+      text: _emailController.text.trim(),
+    );
+    String? recoveryEmailError;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AnimatedBuilder(
+          animation: _translation,
+          builder: (context, _) {
+            return StatefulBuilder(
+              builder: (context, setDialogState) {
+                void submitRecoveryRequest() {
+                  final email = recoveryEmailController.text.trim();
+                  if (email.isEmpty) {
+                    setDialogState(() {
+                      recoveryEmailError = _tr(
+                        'الرجاء إدخال البريد الإلكتروني',
+                        'Please enter your email',
+                      );
+                    });
+                    return;
+                  }
+                  if (!_isValidRecoveryEmail(email)) {
+                    setDialogState(() {
+                      recoveryEmailError = _tr(
+                        'الرجاء إدخال بريد إلكتروني صحيح',
+                        'Please enter a valid email address',
+                      );
+                    });
+                    return;
+                  }
+
+                  Navigator.of(dialogContext).pop();
+                  if (!mounted) return;
+                  // Prototype-only UI flow. Real password reset email integration can be connected later.
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        _tr(
+                          'تم إرسال رابط استعادة كلمة المرور إلى بريدك الجامعي',
+                          'A password recovery link has been sent to your university email',
+                        ),
+                        style: const TextStyle(fontFamily: 'Cairo'),
+                      ),
+                      backgroundColor: const Color(0xFF006571),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+
+                return Directionality(
+                  textDirection: _translation.textDirection,
+                  child: AlertDialog(
+                    backgroundColor: Colors.white,
+                    insetPadding: const EdgeInsets.symmetric(
+                      horizontal: 28,
+                      vertical: 24,
+                    ),
+                    scrollable: true,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    title: Text(
+                      _tr('استعادة كلمة المرور', 'Password Recovery'),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Color(0xFF006571),
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Cairo',
+                      ),
+                    ),
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          _tr(
+                            'أدخلي بريدك الجامعي لإرسال رابط استعادة كلمة المرور',
+                            'Enter your university email to receive a password recovery link',
+                          ),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Color(0xFF444444),
+                            fontSize: 14,
+                            height: 1.45,
+                            fontFamily: 'Cairo',
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        _InputField(
+                          hintText: 'info@email.com',
+                          controller: recoveryEmailController,
+                          keyboardType: TextInputType.emailAddress,
+                          textDirection: TextDirection.ltr,
+                          textAlign: TextAlign.left,
+                          errorText: recoveryEmailError,
+                          onChanged: (_) {
+                            if (recoveryEmailError != null) {
+                              setDialogState(() {
+                                recoveryEmailError = null;
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                    actionsPadding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        child: Text(
+                          _tr('إلغاء', 'Cancel'),
+                          style: const TextStyle(
+                            color: Color(0xFF757575),
+                            fontFamily: 'Cairo',
+                          ),
+                        ),
+                      ),
+                      ElevatedButton(
+                        onPressed: submitRecoveryRequest,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF006571),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          _tr('إرسال', 'Send'),
+                          style: const TextStyle(fontFamily: 'Cairo'),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+
+    recoveryEmailController.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -409,7 +564,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
-                            onPressed: () {},
+                            onPressed: _showPasswordRecoveryDialog,
                             child: TText(
                               forgot,
                               style: const TextStyle(
