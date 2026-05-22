@@ -16,6 +16,7 @@ import 'features/translation/translation_controller.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
+  await loadSavedThemeMode();
   await TranslationController.instance.loadSavedPreference();
   await Hive.openBox<dynamic>(StudentRepository.coursesBoxName);
   await Hive.openBox<dynamic>(LecturerCatalogRepository.boxName);
@@ -61,12 +62,18 @@ class MyApp extends StatelessWidget {
       onError: Colors.white,
     ),
     scaffoldBackgroundColor: Colors.white,
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Colors.white,
+      foregroundColor: _textOnLight,
+      elevation: 0,
+    ),
     cardTheme: const CardThemeData(
       color: Colors.white,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
     ),
     dialogTheme: const DialogThemeData(surfaceTintColor: Colors.transparent),
+    inputDecorationTheme: const InputDecorationTheme(fillColor: Colors.white),
     bottomSheetTheme: const BottomSheetThemeData(
       surfaceTintColor: Colors.transparent,
     ),
@@ -87,12 +94,20 @@ class MyApp extends StatelessWidget {
       onError: Colors.black,
     ),
     scaffoldBackgroundColor: const Color(0xFF050A14),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Color(0xFF050A14),
+      foregroundColor: Colors.white,
+      elevation: 0,
+    ),
     cardTheme: const CardThemeData(
       color: Color(0xFF0B1220),
       surfaceTintColor: Colors.transparent,
       elevation: 0,
     ),
     dialogTheme: const DialogThemeData(surfaceTintColor: Colors.transparent),
+    inputDecorationTheme: const InputDecorationTheme(
+      fillColor: Color(0xFF0B1220),
+    ),
     bottomSheetTheme: const BottomSheetThemeData(
       surfaceTintColor: Colors.transparent,
     ),
