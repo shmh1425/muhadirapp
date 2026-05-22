@@ -63,10 +63,14 @@ class SecurityLocalization {
       tr('الإعدادات العامة', 'General Settings');
   static String get automaticUpdates =>
       tr('التحديثات التلقائية', 'Automatic Updates');
+  static String get appearance => tr('المظهر', 'Appearance');
   static String get darkMode => tr('الوضع الليلي', 'Dark Mode');
   static String get automatic => tr('تلقائي', 'Automatic');
   static String get enabled => tr('مفعل', 'Enabled');
   static String get disabled => tr('مغلق', 'Disabled');
+  static String get systemTheme => tr('النظام', 'System');
+  static String get lightTheme => tr('فاتح', 'Light');
+  static String get darkTheme => tr('داكن', 'Dark');
   static String gateLabel(int gateNumber) =>
       tr('البوابة: $gateNumber', 'Gate: $gateNumber');
   static String campusName(String campusName) {

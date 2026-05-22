@@ -16,13 +16,6 @@ enum SecurityRecordsStatus { accepted, rejected }
 const _kTealLight = Color(0xFF27A2A9);
 const _kTealDark = Color(0xFF006571);
 const _kRed = Color(0xFFD32F2F);
-const _kTextDark = Color(0xFF2D2D2D);
-const _kTextMuted = Color(0xFF757575);
-const _kGreyIconBg = Color(0xFFE8E8E8);
-const _kGreyBorder = Color(0xFFE0E0E0);
-const _kDateIconBg = Color(0xFFF5F5F5);
-const _kInputFill = Color(0xFFF8F7F7);
-const _kCardShadow = Color(0x0D000000);
 
 class SecurityRecordsScreen extends ConsumerStatefulWidget {
   const SecurityRecordsScreen({
@@ -233,7 +226,7 @@ class _SecurityRecordsScreenState extends ConsumerState<SecurityRecordsScreen> {
         return Directionality(
           textDirection: SecurityLocalization.direction,
           child: Scaffold(
-            backgroundColor: Colors.white,
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             body: SafeArea(
               child: Column(
                 children: [
@@ -383,6 +376,7 @@ class _RecordsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final infoTextAlign = SecurityLocalization.isEnglish
         ? TextAlign.left
         : TextAlign.right;
@@ -406,18 +400,18 @@ class _RecordsHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Material(
-              color: _kInputFill,
+              color: colorScheme.surfaceContainerHighest,
               shape: const CircleBorder(),
               child: InkWell(
                 onTap: onRefresh,
                 customBorder: const CircleBorder(),
-                child: const SizedBox(
+                child: SizedBox(
                   width: 34,
                   height: 34,
                   child: Center(
                     child: Icon(
                       Icons.refresh_rounded,
-                      color: _kTextMuted,
+                      color: colorScheme.onSurfaceVariant,
                       size: 20,
                     ),
                   ),
@@ -439,9 +433,9 @@ class _RecordsHeader extends StatelessWidget {
                         '${SecurityLocalization.location}: '
                         '${SecurityLocalization.campusName(campus)}',
                         textAlign: infoTextAlign,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
-                          color: _kTextDark,
+                          color: colorScheme.onSurface,
                           fontFamily: 'Cairo',
                           fontWeight: FontWeight.w600,
                         ),
@@ -457,9 +451,9 @@ class _RecordsHeader extends StatelessWidget {
                           builder: (context, gate, _) => Text(
                             '${SecurityLocalization.gate} $gate',
                             textAlign: infoTextAlign,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: _kTextDark,
+                              color: colorScheme.onSurface,
                               fontFamily: 'Cairo',
                             ),
                           ),
@@ -491,13 +485,14 @@ class _StatusSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       height: 44,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: _kInputFill,
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _kGreyBorder.withValues(alpha: 0.75)),
+        border: Border.all(color: colorScheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -535,6 +530,7 @@ class _SegmentButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Expanded(
       child: InkWell(
         onTap: onTap,
@@ -551,7 +547,7 @@ class _SegmentButton extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: selected ? Colors.white : _kTextMuted,
+              color: selected ? Colors.white : colorScheme.onSurfaceVariant,
               fontFamily: 'Cairo',
               fontSize: 13,
               fontWeight: FontWeight.w700,
@@ -576,7 +572,8 @@ class _DateRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final iconColor = isActive ? _kTealLight : _kTextMuted;
+    final colorScheme = Theme.of(context).colorScheme;
+    final iconColor = isActive ? _kTealLight : colorScheme.onSurfaceVariant;
 
     return InkWell(
       onTap: onTap,
@@ -591,7 +588,7 @@ class _DateRow extends StatelessWidget {
               width: 24,
               height: 24,
               decoration: BoxDecoration(
-                color: _kDateIconBg,
+                color: colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Center(
@@ -605,9 +602,9 @@ class _DateRow extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               '${SecurityLocalization.date}: $formattedDate',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: _kTextDark,
+                color: colorScheme.onSurface,
                 fontFamily: 'Cairo',
               ),
             ),
@@ -626,30 +623,36 @@ class _RecordsSearchBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       height: 42,
       decoration: BoxDecoration(
-        color: _kInputFill,
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _kGreyBorder.withValues(alpha: 0.75)),
+        border: Border.all(color: colorScheme.outlineVariant),
       ),
       child: TextField(
         controller: controller,
         onChanged: onChanged,
+        style: TextStyle(color: colorScheme.onSurface, fontFamily: 'Cairo'),
         textDirection: SecurityLocalization.direction,
         textAlign: SecurityLocalization.isEnglish
             ? TextAlign.left
             : TextAlign.right,
         decoration: InputDecoration(
           hintText: SecurityLocalization.searchHint,
-          hintStyle: const TextStyle(
-            color: Color(0xFF9E9E9E),
+          hintStyle: TextStyle(
+            color: colorScheme.onSurfaceVariant,
             fontSize: 14,
             fontFamily: 'Cairo',
           ),
-          prefixIcon: const Padding(
-            padding: EdgeInsets.only(left: 14, right: 14),
-            child: Icon(Icons.search, color: Color(0xFF9E9E9E), size: 22),
+          prefixIcon: Padding(
+            padding: const EdgeInsets.only(left: 14, right: 14),
+            child: Icon(
+              Icons.search,
+              color: colorScheme.onSurfaceVariant,
+              size: 22,
+            ),
           ),
           prefixIconConstraints: const BoxConstraints(
             minWidth: 48,
@@ -676,26 +679,32 @@ class _CompactStateCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
-        color: _kInputFill,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _kGreyBorder.withValues(alpha: 0.7)),
-        boxShadow: const [
-          BoxShadow(color: _kCardShadow, blurRadius: 10, offset: Offset(0, 2)),
+        border: Border.all(color: colorScheme.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Column(
         children: [
-          Icon(icon, size: 22, color: _kTextMuted),
+          Icon(icon, size: 22, color: colorScheme.onSurfaceVariant),
           const SizedBox(height: 8),
           Text(
             message,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: _kTextMuted,
+            style: TextStyle(
+              color: colorScheme.onSurfaceVariant,
               fontSize: 13,
               fontFamily: 'Cairo',
             ),
@@ -711,15 +720,21 @@ class _CompactLoadingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 20),
       decoration: BoxDecoration(
-        color: _kInputFill,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _kGreyBorder.withValues(alpha: 0.7)),
-        boxShadow: const [
-          BoxShadow(color: _kCardShadow, blurRadius: 10, offset: Offset(0, 2)),
+        border: Border.all(color: colorScheme.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: const Center(
@@ -749,13 +764,19 @@ class _RecordsTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: _kGreyBorder),
+        color: colorScheme.surface,
+        border: Border.all(color: colorScheme.outlineVariant),
         borderRadius: BorderRadius.circular(12),
-        boxShadow: const [
-          BoxShadow(color: _kCardShadow, blurRadius: 10, offset: Offset(0, 2)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       clipBehavior: Clip.antiAlias,
@@ -871,12 +892,17 @@ class _RecordsTableRowState extends State<_RecordsTableRow> {
   @override
   Widget build(BuildContext context) {
     const iconColW = 40.0;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
       decoration: BoxDecoration(
-        color: widget.isAlternate ? const Color(0xFFFAFAFA) : Colors.white,
-        border: Border(bottom: BorderSide(color: _kGreyBorder, width: 0.6)),
+        color: widget.isAlternate
+            ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.56)
+            : colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(color: colorScheme.outlineVariant, width: 0.6),
+        ),
         borderRadius: widget.isLast
             ? const BorderRadius.vertical(bottom: Radius.circular(12))
             : null,
@@ -892,9 +918,9 @@ class _RecordsTableRowState extends State<_RecordsTableRow> {
               textAlign: SecurityLocalization.isEnglish
                   ? TextAlign.left
                   : TextAlign.right,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: _kTextDark,
+                color: colorScheme.onSurface,
                 fontFamily: 'Cairo',
               ),
             ),
@@ -904,9 +930,9 @@ class _RecordsTableRowState extends State<_RecordsTableRow> {
             child: Center(
               child: Text(
                 widget.record.universityId,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
-                  color: _kTextDark,
+                  color: colorScheme.onSurface,
                   fontFamily: 'Cairo',
                 ),
               ),
@@ -917,9 +943,9 @@ class _RecordsTableRowState extends State<_RecordsTableRow> {
             child: Center(
               child: Text(
                 widget.record.formattedTime,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
-                  color: _kTextDark,
+                  color: colorScheme.onSurface,
                   fontFamily: 'Cairo',
                 ),
               ),
@@ -929,7 +955,7 @@ class _RecordsTableRowState extends State<_RecordsTableRow> {
             width: iconColW,
             child: Center(
               child: Material(
-                color: _kGreyIconBg,
+                color: colorScheme.surfaceContainerHighest,
                 shape: const CircleBorder(),
                 child: InkWell(
                   onTap: () {
@@ -943,14 +969,14 @@ class _RecordsTableRowState extends State<_RecordsTableRow> {
                     );
                   },
                   customBorder: const CircleBorder(),
-                  child: const SizedBox(
+                  child: SizedBox(
                     width: 30,
                     height: 30,
                     child: Center(
                       child: Icon(
                         Icons.visibility_outlined,
                         size: 17,
-                        color: _kTextMuted,
+                        color: colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ),
@@ -964,7 +990,7 @@ class _RecordsTableRowState extends State<_RecordsTableRow> {
               child: Center(
                 child: Material(
                   key: _infoKey,
-                  color: _kGreyIconBg,
+                  color: colorScheme.surfaceContainerHighest,
                   shape: const CircleBorder(),
                   child: InkWell(
                     onTap: () {
@@ -982,14 +1008,14 @@ class _RecordsTableRowState extends State<_RecordsTableRow> {
                       }
                     },
                     customBorder: const CircleBorder(),
-                    child: const SizedBox(
+                    child: SizedBox(
                       width: 30,
                       height: 30,
                       child: Center(
                         child: Icon(
                           Icons.info_outline_rounded,
                           size: 17,
-                          color: _kTextMuted,
+                          color: colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -1011,20 +1037,22 @@ class _ReasonPopup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: 220,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
+            color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.08),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
-        border: Border.all(color: _kGreyBorder),
+        border: Border.all(color: colorScheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -1033,9 +1061,9 @@ class _ReasonPopup extends StatelessWidget {
           Expanded(
             child: Text(
               reason,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: _kTextDark,
+                color: colorScheme.onSurface,
                 fontFamily: 'Cairo',
               ),
             ),
@@ -1044,7 +1072,11 @@ class _ReasonPopup extends StatelessWidget {
           InkWell(
             onTap: onClose,
             borderRadius: BorderRadius.circular(12),
-            child: const Icon(Icons.close, size: 18, color: _kTextMuted),
+            child: Icon(
+              Icons.close,
+              size: 18,
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),

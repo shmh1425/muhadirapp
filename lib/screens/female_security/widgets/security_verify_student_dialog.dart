@@ -4,10 +4,7 @@ import '../security_localization.dart';
 import '../../../services/female_security/security_gate_scan_service.dart';
 
 const _kTealLight = Color(0xFF27A2A9);
-const _kTextDark = Color(0xFF2D2D2D);
-const _kTextMuted = Color(0xFF757575);
 const _kRejectRed = Color(0xFFD32F2F);
-const _kPrivacyBg = Color(0xFFEFF8F8);
 
 class StudentGateScanResult {
   const StudentGateScanResult({
@@ -83,6 +80,7 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return AnimatedBuilder(
       animation: SecurityLocalization.controller,
       builder: (context, _) => Directionality(
@@ -91,7 +89,7 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: 28),
           child: Material(
-            color: Colors.white,
+            color: colorScheme.surface,
             borderRadius: BorderRadius.circular(18),
             child: ConstrainedBox(
               constraints: BoxConstraints(
@@ -109,11 +107,11 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
                     Text(
                       SecurityLocalization.cardDataSectionTitle,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        color: _kTealLight,
+                        color: colorScheme.primary,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -137,6 +135,7 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
   }
 
   Widget _buildHeader(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -147,21 +146,21 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
             child: Text(
               SecurityLocalization.gateCardVerificationTitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 17,
                 fontWeight: FontWeight.w800,
-                color: _kTextDark,
+                color: colorScheme.onSurface,
               ),
             ),
           ),
         ),
         IconButton(
           onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.close, color: _kTextDark, size: 22),
+          icon: Icon(Icons.close, color: colorScheme.onSurface, size: 22),
           style: IconButton.styleFrom(
-            backgroundColor: Colors.white,
-            side: const BorderSide(color: _kTextMuted, width: 1),
+            backgroundColor: colorScheme.surfaceContainerHighest,
+            side: BorderSide(color: colorScheme.outlineVariant, width: 1),
             shape: const CircleBorder(),
             minimumSize: const Size(40, 40),
             padding: EdgeInsets.zero,
@@ -225,14 +224,15 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
   }
 
   Widget _buildStudentInfo() {
-    const labelStyle = TextStyle(
+    final colorScheme = Theme.of(context).colorScheme;
+    final labelStyle = TextStyle(
       fontSize: 12,
-      color: _kTextMuted,
+      color: colorScheme.onSurfaceVariant,
       fontFamily: 'Cairo',
     );
-    const valueStyle = TextStyle(
+    final valueStyle = TextStyle(
       fontSize: 13,
-      color: _kTextDark,
+      color: colorScheme.onSurface,
       fontFamily: 'Cairo',
     );
     const nameValueStyle = TextStyle(
@@ -283,11 +283,12 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
   }
 
   Widget _buildPrivacyNotice() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
-        color: _kPrivacyBg,
+        color: colorScheme.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: _kTealLight.withValues(alpha: 0.28)),
       ),
@@ -317,10 +318,10 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
                 const SizedBox(height: 2),
                 Text(
                   SecurityLocalization.sensitiveInfoHiddenForPrivacy,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 11,
-                    color: _kTextMuted,
+                    color: colorScheme.onSurfaceVariant,
                     height: 1.3,
                   ),
                 ),
@@ -361,18 +362,27 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
   }
 
   Widget _buildRejectionReasonField() {
+    final colorScheme = Theme.of(context).colorScheme;
     return DropdownButtonFormField<SecurityRejectionReason>(
       initialValue: _selectedReason,
       isExpanded: true,
+      dropdownColor: colorScheme.surface,
       decoration: InputDecoration(
         labelText: SecurityLocalization.rejectionReasonWhenNeeded,
-        labelStyle: const TextStyle(color: _kTextMuted, fontFamily: 'Cairo'),
+        labelStyle: TextStyle(
+          color: colorScheme.onSurfaceVariant,
+          fontFamily: 'Cairo',
+        ),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: colorScheme.surfaceContainerHighest,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: _kTextMuted, width: 1),
+          borderSide: BorderSide(color: colorScheme.outlineVariant, width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colorScheme.primary, width: 1.4),
         ),
       ),
       items: widget.rejectionReasons
@@ -383,7 +393,10 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
                 SecurityLocalization.isEnglish && reason.titleEn.isNotEmpty
                     ? reason.titleEn
                     : reason.titleAr,
-                style: const TextStyle(color: _kTextDark, fontFamily: 'Cairo'),
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontFamily: 'Cairo',
+                ),
               ),
             ),
           )

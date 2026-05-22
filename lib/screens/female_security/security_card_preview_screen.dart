@@ -8,10 +8,7 @@ import 'security_localization.dart';
 
 const _kTealLight = Color(0xFF27A2A9);
 const _kTealDark = Color(0xFF006571);
-const _kTextDark = Color(0xFF2D2D2D);
-const _kTextMuted = Color(0xFF757575);
 const _kRejectRed = Color(0xFFD32F2F);
-const _kGreyBorder = Color(0xFFE0E0E0);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SecurityCardPreviewScreen
@@ -37,12 +34,13 @@ class _SecurityCardPreviewScreenState extends State<SecurityCardPreviewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return AnimatedBuilder(
       animation: SecurityLocalization.controller,
       builder: (context, _) => Directionality(
         textDirection: SecurityLocalization.direction,
         child: Scaffold(
-          backgroundColor: Colors.white,
+          backgroundColor: theme.scaffoldBackgroundColor,
           body: SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -65,6 +63,7 @@ class _SecurityCardPreviewScreenState extends State<SecurityCardPreviewScreen> {
   }
 
   Widget _buildAppBar(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -75,7 +74,7 @@ class _SecurityCardPreviewScreenState extends State<SecurityCardPreviewScreen> {
                 ? Icons.arrow_back_ios_new_rounded
                 : Icons.arrow_forward_ios_rounded,
             size: 19,
-            color: _kTextDark,
+            color: colorScheme.onSurface,
           ),
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
@@ -87,7 +86,7 @@ class _SecurityCardPreviewScreenState extends State<SecurityCardPreviewScreen> {
             style: TextStyle(
               fontSize: 19,
               fontWeight: FontWeight.bold,
-              color: _kTextDark,
+              color: colorScheme.onSurface,
               fontFamily: 'Cairo',
             ),
           ),
@@ -127,6 +126,8 @@ class _SecurityCardPreviewScreenState extends State<SecurityCardPreviewScreen> {
   }
 
   Widget _buildCard(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Stack(
       clipBehavior: Clip.none,
       alignment: Alignment.topCenter,
@@ -136,18 +137,18 @@ class _SecurityCardPreviewScreenState extends State<SecurityCardPreviewScreen> {
           margin: const EdgeInsets.only(top: 38),
           padding: const EdgeInsets.fromLTRB(18, 50, 18, 18),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: colorScheme.surface,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: _kTealLight, width: 1.2),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
+                color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.05),
                 blurRadius: 12,
                 offset: const Offset(0, 3),
               ),
             ],
           ),
-          child: _buildCardContent(),
+          child: _buildCardContent(context),
         ),
         _buildGateIconBadge(),
       ],
@@ -175,21 +176,22 @@ class _SecurityCardPreviewScreenState extends State<SecurityCardPreviewScreen> {
     );
   }
 
-  Widget _buildCardContent() {
-    const boldStyle = TextStyle(
+  Widget _buildCardContent(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final boldStyle = TextStyle(
       fontSize: 14,
       fontWeight: FontWeight.bold,
-      color: _kTextDark,
+      color: colorScheme.onSurface,
       fontFamily: 'Cairo',
     );
-    const regularStyle = TextStyle(
+    final regularStyle = TextStyle(
       fontSize: 13,
-      color: _kTextDark,
+      color: colorScheme.onSurface,
       fontFamily: 'Cairo',
     );
-    const mutedStyle = TextStyle(
+    final mutedStyle = TextStyle(
       fontSize: 12,
-      color: _kTextMuted,
+      color: colorScheme.onSurfaceVariant,
       fontFamily: 'Cairo',
     );
 
@@ -248,7 +250,7 @@ class _SecurityCardPreviewScreenState extends State<SecurityCardPreviewScreen> {
           secondChild: _buildAcademicDetails(boldStyle, regularStyle),
         ),
         const SizedBox(height: 14),
-        Divider(height: 1, color: _kGreyBorder),
+        Divider(height: 1, color: colorScheme.outlineVariant),
         const SizedBox(height: 12),
         Text(
           widget.student.gateLabel,
@@ -260,6 +262,7 @@ class _SecurityCardPreviewScreenState extends State<SecurityCardPreviewScreen> {
   }
 
   Widget _buildConfidentialBanner() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -294,10 +297,10 @@ class _SecurityCardPreviewScreenState extends State<SecurityCardPreviewScreen> {
                 const SizedBox(height: 3),
                 Text(
                   SecurityLocalization.sensitiveInfoHiddenForPrivacy,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 12,
-                    color: _kTextMuted,
+                    color: colorScheme.onSurfaceVariant,
                     height: 1.35,
                   ),
                 ),
@@ -338,7 +341,9 @@ class _SecurityCardPreviewScreenState extends State<SecurityCardPreviewScreen> {
       child: Text(
         SecurityLocalization.studentIdentityDetails,
         textAlign: TextAlign.center,
-        style: style.copyWith(color: _kTextMuted),
+        style: style.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }
@@ -380,24 +385,29 @@ class _ProtectedInfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: _kGreyBorder.withValues(alpha: 0.28),
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         textDirection: SecurityLocalization.direction,
         children: [
-          const Icon(Icons.lock_outline_rounded, size: 15, color: _kTextMuted),
+          Icon(
+            Icons.lock_outline_rounded,
+            size: 15,
+            color: colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(width: 6),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 11,
-              color: _kTextMuted,
+              color: colorScheme.onSurfaceVariant,
               fontWeight: FontWeight.w600,
             ),
           ),

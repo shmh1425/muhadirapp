@@ -13,8 +13,6 @@ import 'security_records_screen.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 
 const _kTealLight = Color(0xFF27A2A9);
-const _kTextDark = Color(0xFF2D2D2D);
-const _kTextMuted = Color(0xFF757575);
 const _kCardShadow = Color(0x0D000000);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -39,12 +37,13 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return AnimatedBuilder(
       animation: SecurityLocalization.controller,
       builder: (context, _) => Directionality(
         textDirection: SecurityLocalization.direction,
         child: Scaffold(
-          backgroundColor: Colors.white,
+          backgroundColor: theme.scaffoldBackgroundColor,
           body: SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 18),
@@ -108,7 +107,7 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
                 ? Icons.arrow_back_ios_new_rounded
                 : Icons.arrow_forward_ios_rounded,
             size: 19,
-            color: _kTextDark,
+            color: Theme.of(context).colorScheme.onSurface,
           ),
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
@@ -120,7 +119,7 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: _kTealLight,
+              color: Theme.of(context).colorScheme.secondary,
               fontFamily: 'Cairo',
             ),
           ),
@@ -136,9 +135,10 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
     Widget? trailing,
     Color? iconColor,
   }) {
+    final scheme = Theme.of(context).colorScheme;
     return _GenOptionCard(
       icon: icon,
-      iconColor: iconColor ?? _kTextDark,
+      iconColor: iconColor ?? scheme.onSurface,
       label: label,
       trailing: trailing,
     );
@@ -147,8 +147,8 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
   String _themeModeLabel(ThemeMode mode) {
     return switch (mode) {
       ThemeMode.system => SecurityLocalization.automatic,
-      ThemeMode.dark => SecurityLocalization.enabled,
-      ThemeMode.light => SecurityLocalization.disabled,
+      ThemeMode.dark => SecurityLocalization.darkTheme,
+      ThemeMode.light => SecurityLocalization.lightTheme,
     };
   }
 
@@ -159,13 +159,16 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
         return _GenOptionCard(
           icon: Icons.dark_mode_rounded,
           iconColor: _kTealLight,
-          label: SecurityLocalization.darkMode,
+          label: SecurityLocalization.appearance,
           trailing: DropdownButtonHideUnderline(
             child: DropdownButton<ThemeMode>(
               value: mode,
+              dropdownColor: Theme.of(context).colorScheme.surface,
               icon: Icon(
                 Icons.keyboard_arrow_down_rounded,
-                color: _kTextMuted,
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.7),
                 size: 24,
               ),
               items: [ThemeMode.system, ThemeMode.dark, ThemeMode.light]
@@ -174,16 +177,16 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
                       value: m,
                       child: Text(
                         _themeModeLabel(m),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'Cairo',
-                          color: _kTextDark,
+                          color: Theme.of(context).colorScheme.onSurface,
                         ),
                       ),
                     ),
                   )
                   .toList(),
               onChanged: (v) {
-                if (v != null) appThemeMode.value = v;
+                if (v != null) setThemeMode(v);
               },
             ),
           ),
@@ -213,7 +216,9 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
               value: current.gateId,
               icon: Icon(
                 Icons.keyboard_arrow_down_rounded,
-                color: _kTextMuted,
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.7),
                 size: 24,
               ),
               items: options
@@ -225,9 +230,9 @@ class _GeneralSettingsScreenState extends State<GeneralSettingsScreen> {
                           gateNumber: gate.gateNumber,
                           campusName: gate.campusName,
                         ),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'Cairo',
-                          color: _kTextDark,
+                          color: Theme.of(context).colorScheme.onSurface,
                         ),
                       ),
                     ),
@@ -267,12 +272,13 @@ class _GenOptionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final content = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         textDirection: SecurityLocalization.direction,
         children: [
-          Icon(icon, size: 22, color: iconColor ?? _kTextDark),
+          Icon(icon, size: 22, color: iconColor ?? scheme.onSurface),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -280,10 +286,10 @@ class _GenOptionCard extends StatelessWidget {
               textAlign: SecurityLocalization.isEnglish
                   ? TextAlign.left
                   : TextAlign.right,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
-                color: _kTextDark,
+                color: scheme.onSurface,
                 fontFamily: 'Cairo',
               ),
             ),
@@ -295,10 +301,16 @@ class _GenOptionCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: const [
-          BoxShadow(color: _kCardShadow, blurRadius: 10, offset: Offset(0, 2)),
+        boxShadow: [
+          BoxShadow(
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.black.withValues(alpha: 0.18)
+                : _kCardShadow,
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: content,

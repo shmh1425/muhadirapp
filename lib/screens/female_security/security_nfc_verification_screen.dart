@@ -57,12 +57,9 @@ class _SecurityNfcVerificationScreenState
   late final AnimationController _pulseController;
 
   /// Same palette as [NfcAttendanceScreen] (student) for visual consistency.
-  static const _kStudentPillBg = Color(0xFFE1F7F7);
-  static const _kStudentCardBg = Color(0xFFE6FBFB);
   static const _kStudentTealDark = Color(0xFF006571);
   static const _kStudentTealRing = Color(0xFF6FB2B7);
   static const _kStudentMsgBorderOk = Color(0xFFCCE8EA);
-  static const _kStudentMsgText = Color(0xFF35565E);
   static const _kStudentMsgBgError = Color(0xFFFFEBEE);
   static const _kStudentMsgBorderError = Color(0xFFE57373);
   static const _kStudentMsgTextError = Color(0xFFB71C1C);
@@ -84,8 +81,6 @@ class _SecurityNfcVerificationScreenState
   static const _kSnackWarning = Color(0xFFF57C00);
 
   static const _kTealLight = Color(0xFF27A2A9);
-  static const _kTextDark = Color(0xFF2D2D2D);
-  static const _kTextMuted = Color(0xFF757575);
 
   @override
   void initState() {
@@ -691,20 +686,22 @@ class _SecurityNfcVerificationScreenState
     return AnimatedBuilder(
       animation: SecurityLocalization.controller,
       builder: (context, _) {
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
         return Directionality(
           textDirection: SecurityLocalization.direction,
           child: Scaffold(
-            backgroundColor: Colors.white,
+            backgroundColor: theme.scaffoldBackgroundColor,
             appBar: AppBar(
-              backgroundColor: Colors.white,
+              backgroundColor: theme.scaffoldBackgroundColor,
               elevation: 0,
-              foregroundColor: _kTextDark,
+              foregroundColor: colorScheme.onSurface,
               title: Text(
                 SecurityLocalization.nfcGateVerificationTitle,
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'Cairo',
                   fontWeight: FontWeight.w700,
-                  color: _kStudentTealDark,
+                  color: colorScheme.primary,
                 ),
               ),
             ),
@@ -721,7 +718,7 @@ class _SecurityNfcVerificationScreenState
                       Expanded(
                         child: Container(
                           decoration: BoxDecoration(
-                            color: _kStudentCardBg,
+                            color: colorScheme.surface,
                             borderRadius: BorderRadius.circular(26),
                           ),
                           alignment: Alignment.center,
@@ -736,8 +733,11 @@ class _SecurityNfcVerificationScreenState
                       Expanded(
                         child: Container(
                           decoration: BoxDecoration(
-                            color: _kStudentCardBg,
+                            color: colorScheme.surface,
                             borderRadius: BorderRadius.circular(26),
+                            border: Border.all(
+                              color: colorScheme.outlineVariant,
+                            ),
                           ),
                           clipBehavior: Clip.antiAlias,
                           child: _buildScanModePanel(context),
@@ -755,11 +755,12 @@ class _SecurityNfcVerificationScreenState
   }
 
   Widget _buildModePill() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       width: 180,
       height: 42,
       decoration: BoxDecoration(
-        color: _kStudentPillBg,
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(22),
       ),
       padding: const EdgeInsets.all(4),
@@ -833,6 +834,7 @@ class _SecurityNfcVerificationScreenState
       return const SizedBox.shrink();
     }
 
+    final colorScheme = Theme.of(context).colorScheme;
     late Color bg;
     late Color border;
     late Color fg;
@@ -854,10 +856,12 @@ class _SecurityNfcVerificationScreenState
       fg = _kOutcomeDuplicateText;
       secondaryFg = _kOutcomeDuplicateText.withValues(alpha: 0.85);
     } else {
-      bg = _statusError ? _kStudentMsgBgError : Colors.white;
+      bg = _statusError ? _kStudentMsgBgError : colorScheme.surface;
       border = _statusError ? _kStudentMsgBorderError : _kStudentMsgBorderOk;
-      fg = _statusError ? _kStudentMsgTextError : _kStudentMsgText;
-      secondaryFg = _kTextMuted;
+      fg = _statusError ? _kStudentMsgTextError : colorScheme.onSurface;
+      secondaryFg = _statusError
+          ? _kStudentMsgTextError.withValues(alpha: 0.78)
+          : colorScheme.onSurfaceVariant;
     }
 
     final lines = _statusMessage!.split('\n');
@@ -933,10 +937,10 @@ class _SecurityNfcVerificationScreenState
                 Text(
                   SecurityLocalization.qrProcessing,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 13,
-                    color: _kTextMuted,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                     height: 1.35,
                   ),
                 ),
@@ -946,10 +950,10 @@ class _SecurityNfcVerificationScreenState
                 Text(
                   SecurityLocalization.nfcScanningHint,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 13,
-                    color: _kTextMuted,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                     height: 1.35,
                   ),
                 ),
@@ -962,7 +966,8 @@ class _SecurityNfcVerificationScreenState
                     border: Border.all(
                       color: _nfcAvailable
                           ? _kStudentTealDark
-                          : _kTextMuted.withValues(alpha: 0.35),
+                          : Theme.of(context).colorScheme.onSurfaceVariant
+                                .withValues(alpha: 0.35),
                       width: 2,
                     ),
                   ),
@@ -971,7 +976,9 @@ class _SecurityNfcVerificationScreenState
                     size: 52,
                     color: _nfcAvailable
                         ? _kStudentTealDark
-                        : _kTextMuted.withValues(alpha: 0.5),
+                        : Theme.of(
+                            context,
+                          ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
                   ),
                 ),
                 const SizedBox(height: 26),
@@ -1048,7 +1055,7 @@ class _SecurityNfcVerificationScreenState
               borderRadius: BorderRadius.circular(28),
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(28),
                   border: Border.all(color: _kStudentTealDark, width: 2),
                 ),
@@ -1070,10 +1077,10 @@ class _SecurityNfcVerificationScreenState
           child: Text(
             SecurityLocalization.qrNotOnWeb,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 15,
-              color: _kTextDark,
+              color: Theme.of(context).colorScheme.onSurface,
               height: 1.35,
             ),
           ),
@@ -1087,10 +1094,10 @@ class _SecurityNfcVerificationScreenState
           child: Text(
             SecurityLocalization.qrCameraPermissionDenied,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 15,
-              color: _kTextDark,
+              color: Theme.of(context).colorScheme.onSurface,
               height: 1.35,
             ),
           ),
@@ -1159,16 +1166,17 @@ class _SecurityGateModeChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
       child: Container(
         decoration: BoxDecoration(
-          color: isActive ? _kTeal : Colors.white,
+          color: isActive ? _kTeal : colorScheme.surface,
           borderRadius: BorderRadius.circular(18),
           border: isActive
               ? null
-              : Border.all(color: _kTeal.withValues(alpha: 0.22)),
+              : Border.all(color: colorScheme.primary.withValues(alpha: 0.28)),
         ),
         child: Center(
           child: Padding(
@@ -1179,7 +1187,7 @@ class _SecurityGateModeChip extends StatelessWidget {
                 label,
                 maxLines: 1,
                 style: TextStyle(
-                  color: isActive ? Colors.white : _kTeal,
+                  color: isActive ? Colors.white : colorScheme.primary,
                   fontWeight: FontWeight.w600,
                   fontFamily: 'Cairo',
                 ),

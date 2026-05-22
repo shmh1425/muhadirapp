@@ -12,8 +12,6 @@ import '../../services/female_security_auth_service.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 
 const _kTealLight = Color(0xFF27A2A9);
-const _kTextDark = Color(0xFF2D2D2D);
-const _kTextMuted = Color(0xFF757575);
 const _kLogoutRed = Color(0xFFD32F2F);
 const _kCardShadow = Color(0x0D000000);
 
@@ -37,12 +35,13 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return AnimatedBuilder(
       animation: SecurityLocalization.controller,
       builder: (context, _) => Directionality(
         textDirection: SecurityLocalization.direction,
         child: Scaffold(
-          backgroundColor: Colors.white,
+          backgroundColor: theme.scaffoldBackgroundColor,
           body: SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
@@ -53,7 +52,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                     style: TextStyle(
                       fontSize: 25,
                       fontWeight: FontWeight.bold,
-                      color: _kTealLight,
+                      color: theme.colorScheme.secondary,
                       fontFamily: 'Cairo',
                     ),
                   ),
@@ -68,9 +67,9 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                       SecurityLocalization.isEnglish
                           ? SecurityLocalization.english
                           : SecurityLocalization.arabic,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
-                        color: _kTextMuted,
+                        color: theme.colorScheme.onSurfaceVariant,
                         fontFamily: 'Cairo',
                       ),
                     ),
@@ -100,7 +99,9 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                                   ? Icons.star_rounded
                                   : Icons.star_border_rounded,
                               size: 20,
-                              color: filled ? _kTealLight : _kTextMuted,
+                              color: filled
+                                  ? _kTealLight
+                                  : theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
                         );
@@ -118,7 +119,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                       SecurityLocalization.isEnglish
                           ? Icons.chevron_right
                           : Icons.chevron_left,
-                      color: _kTextMuted,
+                      color: theme.colorScheme.onSurfaceVariant,
                       size: 24,
                       textDirection: TextDirection.ltr,
                     ),
@@ -198,17 +199,22 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                 .toString();
         final email = _authService.currentUserEmail ?? 'username@example.com';
 
+        final scheme = Theme.of(context).colorScheme;
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: scheme.surface,
             borderRadius: BorderRadius.circular(14),
-            boxShadow: const [
+            boxShadow: [
               BoxShadow(
-                color: _kCardShadow,
+                color: isDark
+                    ? Colors.black.withValues(alpha: 0.2)
+                    : _kCardShadow,
                 blurRadius: 10,
-                offset: Offset(0, 2),
+                offset: const Offset(0, 2),
               ),
             ],
           ),
@@ -220,7 +226,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(color: _kTealLight, width: 2),
-                  color: _kTextMuted.withValues(alpha: 0.12),
+                  color: scheme.onSurfaceVariant.withValues(alpha: 0.12),
                 ),
                 child: ClipOval(
                   child: photoUrl.isNotEmpty
@@ -239,10 +245,10 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                     ? SecurityLocalization.securityAccount
                     : fullName,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: _kTextDark,
+                  color: scheme.onSurface,
                   fontFamily: 'Cairo',
                 ),
               ),
@@ -250,9 +256,9 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
               Text(
                 email,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
-                  color: _kTextMuted,
+                  color: scheme.onSurface.withValues(alpha: 0.68),
                   fontFamily: 'Cairo',
                 ),
               ),
@@ -276,7 +282,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
           child: Container(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
@@ -306,9 +312,9 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
                 Text(
                   SecurityLocalization.confirmLogout,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
-                    color: _kTextDark,
+                    color: Theme.of(context).colorScheme.onSurface,
                     fontFamily: 'Cairo',
                     height: 1.4,
                   ),
@@ -398,7 +404,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     return _OptionCard(
       icon: icon,
       label: label,
-      labelColor: labelColor ?? _kTextDark,
+      labelColor: labelColor,
       trailing: trailing,
       onTap: onTap,
     );
@@ -426,12 +432,15 @@ class _OptionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final effectiveLabelColor = labelColor ?? scheme.onSurface;
     final content = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         textDirection: SecurityLocalization.direction,
         children: [
-          Icon(icon, size: 22, color: labelColor ?? _kTextDark),
+          Icon(icon, size: 22, color: effectiveLabelColor),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -442,7 +451,7 @@ class _OptionCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
-                color: labelColor ?? _kTextDark,
+                color: effectiveLabelColor,
                 fontFamily: 'Cairo',
               ),
             ),
@@ -454,10 +463,16 @@ class _OptionCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: const [
-          BoxShadow(color: _kCardShadow, blurRadius: 10, offset: Offset(0, 2)),
+        boxShadow: [
+          BoxShadow(
+            color: theme.brightness == Brightness.dark
+                ? Colors.black.withValues(alpha: 0.2)
+                : _kCardShadow,
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Material(
@@ -477,8 +492,12 @@ class _SecurityProfilePlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Icon(Icons.person_rounded, size: 38, color: _kTextMuted),
+    return Center(
+      child: Icon(
+        Icons.person_rounded,
+        size: 38,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
     );
   }
 }
