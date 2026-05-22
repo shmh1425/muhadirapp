@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'female_security_nav_bar.dart';
 import 'general_settings_screen.dart';
 import 'security_localization.dart';
@@ -32,11 +31,9 @@ class SecuritySettingsScreen extends StatefulWidget {
 class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
   final FemaleSecurityAuthService _authService =
       FemaleSecurityAuthService.instance;
-  final ImagePicker _imagePicker = ImagePicker();
 
   bool _notificationsEnabled = false;
   int _rating = 0;
-  bool _isUploadingPhoto = false;
 
   @override
   Widget build(BuildContext context) {
@@ -217,68 +214,23 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
           ),
           child: Column(
             children: [
-              GestureDetector(
-                onTap: _isUploadingPhoto ? null : _pickAndUploadProfileImage,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Container(
-                      width: 76,
-                      height: 76,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: _kTealLight, width: 2),
-                        color: _kTextMuted.withValues(alpha: 0.12),
-                      ),
-                      child: ClipOval(
-                        child: photoUrl.isNotEmpty
-                            ? Image.network(
-                                photoUrl,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) =>
-                                    const _SecurityProfilePlaceholder(),
-                              )
-                            : const _SecurityProfilePlaceholder(),
-                      ),
-                    ),
-                    if (_isUploadingPhoto)
-                      Container(
-                        width: 76,
-                        height: 76,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.black.withValues(alpha: 0.35),
-                        ),
-                        child: const Center(
-                          child: SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.4,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    Positioned(
-                      bottom: 0,
-                      left: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(5),
-                        decoration: const BoxDecoration(
-                          color: _kTealLight,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.camera_alt_rounded,
-                          size: 14,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ],
+              Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: _kTealLight, width: 2),
+                  color: _kTextMuted.withValues(alpha: 0.12),
+                ),
+                child: ClipOval(
+                  child: photoUrl.isNotEmpty
+                      ? Image.network(
+                          photoUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              const _SecurityProfilePlaceholder(),
+                        )
+                      : const _SecurityProfilePlaceholder(),
                 ),
               ),
               const SizedBox(height: 10),
@@ -309,33 +261,6 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
         );
       },
     );
-  }
-
-  Future<void> _pickAndUploadProfileImage() async {
-    try {
-      final pickedFile = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85,
-      );
-      if (pickedFile == null || !mounted) return;
-
-      setState(() => _isUploadingPhoto = true);
-      await _authService.uploadCurrentUserProfileImage(pickedFile);
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(SecurityLocalization.photoUpdated)),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(SecurityLocalization.photoUploadFailed)),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isUploadingPhoto = false);
-      }
-    }
   }
 
   void _showLogoutDialog() {
