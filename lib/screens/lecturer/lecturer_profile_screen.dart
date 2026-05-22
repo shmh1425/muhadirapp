@@ -13,6 +13,7 @@ import 'lecturer_notifications_screen.dart';
 import '../../services/lecturer_auth_service.dart';
 import '../../models/external_lecturer_model.dart';
 import '../../services/lecturer/lecturer_attendance_sessions_warm_cache.dart';
+import '../../theme/app_theme_controller.dart';
 import 'lecturer_screen_session_memory.dart';
 import 'widgets/modern_popup_dialog.dart';
 
@@ -55,15 +56,15 @@ class LecturerProfile {
   }
 
   Map<String, dynamic> get _localizationMap => {
-        'nameAr': nameAr,
-        'nameEn': nameEn,
-        'college': college,
-        'collegeAr': collegeAr,
-        'collegeEn': collegeEn,
-        'department': department,
-        'departmentAr': departmentAr,
-        'departmentEn': departmentEn,
-      };
+    'nameAr': nameAr,
+    'nameEn': nameEn,
+    'college': college,
+    'collegeAr': collegeAr,
+    'collegeEn': collegeEn,
+    'department': department,
+    'departmentAr': departmentAr,
+    'departmentEn': departmentEn,
+  };
 
   String displayCollege({bool? isArabic}) {
     return LecturerLanguageController.localizedCollege(
@@ -124,9 +125,17 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
 
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
+  String _themeModeLabel(ThemeMode mode) {
+    return switch (mode) {
+      ThemeMode.system => _tr('النظام', 'System'),
+      ThemeMode.light => _tr('فاتح', 'Light'),
+      ThemeMode.dark => _tr('داكن', 'Dark'),
+    };
+  }
+
   String _resolveLecturerDisplayName(LecturerProfile profile) {
-    final fromAuth =
-        LecturerAuthService.instance.currentLecturer?.displayNameFor(_isArabic);
+    final fromAuth = LecturerAuthService.instance.currentLecturer
+        ?.displayNameFor(_isArabic);
     if (fromAuth != null && fromAuth.trim().isNotEmpty) {
       return fromAuth;
     }
@@ -134,8 +143,8 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
   }
 
   String _resolveCollege(LecturerProfile profile) {
-    final fromAuth =
-        LecturerAuthService.instance.currentLecturer?.displayCollegeFor(_isArabic);
+    final fromAuth = LecturerAuthService.instance.currentLecturer
+        ?.displayCollegeFor(_isArabic);
     if (fromAuth != null && fromAuth.trim().isNotEmpty) {
       return fromAuth.trim();
     }
@@ -145,10 +154,8 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
   }
 
   String _resolveDepartment(LecturerProfile profile) {
-    final fromAuth =
-        LecturerAuthService.instance.currentLecturer?.displayDepartmentFor(
-          _isArabic,
-        );
+    final fromAuth = LecturerAuthService.instance.currentLecturer
+        ?.displayDepartmentFor(_isArabic);
     if (fromAuth != null && fromAuth.trim().isNotEmpty) {
       return fromAuth.trim();
     }
@@ -317,7 +324,7 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
           child: Scaffold(
-            backgroundColor: Colors.white,
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             body: SafeArea(
               child: Column(
                 children: [
@@ -387,6 +394,8 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
                                 : 'Arabic | English',
                             onTap: _showLanguagePicker,
                           ),
+                          const SizedBox(height: 10),
+                          _ProfileThemeModeTile(labelFor: _themeModeLabel),
                           const SizedBox(height: 10),
                           _ProfileActionButton(
                             icon: Icons.logout,
@@ -549,7 +558,7 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
               height: 26,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.surface,
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.18),
@@ -593,10 +602,88 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
 
   Widget _buildDefaultAvatar() {
     return Container(
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surface,
       child: const Center(
         child: Icon(Icons.person, size: 40, color: _primaryColor),
       ),
+    );
+  }
+}
+
+class _ProfileThemeModeTile extends StatelessWidget {
+  const _ProfileThemeModeTile({required this.labelFor});
+
+  final String Function(ThemeMode mode) labelFor;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: appThemeMode,
+      builder: (context, mode, _) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+          decoration: BoxDecoration(
+            color: scheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(
+                  alpha: Theme.of(context).brightness == Brightness.dark
+                      ? 0.22
+                      : 0.06,
+                ),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.contrast_rounded, size: 24, color: scheme.primary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  LecturerLanguageController.tr('المظهر', 'Appearance'),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+              ),
+              DropdownButtonHideUnderline(
+                child: DropdownButton<ThemeMode>(
+                  value: mode,
+                  dropdownColor: scheme.surface,
+                  icon: Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: scheme.onSurface.withValues(alpha: 0.7),
+                  ),
+                  items: [ThemeMode.system, ThemeMode.light, ThemeMode.dark]
+                      .map(
+                        (m) => DropdownMenuItem<ThemeMode>(
+                          value: m,
+                          child: Text(
+                            labelFor(m),
+                            style: TextStyle(
+                              color: scheme.onSurface,
+                              fontFamily: 'Cairo',
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) setThemeMode(value);
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -618,17 +705,20 @@ class _ProfileActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: scheme.surface,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
+              color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.06),
               blurRadius: 14,
               offset: const Offset(0, 6),
             ),
@@ -644,7 +734,9 @@ class _ProfileActionButton extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: labelColor,
+                  color: labelColor == const Color(0xFF00474F)
+                      ? scheme.onSurface
+                      : labelColor,
                   fontFamily: 'Cairo',
                 ),
               ),

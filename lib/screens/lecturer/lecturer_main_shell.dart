@@ -104,7 +104,7 @@ class _LecturerMainShellState extends ConsumerState<LecturerMainShell> {
           child: Directionality(
             textDirection: LecturerLanguageController.direction(),
             child: Scaffold(
-              backgroundColor: Colors.white,
+              backgroundColor: Theme.of(context).scaffoldBackgroundColor,
               body: IndexedStack(
                 index: _selectedIndex,
                 children: [

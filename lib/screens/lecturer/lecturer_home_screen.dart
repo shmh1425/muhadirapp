@@ -69,7 +69,8 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
   }
 
   Future<void> _loadCalendarOnly() async {
-    final showCalendarProgress = _calendarLoadError != null || _isLoadingCalendar;
+    final showCalendarProgress =
+        _calendarLoadError != null || _isLoadingCalendar;
     if (showCalendarProgress) {
       setState(() {
         _isLoadingCalendar = true;
@@ -140,13 +141,12 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
   static const String _emptyOutsideTermAr = 'هذا اليوم خارج نطاق الترم.';
   static const String _emptyOutsideTermEn =
       'This date is outside the active term.';
-  static const String _emptyHolidayAr =
-      'هذا اليوم إجازة أو غير محسوب للحضور.';
+  static const String _emptyHolidayAr = 'هذا اليوم إجازة أو غير محسوب للحضور.';
   static const String _emptyHolidayEn =
       'This date is a holiday or non-attendance day.';
 
   ({List<LectureItem> lectures, String emptyAr, String emptyEn})
-      _resolveDayLectures(
+  _resolveDayLectures(
     List<LectureItem> all,
     DateTime day, {
     required String filterKey,
@@ -187,7 +187,7 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
   }
 
   ({List<LectureItem> lectures, String emptyAr, String emptyEn})
-      _todayLecturesBlock(List<LectureItem> all) {
+  _todayLecturesBlock(List<LectureItem> all) {
     return _resolveDayLectures(
       all,
       _normalizedToday(),
@@ -198,7 +198,7 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
   }
 
   ({List<LectureItem> lectures, String emptyAr, String emptyEn})
-      _tomorrowLecturesBlock(List<LectureItem> all) {
+  _tomorrowLecturesBlock(List<LectureItem> all) {
     return _resolveDayLectures(
       all,
       _normalizedTomorrow(),
@@ -572,13 +572,19 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
   }
 
   Widget _buildDayLecturesEmptyState(String emptyAr, String emptyEn) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 22),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE6EFF1)),
+        border: Border.all(
+          color: theme.brightness == Brightness.dark
+              ? Colors.white.withValues(alpha: 0.08)
+              : const Color(0xFFE6EFF1),
+        ),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -592,11 +598,11 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
           Text(
             LecturerLanguageController.tr(emptyAr, emptyEn),
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF7A9097),
+              color: scheme.onSurface.withValues(alpha: 0.65),
               height: 1.35,
             ),
           ),
@@ -645,10 +651,8 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
             child: LectureCard(
               lecture: lecture,
               onTap: onAttendTap != null ? () => onAttendTap(lecture) : null,
-              onDelayTap: () => _onDelayLectureFromCard(
-                lecture,
-                actionDateResolver(lecture),
-              ),
+              onDelayTap: () =>
+                  _onDelayLectureFromCard(lecture, actionDateResolver(lecture)),
               onCancelTap: () => _onCancelLectureFromCard(
                 lecture,
                 actionDateResolver(lecture),
@@ -710,8 +714,8 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
         final allLectures = fromState.isNotEmpty
             ? fromState
             : (fromCachedValue.isNotEmpty
-                ? fromCachedValue
-                : _lastNonEmptyCatalogLectures);
+                  ? fromCachedValue
+                  : _lastNonEmptyCatalogLectures);
         final catalogLoading = catalogAsync.isLoading;
         final catalogErr = catalogAsync.hasError ? catalogAsync.error : null;
         final blockFullScreenSpinner =
@@ -722,7 +726,7 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
           child: Scaffold(
-            backgroundColor: Colors.white,
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             body: SafeArea(
               child: blockFullScreenSpinner
                   ? const Center(
