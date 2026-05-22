@@ -333,7 +333,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 return Directionality(
                   textDirection: _translation.textDirection,
                   child: AlertDialog(
-                    backgroundColor: Colors.white,
+                    backgroundColor: Theme.of(context).colorScheme.surface,
                     insetPadding: const EdgeInsets.symmetric(
                       horizontal: 28,
                       vertical: 24,
@@ -361,8 +361,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             'Enter your university email to receive a password recovery link',
                           ),
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Color(0xFF444444),
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.78),
                             fontSize: 14,
                             height: 1.45,
                             fontFamily: 'Cairo',
@@ -431,6 +433,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return AnimatedBuilder(
       animation: _translation,
       builder: (context, _) {
+        final scheme = Theme.of(context).colorScheme;
         final titleLogin = _tr('تسجيل الدخول', 'Sign in');
         final titleApp = _tr('في تطبيق محضر', 'In Muhadir app');
         final labelEmail = _tr('الإيميل الجامعي :', 'University email:');
@@ -449,7 +452,7 @@ class _LoginScreenState extends State<LoginScreen> {
         return Directionality(
           textDirection: _translation.textDirection,
           child: Scaffold(
-            backgroundColor: Colors.white,
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             body: SafeArea(
               child: ListView(
                 padding: EdgeInsets.zero,
@@ -474,9 +477,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       horizontal: 24,
                       vertical: 20,
                     ),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.vertical(
+                    decoration: BoxDecoration(
+                      color: scheme.surface,
+                      borderRadius: const BorderRadius.vertical(
                         top: Radius.circular(26),
                       ),
                     ),
@@ -506,10 +509,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 22),
                         TText(
                           labelEmail,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF222222),
+                            color: scheme.onSurface,
                             fontFamily: 'Cairo',
                           ),
                         ),
@@ -532,10 +535,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 18),
                         TText(
                           labelPassword,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF222222),
+                            color: scheme.onSurface,
                             fontFamily: 'Cairo',
                           ),
                         ),
@@ -567,8 +570,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             onPressed: _showPasswordRecoveryDialog,
                             child: TText(
                               forgot,
-                              style: const TextStyle(
-                                color: Color(0xFF444444),
+                              style: TextStyle(
+                                color: scheme.onSurface.withValues(alpha: 0.78),
                                 fontFamily: 'Cairo',
                               ),
                             ),
@@ -605,9 +608,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             Expanded(
                               child: TText(
                                 terms,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
-                                  color: Color(0xFF444444),
+                                  color: scheme.onSurface.withValues(
+                                    alpha: 0.78,
+                                  ),
                                   fontFamily: 'Cairo',
                                 ),
                               ),
@@ -698,11 +703,11 @@ class _InputField extends StatelessWidget {
 
   static const Color _borderEnabled = Color(0xFFD0D0D0);
   static const Color _borderFocused = Color(0xFF006571);
-  static const Color _textColor = Color(0xFF1a1a1a);
   static const Color _hintColor = Color(0xFF757575);
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return TextFormField(
       controller: controller,
       obscureText: obscureText,
@@ -710,8 +715,8 @@ class _InputField extends StatelessWidget {
       textDirection: textDirection,
       textAlign: textAlign,
       onChanged: onChanged,
-      style: const TextStyle(
-        color: _textColor,
+      style: TextStyle(
+        color: scheme.onSurface,
         fontSize: 16,
         fontWeight: FontWeight.w500,
         fontFamily: 'Cairo',
@@ -732,7 +737,7 @@ class _InputField extends StatelessWidget {
         ),
         suffixIcon: suffixIcon,
         filled: true,
-        fillColor: Colors.white,
+        fillColor: scheme.surface,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 16,
