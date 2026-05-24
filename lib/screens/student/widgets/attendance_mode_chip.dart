@@ -16,6 +16,7 @@ class AttendanceModeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
@@ -26,7 +27,9 @@ class AttendanceModeChip extends StatelessWidget {
           border: isActive
               ? null
               : Border.all(
-                  color: const Color(0xFF006571).withValues(alpha: 0.22),
+                  color: const Color(
+                    0xFF006571,
+                  ).withValues(alpha: isDark ? 0.48 : 0.22),
                 ),
         ),
         child: Center(

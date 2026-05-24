@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../shared/theme/light_surface_theme.dart';
 import '../models/chat_message.dart';
 import '../providers/chatbot_provider.dart';
 import '../../translation/translation_controller.dart';
@@ -22,20 +21,25 @@ class ChatbotScreen extends StatelessWidget {
         builder: (context, _) {
           final controller = TranslationController.instance;
           final dir = controller.textDirection;
+          final theme = Theme.of(context);
+          final scheme = theme.colorScheme;
           return Directionality(
             textDirection: dir,
-            child: Theme(
-              data: themeForLightSurface(),
-              child: Scaffold(
-              backgroundColor: Colors.white,
+            child: Scaffold(
+              backgroundColor: theme.scaffoldBackgroundColor,
               appBar: AppBar(
-                backgroundColor: Colors.white,
+                backgroundColor: theme.scaffoldBackgroundColor,
                 elevation: 0,
                 leading: IconButton(
                   icon: Transform(
                     alignment: Alignment.center,
-                    transform: Matrix4.rotationY(dir == TextDirection.rtl ? 3.14159 : 0),
-                    child: const Icon(Icons.arrow_back_ios_new, color: _primaryColor),
+                    transform: Matrix4.rotationY(
+                      dir == TextDirection.rtl ? 3.14159 : 0,
+                    ),
+                    child: const Icon(
+                      Icons.arrow_back_ios_new,
+                      color: _primaryColor,
+                    ),
                   ),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
@@ -53,8 +57,8 @@ class ChatbotScreen extends StatelessWidget {
                         controller.translateToEnglish
                             ? 'Your smart assistant'
                             : 'مساعدك الذكي',
-                        style: const TextStyle(
-                          color: Color(0xFF1A1A1A),
+                        style: TextStyle(
+                          color: scheme.onSurface,
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
@@ -80,7 +84,8 @@ class ChatbotScreen extends StatelessWidget {
                             vertical: 12,
                           ),
                           reverse: true,
-                          itemCount: provider.messages.length +
+                          itemCount:
+                              provider.messages.length +
                               (provider.isLoading ? 1 : 0),
                           itemBuilder: (context, index) {
                             if (provider.isLoading && index == 0) {
@@ -104,7 +109,6 @@ class ChatbotScreen extends StatelessWidget {
                 ],
               ),
             ),
-            ),
           );
         },
       ),
@@ -123,6 +127,7 @@ class _EmptyState extends StatelessWidget {
       animation: TranslationController.instance,
       builder: (context, _) {
         final english = TranslationController.instance.translateToEnglish;
+        final scheme = Theme.of(context).colorScheme;
         return SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -130,10 +135,10 @@ class _EmptyState extends StatelessWidget {
               const SizedBox(height: 24),
               Text(
                 english ? 'Your smart assistant' : 'مساعدك الذكي',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF424242),
+                  color: scheme.onSurface,
                 ),
               ),
               const SizedBox(height: 32),
@@ -142,9 +147,9 @@ class _EmptyState extends StatelessWidget {
                     ? 'Type your message or tap a suggestion below.'
                     : 'اكتب رسالتك أو اختر أحد الاقتراحات أدناه.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
-                  color: Color(0xFF757575),
+                  color: scheme.onSurfaceVariant,
                   height: 1.4,
                 ),
               ),
@@ -211,6 +216,7 @@ class _SuggestionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -219,10 +225,16 @@ class _SuggestionChip extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
-            color: ChatbotScreen._primaryColor.withValues(alpha: 0.12),
+            color: Theme.of(context).brightness == Brightness.dark
+                ? scheme.surfaceContainerHighest
+                : ChatbotScreen._primaryColor.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: ChatbotScreen._primaryColor.withValues(alpha: 0.3),
+              color: ChatbotScreen._primaryColor.withValues(
+                alpha: Theme.of(context).brightness == Brightness.dark
+                    ? 0.55
+                    : 0.3,
+              ),
             ),
           ),
           child: Text(
@@ -248,20 +260,26 @@ class _MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final isUser = message.isUser;
     final dir = Directionality.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final botBubbleColor = Theme.of(context).brightness == Brightness.dark
+        ? scheme.surfaceContainerHighest
+        : ChatbotScreen._botBubbleColor;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         textDirection: dir,
-        mainAxisAlignment:
-            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isUser) _BotAvatar(),
           if (!isUser) const SizedBox(width: 8),
           Flexible(
             child: Column(
-              crossAxisAlignment:
-                  isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              crossAxisAlignment: isUser
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -271,7 +289,7 @@ class _MessageBubble extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: isUser
                         ? ChatbotScreen._userBubbleColor
-                        : ChatbotScreen._botBubbleColor,
+                        : botBubbleColor,
                     borderRadius: BorderRadius.only(
                       topLeft: const Radius.circular(16),
                       topRight: const Radius.circular(16),
@@ -283,7 +301,7 @@ class _MessageBubble extends StatelessWidget {
                     message.text,
                     style: TextStyle(
                       fontSize: 15,
-                      color: isUser ? Colors.white : Colors.black87,
+                      color: isUser ? Colors.white : scheme.onSurface,
                       height: 1.35,
                     ),
                     textDirection: dir,
@@ -294,7 +312,7 @@ class _MessageBubble extends StatelessWidget {
                   _formatTime(message.timestamp),
                   style: TextStyle(
                     fontSize: 11,
-                    color: Colors.grey[600],
+                    color: scheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -308,7 +326,9 @@ class _MessageBubble extends StatelessWidget {
   String _formatTime(DateTime t) {
     final hour = t.hour > 12 ? t.hour - 12 : (t.hour == 0 ? 12 : t.hour);
     final english = TranslationController.instance.translateToEnglish;
-    final ampm = english ? (t.hour >= 12 ? 'PM' : 'AM') : (t.hour >= 12 ? 'م' : 'ص');
+    final ampm = english
+        ? (t.hour >= 12 ? 'PM' : 'AM')
+        : (t.hour >= 12 ? 'م' : 'ص');
     final min = t.minute.toString().padLeft(2, '0');
     return '$hour:$min $ampm';
   }
@@ -330,7 +350,11 @@ class _ChatbotAvatar extends StatelessWidget {
         fit: BoxFit.contain,
         errorBuilder: (_, __, ___) => CircleAvatar(
           backgroundColor: ChatbotScreen._primaryColor,
-          child: Icon(Icons.smart_toy_rounded, color: Colors.white, size: size * 0.55),
+          child: Icon(
+            Icons.smart_toy_rounded,
+            color: Colors.white,
+            size: size * 0.55,
+          ),
         ),
       ),
     );
@@ -348,6 +372,10 @@ class _TypingIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dir = Directionality.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final botBubbleColor = Theme.of(context).brightness == Brightness.dark
+        ? scheme.surfaceContainerHighest
+        : ChatbotScreen._botBubbleColor;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -360,7 +388,7 @@ class _TypingIndicator extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: ChatbotScreen._botBubbleColor,
+              color: botBubbleColor,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(16),
                 topRight: Radius.circular(16),
@@ -412,7 +440,9 @@ class _TypingDotsState extends State<_TypingDots>
           children: List.generate(3, (i) {
             final delay = i * 0.2;
             final value = ((_controller.value - delay) % 1.0).clamp(0.0, 1.0);
-            final scale = 0.6 + 0.4 * (0.5 + 0.5 * (value < 0.5 ? value * 2 : 2 - value * 2));
+            final scale =
+                0.6 +
+                0.4 * (0.5 + 0.5 * (value < 0.5 ? value * 2 : 2 - value * 2));
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2),
               child: Transform.scale(
@@ -421,7 +451,7 @@ class _TypingDotsState extends State<_TypingDots>
                   width: 8,
                   height: 8,
                   decoration: BoxDecoration(
-                    color: Colors.grey[600],
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -466,6 +496,8 @@ class _InputBarState extends State<_InputBar> {
     final controller = TranslationController.instance;
     final english = controller.translateToEnglish;
     final dir = controller.textDirection;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Container(
       padding: EdgeInsets.fromLTRB(
         12,
@@ -474,10 +506,12 @@ class _InputBarState extends State<_InputBar> {
         8 + MediaQuery.of(context).padding.bottom,
       ),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
+            color: Colors.black.withValues(
+              alpha: theme.brightness == Brightness.dark ? 0.24 : 0.06,
+            ),
             blurRadius: 8,
             offset: const Offset(0, -2),
           ),
@@ -490,17 +524,23 @@ class _InputBarState extends State<_InputBar> {
               controller: _controller,
               focusNode: _focusNode,
               textDirection: dir,
-              style: lightSurfaceFieldTextStyle,
+              style: TextStyle(
+                color: scheme.onSurface,
+                fontFamily: 'Cairo',
+                fontSize: 15,
+              ),
               cursorColor: ChatbotScreen._primaryColor,
               decoration: InputDecoration(
                 hintText: english ? 'Type your message…' : 'اكتب رسالتك...',
-                hintStyle: const TextStyle(
-                  color: lightSurfaceFieldHintColor,
+                hintStyle: TextStyle(
+                  color: scheme.onSurfaceVariant,
                   fontSize: 15,
                   fontFamily: 'Cairo',
                 ),
                 filled: true,
-                fillColor: Colors.grey[100],
+                fillColor: theme.brightness == Brightness.dark
+                    ? scheme.surfaceContainerHighest
+                    : Colors.grey[100],
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(24),
                   borderSide: BorderSide.none,
@@ -522,11 +562,7 @@ class _InputBarState extends State<_InputBar> {
               borderRadius: BorderRadius.circular(24),
               child: const Padding(
                 padding: EdgeInsets.all(12),
-                child: Icon(
-                  Icons.send_rounded,
-                  color: Colors.white,
-                  size: 24,
-                ),
+                child: Icon(Icons.send_rounded, color: Colors.white, size: 24),
               ),
             ),
           ),

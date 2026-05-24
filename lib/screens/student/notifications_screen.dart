@@ -50,7 +50,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   String _tr(TranslationController t, String ar, String en) =>
       t.translateToEnglish ? en : ar;
 
-  static const Color _bg = Color(0xFFF7F9FB);
   /// Matches other student headers (جدول، حضور، أعذار).
   static const Color _headerPrimary = Color(0xFF006571);
   static const Color _deleteAllRed = Color(0xFFDC2626);
@@ -60,8 +59,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     super.initState();
     final id = StudentAuthService.instance.currentStudent?.studentId ?? 0;
     if (id > 0) {
-      _notificationsStream =
-          _notificationsService.watchCurrentStudentNotifications(id);
+      _notificationsStream = _notificationsService
+          .watchCurrentStudentNotifications(id);
     }
   }
 
@@ -140,7 +139,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
     final d = diff.inDays;
     if (en) {
-      return d == 1 ? 'Yesterday' : (d < 7 ? '$d days ago' : '${d ~/ 7} weeks ago');
+      return d == 1
+          ? 'Yesterday'
+          : (d < 7 ? '$d days ago' : '${d ~/ 7} weeks ago');
     }
     if (d == 1) return 'أمس';
     if (d == 2) return 'قبل يومين';
@@ -176,11 +177,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return Directionality(
           textDirection: translation.textDirection,
           child: Scaffold(
-            backgroundColor: _bg,
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             floatingActionButton: const ChatFAB(),
             body: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 16,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -204,17 +208,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Widget _buildHeader(BuildContext context, TranslationController t) {
     return Container(
-      color: Colors.white,
+      color: Theme.of(context).scaffoldBackgroundColor,
       child: Row(
         children: [
           IconButton(
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
             onPressed: () => Navigator.of(context).maybePop(),
-            icon: StudentBackChevronIcon(
-              color: _headerPrimary,
-              size: 16,
-            ),
+            icon: StudentBackChevronIcon(color: _headerPrimary, size: 16),
           ),
           const SizedBox(width: 6),
           Expanded(
@@ -240,6 +241,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Widget _buildDeleteAllBar(TranslationController t) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final deleteColor = isDark ? const Color(0xFFFF8A8A) : _deleteAllRed;
     return Padding(
       padding: const EdgeInsetsDirectional.only(top: 4, bottom: 8),
       child: Align(
@@ -247,7 +250,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         child: TextButton(
           onPressed: _confirmDeleteAll,
           style: TextButton.styleFrom(
-            foregroundColor: _deleteAllRed,
+            foregroundColor: deleteColor,
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
             minimumSize: Size.zero,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -258,7 +261,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               fontFamily: 'Tajawal',
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: _deleteAllRed,
             ),
           ),
         ),
@@ -270,13 +272,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (_studentId <= 0) {
       return <Widget>[
         _EmptyNotificationsMessage(
-          message: _tr(t, 'سجّل دخولك كطالب لعرض التنبيهات.', 'Sign in as a student to view notifications.'),
+          message: _tr(
+            t,
+            'سجّل دخولك كطالب لعرض التنبيهات.',
+            'Sign in as a student to view notifications.',
+          ),
         ),
       ];
     }
 
-    _notificationsStream ??=
-        _notificationsService.watchCurrentStudentNotifications(_studentId);
+    _notificationsStream ??= _notificationsService
+        .watchCurrentStudentNotifications(_studentId);
 
     return <Widget>[
       StreamBuilder<List<StudentNotification>>(
@@ -285,7 +291,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return _EmptyNotificationsMessage(
-              message: _tr(t, 'تعذر تحميل التنبيهات حالياً.', 'Could not load notifications.'),
+              message: _tr(
+                t,
+                'تعذر تحميل التنبيهات حالياً.',
+                'Could not load notifications.',
+              ),
             );
           }
 
@@ -337,7 +347,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   /// Unread first; within each group, newest first.
-  List<StudentNotification> _sortedNotificationsForDisplay(List<StudentNotification> items) {
+  List<StudentNotification> _sortedNotificationsForDisplay(
+    List<StudentNotification> items,
+  ) {
     final copy = List<StudentNotification>.from(items);
     copy.sort((StudentNotification a, StudentNotification b) {
       if (a.isRead != b.isRead) {
@@ -421,7 +433,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           builder: (_) => PendingDetailScreen(
             studentId: _studentId,
             attendanceRecordId: n.attendanceRecordId,
-            course: n.courseName.isEmpty ? (t.translateToEnglish ? 'Course' : 'المقرر') : n.courseName,
+            course: n.courseName.isEmpty
+                ? (t.translateToEnglish ? 'Course' : 'المقرر')
+                : n.courseName,
             dateText: _dateTextFor(n),
             timeRange: _timeRangeFor(n),
             attachmentUrl: n.attachmentUrl,
@@ -441,12 +455,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           context,
           MaterialPageRoute<void>(
             builder: (_) => RejectionDetailScreen(
-              course: n.courseName.isEmpty ? (t.translateToEnglish ? 'Course' : 'المادة') : n.courseName,
+              course: n.courseName.isEmpty
+                  ? (t.translateToEnglish ? 'Course' : 'المادة')
+                  : n.courseName,
               dateText: _dateTextFor(n),
               timeRange: _timeRangeFor(n),
               reason: n.rejectionReason.isNotEmpty
                   ? n.rejectionReason
-                  : (t.translateToEnglish ? 'Your excuse was not accepted.' : 'تم رفض العذر.'),
+                  : (t.translateToEnglish
+                        ? 'Your excuse was not accepted.'
+                        : 'تم رفض العذر.'),
               sectionId: sectionId,
               lectureDate: lectureDate,
               sessionId: sessionId,
@@ -472,7 +490,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   /// Shown after swipe threshold; returns whether [Dismissible] should remove the tile.
-  Future<bool> _confirmAndDeleteNotification(StudentNotification notification) async {
+  Future<bool> _confirmAndDeleteNotification(
+    StudentNotification notification,
+  ) async {
     final t = TranslationController.instance;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -481,7 +501,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         child: AlertDialog(
           title: Text(_tr(t, 'حذف الإشعار', 'Delete notification')),
           content: Text(
-            _tr(t, 'هل أنت متأكد من حذف هذا الإشعار؟', 'Are you sure you want to delete this notification?'),
+            _tr(
+              t,
+              'هل أنت متأكد من حذف هذا الإشعار؟',
+              'Are you sure you want to delete this notification?',
+            ),
           ),
           actions: [
             TextButton(
@@ -489,7 +513,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               child: Text(_tr(t, 'إلغاء', 'Cancel')),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+              ),
               onPressed: () => Navigator.of(ctx).pop(true),
               child: Text(_tr(t, 'موافق', 'OK')),
             ),
@@ -524,11 +550,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       return true;
     } catch (e) {
       if (!mounted) return false;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_deleteFailureMessage(t, e)),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_deleteFailureMessage(t, e))));
       return false;
     }
   }
@@ -541,14 +565,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         textDirection: t.textDirection,
         child: AlertDialog(
           title: Text(_tr(t, 'حذف كل الإشعارات', 'Delete all notifications')),
-          content: Text(_tr(t, 'سيتم حذف جميع الإشعارات من القائمة. هل تريد المتابعة؟', 'This will remove all notifications from the list. Continue?')),
+          content: Text(
+            _tr(
+              t,
+              'سيتم حذف جميع الإشعارات من القائمة. هل تريد المتابعة؟',
+              'This will remove all notifications from the list. Continue?',
+            ),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
               child: Text(_tr(t, 'إلغاء', 'Cancel')),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+              ),
               onPressed: () {
                 Navigator.of(ctx).pop();
                 _deleteAll();
@@ -580,17 +612,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       _optimisticHiddenIds.value = next;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_tr(t, 'تم حذف جميع الإشعارات.', 'All notifications have been deleted.')),
+          content: Text(
+            _tr(
+              t,
+              'تم حذف جميع الإشعارات.',
+              'All notifications have been deleted.',
+            ),
+          ),
           duration: const Duration(seconds: 2),
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_deleteFailureMessage(t, e)),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_deleteFailureMessage(t, e))));
     }
   }
 }
@@ -609,6 +645,7 @@ class _NotificationCard extends StatelessWidget {
   final _NotificationVisualKind visualKind;
   final String relativeTime;
   final VoidCallback onOpen;
+
   /// After swipe threshold: parent shows confirm dialog, then deletes if user accepts.
   final Future<bool> Function() onSwipeDelete;
   final String Function(TranslationController t, String ar, String en) tr;
@@ -675,21 +712,30 @@ class _NotificationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = TranslationController.instance;
-    final message = t.translateToEnglish ? notification.messageEn : notification.messageAr;
+    final message = t.translateToEnglish
+        ? notification.messageEn
+        : notification.messageAr;
     final desc = message.trim().isEmpty
         ? (t.translateToEnglish ? notification.titleEn : notification.titleAr)
         : message;
     final unread = !notification.isRead;
     final (iconColor, stripePastel, iconData) = _style();
     final stripeColor = _stripeEdgeColor(stripePastel, iconColor, unread);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
     final Widget cardFace = Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(16),
+        border: theme.brightness == Brightness.dark
+            ? Border.all(color: scheme.outlineVariant.withValues(alpha: 0.45))
+            : null,
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
+            color: Colors.black.withValues(
+              alpha: theme.brightness == Brightness.dark ? 0.22 : 0.06,
+            ),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -719,9 +765,11 @@ class _NotificationCard extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontFamily: 'Tajawal',
-                              fontWeight: unread ? FontWeight.w800 : FontWeight.w700,
+                              fontWeight: unread
+                                  ? FontWeight.w800
+                                  : FontWeight.w700,
                               fontSize: 15,
-                              color: const Color(0xFF0F172A),
+                              color: scheme.onSurface,
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -729,21 +777,23 @@ class _NotificationCard extends StatelessWidget {
                             desc,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontFamily: 'Tajawal',
                               fontSize: 13.5,
                               height: 1.35,
-                              color: Color(0xFF475569),
+                              color: scheme.onSurfaceVariant,
                               fontWeight: FontWeight.w400,
                             ),
                           ),
                           const SizedBox(height: 8),
                           TText(
                             relativeTime,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontFamily: 'Tajawal',
                               fontSize: 12,
-                              color: Color(0xFF9CA3AF),
+                              color: scheme.onSurfaceVariant.withValues(
+                                alpha: 0.72,
+                              ),
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -801,16 +851,17 @@ class _EmptyNotificationsMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final h = MediaQuery.of(context).size.height;
+    final scheme = Theme.of(context).colorScheme;
     return SizedBox(
       height: (h * 0.45).clamp(220.0, 420.0),
       child: Center(
         child: TText(
           message,
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: 'Tajawal',
             fontSize: 15,
-            color: Color(0xFF64748B),
+            color: scheme.onSurfaceVariant,
             fontWeight: FontWeight.w600,
           ),
         ),

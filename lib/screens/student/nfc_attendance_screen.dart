@@ -75,8 +75,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     }
 
     setState(() => _geoVerifying = true);
-    final required =
-        await StudentCampusGeoGuard.attendanceGeoRequiredToday();
+    final required = await StudentCampusGeoGuard.attendanceGeoRequiredToday();
     if (!mounted) return;
 
     if (!required) {
@@ -119,7 +118,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     setState(() {
       _isScanning = false;
       _statusError = true;
-      _statusMessage = _geoBlockMessage ??
+      _statusMessage =
+          _geoBlockMessage ??
           _tr(
             'أنت خارج حدود الحرم الجامعي.',
             'You are outside the university campus boundary.',
@@ -256,15 +256,6 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         _isBluetoothScanning = false;
       });
     }
-  }
-
-  bool _isBluetoothPoweredOff(BluetoothScanResult? result) {
-    if (result == null) return false;
-    if (result.state != BluetoothScanState.error) return false;
-    final lower = result.message.toLowerCase();
-    return lower.contains('turned off') ||
-        lower.contains('powered off') ||
-        lower.contains('location services are disabled');
   }
 
   bool _shouldShowBluetoothLecturerHint(BluetoothScanResult? result) {
@@ -470,8 +461,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     )..repeat();
     _checkNfcAvailability();
     unawaited(_refreshCampusGeo());
-    StudentCampusGeoGuard.debugSkipGeoFenceForTesting
-        .addListener(_onAttendanceGeoDebugToggle);
+    StudentCampusGeoGuard.debugSkipGeoFenceForTesting.addListener(
+      _onAttendanceGeoDebugToggle,
+    );
   }
 
   void _onAttendanceGeoDebugToggle() {
@@ -804,7 +796,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     );
   }
 
-  String _extractCardId(NfcTag tag) => NfcTagIdentifier.extractNormalizedId(tag);
+  String _extractCardId(NfcTag tag) =>
+      NfcTagIdentifier.extractNormalizedId(tag);
 
   Future<void> _startQrScanner() async {
     if (_isNfc ||
@@ -1276,8 +1269,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
 
   @override
   void dispose() {
-    StudentCampusGeoGuard.debugSkipGeoFenceForTesting
-        .removeListener(_onAttendanceGeoDebugToggle);
+    StudentCampusGeoGuard.debugSkipGeoFenceForTesting.removeListener(
+      _onAttendanceGeoDebugToggle,
+    );
     WidgetsBinding.instance.removeObserver(this);
     _pulseController?.dispose();
     _attendanceCodeController.dispose();
@@ -1293,6 +1287,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Widget _buildGeoVerifyingPanel() {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 28),
       child: Column(
@@ -1310,11 +1305,11 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
           Text(
             _tr('جاري التحقق من موقعك...', 'Checking your location...'),
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF35565E),
+              color: scheme.onSurfaceVariant,
             ),
           ),
         ],
@@ -1323,6 +1318,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Widget _buildGeoBlockedPanel() {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
       child: Column(
@@ -1349,14 +1346,16 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFEBEE),
+              color: isDark
+                  ? const Color(0xFFB71C1C).withValues(alpha: 0.16)
+                  : const Color(0xFFFFEBEE),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: const Color(0xFFE57373)),
             ),
             child: Text(
               _geoBlockMessage!,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Color(0xFFB71C1C),
                 fontSize: 13,
                 fontFamily: 'Cairo',
@@ -1370,11 +1369,14 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
             onPressed: _geoVerifying
                 ? null
                 : () => unawaited(_refreshCampusGeo()),
-            icon: const Icon(Icons.my_location_rounded, color: Color(0xFF006571)),
+            icon: const Icon(
+              Icons.my_location_rounded,
+              color: Color(0xFF006571),
+            ),
             label: Text(
               _tr('إعادة التحقق من الموقع', 'Check location again'),
-              style: const TextStyle(
-                color: Color(0xFF006571),
+              style: TextStyle(
+                color: scheme.primary,
                 fontWeight: FontWeight.w700,
                 fontFamily: 'Cairo',
               ),
@@ -1386,6 +1388,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Widget _buildBluetoothPlaceholderPanel() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final result = _bluetoothScanResult;
     final detection = result?.detection;
     final statusColor = switch (result?.state) {
@@ -1418,7 +1422,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
             height: 122,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.white,
+              color: scheme.surface,
               border: Border.all(color: const Color(0xFF006571), width: 2),
               boxShadow: [
                 BoxShadow(
@@ -1438,11 +1442,11 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
           Text(
             _tr('التحضير عبر البلوتوث', 'Bluetooth Attendance'),
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 20,
               fontWeight: FontWeight.w800,
-              color: Color(0xFF1F2E33),
+              color: scheme.onSurface,
             ),
           ),
           const SizedBox(height: 12),
@@ -1450,9 +1454,13 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: scheme.surface,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFCCE8EA)),
+              border: Border.all(
+                color: theme.brightness == Brightness.dark
+                    ? scheme.outlineVariant.withValues(alpha: 0.55)
+                    : const Color(0xFFCCE8EA),
+              ),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1476,8 +1484,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                       'Ask your lecturer to activate Bluetooth attendance and start broadcasting.',
                     ),
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Color(0xFF5F7A80),
+                    style: TextStyle(
+                      color: scheme.onSurfaceVariant,
                       fontSize: 12,
                       fontFamily: 'Cairo',
                       fontWeight: FontWeight.w600,
@@ -1713,6 +1721,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Widget _buildQrAttendanceContent(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final scanSize = min(280.0, MediaQuery.sizeOf(context).width - 72);
 
     return Column(
@@ -1723,7 +1733,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
           child: Container(
             height: 40,
             decoration: BoxDecoration(
-              color: const Color(0xFFD7F1F1),
+              color: theme.brightness == Brightness.dark
+                  ? scheme.surfaceContainerHighest
+                  : const Color(0xFFD7F1F1),
               borderRadius: BorderRadius.circular(20),
             ),
             padding: const EdgeInsets.all(4),
@@ -1772,9 +1784,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                 backgroundColor: const Color(0xFF006571),
                 foregroundColor: Colors.white,
                 disabledForegroundColor: Colors.white70,
-                disabledBackgroundColor: const Color(0xFF006571).withValues(
-                  alpha: 0.4,
-                ),
+                disabledBackgroundColor: const Color(
+                  0xFF006571,
+                ).withValues(alpha: 0.4),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24),
                 ),
@@ -1832,11 +1844,17 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Widget _buildQrStatusBanner() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: _qrStatusError ? const Color(0xFFFFEBEE) : Colors.white,
+        color: _qrStatusError
+            ? theme.brightness == Brightness.dark
+                  ? const Color(0xFFB71C1C).withValues(alpha: 0.16)
+                  : const Color(0xFFFFEBEE)
+            : scheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: _qrStatusError
@@ -1850,7 +1868,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         style: TextStyle(
           color: _qrStatusError
               ? const Color(0xFFB71C1C)
-              : const Color(0xFF35565E),
+              : scheme.onSurfaceVariant,
           fontSize: 13,
           fontFamily: 'Cairo',
           fontWeight: FontWeight.w600,
@@ -1861,13 +1879,15 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Widget _buildQrManualEntryCard() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: scheme.surface,
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: const Color(0xFF006571), width: 1.5),
           boxShadow: [
@@ -1885,7 +1905,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: const Color(0xFFE6FBFB),
+                color: theme.brightness == Brightness.dark
+                    ? scheme.primary.withValues(alpha: 0.16)
+                    : const Color(0xFFE6FBFB),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -1897,11 +1919,11 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
             const SizedBox(height: 14),
             Text(
               _tr('رمز الحضور', 'Attendance code'),
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 17,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF1F2E33),
+                color: scheme.onSurface,
               ),
             ),
             const SizedBox(height: 6),
@@ -1911,10 +1933,10 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                 'Enter the 6-digit code shown by your lecturer',
               ),
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 13,
-                color: Color(0xFF5F7A80),
+                color: scheme.onSurfaceVariant,
                 height: 1.35,
               ),
             ),
@@ -1925,12 +1947,12 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
               textAlign: TextAlign.center,
               maxLength: 6,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 32,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 8,
-                color: Color(0xFF1F2E33),
+                color: scheme.onSurface,
               ),
               decoration: InputDecoration(
                 counterText: '',
@@ -1943,7 +1965,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                   fontWeight: FontWeight.w600,
                 ),
                 filled: true,
-                fillColor: const Color(0xFFF7FAFB),
+                fillColor: theme.brightness == Brightness.dark
+                    ? scheme.surfaceContainerHighest
+                    : const Color(0xFFF7FAFB),
                 contentPadding: const EdgeInsets.symmetric(vertical: 16),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(16),
@@ -1966,6 +1990,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }
 
   Widget _buildQrScannerCard(double scanSize) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final cutOut = scanSize * 0.68;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1976,7 +2002,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
             width: scanSize,
             height: scanSize,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: scheme.surface,
               borderRadius: BorderRadius.circular(24),
               border: Border.all(color: const Color(0xFF006571), width: 2),
               boxShadow: [
@@ -2008,18 +2034,14 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                     _qrCameraUnavailable)
                   _QrScannerFallback(
                     message: _checkingQrAvailability
-                        ? _tr(
-                            'جاري تجهيز الكاميرا...',
-                            'Preparing camera...',
-                          )
+                        ? _tr('جاري تجهيز الكاميرا...', 'Preparing camera...')
                         : _qrPermissionDenied
                         ? _tr(
                             'فعّل صلاحية الكاميرا من إعدادات الجهاز لمسح الرمز.',
                             'Enable camera access in device settings to scan.',
                           )
                         : _qrStatusMessage,
-                    showRetry:
-                        !_checkingQrAvailability && !_qrPermissionDenied,
+                    showRetry: !_checkingQrAvailability && !_qrPermissionDenied,
                     onRetry: _retryQrScan,
                   ),
                 IgnorePointer(
@@ -2060,7 +2082,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       builder: (context, _) => Directionality(
         textDirection: translation.textDirection,
         child: Scaffold(
-          backgroundColor: Colors.white,
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           floatingActionButton: const ChatFAB(),
           bottomNavigationBar: NavBarSettingsArabic(
             selectedIndex: selectedIndex,
@@ -2102,10 +2124,10 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                 Center(
                   child: TText(
                     attendanceModeTitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF222222),
+                      color: Theme.of(context).colorScheme.onSurface,
                       fontFamily: 'Cairo',
                     ),
                   ),
@@ -2116,7 +2138,11 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                     width: 270,
                     height: 42,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE1F7F7),
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest
+                          : const Color(0xFFE1F7F7),
                       borderRadius: BorderRadius.circular(22),
                     ),
                     padding: const EdgeInsets.all(4),
@@ -2155,7 +2181,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                 Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE6FBFB),
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Theme.of(context).colorScheme.surfaceContainerHighest
+                        : const Color(0xFFE6FBFB),
                     borderRadius: BorderRadius.circular(26),
                   ),
                   padding: const EdgeInsets.symmetric(vertical: 20),
@@ -2234,8 +2262,13 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                               ),
                               decoration: BoxDecoration(
                                 color: _statusError
-                                    ? const Color(0xFFFFEBEE)
-                                    : Colors.white,
+                                    ? Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? const Color(
+                                              0xFFB71C1C,
+                                            ).withValues(alpha: 0.16)
+                                          : const Color(0xFFFFEBEE)
+                                    : Theme.of(context).colorScheme.surface,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: _statusError
@@ -2249,7 +2282,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                                 style: TextStyle(
                                   color: _statusError
                                       ? const Color(0xFFB71C1C)
-                                      : const Color(0xFF35565E),
+                                      : Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
                                   fontSize: 13,
                                   fontFamily: 'Cairo',
                                   fontWeight: FontWeight.w600,
@@ -2334,8 +2369,12 @@ class _QrScannerFallback extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Container(
-      color: const Color(0xFFDBF2F2),
+      color: theme.brightness == Brightness.dark
+          ? scheme.surfaceContainerHighest
+          : const Color(0xFFDBF2F2),
       padding: const EdgeInsets.symmetric(horizontal: 18),
       child: Center(
         child: Column(
@@ -2350,8 +2389,8 @@ class _QrScannerFallback extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Color(0xFF35565E),
+              style: TextStyle(
+                color: scheme.onSurfaceVariant,
                 fontFamily: 'Cairo',
                 fontWeight: FontWeight.w700,
                 fontSize: 13,
@@ -2401,13 +2440,14 @@ class _BluetoothDetectionLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Row(
       children: [
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(
-              color: Color(0xFF5F7A80),
+            style: TextStyle(
+              color: scheme.onSurfaceVariant,
               fontSize: 12,
               fontFamily: 'Cairo',
               fontWeight: FontWeight.w600,
@@ -2421,8 +2461,8 @@ class _BluetoothDetectionLine extends StatelessWidget {
             textAlign: TextAlign.end,
             overflow: TextOverflow.ellipsis,
             maxLines: 2,
-            style: const TextStyle(
-              color: Color(0xFF1F2E33),
+            style: TextStyle(
+              color: scheme.onSurface,
               fontSize: 12,
               fontFamily: 'Cairo',
               fontWeight: FontWeight.w800,

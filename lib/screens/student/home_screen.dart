@@ -35,7 +35,6 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  static const _textStrong = Color(0xFF111827);
   int selectedIndex = 2; // Start with Home selected (index 2 for Home)
   final ManualAttendanceService _attendance = ManualAttendanceService.instance;
   final ExcuseService _excuses = ExcuseService.instance;
@@ -158,10 +157,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     children: [
                       TText(
                         'أهلاً ${_greetingName()}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
-                          color: _textStrong,
+                          color: Theme.of(context).colorScheme.onSurface,
                         ),
                       ),
                       Row(
@@ -239,12 +238,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const TText(
+                      TText(
                         'محاضرات اليوم:',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 18,
-                          color: _textStrong,
+                          color: Theme.of(context).colorScheme.onSurface,
                         ),
                       ),
                       TextButton(
@@ -294,10 +293,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         translation.translateToEnglish
                             ? 'Active absences:'
                             : 'الغيابات النشطة:',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 18,
-                          color: _textStrong,
+                          color: Theme.of(context).colorScheme.onSurface,
                         ),
                       ),
                       TextButton(
@@ -520,6 +519,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget buildStudentCard(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Column(
       children: [
         InkWell(
@@ -533,9 +534,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               // الكرت الأبيض
               Container(
                 margin: const EdgeInsets.only(top: 32),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.only(
+                decoration: BoxDecoration(
+                  color: scheme.surface,
+                  borderRadius: const BorderRadius.only(
                     topRight: Radius.circular(28),
                     topLeft: Radius.circular(28),
                     bottomLeft: Radius.circular(0),
@@ -543,9 +544,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black12,
+                      color: Colors.black.withValues(
+                        alpha: theme.brightness == Brightness.dark
+                            ? 0.24
+                            : 0.12,
+                      ),
                       blurRadius: 8,
-                      offset: Offset(0, 4),
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
@@ -575,19 +580,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             })(),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 14,
-                              color: Color(0xFF111827),
+                              color: scheme.onSurface,
                               fontFamily: 'Cairo',
                             ),
                           ),
                           const SizedBox(height: 4),
                           TText(
                             'رقم الطالب : ${StudentAuthService.instance.currentStudent?.studentId ?? '-'}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
-                              color: Colors.black54,
+                              color: scheme.onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -793,7 +798,10 @@ class _TodayLecturesStrip extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(vertical: 24),
             child: TText(
               'لا توجد محاضرات اليوم',
-              style: TextStyle(fontSize: 15, color: Colors.grey[600]),
+              style: TextStyle(
+                fontSize: 15,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
         ),
@@ -819,7 +827,10 @@ class _TodayLecturesStrip extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(vertical: 24),
             child: TText(
               'لا توجد محاضرات اليوم',
-              style: TextStyle(fontSize: 15, color: Colors.grey[600]),
+              style: TextStyle(
+                fontSize: 15,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
         ),
@@ -848,7 +859,10 @@ class _TodayLecturesStrip extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(vertical: 24),
           child: TText(
             'لا توجد محاضرات اليوم',
-            style: TextStyle(fontSize: 15, color: Colors.grey[600]),
+            style: TextStyle(
+              fontSize: 15,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
       );
