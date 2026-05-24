@@ -3,7 +3,7 @@ import 'package:hive/hive.dart';
 
 /// Global theme mode for the app. Listen to this to rebuild MaterialApp.
 final ValueNotifier<ThemeMode> appThemeMode = ValueNotifier<ThemeMode>(
-  ThemeMode.system,
+  ThemeMode.light,
 );
 
 const String _themeBoxName = 'app_theme_preferences';
@@ -13,7 +13,8 @@ ThemeMode themeModeFromString(String? value) {
   return switch (value) {
     'light' => ThemeMode.light,
     'dark' => ThemeMode.dark,
-    _ => ThemeMode.system,
+    'system' => ThemeMode.system,
+    _ => ThemeMode.light,
   };
 }
 
