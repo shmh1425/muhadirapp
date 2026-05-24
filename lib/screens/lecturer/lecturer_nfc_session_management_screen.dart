@@ -60,8 +60,9 @@ class _LecturerNfcSessionManagementScreenState
     LecturerLanguageController.notifier.addListener(_onLecturerLanguageChanged);
     final cat = ref.read(lecturerUnifiedCatalogProvider).valueOrNull;
     if (cat != null && !cat.isEmpty) {
-      final lectures =
-          cat.toLectureItems(isArabic: LecturerLanguageController.isArabic);
+      final lectures = cat.toLectureItems(
+        isArabic: LecturerLanguageController.isArabic,
+      );
       final courseOptions = _extractUniqueCourseNames(lectures);
       _allLectures = lectures;
       final now = DateTime.now();
@@ -76,7 +77,9 @@ class _LecturerNfcSessionManagementScreenState
 
   @override
   void dispose() {
-    LecturerLanguageController.notifier.removeListener(_onLecturerLanguageChanged);
+    LecturerLanguageController.notifier.removeListener(
+      _onLecturerLanguageChanged,
+    );
     _openSessionsSub?.cancel();
     super.dispose();
   }
@@ -84,15 +87,15 @@ class _LecturerNfcSessionManagementScreenState
   void _onLecturerLanguageChanged() {
     final cat = ref.read(lecturerUnifiedCatalogProvider).valueOrNull;
     if (cat == null || !mounted) return;
-    final lectures =
-        cat.toLectureItems(isArabic: LecturerLanguageController.isArabic);
+    final lectures = cat.toLectureItems(
+      isArabic: LecturerLanguageController.isArabic,
+    );
     final courseOptions = _extractUniqueCourseNames(lectures);
     setState(() {
       _allLectures = lectures;
       if (_selectedCourse != null &&
           !courseOptions.any((n) => n == _selectedCourse)) {
-        _selectedCourse =
-            courseOptions.isNotEmpty ? courseOptions.first : null;
+        _selectedCourse = courseOptions.isNotEmpty ? courseOptions.first : null;
       }
     });
   }
@@ -118,8 +121,9 @@ class _LecturerNfcSessionManagementScreenState
         ]);
         final now = _lectureRepository.currentDateTime;
         final cat = results[1] as UnifiedLecturerCatalog;
-        final lectures =
-            cat.toLectureItems(isArabic: LecturerLanguageController.isArabic);
+        final lectures = cat.toLectureItems(
+          isArabic: LecturerLanguageController.isArabic,
+        );
         final courseOptions = _extractUniqueCourseNames(lectures);
         final cardId = results[2] as String?;
 
@@ -129,8 +133,9 @@ class _LecturerNfcSessionManagementScreenState
           _selectedDate = DateTime(now.year, now.month, now.day);
           _selectedDayOfWeek = _selectedDate.weekday;
           _currentCalendarMonth = DateTime(now.year, now.month, 1);
-          _selectedCourse =
-              courseOptions.isNotEmpty ? courseOptions.first : null;
+          _selectedCourse = courseOptions.isNotEmpty
+              ? courseOptions.first
+              : null;
           _lecturerCardId = cardId;
           _isLoading = false;
           _loadingCard = false;
@@ -165,8 +170,9 @@ class _LecturerNfcSessionManagementScreenState
       if (!mounted) return;
       final now = _lectureRepository.currentDateTime;
       final cat = ref.read(lecturerUnifiedCatalogProvider).requireValue;
-      final lectures =
-          cat.toLectureItems(isArabic: LecturerLanguageController.isArabic);
+      final lectures = cat.toLectureItems(
+        isArabic: LecturerLanguageController.isArabic,
+      );
       final courseOptions = _extractUniqueCourseNames(lectures);
       setState(() {
         _allLectures = lectures;
@@ -175,8 +181,9 @@ class _LecturerNfcSessionManagementScreenState
         _currentCalendarMonth = DateTime(now.year, now.month, 1);
         if (_selectedCourse != null &&
             !courseOptions.any((n) => n == _selectedCourse)) {
-          _selectedCourse =
-              courseOptions.isNotEmpty ? courseOptions.first : null;
+          _selectedCourse = courseOptions.isNotEmpty
+              ? courseOptions.first
+              : null;
         }
       });
     } catch (_) {
@@ -394,26 +401,28 @@ class _LecturerNfcSessionManagementScreenState
     return ValueListenableBuilder<LecturerLanguage>(
       valueListenable: LecturerLanguageController.notifier,
       builder: (context, _, __) {
+        final theme = Theme.of(context);
+        final scheme = theme.colorScheme;
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
           child: Scaffold(
-            backgroundColor: const Color(0xFFF8FBFB),
+            backgroundColor: theme.scaffoldBackgroundColor,
             appBar: AppBar(
-              backgroundColor: const Color(0xFFF8FBFB),
+              backgroundColor: theme.scaffoldBackgroundColor,
               elevation: 0,
               leading: Padding(
                 padding: const EdgeInsetsDirectional.only(start: 8),
                 child: ProfileBackButton(
                   onTap: () => Navigator.of(context).pop(),
-                  color: const Color(0xFF222222),
+                  color: scheme.onSurface,
                 ),
               ),
               title: Text(
                 _tr('إدارة جلسة NFC', 'NFC Session Control'),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF222222),
+                  color: scheme.onSurface,
                   fontFamily: 'Cairo',
                 ),
               ),
@@ -476,7 +485,10 @@ class _LecturerNfcSessionManagementScreenState
             Text(
               _loadError ?? '',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 14),
             TextButton.icon(
@@ -491,20 +503,29 @@ class _LecturerNfcSessionManagementScreenState
   }
 
   Widget _buildLecturerCardStatus() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFDDE8EA)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFDDE8EA),
+        ),
       ),
       child: Row(
         children: [
           Container(
             width: 42,
             height: 42,
-            decoration: const BoxDecoration(
-              color: Color(0xFFE6F3F5),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? scheme.surfaceContainerHighest
+                  : const Color(0xFFE6F3F5),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.nfc_rounded, color: _primary),
@@ -518,9 +539,9 @@ class _LecturerNfcSessionManagementScreenState
                     children: [
                       Text(
                         _tr('بطاقة المحاضر المرتبطة', 'Linked lecturer card'),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
-                          color: Color(0xFF607279),
+                          color: scheme.onSurfaceVariant,
                           fontFamily: 'Cairo',
                         ),
                       ),
@@ -539,7 +560,7 @@ class _LecturerNfcSessionManagementScreenState
                               (_lecturerCardId == null ||
                                   _lecturerCardId!.isEmpty)
                               ? _danger
-                              : const Color(0xFF1F2E33),
+                              : scheme.onSurface,
                           fontFamily: 'Cairo',
                         ),
                       ),
@@ -568,10 +589,10 @@ class _LecturerNfcSessionManagementScreenState
       children: [
         Text(
           _tr('1) اختر المقرر', '1) Select course'),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF1F2E33),
+            color: Theme.of(context).colorScheme.onSurface,
             fontFamily: 'Cairo',
           ),
         ),
@@ -585,16 +606,27 @@ class _LecturerNfcSessionManagementScreenState
             itemBuilder: (context, index) {
               final course = options[index];
               final selected = _selectedCourse == course;
+              final theme = Theme.of(context);
+              final scheme = theme.colorScheme;
+              final isDark = theme.brightness == Brightness.dark;
               return GestureDetector(
                 onTap: () => setState(() => _selectedCourse = course),
                 child: Container(
                   width: 200,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: selected ? const Color(0xFFE6F3F5) : Colors.white,
+                    color: selected
+                        ? (isDark
+                              ? scheme.primary.withValues(alpha: 0.16)
+                              : const Color(0xFFE6F3F5))
+                        : scheme.surface,
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: selected ? _primary : const Color(0xFFE2E8EA),
+                      color: selected
+                          ? _primary
+                          : (isDark
+                                ? scheme.outlineVariant.withValues(alpha: 0.45)
+                                : const Color(0xFFE2E8EA)),
                       width: selected ? 1.4 : 1,
                     ),
                   ),
@@ -610,19 +642,16 @@ class _LecturerNfcSessionManagementScreenState
                           fontWeight: FontWeight.w700,
                           color: selected
                               ? const Color(0xFF0A5A63)
-                              : const Color(0xFF243238),
+                              : scheme.onSurface,
                           fontFamily: 'Cairo',
                         ),
                       ),
                       const Spacer(),
                       Text(
-                        _tr(
-                          'اضغط لاختيار المقرر',
-                          'Tap to select this course',
-                        ),
-                        style: const TextStyle(
+                        _tr('اضغط لاختيار المقرر', 'Tap to select this course'),
+                        style: TextStyle(
                           fontSize: 11,
-                          color: Color(0xFF6A7D84),
+                          color: scheme.onSurfaceVariant,
                           fontFamily: 'Cairo',
                         ),
                       ),
@@ -658,10 +687,10 @@ class _LecturerNfcSessionManagementScreenState
       children: [
         Text(
           _tr('2) اختر اليوم', '2) Select day'),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF1F2E33),
+            color: Theme.of(context).colorScheme.onSurface,
             fontFamily: 'Cairo',
           ),
         ),
@@ -692,9 +721,9 @@ class _LecturerNfcSessionManagementScreenState
             'اليوم المختار: ${LecturerLanguageController.dayNameFromWeekday(_selectedDate.weekday)} ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
             'Selected day: ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
           ),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
-            color: Color(0xFF52646A),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
             fontFamily: 'Cairo',
             fontWeight: FontWeight.w600,
           ),
@@ -722,10 +751,10 @@ class _LecturerNfcSessionManagementScreenState
       children: [
         Text(
           _tr('جلسات اليوم', 'Day sessions'),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF1F2E33),
+            color: Theme.of(context).colorScheme.onSurface,
             fontFamily: 'Cairo',
           ),
         ),
@@ -746,6 +775,9 @@ class _LecturerNfcSessionManagementScreenState
             ),
           ),
         ...lectures.map((lecture) {
+          final theme = Theme.of(context);
+          final scheme = theme.colorScheme;
+          final isDark = theme.brightness == Brightness.dark;
           final sessionId = _sessionIdForLecture(lecture);
           final openSession = _openSessionForLecture(lecture);
           final isOpening = _openingSessionIds.contains(sessionId);
@@ -760,9 +792,13 @@ class _LecturerNfcSessionManagementScreenState
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: scheme.surface,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFDCE6E8)),
+              border: Border.all(
+                color: isDark
+                    ? scheme.outlineVariant.withValues(alpha: 0.45)
+                    : const Color(0xFFDCE6E8),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -772,11 +808,11 @@ class _LecturerNfcSessionManagementScreenState
                     Expanded(
                       child: Text(
                         lecture.courseName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                           fontFamily: 'Cairo',
-                          color: Color(0xFF1F2E33),
+                          color: scheme.onSurface,
                         ),
                       ),
                     ),
@@ -810,9 +846,9 @@ class _LecturerNfcSessionManagementScreenState
                 const SizedBox(height: 6),
                 Text(
                   '${_tr('الوقت', 'Time')}: ${lecture.startTime} - ${lecture.endTime}  •  ${_tr('الشعبة', 'Section')}: ${lecture.section}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF556A71),
+                    color: scheme.onSurfaceVariant,
                     fontFamily: 'Cairo',
                   ),
                 ),
@@ -880,23 +916,32 @@ class _LecturerNfcSessionManagementScreenState
   }
 
   Widget _infoCard({required IconData icon, required String message}) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FBFB),
+        color: isDark
+            ? scheme.surfaceContainerHighest
+            : const Color(0xFFF8FBFB),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2ECEF)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFE2ECEF),
+        ),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: const Color(0xFF648087)),
+          Icon(icon, size: 18, color: scheme.onSurfaceVariant),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: Color(0xFF5A6F76),
+                color: scheme.onSurfaceVariant,
                 fontFamily: 'Cairo',
                 fontWeight: FontWeight.w600,
               ),

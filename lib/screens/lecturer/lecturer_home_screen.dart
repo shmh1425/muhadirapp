@@ -460,10 +460,10 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
       padding: const EdgeInsets.only(bottom: 14),
       child: Text(
         LecturerLanguageController.tr(ar, en),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 20,
           fontWeight: FontWeight.bold,
-          color: Color(0xFF222222),
+          color: Theme.of(context).colorScheme.onSurface,
           fontFamily: 'Cairo',
         ),
       ),
@@ -479,6 +479,9 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
     required DateTime Function(LectureItem lecture) actionDateResolver,
     void Function(LectureItem lecture)? onAttendTap,
   }) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final sortedLectures = TimeUtils.sortLecturesByTime(
       lectures,
       (lecture) => lecture.startTime,
@@ -487,12 +490,16 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: const Color(0xFFF9FCFC),
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFDDE9EB)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFDDE9EB),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.04),
             blurRadius: 14,
             offset: const Offset(0, 6),
           ),
@@ -516,18 +523,20 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
               Expanded(
                 child: Text(
                   LecturerLanguageController.tr(titleAr, titleEn),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF32484D),
+                    color: scheme.onSurface,
                   ),
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE8F4F5),
+                  color: isDark
+                      ? scheme.surfaceContainerHighest
+                      : const Color(0xFFE8F4F5),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
@@ -616,6 +625,9 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
     required DateTime Function(LectureItem lecture) actionDateResolver,
     void Function(LectureItem lecture)? onAttendTap,
   }) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final timeLabel = lecture.timeSlots.isNotEmpty
         ? lecture.timeSlots.join('  •  ')
         : lecture.startTime;
@@ -631,9 +643,15 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFFEAF5F6),
+                color: isDark
+                    ? scheme.surfaceContainerHighest
+                    : const Color(0xFFEAF5F6),
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: const Color(0xFFD4E8EB)),
+                border: Border.all(
+                  color: isDark
+                      ? scheme.outlineVariant.withValues(alpha: 0.45)
+                      : const Color(0xFFD4E8EB),
+                ),
               ),
               child: Text(
                 timeLabel,
@@ -802,10 +820,12 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
                                       'تعذر تحديث التقويم الآن.',
                                       'Calendar refresh failed.',
                                     ),
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontFamily: 'Cairo',
                                       fontSize: 12,
-                                      color: Colors.grey,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
                                     ),
                                   ),
                                 ),

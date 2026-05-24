@@ -123,6 +123,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   String? _bluetoothBroadcastMessage;
   bool _isUsingRosterFallback = false;
   Map<int, ExternalStudent> _studentProfiles = {};
+
   /// Overall section absence metrics per student (same logic as student attendance tracking).
   Map<int, StudentSectionAbsenceMetrics> _absenceMetricsByStudentId =
       <int, StudentSectionAbsenceMetrics>{};
@@ -143,15 +144,14 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     final lecturerId =
         LecturerAuthService.instance.currentLecturer?.lecturerId.trim() ?? '';
     if (sectionId.isNotEmpty && lecturerId.isNotEmpty) {
-      final catalog =
-          LecturerCatalogRepository.instance.getCachedCatalog(lecturerId);
+      final catalog = LecturerCatalogRepository.instance.getCachedCatalog(
+        lecturerId,
+      );
       if (catalog != null) {
         for (final row in catalog.rows) {
           if (row.sectionId.trim() == sectionId) {
             return row
-                .toLectureItem(
-                  isArabic: LecturerLanguageController.isArabic,
-                )
+                .toLectureItem(isArabic: LecturerLanguageController.isArabic)
                 .courseName;
           }
         }
@@ -599,9 +599,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         _students = roster
             .map((s) => _studentFromEnrollment(s, sessionId))
             .toList();
-        unawaited(
-          _refreshStudentProfiles(roster.map((s) => s.studentId)),
-        );
+        unawaited(_refreshStudentProfiles(roster.map((s) => s.studentId)));
         unawaited(_refreshSectionAbsencePercents());
         _isUsingRosterFallback = true;
         _methodStatusMessage = _tr(
@@ -1409,11 +1407,11 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     if (sectionId.isEmpty) return;
     final courseCode = _lecture.crn.trim();
     try {
-      final map =
-          await StudentSectionAbsenceService.instance.loadAbsenceMetricsByStudentId(
-        sectionId: sectionId,
-        courseCode: courseCode,
-      );
+      final map = await StudentSectionAbsenceService.instance
+          .loadAbsenceMetricsByStudentId(
+            sectionId: sectionId,
+            courseCode: courseCode,
+          );
       if (!mounted) return;
       setState(() {
         _absenceMetricsByStudentId = map;
@@ -1438,8 +1436,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     final ids = studentIds.where((id) => id > 0).toSet();
     if (ids.isEmpty) return;
     try {
-      final profiles =
-          await _manualAttendanceService.fetchStudentProfilesByIds(ids);
+      final profiles = await _manualAttendanceService.fetchStudentProfilesByIds(
+        ids,
+      );
       if (!mounted) return;
       setState(() {
         _studentProfiles = profiles;
@@ -1550,10 +1549,11 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     return ValueListenableBuilder<LecturerLanguage>(
       valueListenable: LecturerLanguageController.notifier,
       builder: (context, _, __) {
+        final theme = Theme.of(context);
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
           child: Scaffold(
-            backgroundColor: const Color(0xFFF8FBFB),
+            backgroundColor: theme.scaffoldBackgroundColor,
             body: SafeArea(
               child: Column(
                 children: [
@@ -1615,6 +1615,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   }
 
   Widget _buildHeader() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final activity = _lecture.activity.trim().toLowerCase();
     final isPractical = activity == 'عملي' || activity == 'lab';
     final activityLabel = isPractical
@@ -1629,8 +1631,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: const Color(0xFFE8E8E8))),
+        color: scheme.surface,
+        border: Border(bottom: BorderSide(color: theme.dividerColor)),
       ),
       child: Row(
         children: [
@@ -1647,11 +1649,11 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                     Expanded(
                       child: Text(
                         _displayCourseTitle,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
-                          color: Color(0xFF222222),
+                          color: scheme.onSurface,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -1686,10 +1688,10 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                 const SizedBox(height: 8),
                 Text(
                   line1,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 12,
-                    color: Color(0xFF666666),
+                    color: scheme.onSurfaceVariant,
                     fontWeight: FontWeight.w500,
                   ),
                   maxLines: 1,
@@ -1700,10 +1702,10 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                   _selectedDate != null
                       ? '${_formatDisplayDate(_selectedDate!)}  ·  $line2'
                       : line2,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 12,
-                    color: Color(0xFF666666),
+                    color: scheme.onSurfaceVariant,
                     fontWeight: FontWeight.w500,
                   ),
                   maxLines: 1,
@@ -1810,14 +1812,21 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   }
 
   Widget _buildFilterBar() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final selectedStyle = _filterStyle(_statusFilter);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFDCE6E8)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFDCE6E8),
+        ),
       ),
       child: Row(
         children: [
@@ -1832,11 +1841,11 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                 const SizedBox(width: 8),
                 Text(
                   _tr('الفلتر:', 'Filter:'),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF516166),
+                    color: scheme.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1872,7 +1881,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           PopupMenuButton<AttendanceStatusFilter>(
             tooltip: _tr('تغيير الفلتر', 'Change filter'),
             initialValue: _statusFilter,
-            color: Colors.white,
+            color: scheme.surface,
             surfaceTintColor: Colors.transparent,
             onSelected: (filter) => setState(() => _statusFilter = filter),
             itemBuilder: (context) => _filterMenuOrder.map((filter) {
@@ -1894,10 +1903,10 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                     Expanded(
                       child: Text(
                         style.label,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'Cairo',
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF24383D),
+                          color: scheme.onSurface,
                         ),
                       ),
                     ),
@@ -1909,9 +1918,15 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: const Color(0xFFF2F7F8),
+                color: isDark
+                    ? scheme.surfaceContainerHighest
+                    : const Color(0xFFF2F7F8),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFD5E0E3)),
+                border: Border.all(
+                  color: isDark
+                      ? scheme.outlineVariant.withValues(alpha: 0.45)
+                      : const Color(0xFFD5E0E3),
+                ),
               ),
               child: const Icon(
                 Icons.tune_rounded,
@@ -1955,6 +1970,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     required AttendanceMethod method,
     required String label,
   }) {
+    final scheme = Theme.of(context).colorScheme;
     final selected = _selectedMethod == method;
     return Row(
       children: [
@@ -1967,11 +1983,11 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF222222),
+              color: scheme.onSurface,
             ),
           ),
         ),
@@ -1986,14 +2002,23 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   }
 
   Widget _buildCompactMethodMenu() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     if (_effectiveViewOnly) {
       final short = _shortLabelForAttendanceMethod(_selectedMethod);
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: const Color(0xFFF2F5F6),
+          color: isDark
+              ? scheme.surfaceContainerHighest
+              : const Color(0xFFF2F5F6),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFFB0BEC5)),
+          border: Border.all(
+            color: isDark
+                ? scheme.outlineVariant.withValues(alpha: 0.45)
+                : const Color(0xFFB0BEC5),
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -2027,7 +2052,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
     return PopupMenuButton<AttendanceMethod>(
       tooltip: _tr('اختيار طريقة التحضير', 'Select attendance method'),
-      color: Colors.white,
+      color: scheme.surface,
       surfaceTintColor: Colors.transparent,
       offset: const Offset(0, 8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -2068,9 +2093,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
               : null,
           color: isQrSelected ? null : Colors.white,
           borderRadius: BorderRadius.circular(14),
-          border: isQrSelected
-              ? null
-              : Border.all(color: _primary, width: 1.5),
+          border: isQrSelected ? null : Border.all(color: _primary, width: 1.5),
           boxShadow: [
             BoxShadow(
               color: _primary.withValues(alpha: isQrSelected ? 0.18 : 0.12),
@@ -2115,6 +2138,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   }
 
   Widget _buildBluetoothSessionPanel() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final session = _bluetoothSession;
     final isBroadcasting =
         _bluetoothBroadcastState == BluetoothBroadcastState.broadcasting;
@@ -2129,12 +2155,16 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFDCE8EA)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFDCE8EA),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
+            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.03),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
@@ -2177,11 +2207,11 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                               'جلسة البلوتوث غير نشطة',
                               'Bluetooth session inactive',
                             ),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
-                        color: Color(0xFF213236),
+                        color: scheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -2189,11 +2219,11 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                       _bluetoothBroadcastStatusLabel(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF5A6F76),
+                        color: scheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -2282,20 +2312,20 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                   'تعذر تحميل بيانات التحضير.',
                   'Failed to load attendance data.',
                 ),
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'Cairo',
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF3F3F3F),
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 10),
               Text(
                 _attendanceLoadError!,
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 12,
-                  color: Color(0xFF808080),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -2321,8 +2351,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         builder: (context, constraints) {
           final layout = _resolveStudentsTableLayout(constraints.maxWidth);
           final tableWidth = layout.totalWidth;
-          final needsHorizontalScroll =
-              tableWidth > constraints.maxWidth + 0.5;
+          final needsHorizontalScroll = tableWidth > constraints.maxWidth + 0.5;
 
           Widget tableBody = _filteredStudents.isEmpty
               ? Center(
@@ -2338,9 +2367,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                               'لا يوجد طلاب في هذا الفلتر.',
                               'No students in this filter.',
                             ),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Cairo',
-                        color: Color(0xFF666666),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                         fontWeight: FontWeight.w600,
                       ),
                       textAlign: TextAlign.center,
@@ -2373,19 +2402,22 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           if (needsHorizontalScroll) {
             tableBody = SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: tableWidth,
-                child: tableBody,
-              ),
+              child: SizedBox(width: tableWidth, child: tableBody),
             );
           }
 
           return Container(
             clipBehavior: Clip.hardEdge,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFDDE6E8)),
+              border: Border.all(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Theme.of(
+                        context,
+                      ).colorScheme.outlineVariant.withValues(alpha: 0.45)
+                    : const Color(0xFFDDE6E8),
+              ),
             ),
             child: tableBody,
           );
@@ -2395,8 +2427,10 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   }
 
   Widget _buildStudentsTableHeader(_StudentsTableLayout layout) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      color: const Color(0xFFF1F6F7),
+      color: isDark ? scheme.surfaceContainerHighest : const Color(0xFFF1F6F7),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       child: SizedBox(
         width: layout.contentWidth,
@@ -2406,92 +2440,92 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
               width: layout.indexWidth,
               child: Text(
                 '#',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF4A6066),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ),
-          ),
-          SizedBox(width: layout.columnGap),
-          SizedBox(
-            width: layout.studentWidth,
-            child: Text(
-              _tr('الطالب', 'Student'),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF4A6066),
+            SizedBox(width: layout.columnGap),
+            SizedBox(
+              width: layout.studentWidth,
+              child: Text(
+                _tr('الطالب', 'Student'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ),
-          ),
-          SizedBox(width: layout.columnGap),
-          SizedBox(
-            width: layout.idWidth,
-            child: Text(
-              _tr('الرقم', 'ID'),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF4A6066),
+            SizedBox(width: layout.columnGap),
+            SizedBox(
+              width: layout.idWidth,
+              child: Text(
+                _tr('الرقم', 'ID'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ),
-          ),
-          SizedBox(width: layout.columnGap),
-          SizedBox(
-            width: layout.timeWidth,
-            child: Text(
-              _tr('الوقت', 'Time'),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF4A6066),
+            SizedBox(width: layout.columnGap),
+            SizedBox(
+              width: layout.timeWidth,
+              child: Text(
+                _tr('الوقت', 'Time'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ),
-          ),
-          SizedBox(width: layout.columnGap),
-          SizedBox(
-            width: layout.percentageWidth,
-            child: Text(
-              '%',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF4A6066),
+            SizedBox(width: layout.columnGap),
+            SizedBox(
+              width: layout.percentageWidth,
+              child: Text(
+                '%',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ),
-          ),
-          SizedBox(width: layout.columnGap),
-          SizedBox(
-            width: layout.statusWidth,
-            child: Text(
-              _tr('الحالة', 'Status'),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF4A6066),
+            SizedBox(width: layout.columnGap),
+            SizedBox(
+              width: layout.statusWidth,
+              child: Text(
+                _tr('الحالة', 'Status'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ),
-          ),
           ],
         ),
       ),
@@ -2504,6 +2538,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     required int index,
     required _StudentsTableLayout layout,
   }) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final timeText = student.attendanceTime.trim().isEmpty
         ? '--'
         : student.attendanceTime.trim();
@@ -2511,6 +2547,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     final suspended = student.isSuspended ?? false;
     final rowBackground = deprived || suspended
         ? _deprivedRowBackground
+        : isDark
+        ? (index.isEven ? scheme.surface : scheme.surfaceContainerHighest)
         : (index.isEven ? Colors.white : const Color(0xFFFBFDFD));
     return Container(
       color: rowBackground,
@@ -2523,91 +2561,93 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
               width: layout.indexWidth,
               child: Text(
                 '${index + 1}',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF5E6C70),
-              ),
-            ),
-          ),
-          SizedBox(width: layout.columnGap),
-          SizedBox(
-            width: layout.studentWidth,
-            child: Text(
-              student.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF213236),
-              ),
-            ),
-          ),
-          SizedBox(width: layout.columnGap),
-          SizedBox(
-            width: layout.idWidth,
-            child: Directionality(
-              textDirection: TextDirection.ltr,
-              child: Text(
-                student.academicNumber,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontFamily: 'Cairo',
-                  fontSize: 11.5,
-                  color: Color(0xFF4E6268),
-                ),
-              ),
-            ),
-          ),
-          SizedBox(width: layout.columnGap),
-          SizedBox(
-            width: layout.timeWidth,
-            child: Directionality(
-              textDirection: TextDirection.ltr,
-              child: Text(
-                timeText,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 11,
-                  color: Color(0xFF4E6268),
+                  fontWeight: FontWeight.w700,
+                  color: scheme.onSurfaceVariant,
                 ),
               ),
             ),
-          ),
-          SizedBox(width: layout.columnGap),
-          SizedBox(
-            width: layout.percentageWidth,
-            child: Text(
-              _formatPercentage(student.percentage),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: deprived ? _deprivedRowAccent : const Color(0xFF3D555B),
-              ),
-            ),
-          ),
-          SizedBox(width: layout.columnGap),
-          SizedBox(
-            width: layout.statusWidth,
-            child: ClipRect(
-              child: Align(
-                alignment: AlignmentDirectional.center,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: _buildStatusChipCell(student, statusStyle),
+            SizedBox(width: layout.columnGap),
+            SizedBox(
+              width: layout.studentWidth,
+              child: Text(
+                student.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: scheme.onSurface,
                 ),
               ),
             ),
-          ),
+            SizedBox(width: layout.columnGap),
+            SizedBox(
+              width: layout.idWidth,
+              child: Directionality(
+                textDirection: TextDirection.ltr,
+                child: Text(
+                  student.academicNumber,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 11.5,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(width: layout.columnGap),
+            SizedBox(
+              width: layout.timeWidth,
+              child: Directionality(
+                textDirection: TextDirection.ltr,
+                child: Text(
+                  timeText,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: 'Cairo',
+                    fontSize: 11,
+                    color: Color(0xFF4E6268),
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(width: layout.columnGap),
+            SizedBox(
+              width: layout.percentageWidth,
+              child: Text(
+                _formatPercentage(student.percentage),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: deprived
+                      ? _deprivedRowAccent
+                      : const Color(0xFF3D555B),
+                ),
+              ),
+            ),
+            SizedBox(width: layout.columnGap),
+            SizedBox(
+              width: layout.statusWidth,
+              child: ClipRect(
+                child: Align(
+                  alignment: AlignmentDirectional.center,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: _buildStatusChipCell(student, statusStyle),
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -2620,9 +2660,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     const gapsCount = 5;
     final availableContentWidth =
         (containerWidth - rowHorizontalPadding - layoutSlackPx).clamp(
-      0.0,
-      double.infinity,
-    );
+          0.0,
+          double.infinity,
+        );
     final isTight = availableContentWidth < 325;
     final columnGap = isTight ? 3.0 : 4.0;
     final indexWidth = isTight ? 22.0 : 24.0;
@@ -2647,7 +2687,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         : availableForText;
     var studentWidth = (textTotal * 0.62).clamp(minStudentWidth, 190.0);
     var idWidth = (textTotal - studentWidth).clamp(minIdWidth, 120.0);
-    var contentWidth = indexWidth +
+    var contentWidth =
+        indexWidth +
         studentWidth +
         idWidth +
         timeWidth +
@@ -2660,9 +2701,13 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       idWidth -= idShrinkable;
       excess -= idShrinkable;
       if (excess > 0) {
-        studentWidth = (studentWidth - excess).clamp(minStudentWidth, studentWidth);
+        studentWidth = (studentWidth - excess).clamp(
+          minStudentWidth,
+          studentWidth,
+        );
       }
-      contentWidth = indexWidth +
+      contentWidth =
+          indexWidth +
           studentWidth +
           idWidth +
           timeWidth +
@@ -3561,12 +3606,13 @@ enum AttendanceStatusFilter { all, present, excused, absent, late }
 enum AttendanceStatus { pending, present, absent, excused, late }
 
 /// Statuses the lecturer may set manually; [AttendanceStatus.pending] is system-only.
-const List<AttendanceStatus> _lecturerManualSelectableStatuses = <AttendanceStatus>[
-  AttendanceStatus.present,
-  AttendanceStatus.absent,
-  AttendanceStatus.excused,
-  AttendanceStatus.late,
-];
+const List<AttendanceStatus> _lecturerManualSelectableStatuses =
+    <AttendanceStatus>[
+      AttendanceStatus.present,
+      AttendanceStatus.absent,
+      AttendanceStatus.excused,
+      AttendanceStatus.late,
+    ];
 
 enum AttendanceMethod { nfc, qr, bluetooth, manual }
 
@@ -3655,6 +3701,7 @@ class _StudentsTableLayout {
   final double timeWidth;
   final double percentageWidth;
   final double statusWidth;
+
   /// Sum of column widths + gaps (excludes row horizontal padding).
   final double contentWidth;
   final double totalWidth;

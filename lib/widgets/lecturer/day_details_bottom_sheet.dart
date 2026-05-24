@@ -25,6 +25,7 @@ class DayDetailsBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final gregorianDateText = LecturerLanguageController.isArabic
         ? '${HijriConverter.toArabicNumber(day.date.day)}/${HijriConverter.toArabicNumber(day.date.month)}/${HijriConverter.toArabicNumber(day.date.year)}'
         : '${day.date.day}/${day.date.month}/${day.date.year}';
@@ -42,9 +43,9 @@ class DayDetailsBottomSheet extends StatelessWidget {
     return Directionality(
       textDirection: LecturerLanguageController.direction(),
       child: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -56,7 +57,7 @@ class DayDetailsBottomSheet extends StatelessWidget {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade400,
+                  color: scheme.onSurfaceVariant.withValues(alpha: 0.45),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -161,7 +162,7 @@ class DayDetailsBottomSheet extends StatelessWidget {
                           ),
                           style: TextStyle(
                             fontSize: 16,
-                            color: Colors.grey.shade600,
+                            color: scheme.onSurfaceVariant,
                             fontFamily: 'Cairo',
                           ),
                         ),

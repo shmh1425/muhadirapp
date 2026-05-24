@@ -14,11 +14,16 @@ class LecturerFilterButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final filters = ['اليوم', 'غدًا', 'الكل'];
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F5F5),
+        color: isDark
+            ? scheme.surfaceContainerHighest
+            : const Color(0xFFF5F5F5),
         borderRadius: BorderRadius.circular(24),
       ),
       child: Row(
@@ -49,7 +54,7 @@ class LecturerFilterButtons extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                       color: isSelected
                           ? Colors.white
-                          : const Color(0xFF666666),
+                          : scheme.onSurfaceVariant,
                       fontFamily: 'Cairo',
                     ),
                   ),

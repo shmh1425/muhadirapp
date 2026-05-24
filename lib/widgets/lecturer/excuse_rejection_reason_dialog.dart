@@ -22,6 +22,9 @@ Future<String?> showExcuseRejectionReasonDialog({
         textDirection: textDirection,
         child: StatefulBuilder(
           builder: (dialogContext, setDialogState) {
+            final theme = Theme.of(dialogContext);
+            final scheme = theme.colorScheme;
+            final isDark = theme.brightness == Brightness.dark;
             Widget buildRejectOption({
               required bool selected,
               required String label,
@@ -30,7 +33,9 @@ Future<String?> showExcuseRejectionReasonDialog({
               return Material(
                 color: selected
                     ? primaryColor.withValues(alpha: 0.12)
-                    : const Color(0xFFF8FAFC),
+                    : (isDark
+                          ? scheme.surfaceContainerHighest
+                          : const Color(0xFFF8FAFC)),
                 borderRadius: BorderRadius.circular(12),
                 child: InkWell(
                   onTap: onTap,
@@ -45,7 +50,11 @@ Future<String?> showExcuseRejectionReasonDialog({
                       border: Border.all(
                         color: selected
                             ? primaryColor
-                            : const Color(0xFFE2E8F0),
+                            : (isDark
+                                  ? scheme.outlineVariant.withValues(
+                                      alpha: 0.45,
+                                    )
+                                  : const Color(0xFFE2E8F0)),
                         width: selected ? 1.5 : 1,
                       ),
                     ),
@@ -58,7 +67,7 @@ Future<String?> showExcuseRejectionReasonDialog({
                           size: 22,
                           color: selected
                               ? primaryColor
-                              : const Color(0xFF94A3B8),
+                              : scheme.onSurfaceVariant,
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -69,8 +78,8 @@ Future<String?> showExcuseRejectionReasonDialog({
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
                               color: selected
-                                  ? const Color(0xFF213236)
-                                  : const Color(0xFF64748B),
+                                  ? scheme.onSurface
+                                  : scheme.onSurfaceVariant,
                             ),
                           ),
                         ),
@@ -85,11 +94,11 @@ Future<String?> showExcuseRejectionReasonDialog({
               accentColor: primaryColor,
               title: Text(
                 tr('سبب الرفض', 'Rejection reason'),
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'Cairo',
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
-                  color: Color(0xFF213236),
+                  color: scheme.onSurface,
                 ),
               ),
               actions: [
@@ -166,32 +175,38 @@ Future<String?> showExcuseRejectionReasonDialog({
                         textAlign: TextAlign.start,
                         textDirection: textDirection,
                         cursorColor: primaryColor,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF0F172A),
+                          color: scheme.onSurface,
                         ),
                         decoration: InputDecoration(
                           hintText: tr(
                             'اكتب سبب الرفض',
                             'Write the rejection reason',
                           ),
-                          hintStyle: const TextStyle(
+                          hintStyle: TextStyle(
                             fontFamily: 'Cairo',
                             fontSize: 14,
-                            color: Color(0xFF94A3B8),
+                            color: scheme.onSurfaceVariant,
                           ),
                           filled: true,
-                          fillColor: const Color(0xFFF8FAFC),
+                          fillColor: isDark
+                              ? scheme.surfaceContainerHighest
+                              : const Color(0xFFF8FAFC),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide.none,
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFE2E8F0),
+                            borderSide: BorderSide(
+                              color: isDark
+                                  ? scheme.outlineVariant.withValues(
+                                      alpha: 0.45,
+                                    )
+                                  : const Color(0xFFE2E8F0),
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(

@@ -77,6 +77,11 @@ class ExcuseAttachmentPreview {
     await showDialog<void>(
       context: context,
       builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final scheme = theme.colorScheme;
+        final previewSurface = theme.brightness == Brightness.dark
+            ? scheme.surfaceContainerHighest
+            : const Color(0xFFF8FAFC);
         return Directionality(
           textDirection: textDirection,
           child: Dialog(
@@ -102,7 +107,7 @@ class ExcuseAttachmentPreview {
                     Expanded(
                       child: isImage
                           ? Container(
-                              color: const Color(0xFFF8FAFC),
+                              color: previewSurface,
                               child: InteractiveViewer(
                                 minScale: 1,
                                 maxScale: 8,
@@ -118,9 +123,9 @@ class ExcuseAttachmentPreview {
                                           'Could not preview attachment.\nYou can open it in the browser.',
                                         ),
                                         textAlign: TextAlign.center,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontFamily: 'Cairo',
-                                          color: Color(0xFF64748B),
+                                          color: scheme.onSurfaceVariant,
                                         ),
                                       ),
                                     ),
@@ -130,7 +135,7 @@ class ExcuseAttachmentPreview {
                             )
                           : isPdf
                           ? Container(
-                              color: const Color(0xFFF8FAFC),
+                              color: previewSurface,
                               child: kIsWeb
                                   ? Center(
                                       child: Padding(
@@ -141,9 +146,9 @@ class ExcuseAttachmentPreview {
                                             'In-app PDF preview on Web requires proper Firebase Storage CORS configuration.\nYou can open the file in the browser.',
                                           ),
                                           textAlign: TextAlign.center,
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontFamily: 'Cairo',
-                                            color: Color(0xFF64748B),
+                                            color: scheme.onSurfaceVariant,
                                             height: 1.4,
                                           ),
                                         ),
@@ -193,9 +198,9 @@ class ExcuseAttachmentPreview {
                                     'This file type is not supported for inline preview.\nYou can open it in the browser.',
                                   ),
                                   textAlign: TextAlign.center,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontFamily: 'Cairo',
-                                    color: Color(0xFF64748B),
+                                    color: scheme.onSurfaceVariant,
                                     height: 1.4,
                                   ),
                                 ),

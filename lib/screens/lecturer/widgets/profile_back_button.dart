@@ -14,6 +14,9 @@ class ProfileBackButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -24,12 +27,16 @@ class ProfileBackButton extends StatelessWidget {
           height: 38,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: scheme.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFD6E6E8)),
+            border: Border.all(
+              color: isDark
+                  ? scheme.outlineVariant.withValues(alpha: 0.45)
+                  : const Color(0xFFD6E6E8),
+            ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
+                color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.04),
                 blurRadius: 9,
                 offset: const Offset(0, 4),
               ),

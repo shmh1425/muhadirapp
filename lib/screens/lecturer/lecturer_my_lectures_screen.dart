@@ -50,10 +50,11 @@ class _LecturerMyLecturesScreenState
         );
         final loading = catalogAsync.isLoading && allLectures.isEmpty;
         final err = catalogAsync.hasError && allLectures.isEmpty;
+        final scheme = Theme.of(context).colorScheme;
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
           child: Scaffold(
-            backgroundColor: const Color(0xFFF8FBFB),
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             body: SafeArea(
               child: loading
                   ? const Center(
@@ -76,6 +77,7 @@ class _LecturerMyLecturesScreenState
                                 'حدث خطأ في تحميل المحاضرات',
                                 'Failed to load lectures',
                               ),
+                              style: TextStyle(color: scheme.onSurface),
                             ),
                             const SizedBox(height: 16),
                             TextButton.icon(
@@ -110,6 +112,7 @@ class _LecturerMyLecturesScreenState
   }
 
   Widget _buildPageTopBar() {
+    final scheme = Theme.of(context).colorScheme;
     const backSlotSize = 38.0;
     return Padding(
       padding: const EdgeInsets.only(top: 2),
@@ -124,17 +127,19 @@ class _LecturerMyLecturesScreenState
             ),
             Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: backSlotSize + 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: backSlotSize + 8,
+                ),
                 child: Text(
                   _tr('محاضراتي', 'My Lectures'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF213236),
+                    color: scheme.onSurface,
                     height: 1.25,
                   ),
                 ),
@@ -211,13 +216,14 @@ class _LecturerMyLecturesScreenState
       });
 
     if (sorted.isEmpty) {
+      final scheme = Theme.of(context).colorScheme;
       return Center(
         child: Text(
           _tr('لا توجد محاضرات حالياً', 'No lectures available'),
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: 'Cairo',
             fontSize: 16,
-            color: Color(0xFF607278),
+            color: scheme.onSurfaceVariant,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -257,18 +263,25 @@ class _LecturerMyLecturesScreenState
     required int day,
     required List<LectureItem> lectures,
   }) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: scheme.surface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFFDDE9EB)),
+          border: Border.all(
+            color: isDark
+                ? scheme.outlineVariant.withValues(alpha: 0.45)
+                : const Color(0xFFDDE9EB),
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
+              color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.03),
               blurRadius: 14,
               offset: const Offset(0, 7),
             ),
@@ -290,11 +303,11 @@ class _LecturerMyLecturesScreenState
                 const SizedBox(width: 8),
                 Text(
                   _displayDayName(day),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF32484D),
+                    color: scheme.onSurface,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -304,7 +317,9 @@ class _LecturerMyLecturesScreenState
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE8F4F5),
+                    color: isDark
+                        ? scheme.surfaceContainerHighest
+                        : const Color(0xFFE8F4F5),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
@@ -333,7 +348,12 @@ class _LecturerMyLecturesScreenState
   }
 
   Widget _buildLectureCard(LectureItem lecture) {
-    final isPractical = LecturerActivityLocalization.isPractical(lecture.activity);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final isPractical = LecturerActivityLocalization.isPractical(
+      lecture.activity,
+    );
     final accentStart = isPractical ? const Color(0xFF2A9DA7) : _primaryColor;
     final accentEnd = isPractical
         ? const Color(0xFF167B83)
@@ -350,9 +370,13 @@ class _LecturerMyLecturesScreenState
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: scheme.surface,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFDCE7E9)),
+            border: Border.all(
+              color: isDark
+                  ? scheme.outlineVariant.withValues(alpha: 0.45)
+                  : const Color(0xFFDCE7E9),
+            ),
           ),
           child: Row(
             children: [
@@ -381,10 +405,10 @@ class _LecturerMyLecturesScreenState
                             lecture.courseName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontFamily: 'Cairo',
                               fontSize: 16,
-                              color: Color(0xFF17363D),
+                              color: scheme.onSurface,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
@@ -401,10 +425,10 @@ class _LecturerMyLecturesScreenState
                       subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Cairo',
                         fontSize: 12,
-                        color: Color(0xFF6C8288),
+                        color: scheme.onSurfaceVariant,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -441,12 +465,21 @@ class _LecturerMyLecturesScreenState
   }
 
   Widget _buildInfoPill({required IconData icon, required String label}) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7FAFB),
+        color: isDark
+            ? scheme.surfaceContainerHighest
+            : const Color(0xFFF7FAFB),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFDCE7E9)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFDCE7E9),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -455,10 +488,10 @@ class _LecturerMyLecturesScreenState
           const SizedBox(width: 5),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 11,
-              color: Color(0xFF24484F),
+              color: scheme.onSurface,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -536,22 +569,31 @@ class _LecturerMyLecturesScreenState
   }
 
   Widget _detailRow(String label, String value) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         decoration: BoxDecoration(
-          color: const Color(0xFFF7FAFA),
+          color: isDark
+              ? scheme.surfaceContainerHighest
+              : const Color(0xFFF7FAFA),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE3ECEE)),
+          border: Border.all(
+            color: isDark
+                ? scheme.outlineVariant.withValues(alpha: 0.45)
+                : const Color(0xFFE3ECEE),
+          ),
         ),
         child: Text(
           '$label: $value',
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: 'Cairo',
             fontSize: 13,
-            color: Colors.black87,
+            color: scheme.onSurface,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -574,5 +616,4 @@ class _LecturerMyLecturesScreenState
   String _dayName(int weekday) {
     return LecturerLanguageController.dayNameFromWeekday(weekday);
   }
-
 }

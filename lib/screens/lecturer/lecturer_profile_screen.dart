@@ -761,6 +761,9 @@ class _LanguageOptionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -768,10 +771,20 @@ class _LanguageOptionTile extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFFE8F3F5) : const Color(0xFFF7FAFB),
+          color: selected
+              ? (isDark
+                    ? scheme.primary.withValues(alpha: 0.18)
+                    : const Color(0xFFE8F3F5))
+              : (isDark
+                    ? scheme.surfaceContainerHighest
+                    : const Color(0xFFF7FAFB)),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected ? const Color(0xFF006571) : const Color(0xFFDCE7E9),
+            color: selected
+                ? const Color(0xFF006571)
+                : (isDark
+                      ? scheme.outlineVariant.withValues(alpha: 0.45)
+                      : const Color(0xFFDCE7E9)),
           ),
         ),
         child: Row(
@@ -783,9 +796,7 @@ class _LanguageOptionTile extends StatelessWidget {
                   fontFamily: 'Cairo',
                   fontSize: 14,
                   fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                  color: selected
-                      ? const Color(0xFF006571)
-                      : const Color(0xFF42575D),
+                  color: selected ? const Color(0xFF006571) : scheme.onSurface,
                 ),
               ),
             ),

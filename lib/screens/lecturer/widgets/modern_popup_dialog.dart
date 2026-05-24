@@ -34,6 +34,9 @@ class ModernPopupDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -41,12 +44,12 @@ class ModernPopupDialog extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: scheme.surface,
           borderRadius: BorderRadius.circular(22),
           border: Border.all(color: accentColor.withValues(alpha: 0.35)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
+              color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.12),
               blurRadius: 20,
               offset: const Offset(0, 8),
             ),
@@ -60,7 +63,7 @@ class ModernPopupDialog extends StatelessWidget {
               height: 4,
               margin: const EdgeInsets.only(bottom: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFFD8D8D8),
+                color: scheme.onSurfaceVariant.withValues(alpha: 0.35),
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
@@ -71,7 +74,7 @@ class ModernPopupDialog extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             DefaultTextStyle(
-              style: _bodyStyle,
+              style: _bodyStyle.copyWith(color: scheme.onSurfaceVariant),
               textAlign: TextAlign.center,
               child: Center(child: child),
             ),
@@ -107,11 +110,18 @@ class ModernPopupActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final button = Container(
       height: 42,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: isPrimary ? null : const Color(0xFFF2F2F2),
+        color: isPrimary
+            ? null
+            : (isDark
+                  ? scheme.surfaceContainerHighest
+                  : const Color(0xFFF2F2F2)),
         gradient: isPrimary
             ? LinearGradient(
                 colors: [primaryColor.withValues(alpha: 0.8), primaryColor],
@@ -126,7 +136,7 @@ class ModernPopupActionButton extends StatelessWidget {
         style: TextStyle(
           fontFamily: 'Cairo',
           fontWeight: FontWeight.w700,
-          color: isPrimary ? Colors.white : const Color(0xFF444444),
+          color: isPrimary ? Colors.white : scheme.onSurface,
         ),
       ),
     );
@@ -163,6 +173,9 @@ class ModernPopupSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final hasHeader =
         (title != null && title!.trim().isNotEmpty) ||
         (subtitle != null && subtitle!.trim().isNotEmpty) ||
@@ -188,12 +201,12 @@ class ModernPopupSheet extends StatelessWidget {
           margin: margin,
           padding: padding,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: scheme.surface,
             borderRadius: BorderRadius.circular(24),
             border: Border.all(color: accentColor.withValues(alpha: 0.16)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.12),
+                color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.12),
                 blurRadius: 22,
                 offset: const Offset(0, 10),
               ),
@@ -210,7 +223,7 @@ class ModernPopupSheet extends StatelessWidget {
                     height: 4,
                     margin: EdgeInsets.only(bottom: hasHeader ? 12 : 8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFD6DDE0),
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.35),
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
@@ -237,11 +250,11 @@ class ModernPopupSheet extends StatelessWidget {
                             const SizedBox(height: 4),
                             Text(
                               subtitle!,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontFamily: 'Cairo',
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w600,
-                                color: Color(0xFF60757A),
+                                color: scheme.onSurfaceVariant,
                                 height: 1.35,
                               ),
                             ),
@@ -253,7 +266,7 @@ class ModernPopupSheet extends StatelessWidget {
                       IconButton(
                         onPressed: onClose,
                         icon: const Icon(Icons.close_rounded),
-                        color: const Color(0xFF60757A),
+                        color: scheme.onSurfaceVariant,
                         tooltip: LecturerLanguageController.tr(
                           'إغلاق',
                           'Close',

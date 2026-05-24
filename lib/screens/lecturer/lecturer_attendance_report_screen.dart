@@ -182,8 +182,9 @@ class _LecturerAttendanceReportScreenState
     }
     if (ids.isEmpty) return;
     try {
-      final profiles =
-          await _manualAttendanceService.fetchStudentProfilesByIds(ids);
+      final profiles = await _manualAttendanceService.fetchStudentProfilesByIds(
+        ids,
+      );
       if (!mounted) return;
       setState(() {
         _studentProfiles = profiles;
@@ -355,8 +356,9 @@ class _LecturerAttendanceReportScreenState
     final fromSection = sectionId.isNotEmpty
         ? _catalogNamesBySection[sectionId]
         : null;
-    final fromCode =
-        courseCode.isNotEmpty ? _catalogNamesByCode[courseCode] : null;
+    final fromCode = courseCode.isNotEmpty
+        ? _catalogNamesByCode[courseCode]
+        : null;
 
     var ar = fromSection?.ar ?? fromCode?.ar ?? '';
     var en = fromSection?.en ?? fromCode?.en ?? '';
@@ -428,27 +430,21 @@ class _LecturerAttendanceReportScreenState
         return _StudentAttendanceRecord(
           id: record.recordId,
           studentId: record.studentId,
-          name: _localizedStudentName(
-            record.studentId,
-            record.studentName,
-          ),
+          name: _localizedStudentName(record.studentId, record.studentName),
           academicNumber: record.studentId.toString(),
           time: timeText(record),
           status: _statusFromManual(record.status),
         );
       }).toList();
 
-      updated.add(
-        g.copyWith(students: students),
-      );
+      updated.add(g.copyWith(students: students));
     }
     _groups = updated;
     unawaited(_refreshStudentProfilesFromGroups());
   }
 
-  int get _currentWeekNumber => _calendarRepository.getOfficialWeekNumber(
-        _calendarNow,
-      );
+  int get _currentWeekNumber =>
+      _calendarRepository.getOfficialWeekNumber(_calendarNow);
   int get _effectiveWeekNumber => _weekIsAuto
       ? _currentWeekNumber
       : (_selectedWeekNumber ?? _currentWeekNumber);
@@ -633,11 +629,11 @@ class _LecturerAttendanceReportScreenState
             lecture;
       }
 
-      final sessions =
-          await AttendanceReportTermService.instance.syncAndLoadSectionSessions(
-        lectures: lectures,
-        calendar: _calendarRepository,
-      );
+      final sessions = await AttendanceReportTermService.instance
+          .syncAndLoadSectionSessions(
+            lectures: lectures,
+            calendar: _calendarRepository,
+          );
       final groups = _buildGroupsFromFirestore(
         sessions: sessions,
         recordsBySession: const <String, List<ManualAttendanceRecord>>{},
@@ -711,7 +707,8 @@ class _LecturerAttendanceReportScreenState
           const <ManualAttendanceRecord>[];
       final lectureKey =
           '${session.sectionId.trim()}|${session.lectureStartTime.trim()}';
-      final lecture = lectureBySectionAndStart[lectureKey] ??
+      final lecture =
+          lectureBySectionAndStart[lectureKey] ??
           lectureBySection[session.sectionId];
       final sectionId = session.sectionId.trim();
       final courseCode = (session.courseCode ?? '').trim().isNotEmpty
@@ -743,10 +740,7 @@ class _LecturerAttendanceReportScreenState
             (record) => _StudentAttendanceRecord(
               id: record.recordId,
               studentId: record.studentId,
-              name: _localizedStudentName(
-                record.studentId,
-                record.studentName,
-              ),
+              name: _localizedStudentName(record.studentId, record.studentName),
               academicNumber: record.studentId.toString(),
               time: _timeTextForRecord(record, session),
               status: _statusFromManual(record.status),
@@ -949,10 +943,7 @@ class _LecturerAttendanceReportScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            _tr(
-              'يرجى اختيار محاضرة أولاً.',
-              'Please select a lecture first.',
-            ),
+            _tr('يرجى اختيار محاضرة أولاً.', 'Please select a lecture first.'),
           ),
         ),
       );
@@ -1008,6 +999,7 @@ class _LecturerAttendanceReportScreenState
       barrierDismissible: true,
       barrierColor: Colors.black.withValues(alpha: 0.45),
       builder: (dialogContext) {
+        final scheme = Theme.of(dialogContext).colorScheme;
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
           child: ModernPopupDialog(
@@ -1015,11 +1007,11 @@ class _LecturerAttendanceReportScreenState
             title: Text(
               _tr('إجراء الحضور', 'Attendance action'),
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF2F4449),
+                color: scheme.onSurface,
               ),
             ),
             actions: [
@@ -1038,12 +1030,12 @@ class _LecturerAttendanceReportScreenState
                     'يرجى اختيار الإجراء للمحاضرة في ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
                     'Choose action for lecture on ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
                   ),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     height: 1.45,
-                    color: Color(0xFF5F747A),
+                    color: scheme.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -1582,12 +1574,19 @@ class _LecturerAttendanceReportScreenState
     required double percentage,
     required Color color,
   }) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE0EAEC)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFE0EAEC),
+        ),
       ),
       child: Column(
         children: [
@@ -1596,11 +1595,11 @@ class _LecturerAttendanceReportScreenState
               Expanded(
                 child: Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF2C3F44),
+                    color: scheme.onSurface,
                   ),
                 ),
               ),
@@ -1772,10 +1771,12 @@ class _LecturerAttendanceReportScreenState
     return ValueListenableBuilder<LecturerLanguage>(
       valueListenable: LecturerLanguageController.notifier,
       builder: (context, _, __) {
+        final theme = Theme.of(context);
+        final scheme = theme.colorScheme;
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
           child: Scaffold(
-            backgroundColor: const Color(0xFFF8FBFB),
+            backgroundColor: theme.scaffoldBackgroundColor,
             body: SafeArea(
               child: _loadError != null
                   ? Center(
@@ -1789,14 +1790,15 @@ class _LecturerAttendanceReportScreenState
                                 'حدث خطأ في تحميل التقرير',
                                 'Failed to load report',
                               ),
+                              style: TextStyle(color: scheme.onSurface),
                             ),
                             const SizedBox(height: 12),
                             Text(
                               _loadError!,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey,
+                                color: scheme.onSurfaceVariant,
                               ),
                             ),
                             const SizedBox(height: 16),
@@ -1863,6 +1865,7 @@ class _LecturerAttendanceReportScreenState
   }
 
   Widget _buildPageTopBar() {
+    final scheme = Theme.of(context).colorScheme;
     const backSlotSize = 38.0;
     return Padding(
       padding: const EdgeInsets.only(top: 2),
@@ -1877,17 +1880,19 @@ class _LecturerAttendanceReportScreenState
             ),
             Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: backSlotSize + 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: backSlotSize + 8,
+                ),
                 child: Text(
                   LecturerStrings.reportTitle(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF213236),
+                    color: scheme.onSurface,
                     height: 1.25,
                   ),
                 ),
@@ -1949,13 +1954,18 @@ class _LecturerAttendanceReportScreenState
     required String title,
     String? hint,
   }) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Row(
       children: [
         Container(
           width: 28,
           height: 28,
           decoration: BoxDecoration(
-            color: const Color(0xFFE8F4F5),
+            color: isDark
+                ? scheme.surfaceContainerHighest
+                : const Color(0xFFE8F4F5),
             borderRadius: BorderRadius.circular(9),
           ),
           child: Icon(icon, size: 16, color: _primary),
@@ -1963,11 +1973,11 @@ class _LecturerAttendanceReportScreenState
         const SizedBox(width: 8),
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: 'Cairo',
             fontSize: 13.2,
             fontWeight: FontWeight.w800,
-            color: Color(0xFF24484F),
+            color: scheme.onSurface,
           ),
         ),
         if (hint != null) ...[
@@ -1977,11 +1987,11 @@ class _LecturerAttendanceReportScreenState
               hint,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 11.2,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF6B8389),
+                color: scheme.onSurfaceVariant,
               ),
             ),
           ),
@@ -1991,17 +2001,24 @@ class _LecturerAttendanceReportScreenState
   }
 
   Widget _buildFilters() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final courses = _courseOptions;
     final weeks = _weekOptionsForSelectedCourse;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFD9E8EB)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFD9E8EB),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.045),
+            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.045),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -2097,20 +2114,29 @@ class _LecturerAttendanceReportScreenState
   }
 
   Widget _buildInlineFilterHint(String text) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F9FA),
+        color: isDark
+            ? scheme.surfaceContainerHighest
+            : const Color(0xFFF5F9FA),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFDCE8EA)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFDCE8EA),
+        ),
       ),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'Cairo',
           fontSize: 11.8,
-          color: Color(0xFF698188),
+          color: scheme.onSurfaceVariant,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -2118,12 +2144,19 @@ class _LecturerAttendanceReportScreenState
   }
 
   Widget _buildCourseDropdown(List<_CourseOption> courses) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFD6E5E8)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFD6E5E8),
+        ),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String?>(
@@ -2135,13 +2168,13 @@ class _LecturerAttendanceReportScreenState
             color: Color(0xFF006571),
           ),
           borderRadius: BorderRadius.circular(12),
-          dropdownColor: Colors.white,
+          dropdownColor: scheme.surface,
           menuMaxHeight: 320,
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: 'Cairo',
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF2B4B52),
+            color: scheme.onSurface,
           ),
           items: [
             DropdownMenuItem<String?>(
@@ -2166,12 +2199,19 @@ class _LecturerAttendanceReportScreenState
   }
 
   Widget _buildWeekDropdown(List<int> weeks) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFD6E5E8)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFD6E5E8),
+        ),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<int?>(
@@ -2182,13 +2222,13 @@ class _LecturerAttendanceReportScreenState
             color: Color(0xFF006571),
           ),
           borderRadius: BorderRadius.circular(12),
-          dropdownColor: Colors.white,
+          dropdownColor: scheme.surface,
           menuMaxHeight: 300,
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: 'Cairo',
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF2B4B52),
+            color: scheme.onSurface,
           ),
           items: [
             DropdownMenuItem<int?>(
@@ -2209,15 +2249,22 @@ class _LecturerAttendanceReportScreenState
   }
 
   Widget _buildWeekLectureCards() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final sessions = _filteredGroups;
     if (sessions.isEmpty) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: scheme.surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFDDE9EB)),
+          border: Border.all(
+            color: isDark
+                ? scheme.outlineVariant.withValues(alpha: 0.45)
+                : const Color(0xFFDDE9EB),
+          ),
         ),
         child: Text(
           _tr(
@@ -2225,11 +2272,11 @@ class _LecturerAttendanceReportScreenState
             'No lectures match the current filters.',
           ),
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: 'Cairo',
             fontSize: 12.5,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF5F747A),
+            color: scheme.onSurfaceVariant,
           ),
         ),
       );
@@ -2239,12 +2286,16 @@ class _LecturerAttendanceReportScreenState
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFDDE9EB)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFDDE9EB),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
+            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.03),
             blurRadius: 14,
             offset: const Offset(0, 7),
           ),
@@ -2266,10 +2317,10 @@ class _LecturerAttendanceReportScreenState
               const SizedBox(width: 8),
               Text(
                 LecturerStrings.reportWeekLectures(),
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'Cairo',
                   fontWeight: FontWeight.w800,
-                  color: Color(0xFF32484D),
+                  color: scheme.onSurface,
                 ),
               ),
             ],
@@ -2293,7 +2344,7 @@ class _LecturerAttendanceReportScreenState
                       vertical: 10,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: scheme.surface,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color: selected
@@ -2326,18 +2377,16 @@ class _LecturerAttendanceReportScreenState
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                            Text(
-                              mainTitle,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.start,
+                              Text(
+                                mainTitle,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.start,
                                 style: TextStyle(
                                   fontFamily: 'Cairo',
                                   fontSize: 13.1,
                                   fontWeight: FontWeight.w800,
-                                  color: selected
-                                      ? const Color(0xFF15414A)
-                                      : const Color(0xFF2E4348),
+                                  color: selected ? _primary : scheme.onSurface,
                                 ),
                               ),
                               const SizedBox(height: 3),
@@ -2350,8 +2399,8 @@ class _LecturerAttendanceReportScreenState
                                   fontSize: 11.3,
                                   fontWeight: FontWeight.w700,
                                   color: selected
-                                      ? const Color(0xFF2A5C65)
-                                      : const Color(0xFF627B82),
+                                      ? _primary
+                                      : scheme.onSurfaceVariant,
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -2363,18 +2412,20 @@ class _LecturerAttendanceReportScreenState
                                       vertical: 3,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFF3F8F9),
+                                      color: isDark
+                                          ? scheme.surfaceContainerHighest
+                                          : const Color(0xFFF3F8F9),
                                       borderRadius: BorderRadius.circular(999),
                                     ),
                                     child: Text(
                                       LecturerLanguageController.localizedSectionLabel(
                                         session.section,
                                       ),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontFamily: 'Cairo',
                                         fontSize: 10.6,
                                         fontWeight: FontWeight.w700,
-                                        color: Color(0xFF5E7A81),
+                                        color: scheme.onSurfaceVariant,
                                       ),
                                     ),
                                   ),
@@ -2394,8 +2445,8 @@ class _LecturerAttendanceReportScreenState
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w700,
                                 color: selected
-                                    ? const Color(0xFF2A5C65)
-                                    : const Color(0xFF769097),
+                                    ? _primary
+                                    : scheme.onSurfaceVariant,
                               ),
                             ),
                             const SizedBox(height: 7),
@@ -2486,9 +2537,7 @@ class _LecturerAttendanceReportScreenState
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: canExport
-                    ? () => _exportActiveSession(group)
-                    : null,
+                onPressed: canExport ? () => _exportActiveSession(group) : null,
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(44),
                   side: const BorderSide(color: Color(0xFF006571)),
@@ -2676,6 +2725,9 @@ class _LecturerAttendanceReportScreenState
   }
 
   Widget _buildReportSummaryCard(_LectureAttendanceGroup group) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final statusLabel = _tr('قابل للتعديل', 'Editable');
     final statusColor = const Color(0xFF1B8E3E);
     final statusBg = const Color(0xFFEAF7EF);
@@ -2684,9 +2736,13 @@ class _LecturerAttendanceReportScreenState
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFDCE7E9)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFDCE7E9),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2699,11 +2755,11 @@ class _LecturerAttendanceReportScreenState
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.start,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF213236),
+                    color: scheme.onSurface,
                   ),
                 ),
               ),
@@ -2731,20 +2787,20 @@ class _LecturerAttendanceReportScreenState
           const SizedBox(height: 8),
           Text(
             '${_tr('الشعبة', 'Section')}: ${group.section}',
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 12,
-              color: Color(0xFF55666B),
+              color: scheme.onSurfaceVariant,
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 2),
           Text(
             '${_tr('التاريخ', 'Date')}: ${_formatDate(group.lectureDate)}',
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 12,
-              color: Color(0xFF55666B),
+              color: scheme.onSurfaceVariant,
               fontWeight: FontWeight.w700,
             ),
           ),

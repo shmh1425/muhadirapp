@@ -140,7 +140,9 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
 
   @override
   void dispose() {
-    LecturerLanguageController.notifier.removeListener(_onLecturerLanguageChanged);
+    LecturerLanguageController.notifier.removeListener(
+      _onLecturerLanguageChanged,
+    );
     _calendarSyncSub?.cancel();
     _nfcSessionsSub?.cancel();
     _stopCodeRefreshTimer();
@@ -1063,675 +1065,728 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
 
     return ValueListenableBuilder<LecturerLanguage>(
       valueListenable: LecturerLanguageController.notifier,
-      builder: (context, _, __) => Directionality(
-        textDirection: LecturerLanguageController.direction(),
-        child: PopScope(
-          canPop: false,
-          child: Scaffold(
-            backgroundColor: Colors.white,
-            body: SafeArea(
-              child: Column(
-              children: [
-                const SizedBox(height: 16),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Center(
-                    child: Text(
-                      _selectedMethod == _CheckInMethod.qr
-                          ? _tr(
-                              'قم بإظهار ال QR للطلاب',
-                              'Show the QR to students',
-                            )
-                          : _selectedMethod == _CheckInMethod.nfc
-                          ? _tr(
-                              'فعّل التحضير عبر NFC للطلاب',
-                              'Enable NFC attendance for students',
-                            )
-                          : _tr('فتح جلسة البلوتوث', 'Start Bluetooth Session'),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: primaryColor,
-                        height: 1.4,
-                        fontFamily: 'Cairo',
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF2F5F6),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFD9E5E8)),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(10),
-                            onTap: () {
-                              setState(() {
-                                _selectedMethod = _CheckInMethod.qr;
-                                _codeRefreshSecondsLeft =
-                                    _codeRefreshIntervalSeconds;
-                              });
-                              _stopBluetoothTokenTimer();
-                              if (_qrSession != null) {
-                                _startCodeRefreshTimer();
-                              }
-                            },
-                            child: Container(
-                              height: 38,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: _selectedMethod == _CheckInMethod.qr
-                                    ? const Color(0xFF006571)
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                'QR',
-                                style: TextStyle(
-                                  fontFamily: 'Cairo',
-                                  fontWeight: FontWeight.w800,
-                                  color: _selectedMethod == _CheckInMethod.qr
-                                      ? Colors.white
-                                      : const Color(0xFF4F656B),
+      builder: (context, _, __) {
+        final theme = Theme.of(context);
+        final scheme = theme.colorScheme;
+        final isDark = theme.brightness == Brightness.dark;
+        return Directionality(
+          textDirection: LecturerLanguageController.direction(),
+          child: PopScope(
+            canPop: false,
+            child: Scaffold(
+              backgroundColor: theme.scaffoldBackgroundColor,
+              body: SafeArea(
+                child: Column(
+                  children: [
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Center(
+                        child: Text(
+                          _selectedMethod == _CheckInMethod.qr
+                              ? _tr(
+                                  'قم بإظهار ال QR للطلاب',
+                                  'Show the QR to students',
+                                )
+                              : _selectedMethod == _CheckInMethod.nfc
+                              ? _tr(
+                                  'فعّل التحضير عبر NFC للطلاب',
+                                  'Enable NFC attendance for students',
+                                )
+                              : _tr(
+                                  'فتح جلسة البلوتوث',
+                                  'Start Bluetooth Session',
                                 ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(10),
-                            onTap: () {
-                              setState(
-                                () => _selectedMethod = _CheckInMethod.nfc,
-                              );
-                              _stopCodeRefreshTimer();
-                              _stopBluetoothTokenTimer();
-                            },
-                            child: Container(
-                              height: 38,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: _selectedMethod == _CheckInMethod.nfc
-                                    ? const Color(0xFF006571)
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                'NFC',
-                                style: TextStyle(
-                                  fontFamily: 'Cairo',
-                                  fontWeight: FontWeight.w800,
-                                  color: _selectedMethod == _CheckInMethod.nfc
-                                      ? Colors.white
-                                      : const Color(0xFF4F656B),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(10),
-                            onTap: _isLoadingBluetoothAction
-                                ? null
-                                : _onBluetoothSelected,
-                            child: Container(
-                              height: 38,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color:
-                                    _selectedMethod == _CheckInMethod.bluetooth
-                                    ? const Color(0xFF006571)
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                _tr('بلوتوث', 'Bluetooth'),
-                                style: TextStyle(
-                                  fontFamily: 'Cairo',
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 12,
-                                  color:
-                                      _selectedMethod ==
-                                          _CheckInMethod.bluetooth
-                                      ? Colors.white
-                                      : const Color(0xFF4F656B),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                if (lecture != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 4,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          lecture.courseName,
-                          textAlign: TextAlign.right,
+                          textAlign: TextAlign.center,
                           style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.black87,
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: primaryColor,
+                            height: 1.4,
                             fontFamily: 'Cairo',
                           ),
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'CRN${lecture.crn} | ${lecture.activity}، ${_tr('الشعبة', 'Section')} ${lecture.section}',
-                          textAlign: TextAlign.right,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            color: Colors.black54,
-                            fontFamily: 'Cairo',
-                          ),
-                        ),
-                        if (lecture.location != null &&
-                            lecture.location!.trim().isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            '${_tr('الموقع', 'Location')}: ${lecture.location!.trim()}',
-                            textAlign: TextAlign.right,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.black54,
-                              fontFamily: 'Cairo',
-                            ),
-                          ),
-                        ] else if (lecture.hall.trim().isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            '${_tr('القاعة', 'Hall')}: ${lecture.hall.trim()}',
-                            textAlign: TextAlign.right,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.black54,
-                              fontFamily: 'Cairo',
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 12),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF7F7F7),
-                            borderRadius: BorderRadius.circular(22),
-                            border: Border.all(
-                              color: const Color(0xFFE0E0E0),
-                              width: 1,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: lecture.timeSlots.map((slot) {
-                              return Container(
-                                margin: const EdgeInsets.only(left: 6),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: const Color(0xFFB5C3C7),
-                                    width: 0.9,
-                                  ),
-                                ),
-                                child: Text(
-                                  slot,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF1F2E33),
-                                    fontFamily: 'Cairo',
-                                  ),
-                                  textDirection: TextDirection.ltr,
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                const SizedBox(height: 24),
-                Expanded(
-                  child: Center(
-                    child: Container(
-                      width: MediaQuery.of(context).size.width * 0.72,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 24,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(28),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.08),
-                            blurRadius: 22,
-                            offset: const Offset(0, 10),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? scheme.surfaceContainerHighest
+                              : const Color(0xFFF2F5F6),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isDark
+                                ? scheme.outlineVariant.withValues(alpha: 0.45)
+                                : const Color(0xFFD9E5E8),
                           ),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (_selectedMethod == _CheckInMethod.qr &&
-                              _isLoadingSession) ...[
-                            const SizedBox(
-                              width: 36,
-                              height: 36,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 3,
-                                color: primaryColor,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _tr(
-                                'جاري تحميل جلسة QR...',
-                                'Loading QR session...',
-                              ),
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF465A5F),
-                                fontFamily: 'Cairo',
-                              ),
-                            ),
-                          ] else if (_selectedMethod == _CheckInMethod.nfc &&
-                              _isLoadingNfcAction) ...[
-                            const SizedBox(
-                              width: 36,
-                              height: 36,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 3,
-                                color: primaryColor,
-                              ),
-                            ),
-                          ] else if (_selectedMethod ==
-                                  _CheckInMethod.bluetooth &&
-                              _isLoadingBluetoothAction) ...[
-                            const SizedBox(
-                              width: 36,
-                              height: 36,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 3,
-                                color: primaryColor,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _tr(
-                                'جاري فتح جلسة البلوتوث...',
-                                'Starting Bluetooth session...',
-                              ),
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF465A5F),
-                                fontFamily: 'Cairo',
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _tr(
-                                'جاري تفعيل NFC...',
-                                'Activating NFC attendance...',
-                              ),
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF465A5F),
-                                fontFamily: 'Cairo',
-                              ),
-                            ),
-                          ] else if (lecture == null) ...[
-                            const Icon(
-                              Icons.event_busy_rounded,
-                              size: 48,
-                              color: primaryColor,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _tr(
-                                'لا توجد محاضرة حالياً',
-                                'No lecture is currently active',
-                              ),
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF465A5F),
-                                fontFamily: 'Cairo',
-                              ),
-                            ),
-                          ] else if (_sessionErrorMessage != null) ...[
-                            const Icon(
-                              Icons.error_outline_rounded,
-                              size: 48,
-                              color: primaryColor,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _sessionErrorMessage!,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF465A5F),
-                                fontFamily: 'Cairo',
-                              ),
-                            ),
-                          ] else if (_selectedMethod == _CheckInMethod.nfc) ...[
-                            Icon(
-                              _isNfcActiveForLecture
-                                  ? Icons.nfc_rounded
-                                  : Icons.nfc_outlined,
-                              size: 64,
-                              color: primaryColor,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _isNfcActiveForLecture
-                                  ? _tr(
-                                      'NFC مفعل لهذه المحاضرة',
-                                      'NFC is active for this lecture',
-                                    )
-                                  : _tr(
-                                      'NFC غير مفعل بعد لهذه المحاضرة',
-                                      'NFC is not active for this lecture yet',
-                                    ),
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF465A5F),
-                                fontFamily: 'Cairo',
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              _tr(
-                                'يمكن للطلاب التحضير بالبطاقة بعد تفعيل الجلسة.',
-                                'Students can check in by card once the session is active.',
-                              ),
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF5F7A80),
-                                fontFamily: 'Cairo',
-                              ),
-                            ),
-                          ] else if (_selectedMethod ==
-                              _CheckInMethod.bluetooth) ...[
-                            _buildBluetoothSessionPanel(),
-                          ] else ...[
-                            Container(
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF2F5F6),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: const Color(0xFFD9E5E8),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: _QrDisplayChip(
-                                      label: _tr('رمز QR', 'QR Code'),
-                                      isActive:
-                                          _qrDisplayMode ==
-                                          _QrDisplayMode.qrCode,
-                                      onTap: () => setState(
-                                        () => _qrDisplayMode =
-                                            _QrDisplayMode.qrCode,
-                                      ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(10),
+                                onTap: () {
+                                  setState(() {
+                                    _selectedMethod = _CheckInMethod.qr;
+                                    _codeRefreshSecondsLeft =
+                                        _codeRefreshIntervalSeconds;
+                                  });
+                                  _stopBluetoothTokenTimer();
+                                  if (_qrSession != null) {
+                                    _startCodeRefreshTimer();
+                                  }
+                                },
+                                child: Container(
+                                  height: 38,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: _selectedMethod == _CheckInMethod.qr
+                                        ? const Color(0xFF006571)
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    'QR',
+                                    style: TextStyle(
+                                      fontFamily: 'Cairo',
+                                      fontWeight: FontWeight.w800,
+                                      color:
+                                          _selectedMethod == _CheckInMethod.qr
+                                          ? Colors.white
+                                          : scheme.onSurfaceVariant,
                                     ),
                                   ),
-                                  Expanded(
-                                    child: _QrDisplayChip(
-                                      label: _tr('الرمز الرقمي', 'Number Code'),
-                                      isActive:
-                                          _qrDisplayMode ==
-                                          _QrDisplayMode.numberCode,
-                                      onTap: () => setState(
-                                        () => _qrDisplayMode =
-                                            _QrDisplayMode.numberCode,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            if (_qrDisplayMode == _QrDisplayMode.numberCode)
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 18,
-                                  vertical: 22,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF7FBFC),
-                                  borderRadius: BorderRadius.circular(18),
-                                  border: Border.all(
-                                    color: const Color(0xFFD9E5E8),
-                                  ),
-                                ),
-                                child: Column(
-                                  children: [
-                                    Text(
-                                      _tr('رمز الحضور', 'Attendance Code'),
-                                      style: const TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w800,
-                                        color: Color(0xFF465A5F),
-                                        fontFamily: 'Cairo',
-                                      ),
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Directionality(
-                                      textDirection: TextDirection.ltr,
-                                      child: Text(
-                                        _qrSession?.numericCode.isNotEmpty ==
-                                                true
-                                            ? _qrSession!.numericCode
-                                            : '------',
-                                        style: const TextStyle(
-                                          fontSize: 42,
-                                          fontWeight: FontWeight.w900,
-                                          letterSpacing: 8,
-                                          color: Color(0xFF00474F),
-                                          fontFamily: 'Cairo',
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      '${_tr('سيتم تحديث الرمز خلال', 'Code refreshes in')} ${_codeRefreshSecondsLeft}s',
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Color(0xFF5F7A80),
-                                        fontFamily: 'Cairo',
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            else
-                              Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(24),
-                                  border: Border.all(
-                                    color: const Color(0xFF006571),
-                                    width: 3,
-                                  ),
-                                ),
-                                padding: const EdgeInsets.all(16),
-                                child: QrImageView(
-                                  data: _qrData,
-                                  size: MediaQuery.of(context).size.width * 0.5,
-                                  backgroundColor: Colors.white,
-                                  eyeStyle: const QrEyeStyle(
-                                    eyeShape: QrEyeShape.square,
-                                    color: Color(0xFF00474F),
-                                  ),
-                                  dataModuleStyle: const QrDataModuleStyle(
-                                    dataModuleShape: QrDataModuleShape.square,
-                                    color: Color(0xFF00474F),
-                                  ),
-                                ),
-                              ),
-                            const SizedBox(height: 10),
-                            Text(
-                              _tr('رمز الحضور: ', 'Attendance code: '),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF5F7A80),
-                                fontFamily: 'Cairo',
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Directionality(
-                              textDirection: TextDirection.ltr,
-                              child: Text(
-                                _qrSession?.numericCode.isNotEmpty == true
-                                    ? _qrSession!.numericCode
-                                    : '------',
-                                style: const TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 5,
-                                  color: Color(0xFF00474F),
-                                  fontFamily: 'Cairo',
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 10),
-                            Text(
-                              _tr(
-                                'الجلسة متصلة بـ Firestore',
-                                'Session is connected to Firestore',
+                            Expanded(
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(10),
+                                onTap: () {
+                                  setState(
+                                    () => _selectedMethod = _CheckInMethod.nfc,
+                                  );
+                                  _stopCodeRefreshTimer();
+                                  _stopBluetoothTokenTimer();
+                                },
+                                child: Container(
+                                  height: 38,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: _selectedMethod == _CheckInMethod.nfc
+                                        ? const Color(0xFF006571)
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    'NFC',
+                                    style: TextStyle(
+                                      fontFamily: 'Cairo',
+                                      fontWeight: FontWeight.w800,
+                                      color:
+                                          _selectedMethod == _CheckInMethod.nfc
+                                          ? Colors.white
+                                          : scheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
                               ),
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF5F7A80),
-                                fontFamily: 'Cairo',
+                            ),
+                            Expanded(
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(10),
+                                onTap: _isLoadingBluetoothAction
+                                    ? null
+                                    : _onBluetoothSelected,
+                                child: Container(
+                                  height: 38,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color:
+                                        _selectedMethod ==
+                                            _CheckInMethod.bluetooth
+                                        ? const Color(0xFF006571)
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    _tr('بلوتوث', 'Bluetooth'),
+                                    style: TextStyle(
+                                      fontFamily: 'Cairo',
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 12,
+                                      color:
+                                          _selectedMethod ==
+                                              _CheckInMethod.bluetooth
+                                          ? Colors.white
+                                          : scheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           ],
-                          if (lecture != null) ...[
-                            const SizedBox(height: 22),
-                            SizedBox(
-                              width: 220,
-                              height: 48,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0xFF27A2A9),
-                                      Color(0xFF006571),
-                                    ],
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                  ),
-                                  borderRadius: BorderRadius.circular(26),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    if (lecture != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 4,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              lecture.courseName,
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                color: scheme.onSurface,
+                                fontFamily: 'Cairo',
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'CRN${lecture.crn} | ${lecture.activity}، ${_tr('الشعبة', 'Section')} ${lecture.section}',
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: scheme.onSurfaceVariant,
+                                fontFamily: 'Cairo',
+                              ),
+                            ),
+                            if (lecture.location != null &&
+                                lecture.location!.trim().isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                '${_tr('الموقع', 'Location')}: ${lecture.location!.trim()}',
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: scheme.onSurfaceVariant,
+                                  fontFamily: 'Cairo',
                                 ),
-                                child: TextButton.icon(
-                                  onPressed:
-                                      _selectedMethod == _CheckInMethod.qr
-                                      ? (_isLoadingSession
-                                            ? null
-                                            : _onRefreshPressed)
-                                      : _selectedMethod == _CheckInMethod.nfc
-                                      ? (_isLoadingNfcAction
-                                            ? null
-                                            : _onEnableNfcPressed)
-                                      : (_isLoadingBluetoothAction
-                                            ? null
-                                            : _openOrConfirmBluetoothForCurrentLecture),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(26),
+                              ),
+                            ] else if (lecture.hall.trim().isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                '${_tr('القاعة', 'Hall')}: ${lecture.hall.trim()}',
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: scheme.onSurfaceVariant,
+                                  fontFamily: 'Cairo',
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 12),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? scheme.surfaceContainerHighest
+                                    : const Color(0xFFF7F7F7),
+                                borderRadius: BorderRadius.circular(22),
+                                border: Border.all(
+                                  color: isDark
+                                      ? scheme.outlineVariant.withValues(
+                                          alpha: 0.45,
+                                        )
+                                      : const Color(0xFFE0E0E0),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: lecture.timeSlots.map((slot) {
+                                  return Container(
+                                    margin: const EdgeInsets.only(left: 6),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: scheme.surface,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: const Color(0xFFB5C3C7),
+                                        width: 0.9,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      slot,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: scheme.onSurface,
+                                        fontFamily: 'Cairo',
+                                      ),
+                                      textDirection: TextDirection.ltr,
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 24),
+                    Expanded(
+                      child: Center(
+                        child: Container(
+                          width: MediaQuery.of(context).size.width * 0.72,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 24,
+                          ),
+                          decoration: BoxDecoration(
+                            color: scheme.surface,
+                            borderRadius: BorderRadius.circular(28),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(
+                                  alpha: isDark ? 0.24 : 0.08,
+                                ),
+                                blurRadius: 22,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_selectedMethod == _CheckInMethod.qr &&
+                                  _isLoadingSession) ...[
+                                const SizedBox(
+                                  width: 36,
+                                  height: 36,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 3,
+                                    color: primaryColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _tr(
+                                    'جاري تحميل جلسة QR...',
+                                    'Loading QR session...',
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: scheme.onSurfaceVariant,
+                                    fontFamily: 'Cairo',
+                                  ),
+                                ),
+                              ] else if (_selectedMethod ==
+                                      _CheckInMethod.nfc &&
+                                  _isLoadingNfcAction) ...[
+                                const SizedBox(
+                                  width: 36,
+                                  height: 36,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 3,
+                                    color: primaryColor,
+                                  ),
+                                ),
+                              ] else if (_selectedMethod ==
+                                      _CheckInMethod.bluetooth &&
+                                  _isLoadingBluetoothAction) ...[
+                                const SizedBox(
+                                  width: 36,
+                                  height: 36,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 3,
+                                    color: primaryColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _tr(
+                                    'جاري فتح جلسة البلوتوث...',
+                                    'Starting Bluetooth session...',
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: scheme.onSurfaceVariant,
+                                    fontFamily: 'Cairo',
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _tr(
+                                    'جاري تفعيل NFC...',
+                                    'Activating NFC attendance...',
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: scheme.onSurfaceVariant,
+                                    fontFamily: 'Cairo',
+                                  ),
+                                ),
+                              ] else if (lecture == null) ...[
+                                const Icon(
+                                  Icons.event_busy_rounded,
+                                  size: 48,
+                                  color: primaryColor,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _tr(
+                                    'لا توجد محاضرة حالياً',
+                                    'No lecture is currently active',
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: scheme.onSurfaceVariant,
+                                    fontFamily: 'Cairo',
+                                  ),
+                                ),
+                              ] else if (_sessionErrorMessage != null) ...[
+                                const Icon(
+                                  Icons.error_outline_rounded,
+                                  size: 48,
+                                  color: primaryColor,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _sessionErrorMessage!,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: scheme.onSurfaceVariant,
+                                    fontFamily: 'Cairo',
+                                  ),
+                                ),
+                              ] else if (_selectedMethod ==
+                                  _CheckInMethod.nfc) ...[
+                                Icon(
+                                  _isNfcActiveForLecture
+                                      ? Icons.nfc_rounded
+                                      : Icons.nfc_outlined,
+                                  size: 64,
+                                  color: primaryColor,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _isNfcActiveForLecture
+                                      ? _tr(
+                                          'NFC مفعل لهذه المحاضرة',
+                                          'NFC is active for this lecture',
+                                        )
+                                      : _tr(
+                                          'NFC غير مفعل بعد لهذه المحاضرة',
+                                          'NFC is not active for this lecture yet',
+                                        ),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: scheme.onSurfaceVariant,
+                                    fontFamily: 'Cairo',
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  _tr(
+                                    'يمكن للطلاب التحضير بالبطاقة بعد تفعيل الجلسة.',
+                                    'Students can check in by card once the session is active.',
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: scheme.onSurfaceVariant,
+                                    fontFamily: 'Cairo',
+                                  ),
+                                ),
+                              ] else if (_selectedMethod ==
+                                  _CheckInMethod.bluetooth) ...[
+                                _buildBluetoothSessionPanel(),
+                              ] else ...[
+                                Container(
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? scheme.surfaceContainerHighest
+                                        : const Color(0xFFF2F5F6),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: isDark
+                                          ? scheme.outlineVariant.withValues(
+                                              alpha: 0.45,
+                                            )
+                                          : const Color(0xFFD9E5E8),
                                     ),
                                   ),
-                                  icon: Icon(
-                                    _selectedMethod == _CheckInMethod.qr
-                                        ? Icons.refresh_rounded
-                                        : _selectedMethod == _CheckInMethod.nfc
-                                        ? Icons.nfc_rounded
-                                        : Icons.bluetooth_rounded,
-                                    size: 20,
-                                  ),
-                                  label: Text(
-                                    _selectedMethod == _CheckInMethod.qr
-                                        ? _tr('تحديث الكود', 'Refresh Code')
-                                        : _selectedMethod == _CheckInMethod.nfc
-                                        ? _tr('تفعيل NFC', 'Enable NFC')
-                                        : _tr(
-                                            'فتح جلسة البلوتوث',
-                                            'Start Bluetooth Session',
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: _QrDisplayChip(
+                                          label: _tr('رمز QR', 'QR Code'),
+                                          isActive:
+                                              _qrDisplayMode ==
+                                              _QrDisplayMode.qrCode,
+                                          onTap: () => setState(
+                                            () => _qrDisplayMode =
+                                                _QrDisplayMode.qrCode,
                                           ),
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: _QrDisplayChip(
+                                          label: _tr(
+                                            'الرمز الرقمي',
+                                            'Number Code',
+                                          ),
+                                          isActive:
+                                              _qrDisplayMode ==
+                                              _QrDisplayMode.numberCode,
+                                          onTap: () => setState(
+                                            () => _qrDisplayMode =
+                                                _QrDisplayMode.numberCode,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                if (_qrDisplayMode == _QrDisplayMode.numberCode)
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 18,
+                                      vertical: 22,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? scheme.surfaceContainerHighest
+                                          : const Color(0xFFF7FBFC),
+                                      borderRadius: BorderRadius.circular(18),
+                                      border: Border.all(
+                                        color: isDark
+                                            ? scheme.outlineVariant.withValues(
+                                                alpha: 0.45,
+                                              )
+                                            : const Color(0xFFD9E5E8),
+                                      ),
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        Text(
+                                          _tr('رمز الحضور', 'Attendance Code'),
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w800,
+                                            color: scheme.onSurfaceVariant,
+                                            fontFamily: 'Cairo',
+                                          ),
+                                        ),
+                                        const SizedBox(height: 10),
+                                        Directionality(
+                                          textDirection: TextDirection.ltr,
+                                          child: Text(
+                                            _qrSession
+                                                        ?.numericCode
+                                                        .isNotEmpty ==
+                                                    true
+                                                ? _qrSession!.numericCode
+                                                : '------',
+                                            style: TextStyle(
+                                              fontSize: 42,
+                                              fontWeight: FontWeight.w900,
+                                              letterSpacing: 8,
+                                              color: scheme.primary,
+                                              fontFamily: 'Cairo',
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          '${_tr('سيتم تحديث الرمز خلال', 'Code refreshes in')} ${_codeRefreshSecondsLeft}s',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: scheme.onSurfaceVariant,
+                                            fontFamily: 'Cairo',
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                else
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(24),
+                                      border: Border.all(
+                                        color: const Color(0xFF006571),
+                                        width: 3,
+                                      ),
+                                    ),
+                                    padding: const EdgeInsets.all(16),
+                                    child: QrImageView(
+                                      data: _qrData,
+                                      size:
+                                          MediaQuery.of(context).size.width *
+                                          0.5,
+                                      backgroundColor: Colors.white,
+                                      eyeStyle: const QrEyeStyle(
+                                        eyeShape: QrEyeShape.square,
+                                        color: Color(0xFF00474F),
+                                      ),
+                                      dataModuleStyle: const QrDataModuleStyle(
+                                        dataModuleShape:
+                                            QrDataModuleShape.square,
+                                        color: Color(0xFF00474F),
+                                      ),
+                                    ),
+                                  ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  _tr('رمز الحضور: ', 'Attendance code: '),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: scheme.onSurfaceVariant,
+                                    fontFamily: 'Cairo',
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Directionality(
+                                  textDirection: TextDirection.ltr,
+                                  child: Text(
+                                    _qrSession?.numericCode.isNotEmpty == true
+                                        ? _qrSession!.numericCode
+                                        : '------',
+                                    style: TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 5,
+                                      color: scheme.primary,
                                       fontFamily: 'Cairo',
                                     ),
                                   ),
                                 ),
-                              ),
-                            ),
-                          ],
-                        ],
+                                const SizedBox(height: 10),
+                                Text(
+                                  _tr(
+                                    'الجلسة متصلة بـ Firestore',
+                                    'Session is connected to Firestore',
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: scheme.onSurfaceVariant,
+                                    fontFamily: 'Cairo',
+                                  ),
+                                ),
+                              ],
+                              if (lecture != null) ...[
+                                const SizedBox(height: 22),
+                                SizedBox(
+                                  width: 220,
+                                  height: 48,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        colors: [
+                                          Color(0xFF27A2A9),
+                                          Color(0xFF006571),
+                                        ],
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                      ),
+                                      borderRadius: BorderRadius.circular(26),
+                                    ),
+                                    child: TextButton.icon(
+                                      onPressed:
+                                          _selectedMethod == _CheckInMethod.qr
+                                          ? (_isLoadingSession
+                                                ? null
+                                                : _onRefreshPressed)
+                                          : _selectedMethod ==
+                                                _CheckInMethod.nfc
+                                          ? (_isLoadingNfcAction
+                                                ? null
+                                                : _onEnableNfcPressed)
+                                          : (_isLoadingBluetoothAction
+                                                ? null
+                                                : _openOrConfirmBluetoothForCurrentLecture),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            26,
+                                          ),
+                                        ),
+                                      ),
+                                      icon: Icon(
+                                        _selectedMethod == _CheckInMethod.qr
+                                            ? Icons.refresh_rounded
+                                            : _selectedMethod ==
+                                                  _CheckInMethod.nfc
+                                            ? Icons.nfc_rounded
+                                            : Icons.bluetooth_rounded,
+                                        size: 20,
+                                      ),
+                                      label: Text(
+                                        _selectedMethod == _CheckInMethod.qr
+                                            ? _tr('تحديث الكود', 'Refresh Code')
+                                            : _selectedMethod ==
+                                                  _CheckInMethod.nfc
+                                            ? _tr('تفعيل NFC', 'Enable NFC')
+                                            : _tr(
+                                                'فتح جلسة البلوتوث',
+                                                'Start Bluetooth Session',
+                                              ),
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w700,
+                                          fontFamily: 'Cairo',
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 12),
+                  ],
                 ),
-                const SizedBox(height: 12),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
-    ),
+        );
+      },
     );
   }
 
   Widget _buildBluetoothSessionPanel() {
+    final scheme = Theme.of(context).colorScheme;
     final session = _bluetoothSession;
     final isBroadcasting =
         _bluetoothBroadcastState == BluetoothBroadcastState.broadcasting;
@@ -1761,10 +1816,10 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
                 )
               : _tr('جلسة البلوتوث غير نشطة', 'Bluetooth session inactive'),
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w800,
-            color: Color(0xFF465A5F),
+            color: scheme.onSurfaceVariant,
             fontFamily: 'Cairo',
           ),
         ),
@@ -1774,9 +1829,9 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
           textAlign: TextAlign.center,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
-            color: Color(0xFF5F7A80),
+            color: scheme.onSurfaceVariant,
             fontFamily: 'Cairo',
             fontWeight: FontWeight.w700,
           ),
@@ -1846,6 +1901,7 @@ class _QrDisplayChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return InkWell(
       borderRadius: BorderRadius.circular(10),
       onTap: onTap,
@@ -1864,7 +1920,7 @@ class _QrDisplayChip extends StatelessWidget {
             fontFamily: 'Cairo',
             fontSize: 12,
             fontWeight: FontWeight.w800,
-            color: isActive ? Colors.white : const Color(0xFF4F656B),
+            color: isActive ? Colors.white : scheme.onSurfaceVariant,
           ),
         ),
       ),

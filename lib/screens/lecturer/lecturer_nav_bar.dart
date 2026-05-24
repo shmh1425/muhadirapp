@@ -15,6 +15,9 @@ class LecturerNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return SizedBox(
       height: _barHeight + (_circleSize / 2) + 12,
       child: Stack(
@@ -24,11 +27,11 @@ class LecturerNavBar extends StatelessWidget {
             height: _barHeight,
             margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: scheme.surface,
               borderRadius: BorderRadius.circular(36),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
+                  color: Colors.black.withValues(alpha: isDark ? 0.24 : 0.08),
                   blurRadius: 18,
                   offset: const Offset(0, 8),
                 ),
@@ -136,11 +139,11 @@ class _NavItem extends StatelessWidget {
   final bool isActive;
   final VoidCallback onTap;
 
-  static const _activeColor = Color(0xFF006571);
   static const _iconSize = 24.0;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Expanded(
       child: InkWell(
         onTap: onTap,
@@ -148,7 +151,7 @@ class _NavItem extends StatelessWidget {
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 160),
             opacity: isActive ? 0.0 : 1.0,
-            child: Icon(icon, size: _iconSize, color: _activeColor),
+            child: Icon(icon, size: _iconSize, color: scheme.primary),
           ),
         ),
       ),

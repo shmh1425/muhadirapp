@@ -43,8 +43,9 @@ class _LecturerNotificationsScreenState
     final lecturerId =
         LecturerAuthService.instance.currentLecturer?.lecturerId.trim() ?? '';
     if (lecturerId.isEmpty) return;
-    final catalog =
-        LecturerCatalogRepository.instance.getCachedCatalog(lecturerId);
+    final catalog = LecturerCatalogRepository.instance.getCachedCatalog(
+      lecturerId,
+    );
     if (catalog != null && !catalog.isEmpty) {
       LecturerCourseNameIndex.instance.updateFromCatalog(catalog);
     }
@@ -347,10 +348,12 @@ class _LecturerNotificationsScreenState
     return ValueListenableBuilder<LecturerLanguage>(
       valueListenable: LecturerLanguageController.notifier,
       builder: (context, _, __) {
+        final theme = Theme.of(context);
+        final scheme = theme.colorScheme;
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
           child: Scaffold(
-            backgroundColor: const Color(0xFFF8FBFB),
+            backgroundColor: theme.scaffoldBackgroundColor,
             body: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
@@ -390,11 +393,11 @@ class _LecturerNotificationsScreenState
                                   const SizedBox(height: 12),
                                   Text(
                                     LecturerStrings.notificationsLoading(),
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontFamily: 'Cairo',
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
-                                      color: Color(0xFF5F747A),
+                                      color: scheme.onSurfaceVariant,
                                     ),
                                   ),
                                 ],
@@ -464,8 +467,7 @@ class _LecturerNotificationsScreenState
                                           0,
                                           8,
                                           0,
-                                          MediaQuery.paddingOf(context)
-                                                  .bottom +
+                                          MediaQuery.paddingOf(context).bottom +
                                               88,
                                         ),
                                         itemCount: grouped.length,
@@ -498,6 +500,7 @@ class _LecturerNotificationsScreenState
   }
 
   Widget _buildPageTopBar() {
+    final scheme = Theme.of(context).colorScheme;
     const backSlotSize = 38.0;
     return Padding(
       padding: const EdgeInsets.only(top: 2),
@@ -512,17 +515,19 @@ class _LecturerNotificationsScreenState
             ),
             Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: backSlotSize + 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: backSlotSize + 8,
+                ),
                 child: Text(
                   LecturerStrings.notificationsTitle(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF213236),
+                    color: scheme.onSurface,
                     height: 1.25,
                   ),
                 ),
@@ -617,60 +622,69 @@ class _NotificationOverviewCard extends StatelessWidget {
     return ValueListenableBuilder<LecturerLanguage>(
       valueListenable: LecturerLanguageController.notifier,
       builder: (context, language, _) {
+        final theme = Theme.of(context);
+        final scheme = theme.colorScheme;
+        final isDark = theme.brightness == Brightness.dark;
         return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        gradient: const LinearGradient(
-          colors: [Color(0xFFEAF7F8), Color(0xFFF8FCFC)],
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-        ),
-        border: Border.all(color: const Color(0xFFD1E5E9)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            LecturerStrings.notificationsQuickOverview(language: language),
-            style: const TextStyle(
-              fontFamily: 'Cairo',
-              fontWeight: FontWeight.w800,
-              fontSize: 15,
-              color: Color(0xFF0B5D67),
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            color: scheme.surface,
+            border: Border.all(
+              color: isDark
+                  ? scheme.outlineVariant.withValues(alpha: 0.45)
+                  : const Color(0xFFD1E5E9),
             ),
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _StatPill(
-                label: LecturerStrings.notificationsUnread(language: language),
-                value: unreadCount,
-                bg: const Color(0xFFFFF2F2),
-                fg: const Color(0xFFD32F2F),
-                icon: Icons.mark_email_unread_outlined,
+              Text(
+                LecturerStrings.notificationsQuickOverview(language: language),
+                style: TextStyle(
+                  fontFamily: 'Cairo',
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                  color: scheme.onSurface,
+                ),
               ),
-              _StatPill(
-                label: LecturerStrings.notificationsExcuses(language: language),
-                value: excuseCount,
-                bg: const Color(0xFFFFF8E8),
-                fg: const Color(0xFFB07A06),
-                icon: Icons.rule_folder_outlined,
-              ),
-              _StatPill(
-                label: LecturerStrings.notificationsToday(language: language),
-                value: todayCount,
-                bg: const Color(0xFFE8F7F2),
-                fg: const Color(0xFF0B8060),
-                icon: Icons.today_outlined,
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _StatPill(
+                    label: LecturerStrings.notificationsUnread(
+                      language: language,
+                    ),
+                    value: unreadCount,
+                    bg: const Color(0xFFFFF2F2),
+                    fg: const Color(0xFFD32F2F),
+                    icon: Icons.mark_email_unread_outlined,
+                  ),
+                  _StatPill(
+                    label: LecturerStrings.notificationsExcuses(
+                      language: language,
+                    ),
+                    value: excuseCount,
+                    bg: const Color(0xFFFFF8E8),
+                    fg: const Color(0xFFB07A06),
+                    icon: Icons.rule_folder_outlined,
+                  ),
+                  _StatPill(
+                    label: LecturerStrings.notificationsToday(
+                      language: language,
+                    ),
+                    value: todayCount,
+                    bg: const Color(0xFFE8F7F2),
+                    fg: const Color(0xFF0B8060),
+                    icon: Icons.today_outlined,
+                  ),
+                ],
               ),
             ],
           ),
-        ],
-      ),
         );
       },
     );
@@ -750,6 +764,9 @@ class _NotificationSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final title = LecturerLanguageController.tr(titleAr, titleEn);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
@@ -759,20 +776,22 @@ class _NotificationSection extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: highlight
-                  ? const Color(0xFFEAF8F9)
-                  : const Color(0xFFF2F6F7),
+              color: isDark
+                  ? scheme.surfaceContainerHighest
+                  : (highlight
+                        ? const Color(0xFFEAF8F9)
+                        : const Color(0xFFF2F6F7)),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF1E4D55),
+                    color: scheme.onSurface,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -782,9 +801,13 @@ class _NotificationSection extends StatelessWidget {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: scheme.surface,
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: const Color(0xFFD2E3E7)),
+                    border: Border.all(
+                      color: isDark
+                          ? scheme.outlineVariant.withValues(alpha: 0.45)
+                          : const Color(0xFFD2E3E7),
+                    ),
                   ),
                   child: Text(
                     '${notifications.length}',
@@ -868,148 +891,161 @@ class _NotificationCard extends StatelessWidget {
     return ValueListenableBuilder<LecturerLanguage>(
       valueListenable: LecturerLanguageController.notifier,
       builder: (context, language, _) {
+        final theme = Theme.of(context);
+        final scheme = theme.colorScheme;
+        final isDark = theme.brightness == Brightness.dark;
         final isArabic = language == LecturerLanguage.arabic;
         final style = _styles[_mapType(item)]!;
 
         return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: item.isRead ? const Color(0xFFFAFCFC) : const Color(0xFFF1FAFC),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: item.isRead
-              ? const Color(0xFFDDE7EA)
-              : const Color(0xFF6CB2BD),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: item.isRead ? 0.04 : 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isDark
+                ? (item.isRead
+                      ? scheme.surface
+                      : scheme.surfaceContainerHighest)
+                : (item.isRead
+                      ? const Color(0xFFFAFCFC)
+                      : const Color(0xFFF1FAFC)),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark
+                  ? scheme.outlineVariant.withValues(alpha: 0.45)
+                  : (item.isRead
+                        ? const Color(0xFFDDE7EA)
+                        : const Color(0xFF6CB2BD)),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(
+                  alpha: isDark ? 0.22 : (item.isRead ? 0.04 : 0.06),
+                ),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
+          child: Column(
             children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: style.soft,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(style.icon, color: style.iconColor, size: 20),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  item.displayTitle(isArabic: isArabic),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.start,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF0E4F59),
-                    fontFamily: 'Cairo',
-                    fontSize: 14.5,
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: style.soft,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(style.icon, color: style.iconColor, size: 20),
                   ),
-                ),
-              ),
-              if (!item.isRead)
-                Container(
-                  margin: const EdgeInsetsDirectional.only(end: 6),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF006571),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    LecturerStrings.notificationsNew(language: language),
-                    style: const TextStyle(
-                      fontFamily: 'Cairo',
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      item.displayTitle(isArabic: isArabic),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.start,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: scheme.onSurface,
+                        fontFamily: 'Cairo',
+                        fontSize: 14.5,
+                      ),
                     ),
                   ),
-                ),
-              IconButton(
-                onPressed: onDelete,
-                icon: const Icon(
-                  Icons.delete_outline_rounded,
-                  color: Color(0xFFE53935),
-                ),
-                tooltip: LecturerLanguageController.tr(
-                  'حذف الإشعار',
-                  'Delete notification',
-                  language: language,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              _metaChip(
-                _categoryLabel(item, language: language),
-                const Color(0xFFEAF6F7),
-                const Color(0xFF006571),
-              ),
-              const SizedBox(width: 6),
-              _metaChip(
-                item.isExcuseRequest
-                    ? LecturerStrings.notificationsExcuseRequest(
-                        language: language,
-                      )
-                    : _typeLabel(_mapType(item), language: language),
-                style.soft,
-                style.accent,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            item.displayMessage(isArabic: isArabic),
-            maxLines: 4,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.start,
-            style: const TextStyle(
-              fontSize: 12.5,
-              color: Colors.black87,
-              fontFamily: 'Cairo',
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 9),
-          Row(
-            children: [
-              const Icon(
-                Icons.schedule_rounded,
-                size: 14,
-                color: Color(0xFF8C8C8C),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  '${_relativeTime(item.createdAt, language: language)} · ${_formatDate(item.createdAt, language: language)}',
-                  style: const TextStyle(
-                    fontSize: 11.5,
-                    color: Colors.black54,
-                    fontFamily: 'Cairo',
+                  if (!item.isRead)
+                    Container(
+                      margin: const EdgeInsetsDirectional.only(end: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF006571),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        LecturerStrings.notificationsNew(language: language),
+                        style: const TextStyle(
+                          fontFamily: 'Cairo',
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  IconButton(
+                    onPressed: onDelete,
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: Color(0xFFE53935),
+                    ),
+                    tooltip: LecturerLanguageController.tr(
+                      'حذف الإشعار',
+                      'Delete notification',
+                      language: language,
+                    ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  _metaChip(
+                    _categoryLabel(item, language: language),
+                    const Color(0xFFEAF6F7),
+                    const Color(0xFF006571),
+                  ),
+                  const SizedBox(width: 6),
+                  _metaChip(
+                    item.isExcuseRequest
+                        ? LecturerStrings.notificationsExcuseRequest(
+                            language: language,
+                          )
+                        : _typeLabel(_mapType(item), language: language),
+                    style.soft,
+                    style.accent,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                item.displayMessage(isArabic: isArabic),
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.start,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: scheme.onSurface,
+                  fontFamily: 'Cairo',
+                  height: 1.5,
                 ),
               ),
-              const LecturerDirectionalForwardIcon(size: 13),
+              const SizedBox(height: 9),
+              Row(
+                children: [
+                  Icon(
+                    Icons.schedule_rounded,
+                    size: 14,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      '${_relativeTime(item.createdAt, language: language)} · ${_formatDate(item.createdAt, language: language)}',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: scheme.onSurfaceVariant,
+                        fontFamily: 'Cairo',
+                      ),
+                    ),
+                  ),
+                  const LecturerDirectionalForwardIcon(size: 13),
+                ],
+              ),
             ],
           ),
-        ],
-      ),
         );
       },
     );
@@ -1039,10 +1075,7 @@ class _NotificationCard extends StatelessWidget {
     return LecturerStrings.notificationsStudents(language: language);
   }
 
-  String _formatDate(
-    DateTime? value, {
-    required LecturerLanguage language,
-  }) {
+  String _formatDate(DateTime? value, {required LecturerLanguage language}) {
     if (value == null) {
       return LecturerLanguageController.tr(
         'تاريخ غير متوفر',
@@ -1056,10 +1089,7 @@ class _NotificationCard extends StatelessWidget {
     return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')} $hh:$mm';
   }
 
-  String _relativeTime(
-    DateTime? value, {
-    required LecturerLanguage language,
-  }) {
+  String _relativeTime(DateTime? value, {required LecturerLanguage language}) {
     if (value == null) {
       return LecturerLanguageController.tr('الآن', 'Now', language: language);
     }
@@ -1220,230 +1250,242 @@ class _LecturerNotificationDetailsScreenState
     return ValueListenableBuilder<LecturerLanguage>(
       valueListenable: LecturerLanguageController.notifier,
       builder: (context, language, __) {
+        final theme = Theme.of(context);
+        final scheme = theme.colorScheme;
         final isArabic = language == LecturerLanguage.arabic;
         return Directionality(
-        textDirection: LecturerLanguageController.direction(language),
-        child: Scaffold(
-          backgroundColor: Colors.white,
-          appBar: AppBar(
-            backgroundColor: Colors.white,
-            elevation: 0,
-            leading: IconButton(
-              icon: const LecturerDirectionalBackIcon(
-                color: primaryColor,
-                size: 22,
-              ),
-              onPressed: () => Navigator.pop(context),
-            ),
-            centerTitle: true,
-            title: Text(
-              tr('تفاصيل الاشعار', 'Notification Details'),
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: primaryColor,
-                fontFamily: 'Cairo',
-              ),
-            ),
-            actions: [
-              IconButton(
-                icon: const Icon(
-                  Icons.delete_outline_rounded,
-                  color: Color(0xFFE53935),
+          textDirection: LecturerLanguageController.direction(language),
+          child: Scaffold(
+            backgroundColor: theme.scaffoldBackgroundColor,
+            appBar: AppBar(
+              backgroundColor: theme.scaffoldBackgroundColor,
+              elevation: 0,
+              leading: IconButton(
+                icon: const LecturerDirectionalBackIcon(
+                  color: primaryColor,
+                  size: 22,
                 ),
-                tooltip: tr('حذف الإشعار', 'Delete notification'),
-                onPressed: () => _showDeleteDialog(context),
+                onPressed: () => Navigator.pop(context),
               ),
-            ],
-          ),
-          body: FutureBuilder<_ResolvedExcuseData?>(
-            future: _resolvedExcuseFuture,
-            builder: (context, snapshot) {
-              final resolved = snapshot.data;
-              final status = resolved?.status ?? '';
-              final isPending = status == 'pending';
-              final isRejected = status == 'rejected';
-              final isAccepted = status == 'accepted';
-              final bool canApproveOrReject =
-                  notification.isExcuseRequest && resolved != null && isPending;
+              centerTitle: true,
+              title: Text(
+                tr('تفاصيل الاشعار', 'Notification Details'),
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: primaryColor,
+                  fontFamily: 'Cairo',
+                ),
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.delete_outline_rounded,
+                    color: Color(0xFFE53935),
+                  ),
+                  tooltip: tr('حذف الإشعار', 'Delete notification'),
+                  onPressed: () => _showDeleteDialog(context),
+                ),
+              ],
+            ),
+            body: FutureBuilder<_ResolvedExcuseData?>(
+              future: _resolvedExcuseFuture,
+              builder: (context, snapshot) {
+                final resolved = snapshot.data;
+                final status = resolved?.status ?? '';
+                final isPending = status == 'pending';
+                final isRejected = status == 'rejected';
+                final isAccepted = status == 'accepted';
+                final bool canApproveOrReject =
+                    notification.isExcuseRequest &&
+                    resolved != null &&
+                    isPending;
 
-              return Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const SizedBox(height: 8),
-                            Text(
-                              notification.displayTitle(isArabic: isArabic),
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.black87,
-                                fontFamily: 'Cairo',
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const SizedBox(height: 8),
+                              Text(
+                                notification.displayTitle(isArabic: isArabic),
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: scheme.onSurface,
+                                  fontFamily: 'Cairo',
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              notification.displayMessage(isArabic: isArabic),
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Colors.black87,
-                                height: 1.5,
-                                fontFamily: 'Cairo',
+                              const SizedBox(height: 12),
+                              Text(
+                                notification.displayMessage(isArabic: isArabic),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: scheme.onSurface,
+                                  height: 1.5,
+                                  fontFamily: 'Cairo',
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              _formatDate(notification.createdAt, language: language),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.black54,
-                                fontFamily: 'Cairo',
+                              const SizedBox(height: 12),
+                              Text(
+                                _formatDate(
+                                  notification.createdAt,
+                                  language: language,
+                                ),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: scheme.onSurfaceVariant,
+                                  fontFamily: 'Cairo',
+                                ),
                               ),
-                            ),
-                            if (notification.isExcuseRequest) ...[
-                              const SizedBox(height: 16),
-                              if (snapshot.connectionState ==
-                                      ConnectionState.waiting &&
-                                  resolved == null)
-                                const Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 20),
-                                    child: CircularProgressIndicator(
-                                      color: Color(0xFF006571),
+                              if (notification.isExcuseRequest) ...[
+                                const SizedBox(height: 16),
+                                if (snapshot.connectionState ==
+                                        ConnectionState.waiting &&
+                                    resolved == null)
+                                  const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 20,
+                                      ),
+                                      child: CircularProgressIndicator(
+                                        color: Color(0xFF006571),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              if (resolved != null) ...[
-                                _ExcusePreviewCard(
-                                  notification: notification,
-                                  details: resolved.details,
-                                  studentProfile: resolved.studentProfile,
-                                  isArabic: isArabic,
-                                  onPreviewAttachment: () =>
-                                      _showAttachmentPreviewDialog(
-                                        context,
-                                        resolved.details,
-                                      ),
-                                ),
-                                if (!canApproveOrReject)
-                                  _ReviewedStatusNotice(
-                                    status: resolved.status,
-                                    rejectionReason: resolved.rejectionReason,
-                                    reviewedBy: resolved.reviewedBy,
-                                    reviewedAt: resolved.reviewedAtText,
-                                    decisionHistorySummary:
-                                        resolved.decisionHistorySummary,
+                                if (resolved != null) ...[
+                                  _ExcusePreviewCard(
+                                    notification: notification,
+                                    details: resolved.details,
+                                    studentProfile: resolved.studentProfile,
+                                    isArabic: isArabic,
+                                    onPreviewAttachment: () =>
+                                        _showAttachmentPreviewDialog(
+                                          context,
+                                          resolved.details,
+                                        ),
                                   ),
+                                  if (!canApproveOrReject)
+                                    _ReviewedStatusNotice(
+                                      status: resolved.status,
+                                      rejectionReason: resolved.rejectionReason,
+                                      reviewedBy: resolved.reviewedBy,
+                                      reviewedAt: resolved.reviewedAtText,
+                                      decisionHistorySummary:
+                                          resolved.decisionHistorySummary,
+                                    ),
+                                ],
                               ],
                             ],
-                          ],
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    if (canApproveOrReject)
-                      SizedBox(
-                        height: 48,
-                        child: OutlinedButton(
-                          onPressed: () => _showDecisionDialog(context),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFF006571),
-                            side: const BorderSide(color: Color(0xFF006571)),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                      const SizedBox(height: 12),
+                      if (canApproveOrReject)
+                        SizedBox(
+                          height: 48,
+                          child: OutlinedButton(
+                            onPressed: () => _showDecisionDialog(context),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF006571),
+                              side: const BorderSide(color: Color(0xFF006571)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Text(
+                              tr('اتخاذ القرار', 'Take decision'),
+                              style: const TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
-                          child: Text(
-                            tr('اتخاذ القرار', 'Take decision'),
-                            style: const TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
+                        )
+                      else if (notification.isExcuseRequest &&
+                          resolved != null &&
+                          isRejected)
+                        SizedBox(
+                          height: 48,
+                          child: OutlinedButton(
+                            onPressed: () async {
+                              final ok = await _confirmDecisionChange(context);
+                              if (ok != true || !context.mounted) return;
+                              _showDecisionDialog(context);
+                            },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF006571),
+                              side: const BorderSide(color: Color(0xFF006571)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
+                            child: Text(
+                              tr('تعديل القرار', 'Change decision'),
+                              style: const TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        )
+                      else if (notification.isExcuseRequest &&
+                          resolved != null &&
+                          isAccepted)
+                        SizedBox(
+                          height: 48,
+                          child: OutlinedButton(
+                            onPressed: () async {
+                              final ok = await _confirmDecisionChange(context);
+                              if (ok != true || !context.mounted) return;
+                              _showDecisionDialog(context);
+                            },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF006571),
+                              side: const BorderSide(color: Color(0xFF006571)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Text(
+                              tr('تعديل القرار', 'Change decision'),
+                              style: const TextStyle(
+                                fontFamily: 'Cairo',
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        SizedBox(
+                          height: 48,
+                          child: _GradientButton(
+                            label: tr('إغلاق', 'Close'),
+                            colors: const [
+                              Color(0xFF27A2A9),
+                              Color(0xFF006571),
+                            ],
+                            onPressed: () => Navigator.pop(context),
                           ),
                         ),
-                      )
-                    else if (notification.isExcuseRequest &&
-                        resolved != null &&
-                        isRejected)
-                      SizedBox(
-                        height: 48,
-                        child: OutlinedButton(
-                          onPressed: () async {
-                            final ok = await _confirmDecisionChange(context);
-                            if (ok != true || !context.mounted) return;
-                            _showDecisionDialog(context);
-                          },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFF006571),
-                            side: const BorderSide(color: Color(0xFF006571)),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: Text(
-                            tr('تعديل القرار', 'Change decision'),
-                            style: const TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      )
-                    else if (notification.isExcuseRequest &&
-                        resolved != null &&
-                        isAccepted)
-                      SizedBox(
-                        height: 48,
-                        child: OutlinedButton(
-                          onPressed: () async {
-                            final ok = await _confirmDecisionChange(context);
-                            if (ok != true || !context.mounted) return;
-                            _showDecisionDialog(context);
-                          },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFF006571),
-                            side: const BorderSide(color: Color(0xFF006571)),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: Text(
-                            tr('تعديل القرار', 'Change decision'),
-                            style: const TextStyle(
-                              fontFamily: 'Cairo',
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      )
-                    else
-                      SizedBox(
-                        height: 48,
-                        child: _GradientButton(
-                          label: tr('إغلاق', 'Close'),
-                          colors: const [Color(0xFF27A2A9), Color(0xFF006571)],
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ),
-                  ],
-                ),
-              );
-            },
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
-        ),
-      );
+        );
       },
     );
   }
@@ -1744,10 +1786,7 @@ class _LecturerNotificationDetailsScreenState
     }
   }
 
-  String _formatDate(
-    DateTime? value, {
-    required LecturerLanguage language,
-  }) {
+  String _formatDate(DateTime? value, {required LecturerLanguage language}) {
     if (value == null) {
       return LecturerLanguageController.tr(
         'تاريخ غير متوفر',
@@ -1779,6 +1818,9 @@ class _ExcusePreviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     String tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
     final courseName = LecturerNotificationDisplay.resolveCourseName(
       notification,
@@ -1792,9 +1834,15 @@ class _ExcusePreviewCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9F9F9),
+        color: isDark
+            ? scheme.surfaceContainerHighest
+            : const Color(0xFFF9F9F9),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E2E2)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFE2E2E2),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1802,63 +1850,68 @@ class _ExcusePreviewCard extends StatelessWidget {
           _previewRow(
             tr('تاريخ الاستلام', 'Submission date'),
             details.submissionDate,
+            scheme,
           ),
-          _previewRow(tr('التوقيت', 'Time'), details.submissionTime),
+          _previewRow(tr('التوقيت', 'Time'), details.submissionTime, scheme),
           const SizedBox(height: 8),
-          _previewRow(tr('اسم الطالب', 'Student name'), studentName),
+          _previewRow(tr('اسم الطالب', 'Student name'), studentName, scheme),
           _previewRow(
             tr('رقمه الجامعي', 'Academic number'),
             details.academicNumber,
+            scheme,
           ),
-          _previewRow(tr('المقرر', 'Course'), courseName),
-          _previewRow(
-            tr('الشعبة', 'Section'),
-            details.section,
-          ),
+          _previewRow(tr('المقرر', 'Course'), courseName, scheme),
+          _previewRow(tr('الشعبة', 'Section'), details.section, scheme),
           _previewRow(
             tr('تاريخ المحاضرة', 'Lecture date'),
             details.lectureDate,
+            scheme,
           ),
           _previewRow(
             tr('وقت البداية', 'Start time'),
             details.lectureStartTime,
+            scheme,
           ),
-          _previewRow(tr('وقت النهاية', 'End time'), details.lectureEndTime),
-          _previewRow(tr('حالة الطلب', 'Status'), details.status),
+          _previewRow(
+            tr('وقت النهاية', 'End time'),
+            details.lectureEndTime,
+            scheme,
+          ),
+          _previewRow(tr('حالة الطلب', 'Status'), details.status, scheme),
           const SizedBox(height: 8),
-          const Divider(color: Color(0xFFCECECE)),
+          Divider(color: theme.dividerColor),
           const SizedBox(height: 4),
           Text(
             tr('تفاصيل العذر المرسل', 'Excuse details'),
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 13,
-              color: Colors.black87,
+              color: scheme.onSurface,
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             _normalizedExcuseText(tr),
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 13,
-              color: Colors.black87,
+              color: scheme.onSurface,
               height: 1.5,
             ),
           ),
           const SizedBox(height: 12),
           Text(
             tr('المرفق', 'Attachment'),
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 13,
-              color: Colors.black87,
+              color: scheme.onSurface,
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 6),
-          ..._buildAttachmentSection(tr),
+          ..._buildAttachmentSection(tr, scheme),
         ],
       ),
     );
@@ -1887,15 +1940,18 @@ class _ExcusePreviewCard extends StatelessWidget {
   bool get _hasValidAttachmentUrl =>
       ExcuseAttachmentPreview.isValidAttachmentUrl(_normalizedAttachmentUrl());
 
-  List<Widget> _buildAttachmentSection(String Function(String, String) tr) {
+  List<Widget> _buildAttachmentSection(
+    String Function(String, String) tr,
+    ColorScheme scheme,
+  ) {
     if (!_hasValidAttachmentUrl) {
       return [
         Text(
           tr('لم يتم إرفاق أي مرفق.', 'No attachment was provided.'),
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: 'Cairo',
             fontSize: 13,
-            color: Color(0xFF64748B),
+            color: scheme.onSurfaceVariant,
             height: 1.4,
           ),
         ),
@@ -1905,16 +1961,13 @@ class _ExcusePreviewCard extends StatelessWidget {
     final name = _normalizedAttachmentName();
     return [
       if (name.isNotEmpty)
-        _previewRow(tr('اسم المرفق', 'Attachment name'), name),
+        _previewRow(tr('اسم المرفق', 'Attachment name'), name, scheme),
       if (name.isNotEmpty) const SizedBox(height: 6),
       Align(
         alignment: AlignmentDirectional.centerStart,
         child: OutlinedButton.icon(
           onPressed: onPreviewAttachment,
-          icon: const Icon(
-            Icons.attachment_rounded,
-            color: Color(0xFF006571),
-          ),
+          icon: const Icon(Icons.attachment_rounded, color: Color(0xFF006571)),
           label: Text(
             tr('فتح المرفق', 'Open attachment'),
             style: const TextStyle(
@@ -1934,7 +1987,7 @@ class _ExcusePreviewCard extends StatelessWidget {
     ];
   }
 
-  Widget _previewRow(String label, String value) {
+  Widget _previewRow(String label, String value, ColorScheme scheme) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Column(
@@ -1942,20 +1995,20 @@ class _ExcusePreviewCard extends StatelessWidget {
         children: [
           Text(
             '$label:',
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 13,
-              color: Colors.black87,
+              color: scheme.onSurface,
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 2),
           SelectableText(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 13,
-              color: Colors.black87,
+              color: scheme.onSurface,
               fontWeight: FontWeight.w600,
               height: 1.35,
             ),

@@ -254,8 +254,8 @@ class _LecturerManageLecturesScreenState
   String _tr(String ar, String en) => LecturerLanguageController.tr(ar, en);
 
   int get _currentWeekNumber => _calendarRepository.getOfficialWeekNumber(
-        _calendarRepository.currentDateTime,
-      );
+    _calendarRepository.currentDateTime,
+  );
   int get _maxSelectableWeeks =>
       _calendarRepository.manageLecturesWeekUpperBound;
 
@@ -305,9 +305,9 @@ class _LecturerManageLecturesScreenState
   }
 
   String get _lectureExpiredMessage => _tr(
-        LectureActionEligibility.messageAr,
-        LectureActionEligibility.messageEn,
-      );
+    LectureActionEligibility.messageAr,
+    LectureActionEligibility.messageEn,
+  );
 
   List<LectureItem> _computeLecturesForDateAndCourse() {
     final selectedCourseCode = _selectedCourseCode?.trim();
@@ -366,8 +366,7 @@ class _LecturerManageLecturesScreenState
   List<LectureItem> _lecturesForCourse(String courseCode) {
     return _allLectures
         .where(
-          (l) =>
-              _dayOrder.contains(l.dayOfWeek) && l.crn.trim() == courseCode,
+          (l) => _dayOrder.contains(l.dayOfWeek) && l.crn.trim() == courseCode,
         )
         .toList();
   }
@@ -777,14 +776,6 @@ class _LecturerManageLecturesScreenState
               ),
             ),
             accentColor: _primary,
-            child: TextField(
-              controller: controller,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: InputDecoration(
-                hintText: _tr('عدد الدقائق', 'Minutes'),
-              ),
-            ),
             actions: [
               ModernPopupActionButton(
                 label: _tr('إلغاء', 'Cancel'),
@@ -800,6 +791,14 @@ class _LecturerManageLecturesScreenState
                 primaryColor: _primary,
               ),
             ],
+            child: TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                hintText: _tr('عدد الدقائق', 'Minutes'),
+              ),
+            ),
           ),
         );
       },
@@ -948,75 +947,78 @@ class _LecturerManageLecturesScreenState
 
     showDialog<void>(
       context: context,
-      builder: (ctx) => Directionality(
-        textDirection: LecturerLanguageController.direction(),
-        child: ModernPopupDialog(
-          accentColor: _primary,
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.check_circle_rounded, size: 28, color: _primary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  _tr(
-                    'تم إرسال التأخير وإشعار الطلاب',
-                    'Delay sent and students notified',
+      builder: (ctx) {
+        final scheme = Theme.of(ctx).colorScheme;
+        return Directionality(
+          textDirection: LecturerLanguageController.direction(),
+          child: ModernPopupDialog(
+            accentColor: _primary,
+            title: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.check_circle_rounded, size: 28, color: _primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _tr(
+                      'تم إرسال التأخير وإشعار الطلاب',
+                      'Delay sent and students notified',
+                    ),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: scheme.onSurface,
+                    ),
                   ),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontFamily: 'Cairo',
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF222222),
-                  ),
                 ),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Text(
-                lecture.courseName,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF222222),
-                  fontFamily: 'Cairo',
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '${_tr('وقت المحاضرة المحدث', 'Updated time')}: $newTimeDisplay',
-                style: TextStyle(
-                  fontSize: 13.5,
-                  color: Colors.grey.shade700,
-                  fontFamily: 'Cairo',
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                dispatchMessage,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey.shade700,
-                  fontFamily: 'Cairo',
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            ModernPopupActionButton(
-              label: _tr('حسناً', 'OK'),
-              onTap: () => Navigator.pop(ctx),
-              isPrimary: true,
-              primaryColor: _primary,
+              ],
             ),
-          ],
-        ),
-      ),
+            actions: [
+              ModernPopupActionButton(
+                label: _tr('حسناً', 'OK'),
+                onTap: () => Navigator.pop(ctx),
+                isPrimary: true,
+                primaryColor: _primary,
+              ),
+            ],
+            child: Column(
+              children: [
+                Text(
+                  lecture.courseName,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.onSurface,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '${_tr('وقت المحاضرة المحدث', 'Updated time')}: $newTimeDisplay',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: scheme.onSurfaceVariant,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  dispatchMessage,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: scheme.onSurfaceVariant,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1026,66 +1028,69 @@ class _LecturerManageLecturesScreenState
   }) {
     showDialog<void>(
       context: context,
-      builder: (ctx) => Directionality(
-        textDirection: LecturerLanguageController.direction(),
-        child: ModernPopupDialog(
-          accentColor: _cancelRed,
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.check_circle_rounded, size: 28, color: _cancelRed),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  _tr(
-                    'تم إرسال الإلغاء وإشعار الطلاب',
-                    'Cancellation sent and students notified',
+      builder: (ctx) {
+        final scheme = Theme.of(ctx).colorScheme;
+        return Directionality(
+          textDirection: LecturerLanguageController.direction(),
+          child: ModernPopupDialog(
+            accentColor: _cancelRed,
+            title: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.check_circle_rounded, size: 28, color: _cancelRed),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _tr(
+                      'تم إرسال الإلغاء وإشعار الطلاب',
+                      'Cancellation sent and students notified',
+                    ),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: scheme.onSurface,
+                      fontFamily: 'Cairo',
+                    ),
                   ),
+                ),
+              ],
+            ),
+            actions: [
+              ModernPopupActionButton(
+                label: _tr('حسناً', 'OK'),
+                onTap: () => Navigator.pop(ctx),
+                isPrimary: true,
+                primaryColor: _cancelRed,
+              ),
+            ],
+            child: Column(
+              children: [
+                Text(
+                  lecture.courseName,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF222222),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.onSurface,
                     fontFamily: 'Cairo',
                   ),
                 ),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Text(
-                lecture.courseName,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF222222),
-                  fontFamily: 'Cairo',
+                const SizedBox(height: 6),
+                Text(
+                  dispatchMessage,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: scheme.onSurfaceVariant,
+                    fontFamily: 'Cairo',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                dispatchMessage,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey.shade700,
-                  fontFamily: 'Cairo',
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            ModernPopupActionButton(
-              label: _tr('حسناً', 'OK'),
-              onTap: () => Navigator.pop(ctx),
-              isPrimary: true,
-              primaryColor: _cancelRed,
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -1108,10 +1113,11 @@ class _LecturerManageLecturesScreenState
     return ValueListenableBuilder<LecturerLanguage>(
       valueListenable: LecturerLanguageController.notifier,
       builder: (context, _, __) {
+        final theme = Theme.of(context);
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
           child: Scaffold(
-            backgroundColor: const Color(0xFFF8FBFB),
+            backgroundColor: theme.scaffoldBackgroundColor,
             body: SafeArea(
               child: (_isLoadingLectures && _allLectures.isEmpty)
                   ? const Center(
@@ -1195,6 +1201,7 @@ class _LecturerManageLecturesScreenState
   }
 
   Widget _buildPageTopBar() {
+    final scheme = Theme.of(context).colorScheme;
     const backSlotSize = 38.0;
     return Padding(
       padding: const EdgeInsets.only(top: 2),
@@ -1211,17 +1218,19 @@ class _LecturerManageLecturesScreenState
             ),
             Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: backSlotSize + 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: backSlotSize + 8,
+                ),
                 child: Text(
                   _tr('إدارة المحاضرات', 'Manage Lectures'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Cairo',
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF213236),
+                    color: scheme.onSurface,
                     height: 1.25,
                   ),
                 ),
@@ -1286,6 +1295,9 @@ class _LecturerManageLecturesScreenState
   }
 
   Widget _buildSelectionPanel() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final courses = _courseOptionsForDate;
     final actionableWeeks = _isCourseSelectedForManage
         ? _actionableWeeksForSelectedCourse()
@@ -1293,12 +1305,16 @@ class _LecturerManageLecturesScreenState
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFD9E8EB)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFD9E8EB),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.045),
+            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.045),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -1404,13 +1420,18 @@ class _LecturerManageLecturesScreenState
     required String title,
     String? hint,
   }) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Row(
       children: [
         Container(
           width: 28,
           height: 28,
           decoration: BoxDecoration(
-            color: const Color(0xFFE8F4F5),
+            color: isDark
+                ? scheme.surfaceContainerHighest
+                : const Color(0xFFE8F4F5),
             borderRadius: BorderRadius.circular(9),
           ),
           child: Icon(icon, size: 16, color: _primary),
@@ -1418,11 +1439,11 @@ class _LecturerManageLecturesScreenState
         const SizedBox(width: 8),
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: 'Cairo',
             fontSize: 13.2,
             fontWeight: FontWeight.w800,
-            color: Color(0xFF24484F),
+            color: scheme.onSurface,
           ),
         ),
         if (hint != null) ...[
@@ -1432,11 +1453,11 @@ class _LecturerManageLecturesScreenState
               hint,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'Cairo',
                 fontSize: 11.2,
                 fontWeight: FontWeight.w700,
-                color: Color(0xFF6B8389),
+                color: scheme.onSurfaceVariant,
               ),
             ),
           ),
@@ -1446,20 +1467,29 @@ class _LecturerManageLecturesScreenState
   }
 
   Widget _buildManageInlineFilterHint(String text) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F9FA),
+        color: isDark
+            ? scheme.surfaceContainerHighest
+            : const Color(0xFFF5F9FA),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFDCE8EA)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFDCE8EA),
+        ),
       ),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'Cairo',
           fontSize: 11.8,
-          color: Color(0xFF698188),
+          color: scheme.onSurfaceVariant,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -1472,12 +1502,19 @@ class _LecturerManageLecturesScreenState
   Widget _buildManageCourseDropdown(
     List<({String code, String name})> courses,
   ) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFD6E5E8)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFD6E5E8),
+        ),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String?>(
@@ -1489,13 +1526,13 @@ class _LecturerManageLecturesScreenState
             color: Color(0xFF006571),
           ),
           borderRadius: BorderRadius.circular(12),
-          dropdownColor: Colors.white,
+          dropdownColor: scheme.surface,
           menuMaxHeight: 320,
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: 'Cairo',
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF2B4B52),
+            color: scheme.onSurface,
           ),
           items: courses
               .map(
@@ -1525,13 +1562,20 @@ class _LecturerManageLecturesScreenState
 
   Widget _buildManageWeekDropdown(List<int> weeks) {
     if (weeks.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final selected = _selectedWeekNumber ?? weeks.first;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFD6E5E8)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFD6E5E8),
+        ),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<int>(
@@ -1542,13 +1586,13 @@ class _LecturerManageLecturesScreenState
             color: Color(0xFF006571),
           ),
           borderRadius: BorderRadius.circular(12),
-          dropdownColor: Colors.white,
+          dropdownColor: scheme.surface,
           menuMaxHeight: 300,
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: 'Cairo',
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF2B4B52),
+            color: scheme.onSurface,
           ),
           items: weeks
               .map(
@@ -1568,6 +1612,7 @@ class _LecturerManageLecturesScreenState
   }
 
   Widget _buildContent() {
+    final scheme = Theme.of(context).colorScheme;
     if (!_hasDateAndCourseSelection) {
       return const SizedBox.shrink();
     }
@@ -1597,11 +1642,11 @@ class _LecturerManageLecturesScreenState
       children: [
         Text(
           _tr('المحاضرات', 'Lectures'),
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: 'Cairo',
             fontSize: 16,
             fontWeight: FontWeight.w800,
-            color: Color(0xFF1F2E33),
+            color: scheme.onSurface,
           ),
         ),
         const SizedBox(height: 6),
@@ -1615,17 +1660,20 @@ class _LecturerManageLecturesScreenState
         if (_selectedLectureKeys.isEmpty)
           Text(
             _tr('اختر محاضرة واحدة للمتابعة', 'Select one lecture to continue'),
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Cairo',
               fontSize: 12,
-              color: Color(0xFF6E848B),
+              color: scheme.onSurfaceVariant,
             ),
           ),
         if (!canManage && (selectedExpired || _isPastSelectedDate))
           Text(
             selectedExpired
                 ? _lectureExpiredMessage
-                : _tr('لا يمكن إدارة محاضرة سابقة', 'Cannot manage a past lecture'),
+                : _tr(
+                    'لا يمكن إدارة محاضرة سابقة',
+                    'Cannot manage a past lecture',
+                  ),
             style: const TextStyle(
               fontFamily: 'Cairo',
               fontSize: 12,
@@ -1746,6 +1794,9 @@ class _LecturerManageLecturesScreenState
   }
 
   Widget _buildLectureSelectionCard({required LectureItem lecture}) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final key = _lectureSelectionKey(lecture);
     final isSelected = _selectedLectureKeys.contains(key);
     final timeRange = TimeUtils.formatTimeRange(
@@ -1815,12 +1866,18 @@ class _LecturerManageLecturesScreenState
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFFEAF7F8) : actionSoftBg,
+            color: isDark
+                ? (isSelected
+                      ? scheme.primary.withValues(alpha: 0.16)
+                      : scheme.surface)
+                : (isSelected ? const Color(0xFFEAF7F8) : actionSoftBg),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: isSelected
                   ? const Color(0xFF0B7D88)
-                  : const Color(0xFFDCE7E9),
+                  : (isDark
+                        ? scheme.outlineVariant.withValues(alpha: 0.45)
+                        : const Color(0xFFDCE7E9)),
               width: isSelected ? 1.5 : 1,
             ),
           ),
@@ -1855,9 +1912,7 @@ class _LecturerManageLecturesScreenState
                             fontFamily: 'Cairo',
                             fontSize: 13.1,
                             fontWeight: FontWeight.w800,
-                            color: isSelected
-                                ? const Color(0xFF15414A)
-                                : const Color(0xFF2E4348),
+                            color: isSelected ? _primary : scheme.onSurface,
                           ),
                         ),
                         const SizedBox(height: 3),
@@ -1870,8 +1925,8 @@ class _LecturerManageLecturesScreenState
                             fontSize: 11.3,
                             fontWeight: FontWeight.w700,
                             color: isSelected
-                                ? const Color(0xFF2A5C65)
-                                : const Color(0xFF627B82),
+                                ? _primary
+                                : scheme.onSurfaceVariant,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -1905,8 +1960,8 @@ class _LecturerManageLecturesScreenState
                           fontSize: 10.5,
                           fontWeight: FontWeight.w700,
                           color: isSelected
-                              ? const Color(0xFF2A5C65)
-                              : const Color(0xFF769097),
+                              ? _primary
+                              : scheme.onSurfaceVariant,
                         ),
                       ),
                       const SizedBox(height: 7),
@@ -1990,20 +2045,29 @@ class _LecturerManageLecturesScreenState
 
   /// شارة صغيرة للقاعة/الشعبة/النشاط — ألوان ثابتة فوق خلفية فاتحة (بما يتوافق مع ثيم إجراء المحاضرة).
   Widget _buildSectionSelectionMetaChip(String text) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7FAFB),
+        color: isDark
+            ? scheme.surfaceContainerHighest
+            : const Color(0xFFF7FAFB),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFDCE7EA)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFDCE7EA),
+        ),
       ),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'Cairo',
           fontSize: 11.5,
           fontWeight: FontWeight.w600,
-          color: Color(0xFF586E75),
+          color: scheme.onSurfaceVariant,
         ),
       ),
     );
@@ -2156,6 +2220,9 @@ class _LectureActionDialogState extends State<_LectureActionDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final dateLabel =
         '${widget.selectedDate.day}/${widget.selectedDate.month}/${widget.selectedDate.year}';
     final dayLabel = LecturerLanguageController.dayNameFromWeekday(
@@ -2169,7 +2236,7 @@ class _LectureActionDialogState extends State<_LectureActionDialog> {
 
     return Scaffold(
       body: ColoredBox(
-        color: Colors.white,
+        color: theme.scaffoldBackgroundColor,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
           children: [
@@ -2178,10 +2245,10 @@ class _LectureActionDialogState extends State<_LectureActionDialog> {
                 Expanded(
                   child: Text(
                     widget.tr('إجراء المحاضرة', 'Lecture action'),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF222222),
+                      color: scheme.onSurface,
                       fontFamily: 'Cairo',
                     ),
                   ),
@@ -2197,9 +2264,13 @@ class _LectureActionDialogState extends State<_LectureActionDialog> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: scheme.surface,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFFE2ECEF)),
+                border: Border.all(
+                  color: isDark
+                      ? scheme.outlineVariant.withValues(alpha: 0.45)
+                      : const Color(0xFFE2ECEF),
+                ),
               ),
               child: _isMulti
                   ? Column(
@@ -2210,10 +2281,10 @@ class _LectureActionDialogState extends State<_LectureActionDialog> {
                             'سيطبق الإجراء على جميع الشعب المحددة',
                             'The action will apply to all selected sections',
                           ),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF1F2E33),
+                            color: scheme.onSurface,
                             fontFamily: 'Cairo',
                             height: 1.3,
                           ),
@@ -2221,18 +2292,18 @@ class _LectureActionDialogState extends State<_LectureActionDialog> {
                         const SizedBox(height: 4),
                         Text(
                           '${widget.tr('عدد الشعب', 'Sections')}: ${multiList.length}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
-                            color: Color(0xFF5A6F76),
+                            color: scheme.onSurfaceVariant,
                             fontFamily: 'Cairo',
                           ),
                         ),
                         const SizedBox(height: 6),
                         Text(
                           '$dayLabel - $dateLabel',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
-                            color: Color(0xFF5A6F76),
+                            color: scheme.onSurfaceVariant,
                             fontFamily: 'Cairo',
                           ),
                         ),
@@ -2245,28 +2316,28 @@ class _LectureActionDialogState extends State<_LectureActionDialog> {
                       children: [
                         Text(
                           widget.lecture.courseName,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF1F2E33),
+                            color: scheme.onSurface,
                             fontFamily: 'Cairo',
                           ),
                         ),
                         const SizedBox(height: 6),
                         Text(
                           '$dayLabel - $dateLabel',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
-                            color: Color(0xFF5A6F76),
+                            color: scheme.onSurfaceVariant,
                             fontFamily: 'Cairo',
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           '${widget.tr('الوقت', 'Time')}: $timeRange',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
-                            color: Color(0xFF5A6F76),
+                            color: scheme.onSurfaceVariant,
                             fontFamily: 'Cairo',
                           ),
                         ),
@@ -2358,6 +2429,9 @@ class _LectureActionDialogState extends State<_LectureActionDialog> {
   }
 
   Widget _buildDelayPanel() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final options = <int>[5, 10, 15, 20, 30];
     final disabledReason = widget.delaySent
         ? widget.tr(
@@ -2372,19 +2446,23 @@ class _LectureActionDialogState extends State<_LectureActionDialog> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2ECEF)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFE2ECEF),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             widget.tr('مدة التأخير', 'Delay duration'),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF1F2E33),
+              color: scheme.onSurface,
               fontFamily: 'Cairo',
             ),
           ),
@@ -2427,7 +2505,9 @@ class _LectureActionDialogState extends State<_LectureActionDialog> {
                   fontFamily: 'Cairo',
                 ),
                 filled: true,
-                fillColor: const Color(0xFFF8FBFB),
+                fillColor: isDark
+                    ? scheme.surfaceContainerHighest
+                    : const Color(0xFFF8FBFB),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: Color(0xFFDCE7EA)),
@@ -2449,10 +2529,7 @@ class _LectureActionDialogState extends State<_LectureActionDialog> {
                   vertical: 12,
                 ),
               ),
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                color: Color(0xFF1F2E33),
-              ),
+              style: TextStyle(fontFamily: 'Cairo', color: scheme.onSurface),
             ),
           ],
           const SizedBox(height: 14),
@@ -2506,6 +2583,9 @@ class _LectureActionDialogState extends State<_LectureActionDialog> {
   }
 
   Widget _buildCancelPanel() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final disabledReason = widget.cancelSent
         ? widget.tr(
             'تم إرسال إشعار الإلغاء مسبقًا لهذه المحاضرة',
@@ -2519,9 +2599,13 @@ class _LectureActionDialogState extends State<_LectureActionDialog> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2ECEF)),
+        border: Border.all(
+          color: isDark
+              ? scheme.outlineVariant.withValues(alpha: 0.45)
+              : const Color(0xFFE2ECEF),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2594,8 +2678,11 @@ class _ActionModeButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return Material(
-      color: active ? color : Colors.white,
+      color: active ? color : scheme.surface,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
@@ -2606,7 +2693,11 @@ class _ActionModeButton extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: active ? Colors.transparent : const Color(0xFFD7E4E8),
+              color: active
+                  ? Colors.transparent
+                  : (isDark
+                        ? scheme.outlineVariant.withValues(alpha: 0.45)
+                        : const Color(0xFFD7E4E8)),
             ),
           ),
           child: Text(
@@ -2614,7 +2705,7 @@ class _ActionModeButton extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: active ? Colors.white : const Color(0xFF3F565D),
+              color: active ? Colors.white : scheme.onSurfaceVariant,
               fontFamily: 'Cairo',
             ),
           ),
@@ -2637,23 +2728,36 @@ class _DurationChoiceChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFFE5F5F7) : const Color(0xFFF7FAFB),
+          color: selected
+              ? (isDark
+                    ? scheme.primary.withValues(alpha: 0.16)
+                    : const Color(0xFFE5F5F7))
+              : (isDark
+                    ? scheme.surfaceContainerHighest
+                    : const Color(0xFFF7FAFB)),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: selected ? const Color(0xFF006571) : const Color(0xFFDCE7EA),
+            color: selected
+                ? const Color(0xFF006571)
+                : (isDark
+                      ? scheme.outlineVariant.withValues(alpha: 0.45)
+                      : const Color(0xFFDCE7EA)),
           ),
         ),
         child: Text(
           label,
           style: TextStyle(
             fontSize: 12,
-            color: selected ? const Color(0xFF00525A) : const Color(0xFF586E75),
+            color: selected ? const Color(0xFF00525A) : scheme.onSurfaceVariant,
             fontWeight: FontWeight.w600,
             fontFamily: 'Cairo',
           ),
