@@ -11,6 +11,8 @@ import '../../providers/lecturer_catalog_providers.dart';
 import '../../services/attendance/attendance_report_term_service.dart';
 import '../../services/attendance/attendance_session_export_service.dart';
 import '../../widgets/lecturer/attendance_export_format_picker.dart';
+import '../../features/attendance/attendance_entry_point.dart';
+import '../../services/attendance/manual_attendance_offline_service.dart';
 import '../../services/attendance/manual_attendance_service.dart';
 import '../../services/lecturer/calendar_sync_service.dart';
 import '../../services/lecturer/lecture_repository.dart';
@@ -1375,9 +1377,13 @@ class _LecturerAttendanceReportScreenState
 
     setState(() => _isSaving = true);
     try {
-      await _manualAttendanceService.updateSessionStatuses(
+      await AttendanceEntryPoint.submitManualBatch(
         sessionId: group.sessionId,
+        courseId: group.courseCode.trim(),
         updates: updates,
+      );
+      unawaited(
+        ManualAttendanceOfflineService.instance.triggerBackgroundSyncIfPossible(),
       );
       if (!mounted) return;
 
