@@ -11,6 +11,7 @@ import 'repositories/student_repository.dart';
 import 'screens/splash_screen.dart';
 import 'services/auth/app_session_store.dart';
 import 'services/auth/firebase_auth_bootstrap.dart';
+import 'services/offline/offline_engine_bootstrap.dart';
 import 'theme/app_theme_controller.dart';
 import 'features/translation/translation_controller.dart';
 
@@ -24,9 +25,11 @@ Future<void> main() async {
   await Hive.openBox<dynamic>(SecurityRepository.metadataBoxName);
   await Hive.openBox<dynamic>(AppSessionStore.boxName);
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await OfflineEngineBootstrap.initializeInfrastructure();
   // Wait for any persisted Firebase session before optional anonymous guest auth.
   await FirebaseAuthBootstrap.waitForInitialAuth();
   await FirebaseAuthBootstrap.ensureAnonymousGuestIfNeeded();
+  await OfflineEngineBootstrap.runAfterAuthReady();
   try {
     await dotenv.load(fileName: '.env');
   } catch (_) {
