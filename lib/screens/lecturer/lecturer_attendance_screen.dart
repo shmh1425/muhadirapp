@@ -17,6 +17,13 @@ import '../../widgets/lecturer/attendance_export_format_picker.dart';
 import '../../services/attendance/attendance_status_policy.dart';
 import '../../services/attendance/bluetooth_attendance_service.dart';
 import '../../services/attendance/bluetooth_ble_service.dart';
+import '../../features/attendance/attendance_entry_point.dart';
+import '../../features/attendance/state/attendance_operation_ui_state.dart';
+import '../../features/attendance/state/attendance_state_event.dart';
+import '../../features/attendance/state/attendance_state_service.dart';
+import '../../features/attendance/state/attendance_sync_event_router.dart';
+import '../../services/attendance/lecturer_attendance_session_ui_cache.dart';
+import '../../services/attendance/manual_attendance_offline_service.dart';
 import '../../services/attendance/manual_attendance_service.dart';
 import '../../services/attendance/nfc_attendance_service.dart';
 import '../../services/attendance/qr_attendance_service.dart';
@@ -93,6 +100,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   StreamSubscription<List<ManualAttendanceRecord>>? _recordsSubscription;
   StreamSubscription<void>? _calendarSyncSub;
   StreamSubscription<List<NfcAttendanceSession>>? _nfcSessionsSubscription;
+  StreamSubscription<AttendanceStateEvent>? _attendanceStateEventsSub;
 
   String? _sessionId;
   List<_StudentRow> _students = <_StudentRow>[];
@@ -109,6 +117,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   bool _isProcessingMethodAction = false;
   bool _isNfcActiveForLecture = false;
   String? _methodStatusMessage;
+  bool _syncCompletionSnackArmed = false;
   QrAttendanceSession? _qrSession;
   String _qrData = '';
   bool _isLoadingQr = false;
@@ -203,8 +212,234 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     });
   }
 
-  /// هل يوجد طلاب حالتهم Pending Sync (Offline)؟
-  bool get _hasPendingSyncStudents => _students.any((s) => s.isOffline);
+  /// هل يوجد طلاب بحالة مزامنة نشطة (pending / syncing / failed)؟
+  bool get _hasPendingSyncStudents => _students.any(
+        (s) =>
+            s.uiSyncState == AttendanceUIState.pending ||
+            s.uiSyncState == AttendanceUIState.syncing ||
+            s.uiSyncState == AttendanceUIState.failed ||
+            s.isOffline,
+      );
+
+  Map<int, ManualAttendanceStatus> _firestoreStatusMap() {
+    final map = <int, ManualAttendanceStatus>{};
+    for (final s in _students) {
+      final id = int.tryParse(s.academicNumber);
+      if (id == null) continue;
+      map[id] = _manualStatusFromUi(s.status);
+    }
+    return map;
+  }
+
+  void _attachAttendanceUiSyncListener(String sessionId) {
+    _attendanceStateEventsSub?.cancel();
+    AttendanceSyncEventRouter.instance.attachSession(
+      sessionId: sessionId,
+      firestoreMapBuilder: () async => _firestoreStatusMap(),
+    );
+    _attendanceStateEventsSub =
+        AttendanceStateService.instance.attendanceStateEvents.listen(
+      _onAttendanceStateEvent,
+    );
+  }
+
+  void _onAttendanceStateEvent(AttendanceStateEvent event) {
+    if (!mounted) return;
+    final sessionId = _sessionId?.trim() ?? '';
+    if (sessionId.isEmpty) return;
+    _patchStudentUiState(
+      studentId: event.studentId,
+      uiSyncState: event.model.state,
+    );
+  }
+
+  void _patchStudentUiState({
+    required String studentId,
+    required AttendanceUIState uiSyncState,
+  }) {
+    final hadPendingSyncBefore = _hasPendingSyncStudents;
+    final showSync = uiSyncState == AttendanceUIState.pending ||
+        uiSyncState == AttendanceUIState.syncing ||
+        uiSyncState == AttendanceUIState.failed;
+    setState(() {
+      _students = _students.map((s) {
+        if (s.academicNumber != studentId) return s;
+        if (showSync == s.isOffline && uiSyncState == s.uiSyncState) return s;
+        return _StudentRow(
+          id: s.id,
+          name: s.name,
+          academicNumber: s.academicNumber,
+          attendanceTime: s.attendanceTime,
+          percentage: s.percentage,
+          status: s.status,
+          isOffline: showSync,
+          uiSyncState: uiSyncState,
+          isSuspended: s.isSuspended,
+          isAcademicallyDeprived: s.isAcademicallyDeprived,
+        );
+      }).toList();
+    });
+    _maybeShowSyncCompletedSnack(
+      hadPendingSyncBefore: hadPendingSyncBefore,
+      hasPendingSyncAfter: _hasPendingSyncStudents,
+    );
+    _persistSessionCache(_sessionId?.trim() ?? '');
+  }
+
+  /// Sync all rows from service (e.g. after Firestore stream refresh).
+  void _applyPendingSyncFlagsFromQueue() {
+    final sessionId = _sessionId?.trim() ?? '';
+    if (sessionId.isEmpty || !mounted) return;
+    final hadPendingSyncBefore = _hasPendingSyncStudents;
+    setState(() {
+      _students = _students.map((s) {
+        final model = AttendanceStateService.instance.stateFor(
+          sessionId: sessionId,
+          studentId: s.academicNumber,
+        );
+        final uiSyncState = model?.state ?? AttendanceUIState.idle;
+        final showSync = uiSyncState == AttendanceUIState.pending ||
+            uiSyncState == AttendanceUIState.syncing ||
+            uiSyncState == AttendanceUIState.failed;
+        if (showSync == s.isOffline && uiSyncState == s.uiSyncState) return s;
+        return _StudentRow(
+          id: s.id,
+          name: s.name,
+          academicNumber: s.academicNumber,
+          attendanceTime: s.attendanceTime,
+          percentage: s.percentage,
+          status: s.status,
+          isOffline: showSync,
+          uiSyncState: uiSyncState,
+          isSuspended: s.isSuspended,
+          isAcademicallyDeprived: s.isAcademicallyDeprived,
+        );
+      }).toList();
+    });
+    _maybeShowSyncCompletedSnack(
+      hadPendingSyncBefore: hadPendingSyncBefore,
+      hasPendingSyncAfter: _hasPendingSyncStudents,
+    );
+    _persistSessionCache(sessionId);
+  }
+
+  void _maybeShowSyncCompletedSnack({
+    required bool hadPendingSyncBefore,
+    required bool hasPendingSyncAfter,
+  }) {
+    if (!mounted) return;
+
+    // Arm once we have any pending/syncing/failed rows, then show exactly once
+    // when all of them are cleared for the current session.
+    if (hasPendingSyncAfter) {
+      _syncCompletionSnackArmed = true;
+      return;
+    }
+
+    if (hadPendingSyncBefore && !hasPendingSyncAfter && _syncCompletionSnackArmed) {
+      _syncCompletionSnackArmed = false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _tr(
+              'تمت مزامنة التحضير بنجاح.',
+              'Attendance sync completed successfully.',
+            ),
+          ),
+          duration: const Duration(seconds: 2),
+          backgroundColor: const Color(0xFF2B9E56),
+        ),
+      );
+    }
+  }
+
+  void _persistSessionCache(String sessionId) {
+    final key = sessionId.trim();
+    if (key.isEmpty || _students.isEmpty) return;
+    LecturerAttendanceSessionUiCache.instance.put(
+      sessionId: key,
+      students: _students.map(_snapshotFromRow).toList(),
+      rosterFallback: _isUsingRosterFallback,
+    );
+  }
+
+  LecturerCachedStudentRow _snapshotFromRow(_StudentRow row) {
+    return LecturerCachedStudentRow(
+      id: row.id,
+      name: row.name,
+      academicNumber: row.academicNumber,
+      attendanceTime: row.attendanceTime,
+      percentage: row.percentage,
+      statusName: row.status.name,
+      isOffline: row.isOffline,
+      uiSyncStateName: row.uiSyncState.name,
+      isAcademicallyDeprived: row.isAcademicallyDeprived,
+      isSuspended: row.isSuspended,
+    );
+  }
+
+  _StudentRow _rowFromSnapshot(LecturerCachedStudentRow cached) {
+    final status = AttendanceStatus.values.firstWhere(
+      (s) => s.name == cached.statusName,
+      orElse: () => AttendanceStatus.pending,
+    );
+    final uiSyncState = AttendanceUIState.values.firstWhere(
+      (s) => s.name == cached.uiSyncStateName,
+      orElse: () => AttendanceUIState.idle,
+    );
+    return _applyAbsenceMetricsToRow(
+      _StudentRow(
+        id: cached.id,
+        name: cached.name,
+        academicNumber: cached.academicNumber,
+        attendanceTime: cached.attendanceTime,
+        percentage: cached.percentage,
+        status: status,
+        isOffline: cached.isOffline,
+        uiSyncState: uiSyncState,
+        isSuspended: cached.isSuspended,
+        isAcademicallyDeprived: cached.isAcademicallyDeprived,
+      ),
+    );
+  }
+
+  ({
+    String sessionId,
+    String sectionId,
+    DateTime targetDate,
+    bool hasProvidedSession,
+  })
+  _resolveSessionContext() {
+    final sectionId = (_lecture.sectionId ?? '').trim();
+    final targetDate = _sessionDate;
+    final providedSessionId = _providedSessionId?.trim() ?? '';
+    final sessionId = providedSessionId.isNotEmpty
+        ? providedSessionId
+        : ManualAttendanceService.buildSessionId(
+            sectionId: sectionId,
+            sessionDate: targetDate,
+            lectureStartTime: _lecture.startTime,
+          );
+    return (
+      sessionId: sessionId,
+      sectionId: sectionId,
+      targetDate: targetDate,
+      hasProvidedSession: providedSessionId.isNotEmpty,
+    );
+  }
+
+  Future<void> _prepareSessionInBackground(DateTime sessionDate) async {
+    try {
+      await _manualAttendanceService
+          .prepareSessionForLecture(
+            lecture: _lecture,
+            sessionDate: sessionDate,
+          )
+          .timeout(const Duration(seconds: 12));
+    } catch (_) {
+      // Session doc will be created on first successful online save/sync.
+    }
+  }
 
   /// حفظ التعديلات للجلسة الحالية فقط (مربوط بـ CRN + تاريخ اليوم).
   /// التعديل على أيام سابقة من [Attendance Reports].
@@ -255,8 +490,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         if (studentId == null) continue;
         updates[studentId] = _manualStatusFromUi(entry.value);
       }
-      await _manualAttendanceService.updateSessionStatuses(
+      await AttendanceEntryPoint.submitManualBatch(
         sessionId: sessionId,
+        courseId: _lecture.crn.trim(),
         updates: updates,
       );
 
@@ -273,6 +509,12 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         _draftStatuses = {};
         _hasPendingChanges = false;
       });
+      _applyPendingSyncFlagsFromQueue();
+      _persistSessionCache(sessionId);
+      if (!mounted) return;
+      unawaited(
+        ManualAttendanceOfflineService.instance.triggerBackgroundSyncIfPossible(),
+      );
       unawaited(_refreshSectionAbsencePercents());
 
       final hasPendingSync = _hasPendingSyncStudents;
@@ -422,6 +664,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     _stopQrAutoRefreshTimer();
     _stopBluetoothTokenTimer();
     _pendingFinalizeTimer?.cancel();
+    _attendanceStateEventsSub?.cancel();
+    // Keep [LecturerAttendanceSessionUiCache] so re-entry shows students immediately.
+    AttendanceSyncEventRouter.instance.detach();
     _bluetoothBleService.stopAdvertisingSession();
     super.dispose();
   }
@@ -482,43 +727,60 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   }
 
   Future<void> _loadManualAttendance() async {
-    setState(() {
-      _isLoadingAttendance = true;
-      _attendanceLoadError = null;
-    });
+    final ctx = _resolveSessionContext();
+    if (ctx.sectionId.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingAttendance = false;
+        _attendanceLoadError = _tr(
+          'لا يوجد معرف سكشن لهذه المحاضرة.',
+          'Section id is missing for this lecture.',
+        );
+      });
+      return;
+    }
+
+    final cached =
+        LecturerAttendanceSessionUiCache.instance.snapshotFor(ctx.sessionId);
+    final restoredFromCache = cached != null && cached.students.isNotEmpty;
+
+    if (restoredFromCache) {
+      if (!mounted) return;
+      setState(() {
+        _sessionId = ctx.sessionId;
+        _students = cached.students.map(_rowFromSnapshot).toList();
+        _isUsingRosterFallback = cached.rosterFallback;
+        _isLoadingAttendance = false;
+        _attendanceLoadError = null;
+      });
+      _applyPendingSyncFlagsFromQueue();
+      unawaited(_refreshSectionAbsencePercents());
+    } else {
+      setState(() {
+        _isLoadingAttendance = true;
+        _attendanceLoadError = null;
+      });
+    }
 
     try {
-      final sectionId = (_lecture.sectionId ?? '').trim();
-      if (sectionId.isEmpty) {
-        throw StateError(
-          _tr(
-            'لا يوجد معرف سكشن لهذه المحاضرة.',
-            'Section id is missing for this lecture.',
-          ),
-        );
-      }
-
-      final targetDate = _sessionDate;
-      final providedSessionId = _providedSessionId?.trim() ?? '';
-      final sessionId = providedSessionId.isNotEmpty
-          ? providedSessionId
-          : ManualAttendanceService.buildSessionId(
-              sectionId: sectionId,
-              sessionDate: targetDate,
-              lectureStartTime: _lecture.startTime,
-            );
-      if (!_effectiveViewOnly && providedSessionId.isEmpty) {
-        await _manualAttendanceService.prepareSessionForLecture(
-          lecture: _lecture,
-          sessionDate: targetDate,
-        );
+      if (!_effectiveViewOnly && !ctx.hasProvidedSession) {
+        if (restoredFromCache) {
+          unawaited(_prepareSessionInBackground(ctx.targetDate));
+        } else {
+          await _manualAttendanceService.prepareSessionForLecture(
+            lecture: _lecture,
+            sessionDate: ctx.targetDate,
+          );
+        }
       }
 
       if (!mounted) return;
-      unawaited(_refreshSectionAbsencePercents());
-      _attachSessionStream(sessionId);
+      if (!restoredFromCache) {
+        unawaited(_refreshSectionAbsencePercents());
+      }
+      _attachSessionStream(ctx.sessionId);
       _refreshNfcStatusFromSessionId();
-      await _maybeAutoActivateQrForScheduledLecture(sessionId);
+      await _maybeAutoActivateQrForScheduledLecture(ctx.sessionId);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -531,6 +793,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   void _attachSessionStream(String sessionId) {
     _recordsSubscription?.cancel();
     _sessionId = sessionId;
+    _attachAttendanceUiSyncListener(sessionId);
     _startPendingFinalizeTimer(sessionId);
     _recordsSubscription = _manualAttendanceService
         .watchSessionRecords(sessionId)
@@ -547,10 +810,20 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                 _isLoadingAttendance = false;
                 _attendanceLoadError = null;
               });
+              _persistSessionCache(sessionId);
               unawaited(
                 _refreshStudentProfiles(records.map((r) => r.studentId)),
               );
               unawaited(_refreshSectionAbsencePercents());
+              _applyPendingSyncFlagsFromQueue();
+              return;
+            }
+            if (_students.isNotEmpty) {
+              setState(() {
+                _isLoadingAttendance = false;
+                _attendanceLoadError = null;
+              });
+              unawaited(_loadFallbackRosterForSection(sessionId));
               return;
             }
             setState(() {
@@ -607,6 +880,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           'Showing enrolled roster for preview mode.',
         );
       });
+      _persistSessionCache(sessionId);
     } catch (_) {
       // Ignore fallback roster errors and keep current state.
     }
@@ -3161,7 +3435,10 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     final effectiveStyle =
         statusStyle ?? _statusStyle(AttendanceStatus.present);
     final effectiveStatus = _effectiveStatus(student);
-    final showSync = student.isOffline;
+    final showSync = student.isOffline ||
+        student.uiSyncState == AttendanceUIState.pending ||
+        student.uiSyncState == AttendanceUIState.syncing ||
+        student.uiSyncState == AttendanceUIState.failed;
     final chipLabel = effectiveStyle.chipLabel;
     final statusIcon = _statusIcon(effectiveStatus);
     final isSuspended = student.isSuspended ?? false;
@@ -3188,14 +3465,21 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                   ),
                 )
               : () => _showStatusPicker(student));
-    return _statusChip(
-      chipLabel,
-      effectiveStyle.bg,
-      effectiveStyle.fg,
-      icon: statusIcon,
-      showSync: showSync,
-      onSyncTap: showSync ? _showPendingSyncSnack : null,
-      onChipTap: onChipTap,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: _statusChip(
+            chipLabel,
+            effectiveStyle.bg,
+            effectiveStyle.fg,
+            icon: statusIcon,
+            showSync: showSync,
+            onSyncTap: showSync ? _showPendingSyncSnack : null,
+            onChipTap: onChipTap,
+          ),
+        ),
+      ],
     );
   }
 
@@ -3625,6 +3909,7 @@ class _StudentRow {
     required this.percentage,
     required this.status,
     this.isOffline = false,
+    this.uiSyncState = AttendanceUIState.idle,
     this.isSuspended = false,
     this.isAcademicallyDeprived = false,
   });
@@ -3636,6 +3921,7 @@ class _StudentRow {
   int percentage;
   AttendanceStatus status;
   final bool isOffline;
+  final AttendanceUIState uiSyncState;
   final bool? isSuspended;
 
   /// From [AttendanceStudentCardCalculator.isAcademicallyDeprived] (semester-wide).
@@ -3654,6 +3940,7 @@ class _StudentRow {
       percentage: percentage ?? this.percentage,
       status: status,
       isOffline: isOffline,
+      uiSyncState: uiSyncState,
       isSuspended: isSuspended,
       isAcademicallyDeprived:
           isAcademicallyDeprived ?? this.isAcademicallyDeprived,
