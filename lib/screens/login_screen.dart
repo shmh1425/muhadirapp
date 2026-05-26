@@ -7,19 +7,21 @@ import '../features/translation/widgets/language_toggle_button.dart';
 import '../features/translation/widgets/t_text.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'student/home_screen.dart';
-import 'lecturer/lecturer_main_shell.dart';
-import 'lecturer/lecturer_profile_screen.dart';
 import 'admin/admin_dashboard_screen.dart';
 import 'female_security/female_security_home_screen.dart';
-import '../providers/courses_providers.dart';
-import '../repositories/student_repository.dart';
-import '../providers/lecturer_catalog_providers.dart';
-import '../services/student_auth_service.dart';
-import '../services/lecturer_auth_service.dart';
-import '../services/lecturer/lecturer_cold_start_warmup.dart';
-import '../services/notifications/fcm_token_service.dart';
+import 'lecturer/lecturer_main_shell.dart';
+import 'student/home_screen.dart';
 import '../features/chatbot/providers/chatbot_provider.dart';
+import '../providers/courses_providers.dart';
+import '../providers/lecturer_catalog_providers.dart';
+import '../repositories/student_repository.dart';
+import '../services/auth/auth_session_router.dart';
+import '../services/auth/firebase_auth_bootstrap.dart';
+import '../services/auth/session_restore_service.dart';
+import '../services/lecturer/lecturer_cold_start_warmup.dart';
+import '../services/lecturer_auth_service.dart';
+import '../services/notifications/fcm_token_service.dart';
+import '../services/student_auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -36,6 +38,15 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _termsError = false;
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _autoRestoreAttempted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_tryRestoreExistingSession());
+    });
+  }
 
   TranslationController get _translation => TranslationController.instance;
 
@@ -46,6 +57,34 @@ class _LoginScreenState extends State<LoginScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _tryRestoreExistingSession() async {
+    if (_autoRestoreAttempted || _isLoading) return;
+    _autoRestoreAttempted = true;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (!FirebaseAuthBootstrap.isAppUserSession(user)) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final screen = await SessionRestoreService.instance
+          .buildHomeForSignedInUser(user!);
+      if (!mounted || screen == null) return;
+      ChatbotProvider.instance.clearChat();
+      if (screen is LecturerMainShell) {
+        final container = ProviderScope.containerOf(context);
+        container.invalidate(lecturerUnifiedCatalogProvider);
+        SessionRestoreService.instance.scheduleLecturerWarmup(context);
+      }
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => screen),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   Future<void> _onLoginPressed() async {
@@ -89,117 +128,62 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
 
-      final adminDoc = await FirebaseFirestore.instance
-          .collection('admins')
-          .doc(uid)
-          .get();
-      if (adminDoc.exists) {
+      final route = await AuthSessionRouter.instance.routeAfterFirebaseSignIn(
+        email: normalizedEmail,
+        uid: uid,
+      );
+
+      if (route.shouldSignOut) {
+        await FirebaseAuth.instance.signOut();
         ChatbotProvider.instance.clearChat();
-        unawaited(FcmTokenService.instance.registerDeviceToken(role: 'admin'));
         if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
-        );
+        setState(() {
+          _isLoading = false;
+          _emailError = route.errorMessage ??
+              _tr('فشل تسجيل الدخول', 'Sign-in failed');
+        });
         return;
       }
 
-      final securityDoc = await FirebaseFirestore.instance
-          .collection('security_staff')
-          .doc(uid)
-          .get();
-      if (securityDoc.exists) {
-        final isActive = securityDoc.data()?['isActive'] == true;
-        if (!isActive) {
-          await FirebaseAuth.instance.signOut();
-          ChatbotProvider.instance.clearChat();
-          if (!mounted) return;
-          setState(() {
-            _isLoading = false;
-            _emailError = _tr(
-              'حساب الأمن غير مفعل حالياً',
-              'The security account is not active right now',
-            );
-          });
-          return;
-        }
-        ChatbotProvider.instance.clearChat();
-        unawaited(
-          FcmTokenService.instance.registerDeviceToken(role: 'security'),
-        );
+      final screen = route.screen;
+      if (screen == null) {
         if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const FemaleSecurityHomeScreen()),
-        );
+        setState(() {
+          _isLoading = false;
+          _emailError = _tr('فشل تسجيل الدخول', 'Sign-in failed');
+        });
         return;
       }
 
-      final lecturer = await LecturerAuthService.instance
-          .verifyEmailAndGetLecturer(normalizedEmail);
-      if (lecturer != null) {
-        final profile = LecturerProfile.fromLecturer(
-          lecturer,
-          fallbackName: _tr('محاضر', 'Lecturer'),
-        );
-        ChatbotProvider.instance.clearChat();
-        unawaited(
-          FcmTokenService.instance.registerDeviceToken(
-            role: 'lecturer',
-            lecturerId: lecturer.lecturerId,
-          ),
-        );
-        if (!mounted) return;
-        final container = ProviderScope.containerOf(context);
-        container.invalidate(lecturerUnifiedCatalogProvider);
-        unawaited(LecturerColdStartWarmup.run(container));
-        if (!mounted) return;
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (_) =>
-                LecturerMainShell(initialIndex: 2, profile: profile),
-          ),
-          (route) => false,
-        );
-        return;
-      }
+      ChatbotProvider.instance.clearChat();
+      _registerFcmForScreen(screen);
 
-      final student = await StudentAuthService.instance
-          .verifyEmailAndGetStudent(normalizedEmail);
-      if (student != null) {
-        ChatbotProvider.instance.clearChat();
-        unawaited(
-          FcmTokenService.instance.registerDeviceToken(
-            role: 'student',
-            studentId: student.studentId,
-          ),
-        );
-        if (!mounted) return;
+      if (screen is HomeScreen) {
         try {
           final container = ProviderScope.containerOf(context);
-          final sid = student.studentId.toString();
-          await StudentRepository().clearCoursesCache(sid);
-          await container
-              .read(studentUnifiedCoursesProvider(sid).future)
-              .timeout(const Duration(seconds: 12));
+          final sid = StudentAuthService.instance.currentStudent?.studentId
+              .toString();
+          if (sid != null && sid.isNotEmpty) {
+            await StudentRepository().clearCoursesCache(sid);
+            await container
+                .read(studentUnifiedCoursesProvider(sid).future)
+                .timeout(const Duration(seconds: 12));
+          }
         } catch (e) {
           debugPrint('[Login] prefetch studentUnifiedCoursesProvider: $e');
         }
         if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-        );
-        return;
+      } else if (screen is LecturerMainShell) {
+        final container = ProviderScope.containerOf(context);
+        container.invalidate(lecturerUnifiedCatalogProvider);
+        unawaited(LecturerColdStartWarmup.run(container));
+        if (!mounted) return;
       }
 
-      await FirebaseAuth.instance.signOut();
-      ChatbotProvider.instance.clearChat();
       if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _emailError = _tr(
-          'الحساب صحيح لكن غير مربوط بدور داخل النظام',
-          'The account is valid but is not linked to a system role',
-        );
-      });
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => screen),
+      );
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       final message = switch (e.code) {
@@ -426,6 +410,40 @@ class _LoginScreenState extends State<LoginScreen> {
     );
 
     recoveryEmailController.dispose();
+  }
+
+  void _registerFcmForScreen(Widget screen) {
+    if (screen is AdminDashboardScreen) {
+      unawaited(
+        FcmTokenService.instance.registerDeviceToken(role: 'admin'),
+      );
+    } else if (screen is FemaleSecurityHomeScreen) {
+      unawaited(
+        FcmTokenService.instance.registerDeviceToken(role: 'security'),
+      );
+    } else if (screen is LecturerMainShell) {
+      final lecturerId =
+          LecturerAuthService.instance.currentLecturer?.lecturerId;
+      if (lecturerId != null && lecturerId.trim().isNotEmpty) {
+        unawaited(
+          FcmTokenService.instance.registerDeviceToken(
+            role: 'lecturer',
+            lecturerId: lecturerId,
+          ),
+        );
+      }
+    } else if (screen is HomeScreen) {
+      final studentId =
+          StudentAuthService.instance.currentStudent?.studentId;
+      if (studentId != null) {
+        unawaited(
+          FcmTokenService.instance.registerDeviceToken(
+            role: 'student',
+            studentId: studentId,
+          ),
+        );
+      }
+    }
   }
 
   @override

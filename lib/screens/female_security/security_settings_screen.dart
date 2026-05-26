@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'female_security_nav_bar.dart';
 import 'general_settings_screen.dart';
 import 'security_localization.dart';
 import 'security_nfc_verification_screen.dart';
 import 'security_records_screen.dart';
 import '../login_screen.dart';
+import '../../services/auth/app_session_store.dart';
+import '../../services/profile_photo_session_service.dart';
+import '../../shared/profile/user_profile_image_url.dart';
+import '../../shared/widgets/cached_user_network_image.dart';
 import '../../services/female_security_auth_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -32,6 +37,8 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
 
   bool _notificationsEnabled = false;
   int _rating = 0;
+  final ImagePicker _imagePicker = ImagePicker();
+  bool _isUploadingPhoto = false;
 
   @override
   Widget build(BuildContext context) {
@@ -185,13 +192,17 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
       stream: _authService.watchCurrentSecurityStaff().map((doc) => doc.data()),
       builder: (context, snapshot) {
         final data = snapshot.data ?? const <String, dynamic>{};
-        final rawPhotoUrl = (data['photoUrl'] ?? '').toString().trim();
-        final photoVersion = (data['photoVersion'] ?? '').toString().trim();
-        final photoUrl = rawPhotoUrl.isEmpty
-            ? ''
-            : photoVersion.isEmpty
-            ? rawPhotoUrl
-            : '$rawPhotoUrl${rawPhotoUrl.contains('?') ? '&' : '?'}v=$photoVersion';
+        if (UserProfileImageUrl.pickRawUrl(data).isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            ProfilePhotoSessionService.instance.persistFromFirestoreMap(
+              data,
+              role: AppSessionRole.security,
+            );
+          });
+        }
+        final photoUrl = ProfilePhotoSessionService.instance
+                .resolveSecurityDisplayUrl(firestoreData: data) ??
+            '';
         final fullName =
             (data['fullName'] ??
                     data['name'] ??
@@ -220,23 +231,69 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
           ),
           child: Column(
             children: [
-              Container(
-                width: 76,
-                height: 76,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: _kTealLight, width: 2),
-                  color: scheme.onSurfaceVariant.withValues(alpha: 0.12),
-                ),
-                child: ClipOval(
-                  child: photoUrl.isNotEmpty
-                      ? Image.network(
-                          photoUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) =>
-                              const _SecurityProfilePlaceholder(),
-                        )
-                      : const _SecurityProfilePlaceholder(),
+              GestureDetector(
+                onTap: _isUploadingPhoto ? null : _pickAndUploadProfileImage,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Container(
+                      width: 76,
+                      height: 76,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: _kTealLight, width: 2),
+                        color: scheme.onSurfaceVariant.withValues(alpha: 0.12),
+                      ),
+                      child: ClipOval(
+                        child: photoUrl.isNotEmpty
+                            ? CachedUserNetworkImage(
+                                imageUrl: photoUrl,
+                                fit: BoxFit.cover,
+                                width: 76,
+                                height: 76,
+                                errorWidget: const _SecurityProfilePlaceholder(),
+                              )
+                            : const _SecurityProfilePlaceholder(),
+                      ),
+                    ),
+                    if (_isUploadingPhoto)
+                      Container(
+                        width: 76,
+                        height: 76,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.black.withValues(alpha: 0.35),
+                        ),
+                        child: const Center(
+                          child: SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.4,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: const BoxDecoration(
+                          color: _kTealLight,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.camera_alt_rounded,
+                          size: 14,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 10),
@@ -267,6 +324,39 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
         );
       },
     );
+  }
+
+  Future<void> _pickAndUploadProfileImage() async {
+    try {
+      final pickedFile = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+      if (pickedFile == null || !mounted) return;
+
+      setState(() => _isUploadingPhoto = true);
+      final downloadUrl = await _authService.uploadCurrentUserProfileImage(
+        pickedFile,
+      );
+      await ProfilePhotoSessionService.instance.persistExplicit(
+        role: AppSessionRole.security,
+        rawPhotoUrl: downloadUrl,
+      );
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(SecurityLocalization.photoUpdated)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(SecurityLocalization.photoUploadFailed)),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isUploadingPhoto = false);
+      }
+    }
   }
 
   void _showLogoutDialog() {

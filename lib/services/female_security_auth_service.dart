@@ -4,6 +4,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'auth/app_session_store.dart';
+
 class FemaleSecurityAuthService {
   FemaleSecurityAuthService._();
   static final FemaleSecurityAuthService instance =
@@ -132,7 +134,10 @@ class FemaleSecurityAuthService {
     return true;
   }
 
-  Future<void> signOut() => _auth.signOut();
+  Future<void> signOut() async {
+    await _auth.signOut();
+    await AppSessionStore.instance.clear();
+  }
 
   String _extractFileExtension(String fileName) {
     final sanitizedName = fileName.trim().toLowerCase();

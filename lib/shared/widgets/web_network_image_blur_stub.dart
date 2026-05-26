@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'cached_user_network_image.dart';
+
 /// Stub implementation (non-web).
 class WebNetworkImageBlurWebImpl extends StatelessWidget {
   const WebNetworkImageBlurWebImpl({
@@ -17,12 +19,10 @@ class WebNetworkImageBlurWebImpl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Image.network(
-      url,
+    return CachedUserNetworkImage(
+      imageUrl: url,
       fit: fit,
-      errorBuilder: (context, error, stackTrace) {
-        return onErrorFallback ?? const SizedBox.shrink();
-      },
+      errorWidget: onErrorFallback ?? const SizedBox.shrink(),
     );
   }
 }

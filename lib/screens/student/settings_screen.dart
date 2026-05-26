@@ -10,6 +10,8 @@ import 'components/notification_bell.dart';
 import 'notifications_screen.dart';
 import 'components/custom_nav_bar_icons.dart';
 import '../../features/chatbot/providers/chatbot_provider.dart';
+import '../../services/auth/app_session_store.dart';
+import '../../services/profile_photo_session_service.dart';
 import '../../services/student_auth_service.dart';
 import '../../shared/widgets/student_profile_avatar.dart';
 import '../../shared/widgets/chat_fab.dart';
@@ -280,6 +282,15 @@ class SettingsScreen extends StatelessWidget {
           StudentAuthService.instance.applyCurrentStudentSnapshot(
             snapshot.data!,
           );
+          final data = snapshot.data!.data();
+          if (data != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              ProfilePhotoSessionService.instance.persistFromFirestoreMap(
+                data,
+                role: AppSessionRole.student,
+              );
+            });
+          }
         }
 
         return AnimatedBuilder(

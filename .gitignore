@@ -42,3 +42,7 @@ key.properties
 # Snyk Security Extension - AI Rules (auto-generated)
 .github/instructions/snyk_rules.instructions.md
 
+# UML / PlantUML diagrams (local only — do not commit)
+docs/uml/
+scripts/export-plantuml.ps1
+

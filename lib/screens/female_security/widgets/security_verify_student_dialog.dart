@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../security_localization.dart';
+import '../../../shared/widgets/cached_user_network_image.dart';
 import '../../../services/female_security/security_gate_scan_service.dart';
 
 const _kTealLight = Color(0xFF27A2A9);
@@ -193,26 +194,22 @@ class _SecurityVerifyDialogBodyState extends State<_SecurityVerifyDialogBody> {
               child: ColoredBox(
                 color: _kTealLight.withValues(alpha: 0.06),
                 child: photoUrl.isNotEmpty
-                    ? Image.network(
-                        photoUrl,
+                    ? CachedUserNetworkImage(
+                        imageUrl: photoUrl,
                         width: size,
                         height: size,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
-                            const _GatePhotoFallback(),
-                        loadingBuilder: (context, child, progress) {
-                          if (progress == null) return child;
-                          return const Center(
-                            child: SizedBox(
-                              width: 28,
-                              height: 28,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: _kTealLight,
-                              ),
+                        errorWidget: const _GatePhotoFallback(),
+                        placeholder: const Center(
+                          child: SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: _kTealLight,
                             ),
-                          );
-                        },
+                          ),
+                        ),
                       )
                     : const _GatePhotoFallback(),
               ),

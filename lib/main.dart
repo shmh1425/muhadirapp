@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -10,6 +9,9 @@ import 'repositories/lecturer_catalog_repository.dart';
 import 'repositories/security_repository.dart';
 import 'repositories/student_repository.dart';
 import 'screens/splash_screen.dart';
+import 'services/auth/app_session_store.dart';
+import 'services/auth/firebase_auth_bootstrap.dart';
+import 'services/offline/offline_engine_bootstrap.dart';
 import 'theme/app_theme_controller.dart';
 import 'features/translation/translation_controller.dart';
 
@@ -21,17 +23,13 @@ Future<void> main() async {
   await Hive.openBox<dynamic>(StudentRepository.coursesBoxName);
   await Hive.openBox<dynamic>(LecturerCatalogRepository.boxName);
   await Hive.openBox<dynamic>(SecurityRepository.metadataBoxName);
+  await Hive.openBox<dynamic>(AppSessionStore.boxName);
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  // App uses a non-Firebase login (studentId/email), but Firestore/Storage rules
-  // require an authenticated Firebase session for writes. Anonymous auth keeps
-  // client requests "signed-in" without changing the app's login UX.
-  try {
-    if (FirebaseAuth.instance.currentUser == null) {
-      await FirebaseAuth.instance.signInAnonymously();
-    }
-  } catch (_) {
-    // If auth isn't enabled in Firebase Console, rules will still deny writes.
-  }
+  await OfflineEngineBootstrap.initializeInfrastructure();
+  // Wait for any persisted Firebase session before optional anonymous guest auth.
+  await FirebaseAuthBootstrap.waitForInitialAuth();
+  await FirebaseAuthBootstrap.ensureAnonymousGuestIfNeeded();
+  await OfflineEngineBootstrap.runAfterAuthReady();
   try {
     await dotenv.load(fileName: '.env');
   } catch (_) {

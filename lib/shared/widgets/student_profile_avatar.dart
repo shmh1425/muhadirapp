@@ -3,12 +3,15 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../services/auth/app_session_store.dart';
+import '../../services/profile_photo_session_service.dart';
 import '../../services/student_auth_service.dart';
-import '../../services/student_profile_image_service.dart';
 import '../../screens/student/app_settings.dart';
+import '../profile/user_profile_image_url.dart';
+import 'cached_user_network_image.dart';
 import 'web_network_image_blur.dart';
 
-class StudentProfileAvatar extends StatelessWidget {
+class StudentProfileAvatar extends StatefulWidget {
   const StudentProfileAvatar({
     super.key,
     required this.size,
@@ -21,13 +24,56 @@ class StudentProfileAvatar extends StatelessWidget {
   final Color borderColor;
 
   @override
+  State<StudentProfileAvatar> createState() => _StudentProfileAvatarState();
+}
+
+class _StudentProfileAvatarState extends State<StudentProfileAvatar> {
+  @override
+  void initState() {
+    super.initState();
+    ProfilePhotoSessionService.instance.hydrateCacheKeyFromSessionSnapshot();
+  }
+
+  static Widget _fallbackAvatarStatic() {
+    return const ColoredBox(
+      color: Color(0xFFF1F3F4),
+      child: Center(
+        child: Icon(
+          Icons.person,
+          size: 34,
+          color: Color(0xFF9AA0A6),
+        ),
+      ),
+    );
+  }
+
+  void _schedulePersist(Map<String, dynamic> data) {
+    if (UserProfileImageUrl.pickRawUrl(data).isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ProfilePhotoSessionService.instance.persistFromFirestoreMap(
+        data,
+        role: AppSessionRole.student,
+      );
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder(
       stream: StudentAuthService.instance.watchCurrentStudentDoc(),
       builder: (context, snapshot) {
-        final data = snapshot.data?.data() ?? const <String, dynamic>{};
+        final data = snapshot.data?.data();
+        final map = data ?? const <String, dynamic>{};
 
-        final gender = (data['gender'] ??
+        if (data != null && UserProfileImageUrl.pickRawUrl(data).isNotEmpty) {
+          _schedulePersist(data);
+        }
+
+        final imageUrl = ProfilePhotoSessionService.instance
+                .resolveStudentDisplayUrl(firestoreData: map) ??
+            '';
+
+        final gender = (map['gender'] ??
                 StudentAuthService.instance.currentStudent?.gender ??
                 '')
             .toString()
@@ -35,21 +81,10 @@ class StudentProfileAvatar extends StatelessWidget {
             .toLowerCase();
         final isFemale = gender == 'f' || gender == 'female';
 
-        final photoUrl = (data['photoUrl'] ?? data['photoURL'] ?? data['photo_url'] ?? '')
-            .toString()
-            .trim();
-        final photoVersion = (data['photoVersion'] ?? '').toString().trim();
-        final imageUrl = photoUrl.isEmpty
-            ? ''
-            : photoVersion.isEmpty
-                ? photoUrl
-                : '$photoUrl${photoUrl.contains('?') ? '&' : '?'}v=$photoVersion';
-
         return ValueListenableBuilder<bool>(
           valueListenable: AppSettings.instance.blurProfileImage,
           builder: (context, isBlurred, _) {
             final double blurSigma = (isFemale && isBlurred) ? 5 : 0;
-            final bool preferHtmlElement = blurSigma <= 0;
 
             Widget imageChild;
             if (imageUrl.isNotEmpty) {
@@ -57,37 +92,33 @@ class StudentProfileAvatar extends StatelessWidget {
                 debugPrint('[StudentProfileAvatar] imageUrl=$imageUrl');
               }
               if (kIsWeb && blurSigma > 0) {
-                // On web, blur via CSS on <img> to avoid CORS issues with Canvas.
                 imageChild = WebNetworkImageBlur(
                   url: imageUrl,
                   blurSigma: blurSigma,
                   fit: BoxFit.cover,
-                  onErrorFallback: _AvatarImage._fallbackAvatarStatic(),
+                  onErrorFallback: _fallbackAvatarStatic(),
                 );
               } else {
-                imageChild = _DirectUrlAvatarImage(
-                  url: imageUrl,
-                  preferHtmlElement: preferHtmlElement,
+                imageChild = CachedUserNetworkImage(
+                  imageUrl: imageUrl,
+                  fit: BoxFit.cover,
+                  errorWidget: _fallbackAvatarStatic(),
                 );
               }
             } else {
-              final student = StudentAuthService.instance.currentStudent;
-              final studentId = student?.studentId ?? 0;
-              final email = student?.email ?? '';
-              imageChild = _AvatarImage(
-                key: ValueKey<String>('$studentId|$email'),
-                studentId: studentId,
-                email: email,
-              );
+              imageChild = _fallbackAvatarStatic();
             }
 
             return Container(
-              width: size,
-              height: size,
+              width: widget.size,
+              height: widget.size,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: Colors.white,
-                border: Border.all(color: borderColor, width: borderWidth),
+                border: Border.all(
+                  color: widget.borderColor,
+                  width: widget.borderWidth,
+                ),
               ),
               child: ClipOval(
                 child: (kIsWeb && blurSigma > 0)
@@ -107,142 +138,3 @@ class StudentProfileAvatar extends StatelessWidget {
     );
   }
 }
-
-class _DirectUrlAvatarImage extends StatelessWidget {
-  const _DirectUrlAvatarImage({
-    required this.url,
-    required this.preferHtmlElement,
-  });
-
-  final String url;
-  final bool preferHtmlElement;
-
-  @override
-  Widget build(BuildContext context) {
-    return Image.network(
-      url,
-      fit: BoxFit.cover,
-      // NOTE (Flutter Web): `ImageFiltered` blur doesn't apply to <img> elements.
-      // So when blur is ON, we must avoid the HTML element strategy.
-      webHtmlElementStrategy: preferHtmlElement
-          ? WebHtmlElementStrategy.prefer
-          : WebHtmlElementStrategy.never,
-      errorBuilder: (context, error, stackTrace) {
-        if (kDebugMode) {
-          debugPrint('[StudentProfileAvatar] Image.network error: $error');
-        }
-        return _AvatarImage._fallbackAvatarStatic();
-      },
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            _AvatarImage._fallbackAvatarStatic(),
-            const Center(
-              child: SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _AvatarImage extends StatefulWidget {
-  const _AvatarImage({
-    super.key,
-    required this.studentId,
-    required this.email,
-  });
-
-  final int studentId;
-  final String email;
-
-  static Widget _fallbackAvatarStatic() {
-    return Container(
-      color: Color(0xFFF1F3F4),
-      alignment: Alignment.center,
-      child: Icon(
-        Icons.person,
-        size: 34,
-        color: Color(0xFF9AA0A6),
-      ),
-    );
-  }
-
-  @override
-  State<_AvatarImage> createState() => _AvatarImageState();
-}
-
-class _AvatarImageState extends State<_AvatarImage> {
-  late Future<String?> _profileUrlFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _profileUrlFuture = StudentProfileImageService.instance.getProfileImageUrl(
-      studentId: widget.studentId,
-      email: widget.email,
-    );
-  }
-
-  @override
-  void didUpdateWidget(covariant _AvatarImage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.studentId != widget.studentId || oldWidget.email != widget.email) {
-      _profileUrlFuture = StudentProfileImageService.instance.getProfileImageUrl(
-        studentId: widget.studentId,
-        email: widget.email,
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<String?>(
-      future: _profileUrlFuture,
-      builder: (context, snapshot) {
-        final url = snapshot.data?.trim() ?? '';
-        if (url.isNotEmpty) {
-          return Image.network(
-            url,
-            fit: BoxFit.cover,
-            // Web: prefer <img> to avoid CORS failures (statusCode: 0).
-            webHtmlElementStrategy:
-                kIsWeb ? WebHtmlElementStrategy.prefer : WebHtmlElementStrategy.never,
-            errorBuilder: (context, error, stackTrace) {
-              return _fallbackAvatar();
-            },
-            loadingBuilder: (context, child, loadingProgress) {
-              if (loadingProgress == null) return child;
-              return Stack(
-                fit: StackFit.expand,
-                children: [
-                  _fallbackAvatar(),
-                  const Center(
-                    child: SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ),
-                ],
-              );
-            },
-          );
-        }
-
-        // While loading or if no URL exists, show fallback.
-        return _fallbackAvatar();
-      },
-    );
-  }
-
-  Widget _fallbackAvatar() => _AvatarImage._fallbackAvatarStatic();
-}
-

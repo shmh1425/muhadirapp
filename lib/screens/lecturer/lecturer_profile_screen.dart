@@ -10,6 +10,10 @@ import 'lecturer_language.dart';
 import 'lecturer_my_lectures_screen.dart';
 import 'lecturer_navigation.dart';
 import 'lecturer_notifications_screen.dart';
+import '../../services/auth/app_session_store.dart';
+import '../../services/profile_photo_session_service.dart';
+import '../../shared/profile/user_profile_image_url.dart';
+import '../../shared/widgets/cached_user_network_image.dart';
 import '../../services/lecturer_auth_service.dart';
 import '../../models/external_lecturer_model.dart';
 import '../../services/lecturer/lecturer_attendance_sessions_warm_cache.dart';
@@ -164,18 +168,6 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
     return _tr('غير محدد', 'Not specified');
   }
 
-  String _resolveLecturerPhotoUrl(Map<String, dynamic>? data) {
-    final photoUrl = (data?['photoUrl'] ?? '').toString().trim();
-    final rawUrl = photoUrl.isNotEmpty
-        ? photoUrl
-        : (LecturerAuthService.instance.currentLecturer?.photoUrl ?? '');
-    if (rawUrl.isEmpty) return '';
-    final version = (data?['photoVersion'] ?? '').toString().trim();
-    if (version.isEmpty) return rawUrl;
-    final separator = rawUrl.contains('?') ? '&' : '?';
-    return '$rawUrl${separator}v=$version';
-  }
-
   void _toggleBlur() {
     setState(() {
       _isBlurred = !_isBlurred;
@@ -304,7 +296,7 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
     if (confirmed != true || !mounted) return;
     await FirebaseAuth.instance.signOut();
     if (!mounted) return;
-    LecturerAuthService.instance.logout();
+    await LecturerAuthService.instance.logout();
     clearLecturerAttendanceReportNavCache();
     LecturerManageScreenSessionMemory.clear();
     LecturerAttendanceSessionsWarmCache.clear();
@@ -585,14 +577,25 @@ class _LecturerProfileScreenState extends State<LecturerProfileScreen> {
         (doc) => doc.data(),
       ),
       builder: (context, snapshot) {
-        final photoUrl = _resolveLecturerPhotoUrl(snapshot.data);
+        final data = snapshot.data ?? const <String, dynamic>{};
+        if (UserProfileImageUrl.pickRawUrl(data).isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            ProfilePhotoSessionService.instance.persistFromFirestoreMap(
+              data,
+              role: AppSessionRole.lecturer,
+            );
+          });
+        }
+        final photoUrl = ProfilePhotoSessionService.instance
+                .resolveLecturerDisplayUrl(firestoreData: data) ??
+            '';
         if (photoUrl.isNotEmpty) {
-          return Image.network(
-            photoUrl,
+          return CachedUserNetworkImage(
+            imageUrl: photoUrl,
             fit: BoxFit.cover,
             width: 84,
             height: 84,
-            errorBuilder: (_, __, ___) => _buildDefaultAvatar(),
+            errorWidget: _buildDefaultAvatar(),
           );
         }
         return _buildDefaultAvatar();

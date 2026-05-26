@@ -394,10 +394,20 @@ class BluetoothBleService {
       stopScanning();
     });
 
+    // iOS often misses Android advertisers when filtering by service UUID only
+    // (UUID may appear in scan response, not the primary advertisement packet).
+    final scanServiceFilter = Platform.isIOS
+        ? const <Uuid>[]
+        : [Uuid.parse(muhadirServiceUuid)];
+    _debugLog(
+      'scan_start platform=$_platformLabel '
+      'filtered=${scanServiceFilter.isNotEmpty}',
+    );
+
     try {
       _scanSub = _scanner
           .scanForDevices(
-            withServices: [Uuid.parse(muhadirServiceUuid)],
+            withServices: scanServiceFilter,
             scanMode: ScanMode.lowLatency,
             requireLocationServicesEnabled: false,
           )
@@ -450,7 +460,9 @@ class BluetoothBleService {
       manufacturerData: payloadBytes,
       serviceDataUuid: muhadirServiceUuid,
       serviceData: payloadBytes,
-      includeDeviceName: false,
+      // Helps iOS discover Android broadcasts when service UUID is not in the
+      // primary advertisement packet.
+      includeDeviceName: true,
       includePowerLevel: false,
     );
   }
@@ -463,20 +475,15 @@ class BluetoothBleService {
     String? servicePayload;
     for (final entry in device.serviceData.entries) {
       if (entry.key.expanded != serviceUuid.expanded) continue;
-      final value = _decodePayloadBytes(entry.value);
-      if (value != null && value.startsWith(_marker)) {
+      final value = _payloadFromBytes(entry.value);
+      if (value != null) {
         servicePayload = value;
         break;
       }
     }
-    final manufacturerPayload = _decodePayloadBytes(device.manufacturerData);
-    final rawPayload =
-        servicePayload ??
-        (manufacturerPayload?.contains(_marker) == true
-            ? manufacturerPayload!.substring(
-                manufacturerPayload.indexOf(_marker),
-              )
-            : null);
+    final rawPayload = servicePayload ?? _payloadFromManufacturerData(
+      device.manufacturerData,
+    );
     final nameMatches = device.name.toUpperCase().contains('MUHADIR');
 
     if (!hasService && rawPayload == null && !nameMatches) return null;
@@ -506,6 +513,27 @@ class BluetoothBleService {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Extracts `MHD|...` from service/manufacturer bytes (with optional company id).
+  String? _payloadFromBytes(Uint8List bytes) {
+    final decoded = _decodePayloadBytes(bytes);
+    if (decoded != null && decoded.contains(_marker)) {
+      return decoded.substring(decoded.indexOf(_marker));
+    }
+    if (bytes.length <= 2) return null;
+    // BLE manufacturer data often prefixes a 2-byte company identifier.
+    final withoutCompanyId = _decodePayloadBytes(
+      Uint8List.sublistView(bytes, 2),
+    );
+    if (withoutCompanyId != null && withoutCompanyId.contains(_marker)) {
+      return withoutCompanyId.substring(withoutCompanyId.indexOf(_marker));
+    }
+    return null;
+  }
+
+  String? _payloadFromManufacturerData(Uint8List bytes) {
+    return _payloadFromBytes(bytes);
   }
 
   String _buildCompactPayload(BluetoothAttendanceSession session) {

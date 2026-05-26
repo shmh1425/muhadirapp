@@ -11,6 +11,16 @@ import 'package:flutter/services.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 
+import '../../features/attendance/attendance_session_snapshot.dart';
+import '../../features/attendance/attendance_submission_result.dart';
+import '../../features/attendance/state/attendance_operation_ui_state.dart';
+import '../../features/attendance/state/attendance_state_event.dart';
+import '../../features/attendance/state/attendance_state_service.dart';
+import '../../features/attendance/state/attendance_sync_event_router.dart';
+import '../../features/attendance/ui/student_attendance_status_banner.dart';
+import '../../features/attendance/bluetooth_attendance_entry_service.dart';
+import '../../features/attendance/nfc_attendance_entry_service.dart';
+import '../../features/attendance/qr_attendance_entry_service.dart';
 import '../../features/translation/translation_controller.dart';
 import '../../features/translation/widgets/t_text.dart';
 import '../../services/attendance/bluetooth_attendance_service.dart';
@@ -43,10 +53,6 @@ class NfcAttendanceScreen extends StatefulWidget {
 
 class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  final NfcAttendanceService _nfcAttendance = NfcAttendanceService.instance;
-  final QrAttendanceService _qrAttendance = QrAttendanceService.instance;
-  final BluetoothAttendanceService _bluetoothAttendance =
-      BluetoothAttendanceService.instance;
   final BluetoothBleService _bluetoothBleService = BluetoothBleService.instance;
   final GlobalKey _qrViewKey = GlobalKey(debugLabel: 'student-qr-scanner');
   final TextEditingController _attendanceCodeController =
@@ -54,6 +60,86 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
 
   String _tr(String ar, String en) {
     return TranslationController.instance.translateToEnglish ? en : ar;
+  }
+
+  Future<void> _notifyAttendanceSuccess({
+    required int studentId,
+    required String attendanceMethod,
+    AttendanceSessionSnapshot? snapshot,
+  }) async {
+    if (snapshot == null) return;
+    try {
+      await StudentNotificationsService.instance
+          .addAttendanceSuccessNotification(
+            studentId: studentId,
+            attendanceMethod: attendanceMethod,
+            courseName: snapshot.courseName,
+            section: snapshot.section,
+            sectionId: snapshot.sectionId,
+            sessionId: snapshot.sessionId,
+            lectureDate: snapshot.lectureDate,
+            lectureStartTime: snapshot.lectureStartTime,
+            lectureEndTime: snapshot.lectureEndTime,
+          );
+    } catch (_) {}
+  }
+
+  void _applyPipelineUiState(
+    AttendanceSubmissionResult result, {
+    required String sessionId,
+    required String studentId,
+  }) {
+    final resolvedSession =
+        result.sessionSnapshot?.sessionId?.trim().isNotEmpty == true
+            ? result.sessionSnapshot!.sessionId!.trim()
+            : sessionId.trim();
+    final uiState = switch (result.outcome) {
+      AttendanceSubmissionOutcome.queuedOffline => AttendanceUIState.pending,
+      AttendanceSubmissionOutcome.rejectedOffline => AttendanceUIState.failed,
+      AttendanceSubmissionOutcome.duplicateSkipped => AttendanceUIState.synced,
+      AttendanceSubmissionOutcome.appliedOnline =>
+        result.success ? AttendanceUIState.synced : AttendanceUIState.failed,
+    };
+    _trackedAttendanceSessionId = resolvedSession.isNotEmpty
+        ? resolvedSession
+        : _trackedAttendanceSessionId;
+    AttendanceStateService.instance.setActiveSession(_trackedAttendanceSessionId);
+    AttendanceSyncEventRouter.instance.notifyPipelineOutcome(
+      sessionId: resolvedSession.isNotEmpty ? resolvedSession : sessionId,
+      studentId: studentId,
+      state: uiState,
+      operationId: result.requestId,
+    );
+    if (!mounted) return;
+    setState(() => _selfAttendanceUiState = uiState);
+  }
+
+  String _pipelineUserMessage(AttendanceSubmissionResult result) {
+    if (result.message != null && result.message!.trim().isNotEmpty) {
+      return result.message!.trim();
+    }
+    switch (result.outcome) {
+      case AttendanceSubmissionOutcome.queuedOffline:
+        return _tr(
+          'تم حفظ الحضور وسيتم مزامنته عند الاتصال',
+          'Attendance saved and will sync when online',
+        );
+      case AttendanceSubmissionOutcome.duplicateSkipped:
+        return _tr(
+          'تم تسجيل هذا الحضور مسبقاً',
+          'This attendance was already recorded',
+        );
+      case AttendanceSubmissionOutcome.rejectedOffline:
+        return _tr(
+          'يتطلب مسح QR اتصالاً بالإنترنت',
+          'QR attendance requires an internet connection',
+        );
+      case AttendanceSubmissionOutcome.appliedOnline:
+        return _tr(
+          'تم تسجيل الحضور بنجاح',
+          'Attendance recorded successfully',
+        );
+    }
   }
 
   Future<String?> _campusGeoBlockMessage() async {
@@ -164,6 +250,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   bool _geoVerifying = true;
   bool _geoRequiredToday = false;
   String? _geoBlockMessage;
+  AttendanceUIState _selfAttendanceUiState = AttendanceUIState.idle;
+  String? _trackedAttendanceSessionId;
+  StreamSubscription<AttendanceStateEvent>? _attendanceStateEventsSub;
 
   /// Geo-fence applies to QR attendance only (not NFC or Bluetooth).
   bool get _isAttendanceGeoBlocked =>
@@ -332,53 +421,66 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
 
     setState(() => _isSubmittingBluetoothAttendance = true);
     try {
-      final result = await _bluetoothAttendance
-          .submitAttendanceFromBluetoothSignal(
-            sessionIdHash: detection.sessionIdHash,
-            tokenFragment: detection.tokenFragment,
-            tokenVersion: detection.tokenVersion,
-            detectedSignalStrength: detection.rssi,
-            detectedSignalId: detection.sessionIdHash ?? detection.deviceName,
-            rawPayload: detection.rawPayload,
-            currentTime: DateTime.now(),
-          );
+      final student = StudentAuthService.instance.currentStudent;
+      final pipelineResult =
+          await BluetoothAttendanceEntryService.submitFromSignal(
+        sessionId: detection.sessionIdHash ?? 'bt_pending',
+        courseId: '',
+        studentId: (student?.studentId ?? 0).toString(),
+        sessionIdHash: detection.sessionIdHash,
+        tokenFragment: detection.tokenFragment,
+        tokenVersion: detection.tokenVersion,
+        detectedSignalStrength: detection.rssi,
+        detectedSignalId: detection.sessionIdHash ?? detection.deviceName,
+        rawPayload: detection.rawPayload,
+      );
+      final resultMessage = pipelineResult.message ?? '';
+      _applyPipelineUiState(
+        pipelineResult,
+        sessionId: detection.sessionIdHash ?? 'bt_pending',
+        studentId: (student?.studentId ?? 0).toString(),
+      );
 
       await _stopBluetoothScan();
       if (!mounted) return;
       setState(() {
         _bluetoothScanResult = BluetoothScanResult(
           state: BluetoothScanState.detected,
-          message: result.message,
+          message: resultMessage,
           detection: detection,
         );
       });
 
-      try {
-        final student = StudentAuthService.instance.currentStudent;
-        if (student != null) {
-          await StudentNotificationsService.instance
-              .addAttendanceSuccessNotification(
-                studentId: student.studentId,
-                attendanceMethod: 'bluetooth',
-                courseName: result.session.courseName,
-                section: result.session.section,
-                sectionId: result.session.sectionId,
-                sessionId: result.session.sessionId,
-                lectureDate: result.session.lectureDate,
-                lectureStartTime: result.session.lectureStartTime,
-                lectureEndTime: result.session.lectureEndTime,
-              );
-        }
-      } catch (_) {}
+      if (student != null) {
+        await _notifyAttendanceSuccess(
+          studentId: student.studentId,
+          attendanceMethod: 'bluetooth',
+          snapshot: pipelineResult.sessionSnapshot,
+        );
+      }
 
       if (!mounted) return;
+      if (!pipelineResult.success) {
+        final message = _pipelineUserMessage(pipelineResult);
+        setState(() {
+          _bluetoothScanResult = BluetoothScanResult(
+            state: BluetoothScanState.error,
+            message: message,
+            detection: detection,
+          );
+        });
+        await AttendanceResultPopup.show(
+          context,
+          success: false,
+          message: message,
+        );
+        return;
+      }
+
       await AttendanceResultPopup.show(
         context,
         success: true,
-        message: _tr(
-          'تم تسجيل الحضور عبر البلوتوث بنجاح',
-          'Bluetooth attendance recorded successfully',
-        ),
+        message: _pipelineUserMessage(pipelineResult),
       );
     } on BluetoothAttendanceException catch (e) {
       if (!mounted) return;
@@ -464,6 +566,20 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     StudentCampusGeoGuard.debugSkipGeoFenceForTesting.addListener(
       _onAttendanceGeoDebugToggle,
     );
+    final student = StudentAuthService.instance.currentStudent;
+    if (student != null) {
+      final studentId = student.studentId.toString();
+      AttendanceSyncEventRouter.instance.attachStudent(studentId: studentId);
+      _attendanceStateEventsSub?.cancel();
+      _attendanceStateEventsSub =
+          AttendanceStateService.instance.attendanceStateEvents.listen((event) {
+        if (!mounted || event.studentId != studentId) return;
+        setState(() {
+          _selfAttendanceUiState = event.model.state;
+          _trackedAttendanceSessionId = event.sessionId;
+        });
+      });
+    }
   }
 
   void _onAttendanceGeoDebugToggle() {
@@ -591,50 +707,49 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
           }
 
           try {
-            final result = await _nfcAttendance.submitAttendanceFromCard(
+            final pipelineResult =
+                await NfcAttendanceEntryService.submitFromCardTap(
               lecturerCardId: cardId,
               studentId: student.studentId,
-              currentTime: DateTime.now(),
+              sessionId: 'nfc_pending',
+              courseId: 'nfc',
+              requestId:
+                  'nfc_${cardId}_${student.studentId}_${DateTime.now().millisecondsSinceEpoch}',
+            );
+            final userMessage = _pipelineUserMessage(pipelineResult);
+            _applyPipelineUiState(
+              pipelineResult,
+              sessionId: 'nfc_pending',
+              studentId: student.studentId.toString(),
             );
 
             await NfcManager.instance.stopSession(
               alertMessage: TranslationController.instance.translateToEnglish
                   ? 'Attendance recorded successfully.'
-                  : result.message,
+                  : userMessage,
             );
             if (!mounted) return;
             setState(() {
               _isScanning = false;
-              _statusError = false;
-              _statusMessage = result.message;
+              _statusError = !pipelineResult.success;
+              _statusMessage = userMessage;
             });
-            final session = result.session;
-            // Best-effort: store in-app notification (ignore failures).
-            try {
-              await StudentNotificationsService.instance
-                  .addAttendanceSuccessNotification(
-                    studentId: student.studentId,
-                    attendanceMethod: 'nfc',
-                    courseName: session?.courseName,
-                    section: session?.sectionLabel,
-                    sectionId: session?.sectionId,
-                    sessionId: session?.sessionId,
-                    lectureDate: session?.lectureDate,
-                    lectureStartTime: session?.lectureStartTime,
-                    lectureEndTime: session?.lectureEndTime,
-                  );
-            } catch (_) {}
+            await _notifyAttendanceSuccess(
+              studentId: student.studentId,
+              attendanceMethod: 'nfc',
+              snapshot: pipelineResult.sessionSnapshot,
+            );
             if (!mounted) return;
             await AttendanceResultPopup.show(
               context,
-              success: true,
-              message: _tr(
-                'تم تسجيل حضورك بنجاح',
-                'Attendance recorded successfully',
-              ),
-              subtitle: TranslationController.instance.translateToEnglish
-                  ? 'Your attendance has been recorded.'
-                  : result.message,
+              success: pipelineResult.success,
+              message: pipelineResult.success
+                  ? _tr(
+                      'تم تسجيل حضورك بنجاح',
+                      'Attendance recorded successfully',
+                    )
+                  : _tr('فشل تسجيل الحضور', 'Attendance failed'),
+              subtitle: userMessage,
             );
             if (!sessionDone.isCompleted) {
               sessionDone.complete();
@@ -916,47 +1031,47 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     });
 
     try {
-      final result = await _qrAttendance.submitAttendanceFromNumericCode(
-        code,
-        currentTime: DateTime.now(),
+      final pipelineResult =
+          await QrAttendanceEntryService.submitFromNumericCode(
+        numericCode: code,
+        requestId: 'qr_code_${DateTime.now().millisecondsSinceEpoch}',
       );
+      final userMessage = _pipelineUserMessage(pipelineResult);
+      final student = StudentAuthService.instance.currentStudent;
+      if (student != null) {
+        _applyPipelineUiState(
+          pipelineResult,
+          sessionId: '',
+          studentId: student.studentId.toString(),
+        );
+      }
       if (!mounted) return;
       setState(() {
         _isSubmittingAttendanceCode = false;
-        _qrStatusError = false;
-        _qrStatusMessage = _tr(
-          'تم تسجيل الحضور بنجاح',
-          'Attendance recorded successfully',
-        );
+        _qrStatusError = !pipelineResult.success;
+        _qrStatusMessage = userMessage;
       });
-      try {
-        await StudentNotificationsService.instance
-            .addAttendanceSuccessNotification(
-              studentId:
-                  StudentAuthService.instance.currentStudent?.studentId ?? 0,
-              attendanceMethod: 'qr',
-              courseName: result.session.courseName,
-              section: result.session.section,
-              sectionId: result.session.sectionId,
-              sessionId: result.session.sessionId,
-              lectureDate: result.session.lectureDate,
-              lectureStartTime: result.session.lectureStartTime,
-              lectureEndTime: result.session.lectureEndTime,
-            );
-      } catch (_) {}
+      if (student != null) {
+        await _notifyAttendanceSuccess(
+          studentId: student.studentId,
+          attendanceMethod: 'qr',
+          snapshot: pipelineResult.sessionSnapshot,
+        );
+      }
       if (!mounted) return;
       await AttendanceResultPopup.show(
         context,
-        success: true,
-        message: _tr(
-          'تم تسجيل حضورك بنجاح',
-          'Attendance recorded successfully',
-        ),
-        subtitle: _tr(
-          'تم تسجيل الحضور بنجاح',
-          'Attendance recorded successfully',
-        ),
+        success: pipelineResult.success,
+        message: pipelineResult.success
+            ? _tr(
+                'تم تسجيل حضورك بنجاح',
+                'Attendance recorded successfully',
+              )
+            : _tr('فشل تسجيل الحضور', 'Attendance failed'),
+        subtitle: userMessage,
+        autoDismiss: pipelineResult.success,
       );
+      if (!pipelineResult.success) return;
     } on QrAttendanceException catch (e) {
       if (!mounted) return;
       final message = _friendlyQrCodeMessage(e);
@@ -1111,43 +1226,47 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     }
 
     try {
-      final result = await _qrAttendance.submitAttendanceFromQrPayload(
-        payload,
-        currentTime: DateTime.now(),
+      final pipelineResult = await QrAttendanceEntryService.submitFromQrPayload(
+        qrPayload: payload,
+        requestId:
+            'qr_${payload['sessionId']}_${DateTime.now().millisecondsSinceEpoch}',
       );
+      final userMessage = _pipelineUserMessage(pipelineResult);
+      final student = StudentAuthService.instance.currentStudent;
+      if (student != null) {
+        _applyPipelineUiState(
+          pipelineResult,
+          sessionId: (payload['sessionId'] ?? '').toString(),
+          studentId: student.studentId.toString(),
+        );
+      }
       if (!mounted) return;
       setState(() {
         _isProcessingQrScan = false;
-        _qrStatusError = false;
-        _qrStatusMessage = result.message;
+        _qrStatusError = !pipelineResult.success;
+        _qrStatusMessage = userMessage;
       });
-      try {
-        await StudentNotificationsService.instance
-            .addAttendanceSuccessNotification(
-              studentId:
-                  StudentAuthService.instance.currentStudent?.studentId ?? 0,
-              attendanceMethod: 'qr',
-              courseName: result.session.courseName,
-              section: result.session.section,
-              sectionId: result.session.sectionId,
-              sessionId: result.session.sessionId,
-              lectureDate: result.session.lectureDate,
-              lectureStartTime: result.session.lectureStartTime,
-              lectureEndTime: result.session.lectureEndTime,
-            );
-      } catch (_) {}
+      if (student != null) {
+        await _notifyAttendanceSuccess(
+          studentId: student.studentId,
+          attendanceMethod: 'qr',
+          snapshot: pipelineResult.sessionSnapshot,
+        );
+      }
       if (!mounted) return;
       await AttendanceResultPopup.show(
         context,
-        success: true,
-        message: _tr(
-          'تم تسجيل حضورك بنجاح',
-          'Attendance recorded successfully',
-        ),
-        subtitle: TranslationController.instance.translateToEnglish
-            ? 'Your attendance has been recorded.'
-            : result.message,
+        success: pipelineResult.success,
+        message: pipelineResult.success
+            ? _tr(
+                'تم تسجيل حضورك بنجاح',
+                'Attendance recorded successfully',
+              )
+            : _tr('فشل تسجيل الحضور', 'Attendance failed'),
+        subtitle: userMessage,
+        autoDismiss: pipelineResult.success,
       );
+      if (!pipelineResult.success) return;
     } on QrAttendanceException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -1283,6 +1402,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       // no-op
     }
     _qrScannerController = null;
+    _attendanceStateEventsSub?.cancel();
+    AttendanceSyncEventRouter.instance.detach();
     super.dispose();
   }
 
@@ -2121,6 +2242,10 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                   ],
                 ),
                 const SizedBox(height: 12),
+                StudentAttendanceStatusBanner(
+                  state: _selfAttendanceUiState,
+                  translate: _tr,
+                ),
                 Center(
                   child: TText(
                     attendanceModeTitle,

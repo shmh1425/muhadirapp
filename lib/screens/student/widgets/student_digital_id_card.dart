@@ -8,6 +8,10 @@ import '../../../features/translation/translation_controller.dart';
 import '../../../models/external_student.dart';
 import '../../../screens/student/app_settings.dart';
 import '../../../services/student_auth_service.dart';
+import '../../../services/profile_photo_session_service.dart';
+import '../../../shared/profile/user_profile_image_url.dart';
+import '../../../services/auth/app_session_store.dart';
+import '../../../shared/widgets/cached_user_network_image.dart';
 import '../../../shared/widgets/web_network_image_blur.dart';
 
 /// Digital student ID: photo, name, academics (QR and NFC are separate sections).
@@ -111,24 +115,17 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
           stream: StudentAuthService.instance.watchCurrentStudentDoc(),
           builder: (context, snap) {
             final data = snap.data?.data() ?? const <String, dynamic>{};
-            var photoUrlRaw =
-                (data['photoUrl'] ??
-                        data['photoURL'] ??
-                        data['photo_url'] ??
-                        '')
-                    .toString()
-                    .trim();
-            if (photoUrlRaw.isEmpty) {
-              photoUrlRaw = s.photoUrl.trim();
+            if (UserProfileImageUrl.pickRawUrl(data).isNotEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                ProfilePhotoSessionService.instance.persistFromFirestoreMap(
+                  data,
+                  role: AppSessionRole.student,
+                );
+              });
             }
-            var photoVersion = (data['photoVersion'] ?? s.photoVersion)
-                .toString()
-                .trim();
-            final imageUrl = photoUrlRaw.isEmpty
-                ? ''
-                : photoVersion.isEmpty
-                ? photoUrlRaw
-                : '$photoUrlRaw${photoUrlRaw.contains('?') ? '&' : '?'}v=$photoVersion';
+            final imageUrl = ProfilePhotoSessionService.instance
+                    .resolveStudentDisplayUrl(firestoreData: data) ??
+                '';
 
             final deptEnRaw = s.departmentSafe.trim();
             final deptArRaw = s.departmentArSafe.trim();
@@ -433,7 +430,6 @@ class _CardProfilePhotoContent extends StatelessWidget {
     final borderW = dimension <= 62 ? 2.0 : 2.5;
     final iconSz = (dimension * 0.42).clamp(22.0, 40.0);
     final progSz = (dimension * 0.36).clamp(20.0, 28.0);
-    final preferHtmlElement = blurSigma <= 0;
 
     Widget core;
     if (imageUrl.isEmpty) {
@@ -451,17 +447,12 @@ class _CardProfilePhotoContent extends StatelessWidget {
         ),
       );
     } else {
-      core = Image.network(
-        imageUrl,
+      core = CachedUserNetworkImage(
+        imageUrl: imageUrl,
         width: sized.width,
         height: sized.height,
         fit: BoxFit.cover,
-        alignment: Alignment.center,
-        filterQuality: FilterQuality.medium,
-        webHtmlElementStrategy: preferHtmlElement
-            ? WebHtmlElementStrategy.prefer
-            : WebHtmlElementStrategy.never,
-        errorBuilder: (_, __, ___) => ColoredBox(
+        errorWidget: ColoredBox(
           color: const Color(0xFFECEFF1),
           child: Icon(
             Icons.person,
@@ -469,24 +460,19 @@ class _CardProfilePhotoContent extends StatelessWidget {
             color: const Color(0xFF9AA0A6),
           ),
         ),
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) {
-            return child;
-          }
-          return ColoredBox(
-            color: const Color(0xFFECEFF1),
-            child: Center(
-              child: SizedBox(
-                width: progSz,
-                height: progSz,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: borderColor.withValues(alpha: 0.7),
-                ),
+        placeholder: ColoredBox(
+          color: const Color(0xFFECEFF1),
+          child: Center(
+            child: SizedBox(
+              width: progSz,
+              height: progSz,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: borderColor.withValues(alpha: 0.7),
               ),
             ),
-          );
-        },
+          ),
+        ),
       );
     }
 
