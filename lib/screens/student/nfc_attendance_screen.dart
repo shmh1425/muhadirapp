@@ -91,8 +91,8 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   }) {
     final resolvedSession =
         result.sessionSnapshot?.sessionId?.trim().isNotEmpty == true
-            ? result.sessionSnapshot!.sessionId!.trim()
-            : sessionId.trim();
+        ? result.sessionSnapshot!.sessionId!.trim()
+        : sessionId.trim();
     final uiState = switch (result.outcome) {
       AttendanceSubmissionOutcome.queuedOffline => AttendanceUIState.pending,
       AttendanceSubmissionOutcome.rejectedOffline => AttendanceUIState.failed,
@@ -103,7 +103,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     _trackedAttendanceSessionId = resolvedSession.isNotEmpty
         ? resolvedSession
         : _trackedAttendanceSessionId;
-    AttendanceStateService.instance.setActiveSession(_trackedAttendanceSessionId);
+    AttendanceStateService.instance.setActiveSession(
+      _trackedAttendanceSessionId,
+    );
     AttendanceSyncEventRouter.instance.notifyPipelineOutcome(
       sessionId: resolvedSession.isNotEmpty ? resolvedSession : sessionId,
       studentId: studentId,
@@ -135,10 +137,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
           'QR attendance requires an internet connection',
         );
       case AttendanceSubmissionOutcome.appliedOnline:
-        return _tr(
-          'تم تسجيل الحضور بنجاح',
-          'Attendance recorded successfully',
-        );
+        return _tr('تم تسجيل الحضور بنجاح', 'Attendance recorded successfully');
     }
   }
 
@@ -424,20 +423,20 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       final student = StudentAuthService.instance.currentStudent;
       final pipelineResult =
           await BluetoothAttendanceEntryService.submitFromSignal(
-        sessionId: detection.sessionIdHash ?? 'bt_pending',
-        courseId: '',
-        studentId: (student?.studentId ?? 0).toString(),
-        sessionIdHash: detection.sessionIdHash,
-        tokenFragment: detection.tokenFragment,
-        tokenVersion: detection.tokenVersion,
-        detectedSignalStrength: detection.rssi,
-        detectedSignalId: detection.sessionIdHash ?? detection.deviceName,
-        rawPayload: detection.rawPayload,
-      );
+            sessionId: '',
+            courseId: '',
+            studentId: (student?.studentId ?? 0).toString(),
+            sessionIdHash: detection.sessionIdHash,
+            tokenFragment: detection.tokenFragment,
+            tokenVersion: detection.tokenVersion,
+            detectedSignalStrength: detection.rssi,
+            detectedSignalId: detection.sessionIdHash ?? detection.deviceName,
+            rawPayload: detection.rawPayload,
+          );
       final resultMessage = pipelineResult.message ?? '';
       _applyPipelineUiState(
         pipelineResult,
-        sessionId: detection.sessionIdHash ?? 'bt_pending',
+        sessionId: pipelineResult.sessionSnapshot?.sessionId ?? '',
         studentId: (student?.studentId ?? 0).toString(),
       );
 
@@ -571,14 +570,16 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       final studentId = student.studentId.toString();
       AttendanceSyncEventRouter.instance.attachStudent(studentId: studentId);
       _attendanceStateEventsSub?.cancel();
-      _attendanceStateEventsSub =
-          AttendanceStateService.instance.attendanceStateEvents.listen((event) {
-        if (!mounted || event.studentId != studentId) return;
-        setState(() {
-          _selfAttendanceUiState = event.model.state;
-          _trackedAttendanceSessionId = event.sessionId;
-        });
-      });
+      _attendanceStateEventsSub = AttendanceStateService
+          .instance
+          .attendanceStateEvents
+          .listen((event) {
+            if (!mounted || event.studentId != studentId) return;
+            setState(() {
+              _selfAttendanceUiState = event.model.state;
+              _trackedAttendanceSessionId = event.sessionId;
+            });
+          });
     }
   }
 
@@ -709,13 +710,13 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
           try {
             final pipelineResult =
                 await NfcAttendanceEntryService.submitFromCardTap(
-              lecturerCardId: cardId,
-              studentId: student.studentId,
-              sessionId: 'nfc_pending',
-              courseId: 'nfc',
-              requestId:
-                  'nfc_${cardId}_${student.studentId}_${DateTime.now().millisecondsSinceEpoch}',
-            );
+                  lecturerCardId: cardId,
+                  studentId: student.studentId,
+                  sessionId: 'nfc_pending',
+                  courseId: 'nfc',
+                  requestId:
+                      'nfc_${cardId}_${student.studentId}_${DateTime.now().millisecondsSinceEpoch}',
+                );
             final userMessage = _pipelineUserMessage(pipelineResult);
             _applyPipelineUiState(
               pipelineResult,
@@ -1033,9 +1034,9 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     try {
       final pipelineResult =
           await QrAttendanceEntryService.submitFromNumericCode(
-        numericCode: code,
-        requestId: 'qr_code_${DateTime.now().millisecondsSinceEpoch}',
-      );
+            numericCode: code,
+            requestId: 'qr_code_${DateTime.now().millisecondsSinceEpoch}',
+          );
       final userMessage = _pipelineUserMessage(pipelineResult);
       final student = StudentAuthService.instance.currentStudent;
       if (student != null) {
@@ -1063,10 +1064,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         context,
         success: pipelineResult.success,
         message: pipelineResult.success
-            ? _tr(
-                'تم تسجيل حضورك بنجاح',
-                'Attendance recorded successfully',
-              )
+            ? _tr('تم تسجيل حضورك بنجاح', 'Attendance recorded successfully')
             : _tr('فشل تسجيل الحضور', 'Attendance failed'),
         subtitle: userMessage,
         autoDismiss: pipelineResult.success,
@@ -1258,10 +1256,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
         context,
         success: pipelineResult.success,
         message: pipelineResult.success
-            ? _tr(
-                'تم تسجيل حضورك بنجاح',
-                'Attendance recorded successfully',
-              )
+            ? _tr('تم تسجيل حضورك بنجاح', 'Attendance recorded successfully')
             : _tr('فشل تسجيل الحضور', 'Attendance failed'),
         subtitle: userMessage,
         autoDismiss: pipelineResult.success,

@@ -214,6 +214,11 @@ class BluetoothAttendanceService {
     }
 
     final now = currentTime ?? DateTime.now();
+    _debugBluetoothSubmitStart(
+      sessionIdArg: sessionId,
+      sessionIdHash: sessionIdHash,
+      tokenFragment: tokenFragment,
+    );
     _debugDetectedSignal(
       detectedSignalId: detectedSignalId,
       detectedSignalStrength: detectedSignalStrength,
@@ -237,6 +242,12 @@ class BluetoothAttendanceService {
       rawPayload: rawPayload,
     );
     if (session == null) {
+      _debugBluetoothValidationFailed(
+        reason: 'session_not_found',
+        sessionIdArg: sessionId,
+        sessionIdHash: sessionIdHash,
+        tokenFragment: tokenFragment,
+      );
       throw BluetoothAttendanceException(
         code: BluetoothAttendanceErrorCode.sessionNotFound,
         message: 'لم يتم العثور على جلسة بلوتوث نشطة لهذه المحاضرة',
@@ -252,6 +263,12 @@ class BluetoothAttendanceService {
     );
 
     if (!session.isOpen) {
+      _debugBluetoothValidationFailed(
+        reason: 'session_closed',
+        sessionIdArg: sessionId,
+        sessionIdHash: sessionIdHash,
+        tokenFragment: tokenFragment,
+      );
       throw BluetoothAttendanceException(
         code: BluetoothAttendanceErrorCode.sessionClosed,
         message: 'جلسة البلوتوث مغلقة',
@@ -259,6 +276,12 @@ class BluetoothAttendanceService {
     }
 
     if (session.attendanceMethod.trim().toLowerCase() != 'bluetooth') {
+      _debugBluetoothValidationFailed(
+        reason: 'invalid_attendance_method',
+        sessionIdArg: sessionId,
+        sessionIdHash: sessionIdHash,
+        tokenFragment: tokenFragment,
+      );
       throw BluetoothAttendanceException(
         code: BluetoothAttendanceErrorCode.sessionNotFound,
         message: 'لم يتم العثور على جلسة بلوتوث صالحة',
@@ -266,6 +289,12 @@ class BluetoothAttendanceService {
     }
 
     if (tokenVersion != null && tokenVersion != session.tokenVersion) {
+      _debugBluetoothValidationFailed(
+        reason: 'token_version_mismatch',
+        sessionIdArg: sessionId,
+        sessionIdHash: sessionIdHash,
+        tokenFragment: tokenFragment,
+      );
       throw BluetoothAttendanceException(
         code: BluetoothAttendanceErrorCode.tokenMismatch,
         message: 'انتهت صلاحية جلسة البلوتوث',
@@ -274,6 +303,12 @@ class BluetoothAttendanceService {
     if (bluetoothSessionToken != null &&
         bluetoothSessionToken.trim().isNotEmpty &&
         bluetoothSessionToken.trim() != session.bluetoothSessionToken) {
+      _debugBluetoothValidationFailed(
+        reason: 'token_mismatch',
+        sessionIdArg: sessionId,
+        sessionIdHash: sessionIdHash,
+        tokenFragment: tokenFragment,
+      );
       throw BluetoothAttendanceException(
         code: BluetoothAttendanceErrorCode.tokenMismatch,
         message: 'انتهت صلاحية جلسة البلوتوث',
@@ -282,6 +317,12 @@ class BluetoothAttendanceService {
     if (tokenFragment != null &&
         tokenFragment.trim().isNotEmpty &&
         !session.bluetoothSessionToken.startsWith(tokenFragment.trim())) {
+      _debugBluetoothValidationFailed(
+        reason: 'token_fragment_mismatch',
+        sessionIdArg: sessionId,
+        sessionIdHash: sessionIdHash,
+        tokenFragment: tokenFragment,
+      );
       throw BluetoothAttendanceException(
         code: BluetoothAttendanceErrorCode.tokenMismatch,
         message: 'انتهت صلاحية جلسة البلوتوث',
@@ -289,6 +330,12 @@ class BluetoothAttendanceService {
     }
 
     if (now.isAfter(session.expiresAt)) {
+      _debugBluetoothValidationFailed(
+        reason: 'session_expired',
+        sessionIdArg: sessionId,
+        sessionIdHash: sessionIdHash,
+        tokenFragment: tokenFragment,
+      );
       throw BluetoothAttendanceException(
         code: BluetoothAttendanceErrorCode.sessionExpired,
         message: 'انتهت صلاحية جلسة البلوتوث',
@@ -303,6 +350,12 @@ class BluetoothAttendanceService {
         now: now,
         detectedSignalStrength: detectedSignalStrength,
         tokenVersion: tokenVersion,
+      );
+      _debugBluetoothValidationFailed(
+        reason: 'invalid_lecture_window',
+        sessionIdArg: sessionId,
+        sessionIdHash: sessionIdHash,
+        tokenFragment: tokenFragment,
       );
       throw BluetoothAttendanceException(
         code: BluetoothAttendanceErrorCode.invalidInput,
@@ -324,6 +377,12 @@ class BluetoothAttendanceService {
         detectedSignalStrength: detectedSignalStrength,
         tokenVersion: tokenVersion,
       );
+      _debugBluetoothValidationFailed(
+        reason: 'attendance_window_closed',
+        sessionIdArg: sessionId,
+        sessionIdHash: sessionIdHash,
+        tokenFragment: tokenFragment,
+      );
       throw BluetoothAttendanceException(
         code: BluetoothAttendanceErrorCode.attendanceWindowClosed,
         message: 'انتهت صلاحية جلسة البلوتوث',
@@ -335,6 +394,12 @@ class BluetoothAttendanceService {
       detectedSignalStrength: detectedSignalStrength,
     );
     if (proximityStatus == 'weak') {
+      _debugBluetoothValidationFailed(
+        reason: 'weak_signal',
+        sessionIdArg: sessionId,
+        sessionIdHash: sessionIdHash,
+        tokenFragment: tokenFragment,
+      );
       throw BluetoothAttendanceException(
         code: BluetoothAttendanceErrorCode.weakSignal,
         message: 'لم يتم العثور على جلسة بلوتوث صالحة',
@@ -346,6 +411,12 @@ class BluetoothAttendanceService {
       studentId: student.studentId,
     );
     if (enrollment == null) {
+      _debugBluetoothValidationFailed(
+        reason: 'student_not_enrolled',
+        sessionIdArg: sessionId,
+        sessionIdHash: sessionIdHash,
+        tokenFragment: tokenFragment,
+      );
       throw BluetoothAttendanceException(
         code: BluetoothAttendanceErrorCode.studentNotEnrolled,
         message: 'غير مسجل في هذه الشعبة',
@@ -466,6 +537,12 @@ class BluetoothAttendanceService {
               .trim()
               .toLowerCase();
           if (existingStatus == 'present' || existingStatus == 'late') {
+            _debugBluetoothValidationFailed(
+              reason: 'already_marked',
+              sessionIdArg: sessionId,
+              sessionIdHash: sessionIdHash,
+              tokenFragment: tokenFragment,
+            );
             throw BluetoothAttendanceException(
               code: BluetoothAttendanceErrorCode.alreadyMarked,
               message: 'تم تسجيل الحضور مسبقًا',
@@ -724,12 +801,13 @@ class BluetoothAttendanceService {
     String? rawPayload,
   }) async {
     final explicitSessionId = (sessionId ?? '').trim();
-    if (explicitSessionId.isNotEmpty) {
+    final hash = (sessionIdHash ?? '').trim();
+    final fragment = (tokenFragment ?? '').trim();
+    if (_shouldResolveExactSessionId(explicitSessionId, hash)) {
+      _debugBluetoothResolveExactStart(explicitSessionId);
       return getSessionById(explicitSessionId);
     }
 
-    final fragment = (tokenFragment ?? '').trim();
-    final hash = (sessionIdHash ?? '').trim();
     final fullToken = (bluetoothSessionToken ?? '').trim();
     if (fragment.isEmpty && hash.isEmpty && fullToken.isEmpty) {
       return _resolveActiveSessionFromDetectedProximity(
@@ -749,6 +827,12 @@ class BluetoothAttendanceService {
       query = query.where('tokenVersion', isEqualTo: tokenVersion);
     }
 
+    _debugBluetoothResolveByHashStart(
+      sessionIdHash: hash,
+      tokenFragment: fragment,
+      tokenVersion: tokenVersion,
+      ignoredSessionIdArg: explicitSessionId,
+    );
     final snapshot = await query.limit(25).get();
     for (final doc in snapshot.docs) {
       final session = BluetoothAttendanceSession.fromDocumentSnapshot(doc);
@@ -762,6 +846,7 @@ class BluetoothAttendanceService {
           !session.bluetoothSessionToken.startsWith(fragment)) {
         continue;
       }
+      _debugBluetoothResolveByHashSuccess(session.sessionId);
       return session;
     }
     return null;
@@ -1147,6 +1232,77 @@ class BluetoothAttendanceService {
     return end.isAfter(start);
   }
 
+  bool _shouldResolveExactSessionId(String sessionId, String sessionIdHash) {
+    if (sessionId.isEmpty) return false;
+    if (sessionId == 'bt_pending') return false;
+    if (sessionIdHash.isNotEmpty && sessionId == sessionIdHash) return false;
+    // Bluetooth session ids are generated as section_date_start. Compact BLE
+    // hashes are short and must be resolved through hash/token metadata.
+    return sessionId.contains('_');
+  }
+
+  void _debugBluetoothSubmitStart({
+    required String? sessionIdArg,
+    required String? sessionIdHash,
+    required String? tokenFragment,
+  }) {
+    if (!kDebugMode) return;
+    debugPrint(
+      '[BluetoothAttendance] BLUETOOTH_SUBMIT_START '
+      'sessionIdArg=${(sessionIdArg ?? '').trim()} '
+      'sessionIdHash=${(sessionIdHash ?? '').trim()} '
+      'tokenFragment=${(tokenFragment ?? '').trim()}',
+    );
+  }
+
+  void _debugBluetoothResolveExactStart(String sessionId) {
+    if (!kDebugMode) return;
+    debugPrint(
+      '[BluetoothAttendance] BLUETOOTH_RESOLVE_BY_EXACT_ID_START '
+      'sessionId=$sessionId',
+    );
+  }
+
+  void _debugBluetoothResolveByHashStart({
+    required String sessionIdHash,
+    required String tokenFragment,
+    required int? tokenVersion,
+    required String ignoredSessionIdArg,
+  }) {
+    if (!kDebugMode) return;
+    debugPrint(
+      '[BluetoothAttendance] BLUETOOTH_RESOLVE_BY_HASH_START '
+      'sessionIdHash=$sessionIdHash '
+      'tokenFragment=$tokenFragment '
+      'tokenVersion=${tokenVersion ?? ''} '
+      'ignoredSessionIdArg=$ignoredSessionIdArg',
+    );
+  }
+
+  void _debugBluetoothResolveByHashSuccess(String sessionId) {
+    if (!kDebugMode) return;
+    debugPrint(
+      '[BluetoothAttendance] BLUETOOTH_RESOLVE_BY_HASH_SUCCESS '
+      'sessionId=$sessionId',
+    );
+  }
+
+  void _debugBluetoothValidationFailed({
+    required String reason,
+    required String? sessionIdArg,
+    required String? sessionIdHash,
+    required String? tokenFragment,
+  }) {
+    if (!kDebugMode) return;
+    debugPrint(
+      '[BluetoothAttendance] BLUETOOTH_SUBMIT_VALIDATION_FAILED '
+      'reason=$reason '
+      'sessionIdArg=${(sessionIdArg ?? '').trim()} '
+      'sessionIdHash=${(sessionIdHash ?? '').trim()} '
+      'tokenFragment=${(tokenFragment ?? '').trim()}',
+    );
+  }
+
   String _shortHash(String input, int length) {
     var hash = 0x811c9dc5;
     for (final unit in utf8.encode(input)) {
@@ -1241,6 +1397,13 @@ class BluetoothAttendanceService {
     required bool auditStored,
   }) {
     if (!kDebugMode) return;
+    debugPrint(
+      '[BluetoothAttendance] BLUETOOTH_ATTENDANCE_WRITE_SUCCESS '
+      'canonicalRecordId=$recordId '
+      'path=$_manualRecordsCollection/$recordId '
+      'sessionId=$sessionId '
+      'status=$status',
+    );
     debugPrint(
       '[BluetoothAttendance] BLUETOOTH_SUBMIT_SUCCESS '
       'canonicalRecordId=$recordId '
