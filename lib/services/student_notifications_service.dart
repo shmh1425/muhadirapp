@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -17,8 +19,10 @@ class StudentNotificationsService {
   static const String _hiddenIdsField = 'hiddenNotificationIds';
   static const String _studentNotifCollection = 'student_notifications';
   static const String _prefsCollection = 'student_notification_prefs';
-  static const String _lectureActionIdPrefix = StudentNotification.lectureActionPrefix;
-  static const String _attendanceIdPrefix = StudentNotification.attendancePrefix;
+  static const String _lectureActionIdPrefix =
+      StudentNotification.lectureActionPrefix;
+  static const String _attendanceIdPrefix =
+      StudentNotification.attendancePrefix;
 
   DocumentReference<Map<String, dynamic>>? _prefsRef() {
     final uid = _auth.currentUser?.uid;
@@ -30,15 +34,17 @@ class StudentNotificationsService {
     int studentId,
   ) {
     if (studentId <= 0) {
-      return Stream<({Set<String> readIds, Set<String> hiddenIds})>.value(
-        (readIds: <String>{}, hiddenIds: <String>{}),
-      );
+      return Stream<({Set<String> readIds, Set<String> hiddenIds})>.value((
+        readIds: <String>{},
+        hiddenIds: <String>{},
+      ));
     }
     final ref = _prefsRef();
     if (ref == null) {
-      return Stream<({Set<String> readIds, Set<String> hiddenIds})>.value(
-        (readIds: <String>{}, hiddenIds: <String>{}),
-      );
+      return Stream<({Set<String> readIds, Set<String> hiddenIds})>.value((
+        readIds: <String>{},
+        hiddenIds: <String>{},
+      ));
     }
     return ref.snapshots().map((snap) {
       final data = snap.data() ?? <String, dynamic>{};
@@ -89,62 +95,12 @@ class StudentNotificationsService {
   /// - attendance records: unread if not in prefs.readNotificationIds and not hidden
   /// - student_notifications docs: unread if isRead != true and not hidden/deleted
   Stream<int> watchTotalUnreadCount(int studentId) {
-    final prefsRef = _prefsRef();
     if (studentId <= 0) {
       return Stream<int>.value(0);
     }
-
-    final recordsQuery = _firestore
-        .collection(_recordsCollection)
-        .where('studentId', isEqualTo: studentId)
-        .where('status', whereIn: const ['absent', 'excused']);
-    final notifQuery = _firestore
-        .collection(_studentNotifCollection)
-        .where('studentId', isEqualTo: studentId);
-
-    final prefsStream = prefsRef == null
-        ? Stream<Map<String, dynamic>>.value(<String, dynamic>{})
-        : prefsRef.snapshots().map((s) => s.data() ?? <String, dynamic>{});
-
-    return prefsStream.asyncExpand((prefsData) {
-      final readIds = ((prefsData[_readIdsField] as List<dynamic>?) ?? const [])
-          .map((e) => e.toString())
-          .toSet();
-      final hiddenIds = ((prefsData[_hiddenIdsField] as List<dynamic>?) ?? const [])
-          .map((e) => e.toString())
-          .toSet();
-
-      bool attendanceHidden(String recordId) {
-        return hiddenIds.contains(recordId) ||
-            hiddenIds.contains('$_attendanceIdPrefix$recordId');
-      }
-
-      bool studentNotifHidden(String notifId) {
-        return hiddenIds.contains(notifId) ||
-            hiddenIds.contains('$_lectureActionIdPrefix$notifId');
-      }
-
-      return recordsQuery.snapshots().asyncExpand((recordsSnap) {
-        return notifQuery.snapshots().map((notifSnap) {
-          var total = 0;
-
-          for (final doc in recordsSnap.docs) {
-            if (attendanceHidden(doc.id)) continue;
-            if (!readIds.contains(doc.id)) total++;
-          }
-
-          for (final doc in notifSnap.docs) {
-            if (studentNotifHidden(doc.id)) continue;
-            final data = doc.data();
-            if (data['isDeleted'] == true) continue;
-            if (data['isRead'] == true) continue;
-            total++;
-          }
-
-          return total;
-        });
-      });
-    });
+    return watchCurrentStudentNotifications(
+      studentId,
+    ).map((items) => items.where((n) => !n.isRead).length);
   }
 
   Future<void> markAllAsRead(int studentId) async {
@@ -156,7 +112,10 @@ class StudentNotificationsService {
     }, SetOptions(merge: true));
   }
 
-  Future<void> markNotificationsAsRead(int studentId, List<String> notificationIds) async {
+  Future<void> markNotificationsAsRead(
+    int studentId,
+    List<String> notificationIds,
+  ) async {
     if (studentId <= 0) return;
     final ids = notificationIds
         .map((e) => e.trim())
@@ -216,9 +175,15 @@ class StudentNotificationsService {
     }, SetOptions(merge: true));
   }
 
-  Future<void> hideNotifications(int studentId, List<String> notificationIds) async {
+  Future<void> hideNotifications(
+    int studentId,
+    List<String> notificationIds,
+  ) async {
     if (studentId <= 0) return;
-    final ids = notificationIds.map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    final ids = notificationIds
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
     if (ids.isEmpty) return;
     final ref = _prefsRef();
     if (ref == null) return;
@@ -253,13 +218,10 @@ class StudentNotificationsService {
   }) async {
     final ref = await _getOwnedStudentNotifRef(studentId, notificationDocId);
     if (ref == null) return;
-    await ref.set(
-      <String, dynamic>{
-        'isRead': true,
-        'updatedAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
+    await ref.set(<String, dynamic>{
+      'isRead': true,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   Future<void> deleteStudentNotificationDoc({
@@ -272,12 +234,15 @@ class StudentNotificationsService {
   }
 
   /// Lecturer-style: one stream that returns the merged list of student notifications.
-  Stream<List<StudentNotification>> watchCurrentStudentNotifications(int studentId) {
+  Stream<List<StudentNotification>> watchCurrentStudentNotifications(
+    int studentId,
+  ) {
     if (studentId <= 0) {
-      return const Stream<List<StudentNotification>>.empty();
+      return Stream<List<StudentNotification>>.value(
+        const <StudentNotification>[],
+      );
     }
 
-    final prefsRef = _prefsRef();
     final recordsQuery = _firestore
         .collection(_recordsCollection)
         .where('studentId', isEqualTo: studentId)
@@ -286,61 +251,122 @@ class StudentNotificationsService {
         .collection(_studentNotifCollection)
         .where('studentId', isEqualTo: studentId);
 
-    bool attendanceHidden(Set<String> hiddenIds, String recordId) {
-      return hiddenIds.contains(recordId) ||
-          hiddenIds.contains('$_attendanceIdPrefix$recordId');
+    late final StreamController<List<StudentNotification>> controller;
+    StreamSubscription<_StudentNotificationPrefs>? prefsSub;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? recordsSub;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? notifSub;
+
+    var prefs = const _StudentNotificationPrefs();
+    QuerySnapshot<Map<String, dynamic>>? recordsSnap;
+    QuerySnapshot<Map<String, dynamic>>? notifSnap;
+    var hasPrefs = false;
+
+    void emitIfReady() {
+      final currentRecords = recordsSnap;
+      final currentNotifs = notifSnap;
+      if (!hasPrefs || currentRecords == null || currentNotifs == null) return;
+      if (controller.isClosed) return;
+      controller.add(
+        _buildCurrentStudentNotifications(
+          studentId: studentId,
+          prefs: prefs,
+          recordsSnap: currentRecords,
+          notifSnap: currentNotifs,
+        ),
+      );
     }
 
-    bool studentNotifHidden(Set<String> hiddenIds, String notifId) {
-      return hiddenIds.contains(notifId) ||
-          hiddenIds.contains('$_lectureActionIdPrefix$notifId');
+    controller = StreamController<List<StudentNotification>>(
+      onListen: () {
+        prefsSub = _watchNotificationPrefs().listen((nextPrefs) {
+          prefs = nextPrefs;
+          hasPrefs = true;
+          emitIfReady();
+        }, onError: controller.addError);
+        recordsSub = recordsQuery.snapshots().listen((snap) {
+          recordsSnap = snap;
+          emitIfReady();
+        }, onError: controller.addError);
+        notifSub = notifQuery.snapshots().listen((snap) {
+          notifSnap = snap;
+          emitIfReady();
+        }, onError: controller.addError);
+      },
+      onCancel: () async {
+        await prefsSub?.cancel();
+        await recordsSub?.cancel();
+        await notifSub?.cancel();
+      },
+    );
+
+    return controller.stream;
+  }
+
+  Stream<_StudentNotificationPrefs> _watchNotificationPrefs() {
+    final ref = _prefsRef();
+    if (ref == null) {
+      return Stream<_StudentNotificationPrefs>.value(
+        const _StudentNotificationPrefs(),
+      );
     }
-
-    final prefsStream = prefsRef == null
-        ? Stream<Map<String, dynamic>>.value(<String, dynamic>{})
-        : prefsRef.snapshots().map((s) => s.data() ?? <String, dynamic>{});
-
-    return prefsStream.asyncExpand((prefsData) {
-      final readIds = ((prefsData[_readIdsField] as List<dynamic>?) ?? const [])
-          .map((e) => e.toString())
-          .toSet();
-      final hiddenIds =
-          ((prefsData[_hiddenIdsField] as List<dynamic>?) ?? const [])
-              .map((e) => e.toString())
-              .toSet();
-
-      return recordsQuery.snapshots().asyncExpand((recordsSnap) {
-        return notifQuery.snapshots().map((notifSnap) {
-          final list = <StudentNotification>[];
-
-          for (final doc in recordsSnap.docs) {
-            if (attendanceHidden(hiddenIds, doc.id)) continue;
-            list.add(
-              StudentNotification.fromAttendanceDoc(
-                doc,
-                studentId: studentId,
-                isRead: readIds.contains(doc.id),
-              ),
-            );
-          }
-
-          for (final doc in notifSnap.docs) {
-            if (studentNotifHidden(hiddenIds, doc.id)) continue;
-            final data = doc.data();
-            if (data['isDeleted'] == true) continue;
-            list.add(
-              StudentNotification.fromStudentNotificationDoc(
-                doc,
-                studentId: studentId,
-              ),
-            );
-          }
-
-          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          return list;
-        });
-      });
+    return ref.snapshots().map((snap) {
+      final data = snap.data() ?? <String, dynamic>{};
+      return _StudentNotificationPrefs(
+        readIds: _stringSetFromListField(data[_readIdsField]),
+        hiddenIds: _stringSetFromListField(data[_hiddenIdsField]),
+      );
     });
+  }
+
+  List<StudentNotification> _buildCurrentStudentNotifications({
+    required int studentId,
+    required _StudentNotificationPrefs prefs,
+    required QuerySnapshot<Map<String, dynamic>> recordsSnap,
+    required QuerySnapshot<Map<String, dynamic>> notifSnap,
+  }) {
+    final list = <StudentNotification>[];
+
+    for (final doc in recordsSnap.docs) {
+      if (_attendanceHidden(prefs.hiddenIds, doc.id)) continue;
+      list.add(
+        StudentNotification.fromAttendanceDoc(
+          doc,
+          studentId: studentId,
+          isRead: prefs.readIds.contains(doc.id),
+        ),
+      );
+    }
+
+    for (final doc in notifSnap.docs) {
+      if (_studentNotifHidden(prefs.hiddenIds, doc.id)) continue;
+      final data = doc.data();
+      if (data['isDeleted'] == true) continue;
+      list.add(
+        StudentNotification.fromStudentNotificationDoc(
+          doc,
+          studentId: studentId,
+        ),
+      );
+    }
+
+    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return list;
+  }
+
+  bool _attendanceHidden(Set<String> hiddenIds, String recordId) {
+    return hiddenIds.contains(recordId) ||
+        hiddenIds.contains('$_attendanceIdPrefix$recordId');
+  }
+
+  bool _studentNotifHidden(Set<String> hiddenIds, String notifId) {
+    return hiddenIds.contains(notifId) ||
+        hiddenIds.contains('$_lectureActionIdPrefix$notifId');
+  }
+
+  Set<String> _stringSetFromListField(Object? value) {
+    return ((value as List<dynamic>?) ?? const [])
+        .map((e) => e.toString())
+        .toSet();
   }
 
   /// Add an in-app notification for successful attendance registration.
@@ -382,7 +408,9 @@ class StudentNotificationsService {
       'section': sec,
       'sectionId': (sectionId ?? '').toString().trim(),
       'sessionId': (sessionId ?? '').toString().trim(),
-      'lectureDate': lectureDate == null ? null : Timestamp.fromDate(lectureDate),
+      'lectureDate': lectureDate == null
+          ? null
+          : Timestamp.fromDate(lectureDate),
       'lectureStartTime': (lectureStartTime ?? '').toString().trim(),
       'lectureEndTime': (lectureEndTime ?? '').toString().trim(),
       'isRead': false,
@@ -421,7 +449,8 @@ class StudentNotificationsService {
     required StudentNotification notification,
   }) async {
     if (studentId <= 0) return;
-    if (notification.source == StudentNotificationSource.studentNotificationDoc) {
+    if (notification.source ==
+        StudentNotificationSource.studentNotificationDoc) {
       final docId = notification.firestoreDocId;
       if (docId != null && docId.isNotEmpty) {
         await deleteStudentNotificationDoc(
@@ -480,3 +509,12 @@ class StudentNotificationsService {
   }
 }
 
+class _StudentNotificationPrefs {
+  const _StudentNotificationPrefs({
+    this.readIds = const <String>{},
+    this.hiddenIds = const <String>{},
+  });
+
+  final Set<String> readIds;
+  final Set<String> hiddenIds;
+}
