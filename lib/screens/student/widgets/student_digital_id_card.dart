@@ -27,7 +27,6 @@ class StudentDigitalIdCard extends StatefulWidget {
 class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
   /// Matches app-wide teal (see lecturer profile, security nav, student screens).
   static const Color _darkTeal = Color(0xFF006571);
-  static const Color _bodyText = Color(0xFF2D2D2D);
 
   /// Fixed card footprint — long names/majors ellipsize instead of resizing the card.
   static const double _cardHeight = 198;
@@ -107,6 +106,8 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
     final collegeEn = s.collegeSafe.trim();
     final majorArNormalized = _normalizeMajorAr(s.majorArSafe, s.major);
     final majorEn = s.major.trim();
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return AnimatedBuilder(
       animation: TranslationController.instance,
@@ -123,8 +124,10 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
                 );
               });
             }
-            final imageUrl = ProfilePhotoSessionService.instance
-                    .resolveStudentDisplayUrl(firestoreData: data) ??
+            final imageUrl =
+                ProfilePhotoSessionService.instance.resolveStudentDisplayUrl(
+                  firestoreData: data,
+                ) ??
                 '';
 
             final deptEnRaw = s.departmentSafe.trim();
@@ -150,27 +153,27 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
 
             final displayIssue = _resolvedIssueMmYyyy(data);
 
-            const detailSideStyle = TextStyle(
+            final detailSideStyle = TextStyle(
               fontFamily: 'Cairo',
               fontSize: 11.5,
               height: 1.32,
               fontWeight: FontWeight.w400,
-              color: _bodyText,
+              color: colorScheme.onSurface,
             );
 
-            const nameLineStyle = TextStyle(
+            final nameLineStyle = TextStyle(
               fontFamily: 'Cairo',
               fontSize: 13,
               height: 1.28,
               fontWeight: FontWeight.w700,
-              color: _bodyText,
+              color: colorScheme.onSurface,
             );
 
-            const footerMuted = TextStyle(
+            final footerMuted = TextStyle(
               fontFamily: 'Cairo',
               fontSize: 10,
               height: 1.35,
-              color: Color(0xFF9CA3AF),
+              color: colorScheme.onSurfaceVariant,
               fontWeight: FontWeight.w400,
             );
 
@@ -224,12 +227,12 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
                 width: 32,
                 height: 32,
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const SizedBox(
+                errorBuilder: (_, __, ___) => SizedBox(
                   width: 32,
                   height: 32,
                   child: Icon(
                     Icons.school_outlined,
-                    color: _bodyText,
+                    color: colorScheme.onSurface,
                     size: 22,
                   ),
                 ),
@@ -255,11 +258,11 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
                         textAlign: headerAlign,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'Cairo',
                           fontSize: 11,
                           fontWeight: FontWeight.w400,
-                          color: _bodyText,
+                          color: colorScheme.onSurfaceVariant,
                           height: 1.28,
                         ),
                       ),
@@ -285,15 +288,21 @@ class _StudentDigitalIdCardState extends State<StudentDigitalIdCard> {
               width: double.infinity,
               height: _cardHeight,
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
+                color: isDark
+                    ? colorScheme.surfaceContainerHighest
+                    : colorScheme.surface,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: _darkTeal.withValues(alpha: 0.22),
+                  color: isDark
+                      ? _darkTeal.withValues(alpha: 0.55)
+                      : _darkTeal.withValues(alpha: 0.22),
                   width: 1,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: _darkTeal.withValues(alpha: 0.12),
+                    color: isDark
+                        ? Colors.black.withValues(alpha: 0.24)
+                        : _darkTeal.withValues(alpha: 0.12),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),

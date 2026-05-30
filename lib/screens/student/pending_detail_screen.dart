@@ -37,13 +37,16 @@ class PendingDetailScreen extends StatefulWidget {
 
 class _PendingDetailScreenState extends State<PendingDetailScreen> {
   late final Future<
-      ({
-        String sectionId,
-        String sessionId,
-        DateTime lectureDate,
-        String timeRange
-      })?> _attendanceMetaFuture;
-  late final Future<({String url, String name})?> _excuseAttachmentFallbackFuture;
+    ({
+      String sectionId,
+      String sessionId,
+      DateTime lectureDate,
+      String timeRange,
+    })?
+  >
+  _attendanceMetaFuture;
+  late final Future<({String url, String name})?>
+  _excuseAttachmentFallbackFuture;
 
   @override
   void initState() {
@@ -60,39 +63,46 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
         .where('isExcuseSubmission', isEqualTo: true)
         .snapshots()
         .map((snap) {
-      if (snap.docs.isEmpty) return null;
+          if (snap.docs.isEmpty) return null;
 
-      DateTime? tsOf(Map<String, dynamic> d) {
-        final c = d['clientCreatedAt'];
-        if (c is Timestamp) return c.toDate();
-        final s = d['createdAt'];
-        if (s is Timestamp) return s.toDate();
-        return null;
-      }
+          DateTime? tsOf(Map<String, dynamic> d) {
+            final c = d['clientCreatedAt'];
+            if (c is Timestamp) return c.toDate();
+            final s = d['createdAt'];
+            if (s is Timestamp) return s.toDate();
+            return null;
+          }
 
-      QueryDocumentSnapshot<Map<String, dynamic>>? best;
-      DateTime? bestTs;
+          QueryDocumentSnapshot<Map<String, dynamic>>? best;
+          DateTime? bestTs;
 
-      for (final doc in snap.docs) {
-        final t = tsOf(doc.data());
-        if (best == null) {
-          best = doc;
-          bestTs = t;
-          continue;
-        }
-        if (t == null && bestTs == null) continue;
-        if (t != null && (bestTs == null || t.isAfter(bestTs))) {
-          best = doc;
-          bestTs = t;
-        }
-      }
+          for (final doc in snap.docs) {
+            final t = tsOf(doc.data());
+            if (best == null) {
+              best = doc;
+              bestTs = t;
+              continue;
+            }
+            if (t == null && bestTs == null) continue;
+            if (t != null && (bestTs == null || t.isAfter(bestTs))) {
+              best = doc;
+              bestTs = t;
+            }
+          }
 
-      return (best ?? snap.docs.first).data();
-    });
+          return (best ?? snap.docs.first).data();
+        });
   }
 
-  Future<({String sectionId, String sessionId, DateTime lectureDate, String timeRange})?>
-      _fetchAttendanceMeta() async {
+  Future<
+    ({
+      String sectionId,
+      String sessionId,
+      DateTime lectureDate,
+      String timeRange,
+    })?
+  >
+  _fetchAttendanceMeta() async {
     final rid = widget.attendanceRecordId.trim();
     if (rid.isEmpty) return null;
     try {
@@ -114,12 +124,16 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
         final y = int.tryParse((data['lectureYear'] ?? '').toString()) ?? 0;
         final m = int.tryParse((data['lectureMonth'] ?? '').toString()) ?? 0;
         final d = int.tryParse((data['lectureDay'] ?? '').toString()) ?? 0;
-        lectureDate = (y > 0 && m > 0 && d > 0) ? DateTime(y, m, d) : DateTime.now();
+        lectureDate = (y > 0 && m > 0 && d > 0)
+            ? DateTime(y, m, d)
+            : DateTime.now();
       }
 
       final start = (data['lectureStartTime'] ?? '').toString().trim();
       final end = (data['lectureEndTime'] ?? '').toString().trim();
-      final range = (start.isNotEmpty && end.isNotEmpty) ? '$start-$end' : widget.timeRange;
+      final range = (start.isNotEmpty && end.isNotEmpty)
+          ? '$start-$end'
+          : widget.timeRange;
 
       if (sectionId.isEmpty || sessionId.isEmpty) return null;
       return (
@@ -133,7 +147,8 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
     }
   }
 
-  Future<({String url, String name})?> _fetchExcuseAttachmentFromRequests() async {
+  Future<({String url, String name})?>
+  _fetchExcuseAttachmentFromRequests() async {
     final rid = widget.attendanceRecordId.trim();
     if (rid.isEmpty || widget.studentId <= 0) return null;
     try {
@@ -158,7 +173,8 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
         final url = (doc.data()['attachmentUrl'] ?? '').toString().trim();
         if (url.isEmpty) continue;
         final t = submittedAtOf(doc.data());
-        if (best == null || (t != null && (bestTs == null || t.isAfter(bestTs)))) {
+        if (best == null ||
+            (t != null && (bestTs == null || t.isAfter(bestTs)))) {
           best = doc;
           bestTs = t;
         }
@@ -221,7 +237,7 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
         return Directionality(
           textDirection: translation.textDirection,
           child: Scaffold(
-            backgroundColor: Colors.white,
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             bottomNavigationBar: NavBarSettingsArabic(
               selectedIndex: 1,
               onItemTapped: (index) {
@@ -248,7 +264,9 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
                       stream: _watchLatestPendingSubmission(),
                       builder: (context, snap) {
                         if (snap.hasError && snap.data == null) {
-                          debugPrint('[PendingDetail] stream error: ${snap.error}');
+                          debugPrint(
+                            '[PendingDetail] stream error: ${snap.error}',
+                          );
                           return Padding(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 24,
@@ -325,10 +343,7 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
       child: Row(
         children: <Widget>[
           IconButton(
-            icon: StudentBackChevronIcon(
-              color: Color(0xFF006571),
-              size: 16,
-            ),
+            icon: StudentBackChevronIcon(color: Color(0xFF006571), size: 16),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
             onPressed: () => Navigator.of(context).maybePop(),
@@ -358,18 +373,26 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
     required String attachmentUrl,
     required bool translateToEnglish,
   }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final attachmentAvailable = attachmentUrl.trim().isNotEmpty;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark
+            ? colorScheme.surfaceContainerHighest
+            : colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: Colors.grey.shade300,
+          color: isDark
+              ? colorScheme.outlineVariant.withValues(alpha: 0.75)
+              : Colors.grey.shade300,
           width: 1,
         ),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -388,10 +411,10 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
               ),
               child: Text(
                 translateToEnglish ? 'Pending' : 'قيد الانتظار',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: Colors.white,
+                  color: Colors.black.withValues(alpha: 0.72),
                 ),
               ),
             ),
@@ -401,10 +424,10 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
             alignment: AlignmentDirectional.centerStart,
             child: TText(
               widget.course,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF1A1A1A),
+                color: colorScheme.onSurface,
               ),
               textAlign: TextAlign.start,
             ),
@@ -414,10 +437,10 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
             alignment: AlignmentDirectional.centerStart,
             child: TText(
               widget.dateText,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF1A1A1A),
+                color: colorScheme.onSurface,
               ),
               textAlign: TextAlign.start,
             ),
@@ -427,10 +450,10 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
             alignment: AlignmentDirectional.centerStart,
             child: Text(
               widget.timeRange,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF1A1A1A),
+                color: colorScheme.onSurface,
               ),
               textAlign: TextAlign.start,
             ),
@@ -441,18 +464,14 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                const Icon(
-                  Icons.push_pin,
-                  color: Color(0xFFFFE082),
-                  size: 20,
-                ),
+                const Icon(Icons.push_pin, color: Color(0xFFFFE082), size: 20),
                 const SizedBox(width: 8),
                 TText(
                   translateToEnglish ? 'Text:' : 'النص :',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1A1A1A),
+                    color: colorScheme.onSurface,
                   ),
                 ),
               ],
@@ -464,19 +483,19 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
             child: excuseText.isEmpty
                 ? Text(
                     '—',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       height: 1.5,
-                      color: Color(0xFF1A1A1A),
+                      color: colorScheme.onSurface,
                     ),
                     textAlign: TextAlign.start,
                   )
                 : TText(
                     excuseText,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       height: 1.5,
-                      color: Color(0xFF1A1A1A),
+                      color: colorScheme.onSurface,
                     ),
                     textAlign: TextAlign.start,
                   ),
@@ -488,27 +507,34 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
               color: Colors.transparent,
               child: InkWell(
                 borderRadius: BorderRadius.circular(8),
-                onTap: attachmentUrl.trim().isEmpty
+                onTap: !attachmentAvailable
                     ? null
                     : () => _openAttachmentPreview(
-                          context,
-                          attachmentUrl,
-                          attachmentName.isNotEmpty ? attachmentName : null,
-                        ),
+                        context,
+                        attachmentUrl,
+                        attachmentName.isNotEmpty ? attachmentName : null,
+                      ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 4,
+                    horizontal: 2,
+                  ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF5F5F5),
+                          color: isDark
+                              ? colorScheme.surface
+                              : const Color(0xFFF5F5F5),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.description_outlined,
-                          color: Color(0xFF616161),
+                          color: attachmentAvailable
+                              ? const Color(0xFF006571)
+                              : colorScheme.onSurfaceVariant,
                           size: 24,
                         ),
                       ),
@@ -516,19 +542,21 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
                       TText(
                         attachmentName.isNotEmpty
                             ? attachmentName
-                            : (translateToEnglish ? 'Attachment' : 'مرفق العذر'),
+                            : (translateToEnglish
+                                  ? 'Attachment'
+                                  : 'مرفق العذر'),
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: attachmentUrl.trim().isEmpty
-                              ? Colors.grey.shade400
+                          color: !attachmentAvailable
+                              ? colorScheme.onSurfaceVariant
                               : const Color(0xFF006571),
-                          decoration: attachmentUrl.trim().isEmpty
+                          decoration: !attachmentAvailable
                               ? TextDecoration.none
                               : TextDecoration.underline,
                         ),
                       ),
-                      if (attachmentUrl.trim().isNotEmpty) ...<Widget>[
+                      if (attachmentAvailable) ...<Widget>[
                         const SizedBox(width: 8),
                         TText(
                           translateToEnglish ? 'Preview' : 'معاينة',
@@ -552,26 +580,28 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
               translateToEnglish
                   ? 'Excuse status: awaiting instructor review.'
                   : 'حالة العذر: بانتظار مراجعة الدكتور.',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF666666),
+                color: colorScheme.onSurfaceVariant,
               ),
               textAlign: TextAlign.start,
             ),
           ),
           const SizedBox(height: 22),
           FutureBuilder<
-              ({
-                String sectionId,
-                String sessionId,
-                DateTime lectureDate,
-                String timeRange
-              })?>(
+            ({
+              String sectionId,
+              String sessionId,
+              DateTime lectureDate,
+              String timeRange,
+            })?
+          >(
             future: _attendanceMetaFuture,
             builder: (context, metaSnap) {
               final meta = metaSnap.data;
-              final bool loading = metaSnap.connectionState == ConnectionState.waiting;
+              final bool loading =
+                  metaSnap.connectionState == ConnectionState.waiting;
 
               return SizedBox(
                 height: 50,
@@ -615,8 +645,9 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
                         },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF006571),
-                    disabledBackgroundColor:
-                        const Color(0xFF006571).withValues(alpha: 0.5),
+                    disabledBackgroundColor: const Color(
+                      0xFF006571,
+                    ).withValues(alpha: 0.5),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(25),
                     ),
@@ -650,4 +681,3 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
     );
   }
 }
-
