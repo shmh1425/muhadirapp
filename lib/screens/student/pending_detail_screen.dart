@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -5,6 +7,7 @@ import 'components/custom_nav_bar_icons.dart';
 import 'components/notification_bell.dart';
 import 'components/student_back_chevron_icon.dart';
 import '../../widgets/lecturer/excuse_attachment_preview.dart';
+import '../../models/excuse/excuse_request.dart';
 import 'home_screen.dart';
 import 'settings_screen.dart';
 import 'submit_excuse_screen.dart';
@@ -36,6 +39,8 @@ class PendingDetailScreen extends StatefulWidget {
 }
 
 class _PendingDetailScreenState extends State<PendingDetailScreen> {
+  Timer? _editTimer;
+
   late final Future<
     ({
       String sectionId,
@@ -45,14 +50,41 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
     })?
   >
   _attendanceMetaFuture;
-  late final Future<({String url, String name})?>
-  _excuseAttachmentFallbackFuture;
+  late final Future<({String url, String name, DateTime? editDeadline})?>
+  _excuseRequestInfoFuture;
 
   @override
   void initState() {
     super.initState();
     _attendanceMetaFuture = _fetchAttendanceMeta();
-    _excuseAttachmentFallbackFuture = _fetchExcuseAttachmentFromRequests();
+    _excuseRequestInfoFuture = _fetchLatestExcuseRequestInfo();
+  }
+
+  @override
+  void dispose() {
+    _editTimer?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleEditTimer(DateTime deadline) {
+    _editTimer?.cancel();
+    if (DateTime.now().isAfter(deadline)) return;
+    final remaining = deadline.difference(DateTime.now());
+    _editTimer = Timer(remaining + const Duration(milliseconds: 200), () {
+      if (mounted) setState(() {});
+    });
+  }
+
+  DateTime? _editDeadlineFromNotification(Map<String, dynamic> data) {
+    DateTime? tsOf(dynamic v) => v is Timestamp ? v.toDate() : null;
+    final base =
+        tsOf(data['clientCreatedAt']) ?? tsOf(data['createdAt']);
+    return base?.add(ExcuseRequest.pendingEditWindow);
+  }
+
+  bool _canEditExcuse(DateTime? editDeadline) {
+    if (editDeadline == null) return true;
+    return !DateTime.now().isAfter(editDeadline);
   }
 
   Stream<Map<String, dynamic>?> _watchLatestPendingSubmission() {
@@ -147,8 +179,8 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
     }
   }
 
-  Future<({String url, String name})?>
-  _fetchExcuseAttachmentFromRequests() async {
+  Future<({String url, String name, DateTime? editDeadline})?>
+  _fetchLatestExcuseRequestInfo() async {
     final rid = widget.attendanceRecordId.trim();
     if (rid.isEmpty || widget.studentId <= 0) return null;
     try {
@@ -170,8 +202,8 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
       QueryDocumentSnapshot<Map<String, dynamic>>? best;
       DateTime? bestTs;
       for (final doc in snap.docs) {
-        final url = (doc.data()['attachmentUrl'] ?? '').toString().trim();
-        if (url.isEmpty) continue;
+        final status = (doc.data()['status'] ?? '').toString().trim();
+        if (status.isNotEmpty && status.toLowerCase() != 'pending') continue;
         final t = submittedAtOf(doc.data());
         if (best == null ||
             (t != null && (bestTs == null || t.isAfter(bestTs)))) {
@@ -182,9 +214,11 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
       final picked = best ?? snap.docs.first;
       final data = picked.data();
       final url = (data['attachmentUrl'] ?? '').toString().trim();
-      if (url.isEmpty) return null;
       final name = (data['attachmentName'] ?? '').toString().trim();
-      return (url: url, name: name);
+      final base = submittedAtOf(data);
+      final editDeadline = base?.add(ExcuseRequest.pendingEditWindow);
+      if (url.isEmpty && base == null) return null;
+      return (url: url, name: name, editDeadline: editDeadline);
     } catch (_) {
       return null;
     }
@@ -296,8 +330,10 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
                         final streamAttachmentUrl =
                             (data['attachmentUrl'] ?? '').toString().trim();
 
-                        return FutureBuilder<({String url, String name})?>(
-                          future: _excuseAttachmentFallbackFuture,
+                        return FutureBuilder<
+                          ({String url, String name, DateTime? editDeadline})?
+                        >(
+                          future: _excuseRequestInfoFuture,
                           builder: (context, fallbackSnap) {
                             final fallback = fallbackSnap.data;
                             final attachmentUrl = _resolveAttachmentUrl(
@@ -308,6 +344,14 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
                               streamName: streamAttachmentName,
                               fallbackName: fallback?.name,
                             );
+                            final editDeadline =
+                                fallback?.editDeadline ??
+                                _editDeadlineFromNotification(data);
+                            if (editDeadline != null &&
+                                _canEditExcuse(editDeadline)) {
+                              _scheduleEditTimer(editDeadline);
+                            }
+                            final canEdit = _canEditExcuse(editDeadline);
 
                             return SingleChildScrollView(
                               padding: const EdgeInsets.symmetric(
@@ -321,6 +365,7 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
                                 attachmentUrl: attachmentUrl,
                                 translateToEnglish:
                                     translation.translateToEnglish,
+                                canEdit: canEdit,
                               ),
                             );
                           },
@@ -372,6 +417,7 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
     required String attachmentName,
     required String attachmentUrl,
     required bool translateToEnglish,
+    required bool canEdit,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -385,16 +431,16 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
             : colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: isDark
-              ? colorScheme.outlineVariant.withValues(alpha: 0.75)
-              : Colors.grey.shade300,
+          color: colorScheme.outlineVariant.withValues(
+            alpha: isDark ? 0.75 : 0.15,
+          ),
           width: 1,
         ),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.09),
+            blurRadius: isDark ? 10 : 12,
+            offset: Offset(0, isDark ? 4 : 5),
           ),
         ],
       ),
@@ -589,7 +635,8 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
             ),
           ),
           const SizedBox(height: 22),
-          FutureBuilder<
+          if (canEdit)
+            FutureBuilder<
             ({
               String sectionId,
               String sessionId,
@@ -675,7 +722,7 @@ class _PendingDetailScreenState extends State<PendingDetailScreen> {
                 ),
               );
             },
-          ),
+          )
         ],
       ),
     );

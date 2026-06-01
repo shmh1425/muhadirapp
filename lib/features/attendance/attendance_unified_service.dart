@@ -78,7 +78,7 @@ class AttendanceUnifiedService {
   Future<AttendanceSubmissionResult> _submitQrOnline(
     AttendancePayload payload,
   ) async {
-    if (!await AttendanceConnectivity.isOnline()) {
+    if (!await AttendanceConnectivity.isOnlineForAttendance()) {
       AttendancePipelineLogger.log(
         AttendancePipelineLogger.qr,
         'rejected offline',
@@ -107,7 +107,7 @@ class AttendanceUnifiedService {
   Future<AttendanceSubmissionResult> _submitOfflineCapable(
     AttendancePayload payload,
   ) async {
-    if (!await AttendanceConnectivity.isOnline()) {
+    if (!await AttendanceConnectivity.isOnlineForAttendance()) {
       AttendancePipelineLogger.log(
         AttendancePipelineLogger.offline,
         'no connectivity — enqueue immediately',
@@ -131,6 +131,9 @@ class AttendanceUnifiedService {
     } on NfcAttendanceException {
       rethrow;
     } on BluetoothAttendanceException catch (e) {
+      if (e.code == BluetoothAttendanceErrorCode.alreadyMarked) {
+        return AttendanceSubmissionResult.duplicate(AttendanceSource.bluetooth);
+      }
       if (e.code == BluetoothAttendanceErrorCode.unknown) {
         AttendancePipelineLogger.log(
           AttendancePipelineLogger.offline,

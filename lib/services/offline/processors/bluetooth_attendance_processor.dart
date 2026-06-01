@@ -15,6 +15,26 @@ class BluetoothAttendanceProcessor implements OfflineOperationProcessor {
   Future<void> process(OfflineOperation operation) async {
     final payload = AttendancePayload.fromQueueMap(operation.payload);
     final meta = payload.metadata ?? payload.toQueuePayload();
+    try {
+      await _submit(meta, payload);
+    } on BluetoothAttendanceException catch (e) {
+      if (e.code == BluetoothAttendanceErrorCode.alreadyMarked) {
+        if (kDebugMode) {
+          debugPrint(
+            '[ATTENDANCE_SYNC] bluetooth already marked — treating as success '
+            'operationId=${operation.id}',
+          );
+        }
+        return;
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _submit(
+    Map<String, dynamic> meta,
+    AttendancePayload payload,
+  ) async {
     await BluetoothAttendanceService.instance.submitAttendanceFromBluetoothSignal(
       sessionId: (meta['sessionId'] ?? payload.sessionId).toString(),
       bluetoothSessionToken: meta['bluetoothSessionToken']?.toString(),
@@ -25,12 +45,8 @@ class BluetoothAttendanceProcessor implements OfflineOperationProcessor {
       detectedSignalId: meta['detectedSignalId']?.toString(),
       rawPayload: meta['rawPayload']?.toString(),
       currentTime: payload.timestamp.toLocal(),
+      queueReplay: true,
     );
-    if (kDebugMode) {
-      debugPrint(
-        '[ATTENDANCE_SYNC] bluetooth replay success operationId=${operation.id}',
-      );
-    }
   }
 
   static int? _safeInt(dynamic value) {

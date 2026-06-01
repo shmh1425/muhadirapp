@@ -24,8 +24,10 @@ class ScheduleScreen extends ConsumerStatefulWidget {
 
 class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   static const Color _primaryColor = Color(0xFF006571);
-  static const double _timeColWidth = 52;
+  /// عمود الأوقات (يمين الجدول في العربية) — عرض كافٍ لـ «08:00 - 09:00».
+  static const double _timeColWidth = 58;
   static const double _rowHeight = 60;
+  static const Color _dayHeaderBgLight = Color(0xFFF1F3F4);
 
   String _formatHHmm(String time) {
     final parts = time.split(':');
@@ -46,6 +48,23 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     'الأربعاء',
     'الخميس',
   ];
+
+  /// خطوط شبكة جدول الأيام (واضحة على الخلفية البيضاء).
+  Color _dayGridLineColor(BuildContext context) {
+    final theme = Theme.of(context);
+    if (theme.brightness == Brightness.dark) {
+      return theme.colorScheme.outlineVariant.withValues(alpha: 0.5);
+    }
+    return const Color(0xFFD8DEE4);
+  }
+
+  Color _dayHeaderBackground(BuildContext context) {
+    final theme = Theme.of(context);
+    if (theme.brightness == Brightness.dark) {
+      return theme.colorScheme.surfaceContainerHigh;
+    }
+    return _dayHeaderBgLight;
+  }
 
   /// عربي (RTL): الأحد أول الأسبوع على **يمين** الجدول بجانب عمود الوقت.
   List<String> _daysInTableOrder(bool rtl) {
@@ -297,12 +316,13 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     final isRtl = translation.textDirection == TextDirection.rtl;
     final tableHeight = timeSlots.length * _rowHeight;
     final colorScheme = Theme.of(context).colorScheme;
+    final gridLine = _dayGridLineColor(context);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: Container(
         decoration: BoxDecoration(
-          border: Border.all(color: colorScheme.outlineVariant, width: 1),
+          border: Border.all(color: gridLine),
           color: colorScheme.surface,
         ),
         // اتجاه الرسم LTR ثابت؛ عمود الوقت يُوضع يمين/يسار حسب اللغة،
@@ -322,7 +342,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                       height: tableHeight,
                       child: _buildTimeColumn(timeSlots),
                     ),
-                  ..._daysInTableOrder(isRtl).map((day) {
+                  ..._daysInTableOrder(isRtl).map((String day) {
                     return SizedBox(
                       width: dayWidth,
                       height: tableHeight,
@@ -354,70 +374,77 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
     final translation = TranslationController.instance;
     final isRtl = translation.textDirection == TextDirection.rtl;
     final colorScheme = Theme.of(context).colorScheme;
-    final headerColor = colorScheme.surfaceContainerHighest;
+    final headerBg = _dayHeaderBackground(context);
+    final gridLine = _dayGridLineColor(context);
     return Directionality(
       textDirection: TextDirection.ltr,
-      child: Row(
-        children: <Widget>[
-          if (!isRtl)
-            SizedBox(
-              width: _timeColWidth,
-              child: Container(
-                height: 48,
-                decoration: BoxDecoration(color: headerColor),
+      child: Container(
+        decoration: BoxDecoration(
+          color: headerBg,
+          border: Border(bottom: BorderSide(color: gridLine)),
+        ),
+        child: Row(
+          children: <Widget>[
+            if (!isRtl)
+              SizedBox(
+                width: _timeColWidth,
+                child: Container(height: 48, color: headerBg),
               ),
-            ),
-          ..._daysInTableOrder(isRtl).map((String day) {
-            return SizedBox(
-              width: dayWidth,
-              child: Container(
-                height: 48,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(color: headerColor),
-                child: TText(
-                  day,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: colorScheme.onSurface,
+            ..._daysInTableOrder(isRtl).map((String day) {
+              return SizedBox(
+                width: dayWidth,
+                child: Container(
+                  height: 48,
+                  alignment: Alignment.center,
+                  color: headerBg,
+                  child: TText(
+                    day,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: colorScheme.onSurface,
+                    ),
                   ),
                 ),
+              );
+            }),
+            if (isRtl)
+              SizedBox(
+                width: _timeColWidth,
+                child: Container(height: 48, color: headerBg),
               ),
-            );
-          }),
-          if (isRtl)
-            SizedBox(
-              width: _timeColWidth,
-              child: Container(
-                height: 48,
-                decoration: BoxDecoration(color: headerColor),
-              ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildTimeColumn(List<TimeSlot> timeSlots) {
-    final translation = TranslationController.instance;
-    final isRtl = translation.textDirection == TextDirection.rtl;
     final colorScheme = Theme.of(context).colorScheme;
-    final headerColor = colorScheme.surfaceContainerHighest;
+    final gridLine = _dayGridLineColor(context);
+    final timeBg = _dayHeaderBackground(context);
+    final timeColor = colorScheme.onSurfaceVariant;
     return Column(
       children: timeSlots.map((TimeSlot slot) {
         return Container(
           height: _rowHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          alignment: isRtl ? Alignment.centerRight : Alignment.centerLeft,
-          decoration: BoxDecoration(color: headerColor),
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: timeBg,
+            border: Border(bottom: BorderSide(color: gridLine)),
+          ),
           child: Text(
             _formatSlotLabel(slot),
-            textAlign: isRtl ? TextAlign.right : TextAlign.left,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: colorScheme.onSurface,
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: timeColor,
+              height: 1.2,
             ),
           ),
         );
@@ -434,7 +461,8 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   ) {
     final firstSlotMinutes = _parseTimeToMinutes(timeSlots.first.start);
     const int slotMinutes = 60;
-    final gridBorderColor = Theme.of(context).colorScheme.outlineVariant;
+    final gridLine = _dayGridLineColor(context);
+    final cellBg = Theme.of(context).colorScheme.surface;
 
     final dayCourses = courses.where((c) => c.day == day).toList();
     dayCourses.sort(
@@ -451,14 +479,8 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
             return Container(
               height: _rowHeight,
               decoration: BoxDecoration(
-                border: Border(
-                  left: BorderSide(color: gridBorderColor, width: 1),
-                  top: BorderSide(
-                    color: idx == 0 ? gridBorderColor : Colors.transparent,
-                    width: 1,
-                  ),
-                  bottom: BorderSide(color: gridBorderColor, width: 1),
-                ),
+                color: cellBg,
+                border: Border(bottom: BorderSide(color: gridLine)),
               ),
             );
           }),
@@ -504,7 +526,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                   ),
                   decoration: BoxDecoration(
                     color: course.color,
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -523,7 +545,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
                                   color: Colors.white,
-                                  height: 1.2,
+                                  height: 1.25,
                                 ),
                                 textAlign: TextAlign.center,
                                 maxLines: 4,
@@ -666,7 +688,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: colorScheme.outlineVariant, width: 1),
+          bottom: BorderSide(color: _dayGridLineColor(context)),
         ),
       ),
       child: Row(

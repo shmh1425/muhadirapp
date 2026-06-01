@@ -379,6 +379,22 @@ class _SubmitExcuseScreenState extends State<SubmitExcuseScreen> {
 
       if (!mounted) return;
       _showSuccessDialog();
+    } on StateError catch (e) {
+      if (e.message == 'rejected_resubmit_window_closed') {
+        _showError(
+          'لا يمكن إعادة رفع العذر حالياً.',
+          'This excuse can no longer be resubmitted.',
+        );
+        return;
+      }
+      if (e.message == 'pending_edit_window_closed') {
+        _showError(
+          'لا يمكن تعديل العذر حالياً.',
+          'This excuse can no longer be edited.',
+        );
+        return;
+      }
+      rethrow;
     } on FirebaseException catch (e) {
       final msg = (e.message ?? '').trim();
       final code = e.code.trim();

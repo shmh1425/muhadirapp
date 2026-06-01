@@ -123,17 +123,7 @@ class ExcuseAttendanceMerge {
   /// the row is treated like other closed rows (e.g. hidden from home "active").
   static bool rejectedResubmitStillAllowed(ExcuseRequest request) {
     if (request.status != ExcuseRequestStatus.rejected) return false;
-    final deadline = request.reviewDeadlineAt;
-    if (deadline != null) {
-      return !DateTime.now().isAfter(deadline);
-    }
-    final reviewed = request.reviewedAt ?? request.updatedAt;
-    if (reviewed != null) {
-      final reviewedDay = DateTime(reviewed.year, reviewed.month, reviewed.day);
-      final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
-      return today.difference(reviewedDay).inDays < 3;
-    }
-    return true;
+    return request.rejectedResubmitStillAllowed;
   }
 
   /// Status strings match the excuse-management list (`_ExcuseItem.status`).

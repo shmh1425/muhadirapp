@@ -4,6 +4,11 @@ import 'package:flutter/foundation.dart';
 enum ExcuseRequestStatus { pending, accepted, rejected, expired }
 
 class ExcuseRequest {
+  /// Window to correct a wrong upload while the excuse is still pending review.
+  static const Duration pendingEditWindow = Duration(minutes: 3);
+
+  /// Calendar days after rejection during which the student may resubmit.
+  static const int rejectedResubmitGraceDays = 3;
   const ExcuseRequest({
     required this.id,
     required this.studentId,
@@ -66,6 +71,54 @@ class ExcuseRequest {
 
   /// True when key fields are missing (legacy / minimal Firestore documents).
   final bool isPartialDocument;
+
+  /// Deadline to correct a pending excuse after the first upload.
+  DateTime? get pendingEditDeadline {
+    if (status != ExcuseRequestStatus.pending) return null;
+    final base = submittedAt ?? createdAt;
+    return base?.add(pendingEditWindow);
+  }
+
+  bool get pendingEditStillAllowed {
+    final deadline = pendingEditDeadline;
+    if (deadline == null) return true;
+    return !DateTime.now().isAfter(deadline);
+  }
+
+  static DateTime rejectedResubmitDeadlineFromReviewedAt(DateTime reviewed) {
+    final reviewedDay = DateTime(reviewed.year, reviewed.month, reviewed.day);
+    return reviewedDay.add(Duration(days: rejectedResubmitGraceDays));
+  }
+
+  static bool rejectedResubmitStillAllowedAt(DateTime reviewed) {
+    final reviewedDay = DateTime(reviewed.year, reviewed.month, reviewed.day);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return today.difference(reviewedDay).inDays < rejectedResubmitGraceDays;
+  }
+
+  /// Resubmit deadline after rejection; null when not applicable.
+  DateTime? get rejectedResubmitDeadline {
+    if (status != ExcuseRequestStatus.rejected) return null;
+    if (reviewDeadlineAt != null) return reviewDeadlineAt;
+    final reviewed = reviewedAt ?? updatedAt;
+    if (reviewed != null) {
+      return rejectedResubmitDeadlineFromReviewedAt(reviewed);
+    }
+    return null;
+  }
+
+  bool get rejectedResubmitStillAllowed {
+    if (status != ExcuseRequestStatus.rejected) return false;
+    if (reviewDeadlineAt != null) {
+      return !DateTime.now().isAfter(reviewDeadlineAt!);
+    }
+    final reviewed = reviewedAt ?? updatedAt;
+    if (reviewed != null) {
+      return rejectedResubmitStillAllowedAt(reviewed);
+    }
+    return true;
+  }
 
   static ExcuseRequestStatus statusFromString(String raw) {
     switch (raw.trim().toLowerCase()) {

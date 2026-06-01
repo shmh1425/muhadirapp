@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../features/attendance/attendance_connectivity.dart';
+import 'offline_operation_types.dart';
+import 'offline_queue_service.dart';
 import 'offline_sync_engine.dart';
 
 /// Listens for connectivity restoration and triggers queue processing once.
@@ -30,6 +33,8 @@ class OfflineConnectivityService {
     if (_started) return;
     _started = true;
 
+    unawaited(_seedDisconnectedFromCurrentConnectivity());
+
     _subscription = _connectivity.onConnectivityChanged.listen(
       _onConnectivityChanged,
       onError: (Object error, StackTrace stackTrace) {
@@ -42,6 +47,17 @@ class OfflineConnectivityService {
 
     if (kDebugMode) {
       debugPrint('$_logTag listening (sync on reconnect only)');
+    }
+  }
+
+  Future<void> _seedDisconnectedFromCurrentConnectivity() async {
+    try {
+      final results = await _connectivity.checkConnectivity();
+      if (!_isConnected(results)) {
+        _wasDisconnected = true;
+      }
+    } catch (_) {
+      // Best-effort; reconnect handler still works after a later offline event.
     }
   }
 
@@ -64,12 +80,26 @@ class OfflineConnectivityService {
       return;
     }
 
-    if (!_wasDisconnected) {
-      // Ignore initial "online" emission — only sync after a prior disconnect.
+    final hasQueuedAttendance = await _hasQueuedAttendanceOps();
+
+    if (!_wasDisconnected && !hasQueuedAttendance) {
+      // Ignore initial "online" unless there is pending attendance to flush.
       return;
     }
 
     _wasDisconnected = false;
+
+    if (!await AttendanceConnectivity.canReachFirestore()) {
+      if (kDebugMode) {
+        debugPrint(
+          '$_logTag Wi‑Fi/cellular up but Firestore unreachable — '
+          'deferring sync results=$results',
+        );
+      }
+      _wasDisconnected = true;
+      return;
+    }
+
     if (kDebugMode) {
       debugPrint('$_logTag online — triggering sync results=$results');
     }
@@ -87,5 +117,22 @@ class OfflineConnectivityService {
   bool _isConnected(List<ConnectivityResult> results) {
     if (results.isEmpty) return false;
     return results.any((r) => r != ConnectivityResult.none);
+  }
+
+  Future<bool> _hasQueuedAttendanceOps() async {
+    try {
+      await OfflineQueueService.instance.ensureInitialized();
+      final pending = await OfflineQueueService.instance.getPendingOperations();
+      if (pending.isNotEmpty) return true;
+      final failed =
+          await OfflineQueueService.instance.getFailedOperations();
+      return failed.any(
+        (op) =>
+            op.type == OfflineOperationTypes.bluetoothAttendance ||
+            op.type == OfflineOperationTypes.nfcAttendance,
+      );
+    } catch (_) {
+      return false;
+    }
   }
 }

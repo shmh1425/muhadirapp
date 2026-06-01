@@ -74,11 +74,24 @@ abstract final class AttendanceOperationIdentity {
     return normalizeAttendanceIdentity(payload)?.operationKey;
   }
 
+  /// Session id used for queue signals and UI cache keys (never empty for BT/NFC).
+  static String effectiveSessionIdFromPayload(Map<String, dynamic> payload) {
+    final normalized = normalizeAttendanceIdentity(payload);
+    if (normalized != null) return normalized.sessionId;
+    return (payload['sessionId'] ?? '').toString().trim();
+  }
+
   static Map<String, dynamic> embedInPayload(Map<String, dynamic> payload) {
     final map = Map<String, dynamic>.from(payload);
-    final key = operationKeyFromPayload(map);
-    if (key != null) {
-      map[payloadField] = key;
+    final normalized = normalizeAttendanceIdentity(map);
+    if (normalized != null) {
+      map[payloadField] = normalized.operationKey;
+      map['sessionId'] = normalized.sessionId;
+    } else {
+      final key = operationKeyFromPayload(map);
+      if (key != null) {
+        map[payloadField] = key;
+      }
     }
     return map;
   }

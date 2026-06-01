@@ -3,14 +3,17 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../../models/attendance/manual_attendance_record.dart';
+import '../../../services/attendance/manual_attendance_service.dart';
 import '../../../services/offline/offline_attendance_signals.dart';
 import '../../../services/offline/offline_operation.dart';
+import '../../../services/offline/offline_operation_types.dart';
 import '../../../services/offline/offline_queue_service.dart';
 import 'attendance_operation_ui_state.dart';
 import 'attendance_queue_snapshot.dart';
 import 'attendance_state_event.dart';
 import 'attendance_state_pure_resolver.dart';
 import '../contracts/attendance_ui_contract.dart';
+import '../identity/attendance_operation_identity.dart';
 import '../logging/attendance_log_categories.dart';
 
 typedef AttendanceFirestoreMapBuilder = Future<Map<int, ManualAttendanceStatus>>
@@ -36,6 +39,7 @@ class AttendanceStateService extends ChangeNotifier {
   String? _activeSessionId;
   String? _trackedStudentId;
   AttendanceFirestoreMapBuilder? _firestoreMapBuilder;
+  StreamSubscription<List<ManualAttendanceRecord>>? _studentRecordsSub;
 
   Stream<AttendanceStateEvent> get attendanceStateEvents =>
       _eventController.stream;
@@ -81,14 +85,54 @@ class AttendanceStateService extends ChangeNotifier {
   void attachStudent({required String studentId}) {
     _trackedStudentId = studentId.trim();
     _firestoreMapBuilder = null;
+    unawaited(_studentRecordsSub?.cancel());
+    _studentRecordsSub = null;
+    final studentInt = int.tryParse(_trackedStudentId!) ?? 0;
+    if (studentInt > 0) {
+      _studentRecordsSub = ManualAttendanceService.instance
+          .watchStudentRecords(studentInt)
+          .listen(
+        _onTrackedStudentFirestoreRecords,
+        onError: (_) {},
+      );
+    }
     AttendanceLogCategories.log(
       AttendanceLogCategories.state,
       'attachStudent',
       studentId: _trackedStudentId,
     );
+    unawaited(refreshTrackedStudentState());
+  }
+
+  /// Re-read queue + emit UI (e.g. after connectivity restore).
+  Future<void> refreshTrackedStudentState() async {
+    if (_trackedStudentId == null) return;
+    await _recomputeTrackedStudent(
+      OfflineAttendanceSignal(
+        kind: OfflineAttendanceSignalKind.operationChanged,
+        studentId: _trackedStudentId,
+      ),
+    );
+  }
+
+  /// Latest model for [studentId] when session id is unknown or stale.
+  AttendanceOperationUIModel? latestModelForStudent(String studentId) {
+    final suffix = '_${studentId.trim()}';
+    AttendanceOperationUIModel? newest;
+    for (final entry in _states.entries) {
+      if (!entry.key.endsWith(suffix)) continue;
+      final model = entry.value;
+      if (newest == null ||
+          model.lastUpdated.isAfter(newest.lastUpdated)) {
+        newest = model;
+      }
+    }
+    return newest;
   }
 
   void detach() {
+    unawaited(_studentRecordsSub?.cancel());
+    _studentRecordsSub = null;
     _activeSessionId = null;
     _trackedStudentId = null;
     _firestoreMapBuilder = null;
@@ -243,17 +287,29 @@ class AttendanceStateService extends ChangeNotifier {
       }
     }
 
-    final sessionId = signal.sessionId?.trim().isNotEmpty == true
-        ? signal.sessionId!.trim()
-        : (match != null
-            ? (match.payload['sessionId'] ?? '').toString()
-            : (_activeSessionId ?? ''));
-
-    if (sessionId.isEmpty) return;
-    _activeSessionId = sessionId;
-
     final firestoreSynced =
         signal.kind == OfflineAttendanceSignalKind.operationRemoved;
+
+    var sessionId = signal.sessionId?.trim().isNotEmpty == true
+        ? signal.sessionId!.trim()
+        : (match != null
+            ? AttendanceOperationIdentity.effectiveSessionIdFromPayload(
+                match.payload,
+              )
+            : (_activeSessionId?.trim() ?? ''));
+
+    if (sessionId.isEmpty) {
+      sessionId = _cachedSessionIdForStudent(studentId) ?? '';
+    }
+
+    if (sessionId.isEmpty) {
+      if (firestoreSynced) {
+        _finalizeTrackedStudentSync(studentId: studentId);
+      }
+      return;
+    }
+    _activeSessionId = sessionId;
+
     _applyModel(
       AttendanceStatePureResolver.resolveUiModel(
         sessionId: sessionId,
@@ -262,6 +318,104 @@ class AttendanceStateService extends ChangeNotifier {
         firestoreSynced: firestoreSynced,
       ),
     );
+  }
+
+  String? _cachedSessionIdForStudent(String studentId) {
+    final suffix = '_$studentId';
+    for (final entry in _states.entries) {
+      if (!entry.key.endsWith(suffix)) continue;
+      final sid = entry.value.sessionId.trim();
+      if (sid.isNotEmpty) return sid;
+    }
+    return null;
+  }
+
+  void _onTrackedStudentFirestoreRecords(List<ManualAttendanceRecord> records) {
+    final studentId = _trackedStudentId?.trim() ?? '';
+    if (studentId.isEmpty) return;
+    for (final entry in _states.entries.toList()) {
+      if (!entry.key.endsWith('_$studentId')) continue;
+      final model = entry.value;
+      if (!model.isActiveSync) continue;
+      if (!_firestoreConfirmsAttendance(model, records)) continue;
+      unawaited(_clearStudentAttendanceQueueOps(studentId, model));
+      _applyModel(
+        model.copyWith(
+          state: AttendanceUIState.synced,
+          lastUpdated: DateTime.now().toUtc(),
+          message: null,
+        ),
+      );
+    }
+  }
+
+  bool _firestoreConfirmsAttendance(
+    AttendanceOperationUIModel model,
+    List<ManualAttendanceRecord> records,
+  ) {
+    final pendingSession = model.sessionId.trim();
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    for (final record in records) {
+      if (record.studentId.toString() != model.studentId) continue;
+      if (!record.isPresentLike) continue;
+      final recordSession = record.sessionId.trim();
+      if (pendingSession.isNotEmpty &&
+          pendingSession != 'bt_pending' &&
+          recordSession == pendingSession) {
+        return true;
+      }
+      if (pendingSession.isEmpty || pendingSession == 'bt_pending') {
+        final lectureDay = DateTime(
+          record.lectureDate.year,
+          record.lectureDate.month,
+          record.lectureDate.day,
+        );
+        if (lectureDay == todayDate) return true;
+      }
+    }
+    return false;
+  }
+
+  Future<void> _clearStudentAttendanceQueueOps(
+    String studentId,
+    AttendanceOperationUIModel model,
+  ) async {
+    await _queue.ensureInitialized();
+    final studentInt = _parseStudentId(studentId);
+    final ops = <OfflineOperation>[
+      ...await _queue.getUnsyncedOperations(),
+      ...await _queue.getFailedOperations(),
+    ];
+    for (final op in ops) {
+      final opStudent = _parseStudentId(op.payload['studentId']);
+      if (opStudent != studentInt && opStudent.toString() != studentId) {
+        continue;
+      }
+      final channel = op.type;
+      if (channel != OfflineOperationTypes.bluetoothAttendance &&
+          channel != OfflineOperationTypes.nfcAttendance) {
+        continue;
+      }
+      final opId = model.operationId?.trim() ?? '';
+      if (opId.isNotEmpty && op.id != opId) continue;
+      await _queue.removeOperation(op.id);
+    }
+  }
+
+  void _finalizeTrackedStudentSync({required String studentId}) {
+    final suffix = '_$studentId';
+    for (final entry in _states.entries.toList()) {
+      if (!entry.key.endsWith(suffix)) continue;
+      final model = entry.value;
+      if (!model.isActiveSync) continue;
+      _applyModel(
+        model.copyWith(
+          state: AttendanceUIState.synced,
+          lastUpdated: DateTime.now().toUtc(),
+        ),
+      );
+    }
   }
 
   void _applyModel(AttendanceOperationUIModel model) {

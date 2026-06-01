@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
+import '../attendance/bluetooth_attendance_service.dart';
 import '../../features/attendance/identity/attendance_operation_identity.dart';
 import 'offline_engine_log.dart';
 import 'offline_operation.dart';
@@ -61,6 +62,16 @@ class OfflineSyncEngine {
         traceId: traceId,
         correlationId: correlationId,
       );
+      final requeuedBt = await _queue.requeueFailedBluetoothAttendanceOps();
+      if (requeuedBt > 0) {
+        OfflineEngineLog.log(
+          OfflineEngineLog.sync,
+          'requeued failed bluetooth ops',
+          traceId: traceId,
+          correlationId: correlationId,
+          detail: 'count=$requeuedBt',
+        );
+      }
       final first = await _drainPendingUnlocked(
         traceId: traceId,
         correlationId: correlationId,
@@ -235,6 +246,18 @@ class OfflineSyncEngine {
         correlationId: correlationId,
       );
     } catch (e) {
+      if (OfflineSyncFailurePolicy.isSuccessfulIdempotentFailure(e)) {
+        await _queue.markSynced(operation.id);
+        await _queue.removeOperation(operation.id);
+        OfflineEngineLog.log(
+          OfflineEngineLog.sync,
+          'sync success (already marked)',
+          operationId: operation.id,
+          traceId: traceId,
+          correlationId: correlationId,
+        );
+        return;
+      }
       final latest = await _queue.getById(operation.id) ?? operation;
       final permanent = OfflineSyncFailurePolicy.isPermanentFailure(e);
       final transient = OfflineSyncFailurePolicy.isTransientFailure(e);

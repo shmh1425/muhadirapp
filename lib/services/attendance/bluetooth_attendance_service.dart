@@ -204,6 +204,8 @@ class BluetoothAttendanceService {
     String? detectedSignalId,
     String? rawPayload,
     DateTime? currentTime,
+    /// Offline queue replay: resolve closed sessions and skip live token checks.
+    bool queueReplay = false,
   }) async {
     final student = StudentAuthService.instance.currentStudent;
     if (student == null || student.studentId <= 0) {
@@ -240,6 +242,7 @@ class BluetoothAttendanceService {
       detectedSignalId: detectedSignalId,
       detectedSignalStrength: detectedSignalStrength,
       rawPayload: rawPayload,
+      queueReplay: queueReplay,
     );
     if (session == null) {
       _debugBluetoothValidationFailed(
@@ -262,7 +265,7 @@ class BluetoothAttendanceService {
       tokenVersion: tokenVersion,
     );
 
-    if (!session.isOpen) {
+    if (!queueReplay && !session.isOpen) {
       _debugBluetoothValidationFailed(
         reason: 'session_closed',
         sessionIdArg: sessionId,
@@ -288,58 +291,61 @@ class BluetoothAttendanceService {
       );
     }
 
-    if (tokenVersion != null && tokenVersion != session.tokenVersion) {
-      _debugBluetoothValidationFailed(
-        reason: 'token_version_mismatch',
-        sessionIdArg: sessionId,
-        sessionIdHash: sessionIdHash,
-        tokenFragment: tokenFragment,
-      );
-      throw BluetoothAttendanceException(
-        code: BluetoothAttendanceErrorCode.tokenMismatch,
-        message: 'انتهت صلاحية جلسة البلوتوث',
-      );
-    }
-    if (bluetoothSessionToken != null &&
-        bluetoothSessionToken.trim().isNotEmpty &&
-        bluetoothSessionToken.trim() != session.bluetoothSessionToken) {
-      _debugBluetoothValidationFailed(
-        reason: 'token_mismatch',
-        sessionIdArg: sessionId,
-        sessionIdHash: sessionIdHash,
-        tokenFragment: tokenFragment,
-      );
-      throw BluetoothAttendanceException(
-        code: BluetoothAttendanceErrorCode.tokenMismatch,
-        message: 'انتهت صلاحية جلسة البلوتوث',
-      );
-    }
-    if (tokenFragment != null &&
-        tokenFragment.trim().isNotEmpty &&
-        !session.bluetoothSessionToken.startsWith(tokenFragment.trim())) {
-      _debugBluetoothValidationFailed(
-        reason: 'token_fragment_mismatch',
-        sessionIdArg: sessionId,
-        sessionIdHash: sessionIdHash,
-        tokenFragment: tokenFragment,
-      );
-      throw BluetoothAttendanceException(
-        code: BluetoothAttendanceErrorCode.tokenMismatch,
-        message: 'انتهت صلاحية جلسة البلوتوث',
-      );
-    }
+    if (!queueReplay) {
+      if (tokenVersion != null && tokenVersion != session.tokenVersion) {
+        _debugBluetoothValidationFailed(
+          reason: 'token_version_mismatch',
+          sessionIdArg: sessionId,
+          sessionIdHash: sessionIdHash,
+          tokenFragment: tokenFragment,
+        );
+        throw BluetoothAttendanceException(
+          code: BluetoothAttendanceErrorCode.tokenMismatch,
+          message: 'انتهت صلاحية جلسة البلوتوث',
+        );
+      }
+      if (bluetoothSessionToken != null &&
+          bluetoothSessionToken.trim().isNotEmpty &&
+          bluetoothSessionToken.trim() != session.bluetoothSessionToken) {
+        _debugBluetoothValidationFailed(
+          reason: 'token_mismatch',
+          sessionIdArg: sessionId,
+          sessionIdHash: sessionIdHash,
+          tokenFragment: tokenFragment,
+        );
+        throw BluetoothAttendanceException(
+          code: BluetoothAttendanceErrorCode.tokenMismatch,
+          message: 'انتهت صلاحية جلسة البلوتوث',
+        );
+      }
+      if (tokenFragment != null &&
+          tokenFragment.trim().isNotEmpty &&
+          !session.bluetoothSessionToken.startsWith(tokenFragment.trim()) &&
+          !_tokenMatchesPrevious(session, tokenFragment.trim())) {
+        _debugBluetoothValidationFailed(
+          reason: 'token_fragment_mismatch',
+          sessionIdArg: sessionId,
+          sessionIdHash: sessionIdHash,
+          tokenFragment: tokenFragment,
+        );
+        throw BluetoothAttendanceException(
+          code: BluetoothAttendanceErrorCode.tokenMismatch,
+          message: 'انتهت صلاحية جلسة البلوتوث',
+        );
+      }
 
-    if (now.isAfter(session.expiresAt)) {
+      if (now.isAfter(session.expiresAt)) {
       _debugBluetoothValidationFailed(
         reason: 'session_expired',
         sessionIdArg: sessionId,
         sessionIdHash: sessionIdHash,
         tokenFragment: tokenFragment,
       );
-      throw BluetoothAttendanceException(
-        code: BluetoothAttendanceErrorCode.sessionExpired,
-        message: 'انتهت صلاحية جلسة البلوتوث',
-      );
+        throw BluetoothAttendanceException(
+          code: BluetoothAttendanceErrorCode.sessionExpired,
+          message: 'انتهت صلاحية جلسة البلوتوث',
+        );
+      }
     }
 
     final today = _normalizedDate(now);
@@ -393,7 +399,7 @@ class BluetoothAttendanceService {
       session: session,
       detectedSignalStrength: detectedSignalStrength,
     );
-    if (proximityStatus == 'weak') {
+    if (!queueReplay && proximityStatus == 'weak') {
       _debugBluetoothValidationFailed(
         reason: 'weak_signal',
         sessionIdArg: sessionId,
@@ -799,6 +805,7 @@ class BluetoothAttendanceService {
     String? detectedSignalId,
     int? detectedSignalStrength,
     String? rawPayload,
+    bool queueReplay = false,
   }) async {
     final explicitSessionId = (sessionId ?? '').trim();
     final hash = (sessionIdHash ?? '').trim();
@@ -816,15 +823,18 @@ class BluetoothAttendanceService {
         detectedSignalId: detectedSignalId,
         detectedSignalStrength: detectedSignalStrength,
         rawPayload: rawPayload,
+        queueReplay: queueReplay,
       );
     }
 
     Query<Map<String, dynamic>> query = _firestore
         .collection(sessionsCollection)
-        .where('isOpen', isEqualTo: true)
         .where('attendanceMethod', isEqualTo: 'bluetooth');
-    if (tokenVersion != null && tokenVersion > 0) {
-      query = query.where('tokenVersion', isEqualTo: tokenVersion);
+    if (!queueReplay) {
+      query = query.where('isOpen', isEqualTo: true);
+      if (tokenVersion != null && tokenVersion > 0) {
+        query = query.where('tokenVersion', isEqualTo: tokenVersion);
+      }
     }
 
     _debugBluetoothResolveByHashStart(
@@ -833,23 +843,46 @@ class BluetoothAttendanceService {
       tokenVersion: tokenVersion,
       ignoredSessionIdArg: explicitSessionId,
     );
-    final snapshot = await query.limit(25).get();
+    final snapshot = await query.limit(queueReplay ? 50 : 25).get();
+    final lectureDay = _normalizedDate(now);
+    BluetoothAttendanceSession? best;
     for (final doc in snapshot.docs) {
       final session = BluetoothAttendanceSession.fromDocumentSnapshot(doc);
+      if (_normalizedDate(session.lectureDate) != lectureDay) continue;
       if (hash.isNotEmpty && _shortHash(session.sessionId, 6) != hash) {
         continue;
       }
-      if (fullToken.isNotEmpty && session.bluetoothSessionToken != fullToken) {
-        continue;
+      if (!queueReplay) {
+        if (fullToken.isNotEmpty && session.bluetoothSessionToken != fullToken) {
+          continue;
+        }
+        if (fragment.isNotEmpty &&
+            !session.bluetoothSessionToken.startsWith(fragment) &&
+            !_tokenMatchesPrevious(session, fragment)) {
+          continue;
+        }
+        if (tokenVersion != null &&
+            tokenVersion > 0 &&
+            tokenVersion != session.tokenVersion) {
+          continue;
+        }
       }
-      if (fragment.isNotEmpty &&
-          !session.bluetoothSessionToken.startsWith(fragment)) {
-        continue;
+      if (best == null || (session.isOpen && !best.isOpen)) {
+        best = session;
       }
-      _debugBluetoothResolveByHashSuccess(session.sessionId);
-      return session;
     }
-    return null;
+    if (best != null) {
+      _debugBluetoothResolveByHashSuccess(best.sessionId);
+    }
+    return best;
+  }
+
+  static bool _tokenMatchesPrevious(
+    BluetoothAttendanceSession session,
+    String fragment,
+  ) {
+    final previous = (session.previousBluetoothSessionToken ?? '').trim();
+    return previous.isNotEmpty && previous.startsWith(fragment);
   }
 
   Future<BluetoothAttendanceSession?>
@@ -859,6 +892,7 @@ class BluetoothAttendanceService {
     required String? detectedSignalId,
     required int? detectedSignalStrength,
     required String? rawPayload,
+    bool queueReplay = false,
   }) async {
     final signalId = (detectedSignalId ?? '').trim();
     final payload = (rawPayload ?? '').trim();
@@ -905,12 +939,13 @@ class BluetoothAttendanceService {
         .map(_sectionLookupKey)
         .where((id) => id.isNotEmpty)
         .toSet();
-    final snapshot = await _firestore
+    Query<Map<String, dynamic>> proximityQuery = _firestore
         .collection(sessionsCollection)
-        .where('isOpen', isEqualTo: true)
-        .where('attendanceMethod', isEqualTo: 'bluetooth')
-        .limit(50)
-        .get();
+        .where('attendanceMethod', isEqualTo: 'bluetooth');
+    if (!queueReplay) {
+      proximityQuery = proximityQuery.where('isOpen', isEqualTo: true);
+    }
+    final snapshot = await proximityQuery.limit(50).get();
 
     final matches = <BluetoothAttendanceSession>[];
     var rejected = 0;
@@ -931,7 +966,7 @@ class BluetoothAttendanceService {
         lectureEndTime: session.lectureEndTime,
         currentTime: now,
       );
-      final notExpired = !now.isAfter(session.expiresAt);
+      final notExpired = queueReplay || !now.isAfter(session.expiresAt);
       if (sectionMatches &&
           dateMatches &&
           validLectureWindow &&

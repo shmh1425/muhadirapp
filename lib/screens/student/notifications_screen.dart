@@ -8,6 +8,7 @@ import '../../shared/widgets/chat_fab.dart';
 import '../../features/translation/translation_controller.dart';
 import '../../features/translation/widgets/t_text.dart';
 import '../../services/excuse/excuse_attendance_merge.dart';
+import '../../models/excuse/excuse_request.dart';
 import 'excuse_screen.dart';
 import 'pending_detail_screen.dart';
 import 'rejection_detail_screen.dart';
@@ -471,6 +472,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               attendanceRecordId: n.attendanceRecordId,
               attachmentUrl: n.attachmentUrl,
               attachmentName: n.attachmentName,
+              resubmitDeadline: ExcuseRequest.rejectedResubmitDeadlineFromReviewedAt(
+                n.createdAt,
+              ),
             ),
           ),
         );

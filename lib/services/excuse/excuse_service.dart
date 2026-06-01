@@ -230,10 +230,48 @@ class ExcuseService {
 
   Future<void> submitRequest(ExcuseRequest request) async {
     if (!enabled) return;
-    await _firestore
-        .collection(excusesCollection)
-        .doc(request.id)
-        .set(request.toMap(), SetOptions(merge: true));
+    final ref = _firestore.collection(excusesCollection).doc(request.id);
+    final existing = await ref.get();
+    DateTime? parseTs(dynamic v) => v is Timestamp ? v.toDate() : null;
+    var preserveSubmittedAt = false;
+    if (existing.exists) {
+      final data = existing.data() ?? <String, dynamic>{};
+      final existingStatus = ExcuseRequest.statusFromString(
+        (data['status'] ?? '').toString(),
+      );
+      if (existingStatus == ExcuseRequestStatus.rejected) {
+        final reviewed =
+            parseTs(data['reviewedAt']) ?? parseTs(data['updatedAt']);
+        final reviewDeadline = parseTs(data['reviewDeadlineAt']);
+        final allowed = reviewDeadline != null
+            ? !DateTime.now().isAfter(reviewDeadline)
+            : reviewed != null
+            ? ExcuseRequest.rejectedResubmitStillAllowedAt(reviewed)
+            : true;
+        if (!allowed) {
+          throw StateError('rejected_resubmit_window_closed');
+        }
+      } else if (existingStatus == ExcuseRequestStatus.pending) {
+        final base =
+            parseTs(data['submittedAt']) ?? parseTs(data['createdAt']);
+        final deadline = base?.add(ExcuseRequest.pendingEditWindow);
+        if (deadline != null && DateTime.now().isAfter(deadline)) {
+          throw StateError('pending_edit_window_closed');
+        }
+        preserveSubmittedAt = true;
+      }
+    }
+    final payload = <String, dynamic>{
+      ...request.toMap(),
+      if (preserveSubmittedAt) 'submittedAt': FieldValue.delete(),
+      if (request.status == ExcuseRequestStatus.pending) ...<String, dynamic>{
+        'rejectionReason': FieldValue.delete(),
+        'reviewDeadlineAt': FieldValue.delete(),
+        'reviewedAt': FieldValue.delete(),
+        'reviewedBy': FieldValue.delete(),
+      },
+    };
+    await ref.set(payload, SetOptions(merge: true));
   }
 
   /// Returns true if the request was stored in `excuse_requests`.
@@ -404,8 +442,14 @@ class ExcuseService {
           };
           if (newStatus == 'rejected') {
             payload['rejectionReason'] = rejectionReason;
+            payload['reviewDeadlineAt'] = Timestamp.fromDate(
+              ExcuseRequest.rejectedResubmitDeadlineFromReviewedAt(
+                DateTime.now(),
+              ),
+            );
           } else {
             payload['rejectionReason'] = FieldValue.delete();
+            payload['reviewDeadlineAt'] = FieldValue.delete();
           }
 
           if (attendanceRecordId.isNotEmpty) {

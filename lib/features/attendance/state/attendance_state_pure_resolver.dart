@@ -1,4 +1,5 @@
 import '../../../models/attendance/manual_attendance_record.dart';
+import '../identity/attendance_operation_identity.dart';
 import '../../../services/offline/offline_operation.dart';
 import '../../../services/offline/offline_operation_status.dart';
 import '../../../services/offline/offline_operation_types.dart';
@@ -109,11 +110,18 @@ abstract final class AttendanceStatePureResolver {
   }
 
   static bool _operationMatchesSession(OfflineOperation op, String sessionId) {
-    final payloadSession = (op.payload['sessionId'] ?? '').toString().trim();
-    if (payloadSession == sessionId) return true;
-    if (sessionId.isEmpty) return false;
+    final target = sessionId.trim();
+    if (target.isEmpty) return false;
+    final payloadSession =
+        AttendanceOperationIdentity.effectiveSessionIdFromPayload(op.payload);
+    if (payloadSession == target) return true;
     final card = (op.payload['lecturerCardId'] ?? '').toString().trim();
-    if (card.isNotEmpty && sessionId == 'nfc_$card') return true;
+    if (card.isNotEmpty && target == 'nfc_$card') return true;
+    if (target == 'bt_pending' &&
+        op.type == OfflineOperationTypes.bluetoothAttendance) {
+      return payloadSession == 'bt_pending' ||
+          (op.payload['sessionId'] ?? '').toString().trim().isEmpty;
+    }
     return false;
   }
 

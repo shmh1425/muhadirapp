@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'components/notification_bell.dart';
 import 'components/custom_nav_bar_icons.dart';
@@ -8,7 +10,7 @@ import 'settings_screen.dart';
 import '../../features/translation/translation_controller.dart';
 import '../../widgets/lecturer/excuse_attachment_preview.dart';
 
-class RejectionDetailScreen extends StatelessWidget {
+class RejectionDetailScreen extends StatefulWidget {
   final String course;
   final String dateText;
   final String timeRange;
@@ -19,6 +21,7 @@ class RejectionDetailScreen extends StatelessWidget {
   final String attendanceRecordId;
   final String? attachmentUrl;
   final String? attachmentName;
+  final DateTime? resubmitDeadline;
 
   const RejectionDetailScreen({
     super.key,
@@ -32,7 +35,44 @@ class RejectionDetailScreen extends StatelessWidget {
     required this.attendanceRecordId,
     this.attachmentUrl,
     this.attachmentName,
+    this.resubmitDeadline,
   });
+
+  @override
+  State<RejectionDetailScreen> createState() => _RejectionDetailScreenState();
+}
+
+class _RejectionDetailScreenState extends State<RejectionDetailScreen> {
+  Timer? _resubmitTimer;
+
+  bool get _canResubmit {
+    final deadline = widget.resubmitDeadline;
+    if (deadline == null) return true;
+    return !DateTime.now().isAfter(deadline);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleResubmitTimer();
+  }
+
+  void _scheduleResubmitTimer() {
+    _resubmitTimer?.cancel();
+    final deadline = widget.resubmitDeadline;
+    if (deadline == null || !_canResubmit) return;
+    final remaining = deadline.difference(DateTime.now());
+    if (remaining.isNegative) return;
+    _resubmitTimer = Timer(remaining + const Duration(milliseconds: 200), () {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _resubmitTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -107,27 +147,33 @@ class RejectionDetailScreen extends StatelessWidget {
   }
 
   Widget _buildDetailCard(BuildContext context) {
+    final translateToEnglish = TranslationController.instance.translateToEnglish;
+    final canResubmit = _canResubmit;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? colorScheme.surfaceContainerHighest : colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: Colors.grey.shade300,
+          color: colorScheme.outlineVariant.withValues(
+            alpha: isDark ? 0.75 : 0.15,
+          ),
           width: 1,
         ),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.09),
+            blurRadius: isDark ? 10 : 12,
+            offset: Offset(0, isDark ? 4 : 5),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          // Status Tag - في أقصى اليسار (top-left في RTL)
           Align(
             alignment: Alignment.topLeft,
             child: Container(
@@ -136,9 +182,9 @@ class RejectionDetailScreen extends StatelessWidget {
                 color: const Color(0xFFE57373),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Text(
-                'تم الرفض',
-                style: TextStyle(
+              child: Text(
+                translateToEnglish ? 'Rejected' : 'تم الرفض',
+                style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: Colors.white,
@@ -147,11 +193,10 @@ class RejectionDetailScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          // Course Name - محاذاة لليمين
           Align(
             alignment: Alignment.centerRight,
             child: Text(
-              course,
+              widget.course,
               style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -161,11 +206,10 @@ class RejectionDetailScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          // Date - محاذاة لليمين
           Align(
             alignment: Alignment.centerRight,
             child: Text(
-              dateText,
+              widget.dateText,
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
@@ -175,11 +219,10 @@ class RejectionDetailScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          // Time - محاذاة لليمين
           Align(
             alignment: Alignment.centerRight,
             child: Text(
-              timeRange,
+              widget.timeRange,
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -189,7 +232,6 @@ class RejectionDetailScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          // Reason Section - في أقصى اليمين
           Align(
             alignment: Alignment.centerRight,
             child: Row(
@@ -201,9 +243,9 @@ class RejectionDetailScreen extends StatelessWidget {
                   size: 20,
                 ),
                 const SizedBox(width: 8),
-                const Text(
-                  'السبب :',
-                  style: TextStyle(
+                Text(
+                  translateToEnglish ? 'Reason:' : 'السبب :',
+                  style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF1A1A1A),
@@ -213,11 +255,10 @@ class RejectionDetailScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          // Reason Text - محاذاة لليمين
           Align(
             alignment: Alignment.centerRight,
             child: Text(
-              reason,
+              widget.reason,
               style: const TextStyle(
                 fontSize: 14,
                 height: 1.5,
@@ -227,21 +268,20 @@ class RejectionDetailScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          // Document — معاينة المرفق عند توفر الرابط
           Align(
             alignment: Alignment.centerRight,
             child: Material(
               color: Colors.transparent,
               child: InkWell(
                 borderRadius: BorderRadius.circular(8),
-                onTap: (attachmentUrl ?? '').trim().isEmpty
+                onTap: (widget.attachmentUrl ?? '').trim().isEmpty
                     ? null
                     : () async {
                         final t = TranslationController.instance;
                         await ExcuseAttachmentPreview.showAttachmentPreviewDialog(
                           context: context,
-                          attachmentUrl: attachmentUrl!.trim(),
-                          attachmentName: attachmentName?.trim() ?? '',
+                          attachmentUrl: widget.attachmentUrl!.trim(),
+                          attachmentName: widget.attachmentName?.trim() ?? '',
                           tr: (ar, en) => t.translateToEnglish ? en : ar,
                           textDirection: t.textDirection,
                           logTag: '[StudentExcusePreview]',
@@ -266,16 +306,16 @@ class RejectionDetailScreen extends StatelessWidget {
                       ),
                       const SizedBox(width: 12),
                       Text(
-                        attachmentName?.trim().isNotEmpty == true
-                            ? attachmentName!.trim()
-                            : 'عذر',
+                        widget.attachmentName?.trim().isNotEmpty == true
+                            ? widget.attachmentName!.trim()
+                            : (translateToEnglish ? 'Excuse' : 'عذر'),
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: (attachmentUrl ?? '').trim().isEmpty
+                          color: (widget.attachmentUrl ?? '').trim().isEmpty
                               ? Colors.grey.shade400
                               : const Color(0xFF006571),
-                          decoration: (attachmentUrl ?? '').trim().isEmpty
+                          decoration: (widget.attachmentUrl ?? '').trim().isEmpty
                               ? TextDecoration.none
                               : TextDecoration.underline,
                         ),
@@ -287,58 +327,54 @@ class RejectionDetailScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 32),
-          // Resubmit Button
-          Container(
-            height: 50,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: <Color>[
-                  Color(0xFF27A2A9),
-                  Color(0xFF006571),
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+          if (canResubmit)
+            Container(
+              height: 50,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: <Color>[
+                    Color(0xFF27A2A9),
+                    Color(0xFF006571),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+                borderRadius: BorderRadius.circular(25),
               ),
-              borderRadius: BorderRadius.circular(25),
-            ),
-            child: Builder(
-              builder: (BuildContext context) {
-                return ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => SubmitExcuseScreen(
-                          course: course,
-                          dateText: dateText,
-                          timeRange: timeRange,
-                          sectionId: sectionId,
-                          lectureDate: lectureDate,
-                          sessionId: sessionId,
-                          attendanceRecordId: attendanceRecordId,
-                        ),
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => SubmitExcuseScreen(
+                        course: widget.course,
+                        dateText: widget.dateText,
+                        timeRange: widget.timeRange,
+                        sectionId: widget.sectionId,
+                        lectureDate: widget.lectureDate,
+                        sessionId: widget.sessionId,
+                        attendanceRecordId: widget.attendanceRecordId,
                       ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(25),
                     ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(25),
                   ),
-                  child: const Text(
-                    'إعادة رفع عذر',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+                ),
+                child: Text(
+                  translateToEnglish ? 'Resubmit excuse' : 'إعادة رفع عذر',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
-                );
-              },
-            ),
-          ),
+                ),
+              ),
+            )
         ],
       ),
     );

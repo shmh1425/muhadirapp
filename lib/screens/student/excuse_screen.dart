@@ -159,6 +159,7 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
           rejectionReason: req?.rejectionReason,
           attachmentUrl: req?.attachmentUrl,
           attachmentName: req?.attachmentName,
+          resubmitDeadline: req?.rejectedResubmitDeadline,
         ),
       );
     }
@@ -465,10 +466,14 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
   Widget _buildCourseTabs(List<String> courses) {
     final tabs = <String>['الكل', ...courses];
     final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final trackBg = isDark
+        ? colorScheme.surfaceContainerHighest
+        : _tabBackground;
     return Container(
       height: 44,
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest,
+        color: trackBg,
         borderRadius: BorderRadius.circular(22),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -523,9 +528,9 @@ class _ExcuseScreenState extends ConsumerState<ExcuseScreen> {
         borderRadius: BorderRadius.circular(18),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.09),
+            blurRadius: isDark ? 10 : 12,
+            offset: Offset(0, isDark ? 4 : 5),
           ),
         ],
       ),
@@ -656,6 +661,7 @@ class _ExcuseItem {
     this.rejectionReason,
     this.attachmentUrl,
     this.attachmentName,
+    this.resubmitDeadline,
   });
 
   final String course;
@@ -670,6 +676,7 @@ class _ExcuseItem {
   final String? rejectionReason;
   final String? attachmentUrl;
   final String? attachmentName;
+  final DateTime? resubmitDeadline;
 
   _ExcuseItem copyWith({
     String? course,
@@ -677,6 +684,7 @@ class _ExcuseItem {
     String? rejectionReason,
     String? attachmentUrl,
     String? attachmentName,
+    DateTime? resubmitDeadline,
   }) {
     return _ExcuseItem(
       course: course ?? this.course,
@@ -691,6 +699,7 @@ class _ExcuseItem {
       rejectionReason: rejectionReason ?? this.rejectionReason,
       attachmentUrl: attachmentUrl ?? this.attachmentUrl,
       attachmentName: attachmentName ?? this.attachmentName,
+      resubmitDeadline: resubmitDeadline ?? this.resubmitDeadline,
     );
   }
 }
@@ -742,7 +751,14 @@ class _ExcuseCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: colorScheme.surface,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: colorScheme.outlineVariant, width: 1),
+                border: Border.all(
+                  color: colorScheme.outlineVariant.withValues(
+                    alpha: Theme.of(context).brightness == Brightness.dark
+                        ? 0.75
+                        : 0.15,
+                  ),
+                  width: 1,
+                ),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -805,6 +821,7 @@ class _ExcuseCard extends StatelessWidget {
             attendanceRecordId: item.attendanceRecordId,
             attachmentUrl: item.attachmentUrl,
             attachmentName: item.attachmentName,
+            resubmitDeadline: item.resubmitDeadline,
           ),
         ),
       );
@@ -855,12 +872,17 @@ class _ExcuseCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: colorScheme.outlineVariant, width: 1),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(
+            alpha: isDark ? 0.75 : 0.15,
+          ),
+          width: 1,
+        ),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.09),
+            blurRadius: isDark ? 10 : 12,
+            offset: Offset(0, isDark ? 4 : 5),
           ),
         ],
       ),
@@ -978,7 +1000,9 @@ class _ExcuseCard extends StatelessWidget {
                                 color: colorScheme.surfaceContainerHighest,
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: colorScheme.outlineVariant,
+                                  color: colorScheme.outlineVariant.withValues(
+                                    alpha: isDark ? 0.75 : 0.15,
+                                  ),
                                   width: 1,
                                 ),
                               ),

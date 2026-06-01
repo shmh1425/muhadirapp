@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,7 +8,6 @@ import '../../features/translation/widgets/t_text.dart';
 import 'components/student_back_chevron_icon.dart';
 import 'widgets/student_digital_id_card.dart';
 import 'widgets/student_gate_mode_panel.dart';
-import 'widgets/student_geo_debug_toggle.dart';
 
 class StudentCardPage extends StatelessWidget {
   const StudentCardPage({super.key});
@@ -73,10 +71,6 @@ class StudentCardPage extends StatelessWidget {
                             StudentDigitalIdCard(student: student)
                           else
                             _buildMissingStudentCard(),
-                          if (kDebugMode) ...[
-                            const SizedBox(height: 12),
-                            const StudentGeoDebugToggle(),
-                          ],
                           if (student != null &&
                               student.studentId > 0 &&
                               student.isFemale)

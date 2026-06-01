@@ -156,7 +156,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       TText(
-                        'أهلاً ${_greetingName()}',
+                        translation.tr(
+                          'أهلاً  ${_greetingName()}' + '👋',
+                          'Hi ' + '${_greetingName()}' + '👋',
+                        ),
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
@@ -499,6 +502,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   attendanceRecordId: r.recordId,
                                   attachmentUrl: req?.attachmentUrl,
                                   attachmentName: req?.attachmentName,
+                                  resubmitDeadline: req?.rejectedResubmitDeadline,
                                 ),
                               ),
                             );

@@ -833,11 +833,15 @@ class _AttendanceTrackingScreenState
       _selectedCourse = selected;
     }
     final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final trackBg = isDark
+        ? colorScheme.surfaceContainerHighest
+        : _tabBackground;
 
     return Container(
       height: 44,
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest,
+        color: trackBg,
         borderRadius: BorderRadius.circular(22),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),

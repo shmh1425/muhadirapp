@@ -1,12 +1,23 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
+import '../attendance/bluetooth_attendance_service.dart';
+
 /// Classifies sync failures for retry vs terminal handling in [OfflineSyncEngine].
 abstract final class OfflineSyncFailurePolicy {
   static const int defaultMaxRetries = 3;
 
+  /// Attendance already on server — replay should complete the queue op.
+  static bool isSuccessfulIdempotentFailure(Object error) {
+    if (error is BluetoothAttendanceException) {
+      return error.code == BluetoothAttendanceErrorCode.alreadyMarked;
+    }
+    return false;
+  }
+
   /// Terminal errors (permission, invalid payload) — mark failed immediately.
   static bool isPermanentFailure(Object error) {
+    if (isSuccessfulIdempotentFailure(error)) return false;
     if (error.toString().contains('Manual attendance sync exceeded max retries')) {
       return true;
     }
@@ -30,7 +41,11 @@ abstract final class OfflineSyncFailurePolicy {
         message.contains('socket') ||
         message.contains('connection') ||
         message.contains('timeout') ||
-        message.contains('unavailable');
+        message.contains('unavailable') ||
+        message.contains('unable to resolve host') ||
+        message.contains('unknownhost') ||
+        message.contains('eai_nodata') ||
+        message.contains('firestore.googleapis.com');
   }
 
   static bool _isPermanentFirebaseCode(String code) {

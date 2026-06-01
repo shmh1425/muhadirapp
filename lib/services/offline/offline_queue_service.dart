@@ -9,6 +9,7 @@ import 'offline_attendance_signals.dart';
 import 'offline_engine_log.dart';
 import 'offline_operation.dart';
 import 'offline_operation_status.dart';
+import 'offline_operation_types.dart';
 import 'offline_sync_failure_policy.dart';
 import 'offline_sync_lock.dart';
 
@@ -313,6 +314,25 @@ class OfflineQueueService {
     return ids;
   }
 
+  /// Re-attempt failed Bluetooth attendance after connectivity (session may have closed).
+  Future<int> requeueFailedBluetoothAttendanceOps() async {
+    await ensureInitialized();
+    var count = 0;
+    for (final op in await getFailedOperations()) {
+      if (op.type != OfflineOperationTypes.bluetoothAttendance) continue;
+      await _write(
+        op.copyWith(
+          status: OfflineOperationStatus.pending,
+          updatedAt: DateTime.now().toUtc(),
+          retryCount: 0,
+          clearLastError: true,
+        ),
+      );
+      count++;
+    }
+    return count;
+  }
+
   Future<int> requeueRetriableFailedOperations({
     int maxRetryCount = OfflineSyncFailurePolicy.defaultMaxRetries,
   }) async {
@@ -515,7 +535,9 @@ class OfflineQueueService {
         kind: kind,
         operationId: operation.id,
         operationType: operation.type,
-        sessionId: (operation.payload['sessionId'] ?? '').toString(),
+        sessionId: AttendanceOperationIdentity.effectiveSessionIdFromPayload(
+          operation.payload,
+        ),
         studentId: _parseStudentId(operation.payload['studentId']).toString(),
       ),
     );

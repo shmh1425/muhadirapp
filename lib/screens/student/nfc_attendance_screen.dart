@@ -13,6 +13,9 @@ import 'package:qr_code_scanner_plus/qr_code_scanner_plus.dart';
 
 import '../../features/attendance/attendance_session_snapshot.dart';
 import '../../features/attendance/attendance_submission_result.dart';
+import '../../features/attendance/attendance_connectivity.dart';
+import '../../features/attendance/attendance_source.dart';
+import '../../features/attendance/identity/attendance_operation_identity.dart';
 import '../../features/attendance/state/attendance_operation_ui_state.dart';
 import '../../features/attendance/state/attendance_state_event.dart';
 import '../../features/attendance/state/attendance_state_service.dart';
@@ -28,6 +31,7 @@ import '../../services/attendance/bluetooth_ble_service.dart';
 import '../../services/attendance/nfc_attendance_service.dart';
 import '../../services/nfc/nfc_tag_identifier.dart';
 import '../../services/attendance/qr_attendance_service.dart';
+import '../../services/offline/offline_sync_engine.dart';
 import '../../services/geo/campus_geo_check_mode.dart';
 import '../../services/geo/student_campus_geo_guard.dart';
 import '../../services/student_auth_service.dart';
@@ -38,7 +42,6 @@ import 'components/custom_nav_bar_icons.dart';
 import 'components/notification_bell.dart';
 import 'components/student_back_chevron_icon.dart';
 import 'widgets/attendance_mode_chip.dart';
-import 'widgets/student_geo_debug_toggle.dart';
 import 'home_screen.dart';
 import 'notifications_screen.dart';
 import 'services_screen.dart';
@@ -89,10 +92,21 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     required String sessionId,
     required String studentId,
   }) {
-    final resolvedSession =
+    var resolvedSession =
         result.sessionSnapshot?.sessionId?.trim().isNotEmpty == true
         ? result.sessionSnapshot!.sessionId!.trim()
         : sessionId.trim();
+    if (resolvedSession.isEmpty &&
+        result.outcome == AttendanceSubmissionOutcome.queuedOffline) {
+      resolvedSession = AttendanceOperationIdentity.effectiveSessionIdFromPayload(
+        <String, dynamic>{
+          'sessionId': '',
+          'studentId': studentId,
+          'source': result.source.wireValue,
+          'attendanceStatus': 'present',
+        },
+      );
+    }
     final uiState = switch (result.outcome) {
       AttendanceSubmissionOutcome.queuedOffline => AttendanceUIState.pending,
       AttendanceSubmissionOutcome.rejectedOffline => AttendanceUIState.failed,
@@ -113,12 +127,107 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       operationId: result.requestId,
     );
     if (!mounted) return;
-    setState(() => _selfAttendanceUiState = uiState);
+    setState(() {
+      _selfAttendanceUiState = uiState;
+      _selfAttendanceStatusMessage = result.message != null
+          ? _localizePipelineMessage(result.message!)
+          : null;
+    });
+  }
+
+  void _syncSelfAttendanceFromService() {
+    final student = StudentAuthService.instance.currentStudent;
+    if (student == null || !mounted) return;
+    final studentId = student.studentId.toString();
+    final service = AttendanceStateService.instance;
+    final sessionId = _trackedAttendanceSessionId?.trim() ?? '';
+    final model = (sessionId.isNotEmpty
+            ? service.stateFor(sessionId: sessionId, studentId: studentId)
+            : null) ??
+        service.latestModelForStudent(studentId);
+    if (model == null) return;
+    if (model.state == _selfAttendanceUiState &&
+        model.message == _selfAttendanceStatusMessage) {
+      return;
+    }
+    setState(() {
+      _selfAttendanceUiState = model.state;
+      _selfAttendanceStatusMessage = model.message;
+      _trackedAttendanceSessionId = model.sessionId;
+    });
+  }
+
+  Future<void> _refreshSelfAttendanceAfterConnectivity() async {
+    if (!await AttendanceConnectivity.canReachFirestore()) return;
+    await OfflineSyncEngine.instance.runStartupSyncSequence();
+    await AttendanceStateService.instance.refreshTrackedStudentState();
+    if (!mounted) return;
+    _syncSelfAttendanceFromService();
+  }
+
+  /// سحب للأسفل: مزامنة الحضور + تحديث الموقع ووضع التحضير الحالي.
+  Future<void> _onPullToRefresh() async {
+    await Future.wait([
+      _refreshCampusGeo(),
+      _refreshSelfAttendanceAfterConnectivity(),
+    ]);
+    if (!mounted) return;
+    if (_isBluetooth) {
+      await _refreshBluetoothAvailability();
+    } else if (_isNfc) {
+      await _checkNfcAvailability();
+    }
+  }
+
+  /// يعرّب رسائل الـ pipeline الإنجليزية عندما تكون الواجهة عربية.
+  String _localizePipelineMessage(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return trimmed;
+    if (RegExp(r'[\u0600-\u06FF]').hasMatch(trimmed)) return trimmed;
+
+    final lower = trimmed.toLowerCase();
+    if (lower.contains('attendance recorded successfully') ||
+        lower.contains('your attendance was recorded')) {
+      return _tr('تم تسجيل حضورك بنجاح', 'Attendance recorded successfully');
+    }
+    if (lower.contains('attendance queued for sync') ||
+        lower.contains('attendance saved and will sync')) {
+      return _tr(
+        'تم حفظ الحضور وسيتم مزامنته عند الاتصال',
+        'Attendance saved and will sync when online',
+      );
+    }
+    if (lower.contains('duplicate request skipped') ||
+        lower.contains('already recorded')) {
+      return _tr(
+        'تم تسجيل هذا الحضور مسبقاً',
+        'This attendance was already recorded',
+      );
+    }
+    if (lower.contains('manual attendance saved')) {
+      return _tr('تم حفظ الحضور', 'Attendance saved');
+    }
+    if (lower.contains('manual attendance queued')) {
+      return _tr(
+        'تم حفظ الحضور وسيتم مزامنته عند الاتصال',
+        'Manual attendance queued for sync',
+      );
+    }
+    if (lower.contains('qr attendance requires')) {
+      return _tr(
+        'يتطلب مسح QR اتصالاً بالإنترنت',
+        'QR attendance requires an internet connection',
+      );
+    }
+    if (!TranslationController.instance.translateToEnglish) {
+      return _tr('تم تسجيل حضورك بنجاح', 'Attendance recorded successfully');
+    }
+    return trimmed;
   }
 
   String _pipelineUserMessage(AttendanceSubmissionResult result) {
     if (result.message != null && result.message!.trim().isNotEmpty) {
-      return result.message!.trim();
+      return _localizePipelineMessage(result.message!);
     }
     switch (result.outcome) {
       case AttendanceSubmissionOutcome.queuedOffline:
@@ -250,6 +359,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
   bool _geoRequiredToday = false;
   String? _geoBlockMessage;
   AttendanceUIState _selfAttendanceUiState = AttendanceUIState.idle;
+  String? _selfAttendanceStatusMessage;
   String? _trackedAttendanceSessionId;
   StreamSubscription<AttendanceStateEvent>? _attendanceStateEventsSub;
 
@@ -433,7 +543,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
             detectedSignalId: detection.sessionIdHash ?? detection.deviceName,
             rawPayload: detection.rawPayload,
           );
-      final resultMessage = pipelineResult.message ?? '';
+      final userMessage = _pipelineUserMessage(pipelineResult);
       _applyPipelineUiState(
         pipelineResult,
         sessionId: pipelineResult.sessionSnapshot?.sessionId ?? '',
@@ -445,7 +555,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
       setState(() {
         _bluetoothScanResult = BluetoothScanResult(
           state: BluetoothScanState.detected,
-          message: resultMessage,
+          message: userMessage,
           detection: detection,
         );
       });
@@ -562,36 +672,32 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     )..repeat();
     _checkNfcAvailability();
     unawaited(_refreshCampusGeo());
-    StudentCampusGeoGuard.debugSkipGeoFenceForTesting.addListener(
-      _onAttendanceGeoDebugToggle,
-    );
     final student = StudentAuthService.instance.currentStudent;
     if (student != null) {
       final studentId = student.studentId.toString();
+      final stateService = AttendanceStateService.instance;
       AttendanceSyncEventRouter.instance.attachStudent(studentId: studentId);
+      stateService.addListener(_syncSelfAttendanceFromService);
       _attendanceStateEventsSub?.cancel();
-      _attendanceStateEventsSub = AttendanceStateService
-          .instance
-          .attendanceStateEvents
-          .listen((event) {
-            if (!mounted || event.studentId != studentId) return;
-            setState(() {
-              _selfAttendanceUiState = event.model.state;
-              _trackedAttendanceSessionId = event.sessionId;
-            });
+      _attendanceStateEventsSub = stateService.attendanceStateEvents.listen(
+        (event) {
+          if (!mounted || event.studentId != studentId) return;
+          setState(() {
+            _selfAttendanceUiState = event.model.state;
+            _selfAttendanceStatusMessage = event.model.message;
+            _trackedAttendanceSessionId = event.sessionId;
           });
+        },
+      );
+      _syncSelfAttendanceFromService();
     }
-  }
-
-  void _onAttendanceGeoDebugToggle() {
-    if (!mounted) return;
-    unawaited(_refreshCampusGeo());
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_refreshCampusGeo());
+      unawaited(_refreshSelfAttendanceAfterConnectivity());
     }
   }
 
@@ -1383,9 +1489,6 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
 
   @override
   void dispose() {
-    StudentCampusGeoGuard.debugSkipGeoFenceForTesting.removeListener(
-      _onAttendanceGeoDebugToggle,
-    );
     WidgetsBinding.instance.removeObserver(this);
     _pulseController?.dispose();
     _attendanceCodeController.dispose();
@@ -1398,6 +1501,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
     }
     _qrScannerController = null;
     _attendanceStateEventsSub?.cancel();
+    AttendanceStateService.instance.removeListener(_syncSelfAttendanceFromService);
     AttendanceSyncEventRouter.instance.detach();
     super.dispose();
   }
@@ -2205,9 +2309,15 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
             onItemTapped: _onItemTapped,
           ),
           body: SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              children: [
+            child: RefreshIndicator(
+              color: const Color(0xFF006571),
+              onRefresh: _onPullToRefresh,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                children: [
                 Row(
                   children: [
                     IconButton(
@@ -2239,6 +2349,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                 const SizedBox(height: 12),
                 StudentAttendanceStatusBanner(
                   state: _selfAttendanceUiState,
+                  message: _selfAttendanceStatusMessage,
                   translate: _tr,
                 ),
                 Center(
@@ -2296,8 +2407,6 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                   ),
                 ),
                 const SizedBox(height: 16),
-                if (kDebugMode) const StudentGeoDebugToggle(),
-                if (kDebugMode) const SizedBox(height: 8),
                 Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
@@ -2468,6 +2577,7 @@ class _NfcAttendanceScreenState extends State<NfcAttendanceScreen>
                   ),
                 ),
               ],
+              ),
             ),
           ),
         ),

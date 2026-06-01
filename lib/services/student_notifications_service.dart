@@ -373,7 +373,7 @@ class StudentNotificationsService {
   /// Stored in `student_notifications` so it shows in the bell + notifications list.
   Future<void> addAttendanceSuccessNotification({
     required int studentId,
-    required String attendanceMethod, // 'nfc' | 'qr'
+    required String attendanceMethod, // 'nfc' | 'qr' | 'bluetooth'
     String? courseName,
     String? section,
     String? sectionId,
@@ -386,7 +386,16 @@ class StudentNotificationsService {
     if (!isSignedIn()) return;
 
     final method = attendanceMethod.trim().toLowerCase();
-    final methodAr = method == 'qr' ? 'QR' : 'NFC';
+    final methodAr = switch (method) {
+      'qr' => 'QR',
+      'bluetooth' => 'البلوتوث',
+      _ => 'NFC',
+    };
+    final methodEn = switch (method) {
+      'qr' => 'QR',
+      'bluetooth' => 'Bluetooth',
+      _ => 'NFC',
+    };
     final name = (courseName ?? '').toString().trim();
     final sec = (section ?? '').toString().trim();
     final secLabel = sec.isNotEmpty ? ' - شعبة $sec' : '';
@@ -402,8 +411,8 @@ class StudentNotificationsService {
           ? 'تم تسجيل حضورك بنجاح في "$name"$secLabel عبر $methodAr.'
           : 'تم تسجيل حضورك بنجاح عبر $methodAr.',
       'messageEn': name.isNotEmpty
-          ? 'Your attendance was recorded for "$name"${sec.isNotEmpty ? ' — Section $sec' : ''} via ${method.toUpperCase()}.'
-          : 'Your attendance was recorded via ${method.toUpperCase()}.',
+          ? 'Your attendance was recorded for "$name"${sec.isNotEmpty ? ' — Section $sec' : ''} via $methodEn.'
+          : 'Your attendance was recorded via $methodEn.',
       'courseName': name,
       'section': sec,
       'sectionId': (sectionId ?? '').toString().trim(),
