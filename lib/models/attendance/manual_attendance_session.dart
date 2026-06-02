@@ -18,27 +18,40 @@ class ManualAttendanceSession {
     this.courseCode,
     this.lecturerId,
     this.sessionOpenedAt,
+    this.attendanceMethod = '',
+    this.sessionWasOpened = false,
+    this.explicitSessionOpened = false,
+    this.defaultPresentPolicyApplied = false,
   });
 
   final String sessionId;
   final String sectionId;
   final String courseName;
   final String sectionLabel;
+
   /// From session doc `courseCode` (e.g. CRN) when present.
   final String? courseCode;
+
   /// From session doc when present.
   final String? lecturerId;
   final DateTime? sessionOpenedAt;
+  final String attendanceMethod;
+  final bool sessionWasOpened;
+  final bool explicitSessionOpened;
+  final bool defaultPresentPolicyApplied;
   final String lectureStartTime;
   final String lectureEndTime;
   final DateTime lectureDate;
   final int dayOfWeek;
+
   /// When set, session is linked to an academic term for week-based attendance.
   final String? termId;
   final int? officialWeekNumber;
   final int? effectiveWeekNumber;
+
   /// True only for instructional weeks; break weeks must not count in attendance.
   final bool countInAttendance;
+
   /// When true, session is included in totalCountableSessions for absence calculation.
   final bool attendanceFinalized;
 
@@ -57,7 +70,10 @@ class ManualAttendanceSession {
     return ManualAttendanceSession._fromMap(doc.id, doc.data()!);
   }
 
-  static ManualAttendanceSession _fromMap(String docId, Map<String, dynamic> data) {
+  static ManualAttendanceSession _fromMap(
+    String docId,
+    Map<String, dynamic> data,
+  ) {
     DateTime lectureDate;
     final y = _safeInt(data['lectureYear']);
     final m = _safeInt(data['lectureMonth']);
@@ -88,7 +104,10 @@ class ManualAttendanceSession {
     final effectiveWeek = _optionalInt(data['effectiveWeekNumber']);
     final cc = (data['courseCode'] ?? '').toString().trim();
     final lid = (data['lecturerId'] ?? '').toString().trim();
-    final sessionOpenedAt = _toDateTime(data['sessionOpenedAt'] ?? data['openedAt']);
+    final attendanceMethod = (data['attendanceMethod'] ?? '').toString().trim();
+    final sessionOpenedAt = _toDateTime(
+      data['sessionOpenedAt'] ?? data['openedAt'],
+    );
     return ManualAttendanceSession(
       sessionId: (data['sessionId'] ?? docId).toString(),
       sectionId: (data['sectionId'] ?? '').toString(),
@@ -100,7 +119,9 @@ class ManualAttendanceSession {
       dayOfWeek: (dayOfWeek >= DateTime.monday && dayOfWeek <= DateTime.sunday)
           ? dayOfWeek
           : lectureDate.weekday,
-      termId: (data['termId'] ?? '').toString().trim().isEmpty ? null : (data['termId'] ?? '').toString(),
+      termId: (data['termId'] ?? '').toString().trim().isEmpty
+          ? null
+          : (data['termId'] ?? '').toString(),
       officialWeekNumber: officialWeek,
       effectiveWeekNumber: effectiveWeek,
       countInAttendance: data['countInAttendance'] != false,
@@ -108,6 +129,10 @@ class ManualAttendanceSession {
       courseCode: cc.isEmpty ? null : cc,
       lecturerId: lid.isEmpty ? null : lid,
       sessionOpenedAt: sessionOpenedAt,
+      attendanceMethod: attendanceMethod,
+      sessionWasOpened: data['sessionWasOpened'] == true,
+      explicitSessionOpened: data['explicitSessionOpened'] == true,
+      defaultPresentPolicyApplied: data['defaultPresentPolicyApplied'] == true,
     );
   }
 

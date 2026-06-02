@@ -19,6 +19,7 @@ import '../../services/lecturer/lecture_repository.dart';
 import '../../services/lecturer/lecturer_attendance_sessions_warm_cache.dart';
 import '../../services/lecturer_auth_service.dart';
 import '../../utils/localized_firestore_fields.dart';
+import '../../utils/lecture_action_eligibility.dart';
 import '../../utils/shared/time_utils.dart';
 import 'lecturer_language.dart';
 import 'lecturer_strings.dart';
@@ -636,12 +637,17 @@ class _LecturerAttendanceReportScreenState
             lectures: lectures,
             calendar: _calendarRepository,
           );
-      final groups = _buildGroupsFromFirestore(
+      final persistedGroups = _buildGroupsFromFirestore(
         sessions: sessions,
         recordsBySession: const <String, List<ManualAttendanceRecord>>{},
         lectureBySection: lectureBySection,
         lectureBySectionAndStart: lectureBySectionAndStart,
       );
+      final pendingGroups = await _buildOpenPendingScheduledGroups(
+        lectures: lectures,
+        sessions: sessions,
+      );
+      final groups = _mergeGroups(persistedGroups, pendingGroups);
 
       if (!mounted) return;
       setState(() {
@@ -712,6 +718,9 @@ class _LecturerAttendanceReportScreenState
       final lecture =
           lectureBySectionAndStart[lectureKey] ??
           lectureBySection[session.sectionId];
+      if (_shouldReplaceWithOpenPendingGroup(session, lecture, effectiveDate)) {
+        continue;
+      }
       final sectionId = session.sectionId.trim();
       final courseCode = (session.courseCode ?? '').trim().isNotEmpty
           ? (session.courseCode ?? '').trim()
@@ -790,16 +799,155 @@ class _LecturerAttendanceReportScreenState
     if (_calendarRepository.isScheduledLecturesExcluded(group.lectureDate)) {
       return false;
     }
-    final lecture = group.lecture;
-    if (lecture != null &&
-        _manualAttendanceService.isLectureStillOpenForReporting(
-          lecture,
-          group.lectureDate,
-          now: _calendarNow,
-        )) {
+    return true;
+  }
+
+  bool _shouldReplaceWithOpenPendingGroup(
+    ManualAttendanceSession session,
+    LectureItem? lecture,
+    DateTime lectureDate,
+  ) {
+    if (lecture == null) return false;
+    if (!_isLectureInCurrentWindow(lecture, lectureDate)) return false;
+    if (session.explicitSessionOpened || session.sessionWasOpened) {
       return false;
     }
-    return true;
+    return session.defaultPresentPolicyApplied ||
+        session.attendanceMethod ==
+            ManualAttendanceService.attendanceMethodDefaultPresent;
+  }
+
+  Future<List<_LectureAttendanceGroup>> _buildOpenPendingScheduledGroups({
+    required List<LectureItem> lectures,
+    required List<ManualAttendanceSession> sessions,
+  }) async {
+    final today = DateTime(
+      _calendarNow.year,
+      _calendarNow.month,
+      _calendarNow.day,
+    );
+    final sessionsById = <String, ManualAttendanceSession>{
+      for (final s in sessions) s.sessionId: s,
+    };
+    final groups = <_LectureAttendanceGroup>[];
+
+    for (final lecture in lectures) {
+      final sectionId = (lecture.sectionId ?? '').trim();
+      if (sectionId.isEmpty || lecture.dayOfWeek != today.weekday) {
+        continue;
+      }
+      if (!_calendarRepository.isWithinActiveTerm(today)) continue;
+      if (_calendarRepository.isScheduledLecturesExcluded(today)) continue;
+      if (!_isLectureInCurrentWindow(lecture, today)) continue;
+
+      final sessionId = ManualAttendanceService.buildSessionId(
+        sectionId: sectionId,
+        sessionDate: today,
+        lectureStartTime: lecture.startTime,
+      );
+      final existing = sessionsById[sessionId];
+      if (existing != null &&
+          (existing.explicitSessionOpened || existing.sessionWasOpened)) {
+        continue;
+      }
+
+      final roster = await _manualAttendanceService.getActiveSectionRoster(
+        sectionId,
+      );
+      final names = _resolveBilingualCourseNames(
+        sectionId: sectionId,
+        courseCode: lecture.crn.trim(),
+        sessionCourseName: lecture.courseName,
+      );
+      final courseName = LocalizedFirestoreFields.localizedCourseName(
+        <String, dynamic>{
+          'courseNameAr': names.ar,
+          'courseNameEn': names.en,
+          'courseName': lecture.courseName,
+        },
+        isArabic: LecturerLanguageController.isArabic,
+        fallback: lecture.crn.trim().isNotEmpty
+            ? lecture.crn.trim()
+            : sectionId,
+      );
+
+      groups.add(
+        _LectureAttendanceGroup(
+          sessionId: sessionId,
+          lecture: lecture,
+          courseName: courseName,
+          courseNameAr: names.ar,
+          courseNameEn: names.en,
+          courseCode: lecture.crn.trim(),
+          section: lecture.section.trim().isNotEmpty ? lecture.section : '-',
+          sectionId: sectionId,
+          dayOfWeek: today.weekday,
+          weekNumber: _calendarRepository.getOfficialWeekNumber(today),
+          lectureDate: today,
+          startTime: lecture.startTime,
+          timeRange: '${lecture.startTime} - ${lecture.endTime}',
+          students: roster
+              .map(
+                (student) => _StudentAttendanceRecord(
+                  id: '${sessionId}_${student.studentId}',
+                  studentId: student.studentId,
+                  name: _localizedStudentName(
+                    student.studentId,
+                    student.studentName,
+                  ),
+                  academicNumber: student.studentId.toString(),
+                  time: '--',
+                  status: _AttendanceStatus.pending,
+                ),
+              )
+              .toList(),
+          isVirtualPending: true,
+        ),
+      );
+    }
+    return groups;
+  }
+
+  bool _isLectureInCurrentWindow(LectureItem lecture, DateTime lectureDate) {
+    final startParts = LectureActionEligibility.parseHhmm(lecture.startTime);
+    final end = LectureActionEligibility.lectureEndDateTime(
+      lectureDate: lectureDate,
+      lectureEndTime: lecture.endTime,
+      lectureStartTime: lecture.startTime,
+    );
+    if (startParts == null || end == null) return false;
+    final start = DateTime(
+      lectureDate.year,
+      lectureDate.month,
+      lectureDate.day,
+      startParts.$1,
+      startParts.$2,
+    );
+    return !_calendarNow.isBefore(start) && end.isAfter(_calendarNow);
+  }
+
+  List<_LectureAttendanceGroup> _mergeGroups(
+    List<_LectureAttendanceGroup> persisted,
+    List<_LectureAttendanceGroup> pending,
+  ) {
+    if (pending.isEmpty) return persisted;
+    final bySession = <String, _LectureAttendanceGroup>{
+      for (final group in persisted) group.sessionId: group,
+    };
+    for (final group in pending) {
+      bySession[group.sessionId] = group;
+    }
+    final groups = bySession.values.toList();
+    groups.sort((a, b) {
+      final byDate = b.lectureDate.compareTo(a.lectureDate);
+      if (byDate != 0) return byDate;
+      final aTime = TimeUtils.parseTimeString(a.startTime);
+      final bTime = TimeUtils.parseTimeString(b.startTime);
+      final aMinutes = aTime.$1 * 60 + aTime.$2;
+      final bMinutes = bTime.$1 * 60 + bTime.$2;
+      return aMinutes.compareTo(bMinutes);
+    });
+    return groups;
   }
 
   String _timeTextForRecord(
@@ -1383,7 +1531,8 @@ class _LecturerAttendanceReportScreenState
         updates: updates,
       );
       unawaited(
-        ManualAttendanceOfflineService.instance.triggerBackgroundSyncIfPossible(),
+        ManualAttendanceOfflineService.instance
+            .triggerBackgroundSyncIfPossible(),
       );
       if (!mounted) return;
 
@@ -1766,6 +1915,7 @@ class _LecturerAttendanceReportScreenState
   /// التصدير متاح فقط لجلسة محددة وبعد حفظ أي تعديلات معلّقة.
   bool _canTapExport(_LectureAttendanceGroup? g) {
     if (g == null || _isExporting || _isSaving) return false;
+    if (g.isVirtualPending) return false;
     if (_isEditMode && _hasPendingChanges) return false;
     return true;
   }
@@ -2480,7 +2630,7 @@ class _LecturerAttendanceReportScreenState
   }
 
   Widget _buildReportActionButtons(_LectureAttendanceGroup group) {
-    final canExport = !_isExporting;
+    final canExport = !_isExporting && !group.isVirtualPending;
     return Column(
       children: [
         SizedBox(
@@ -2625,14 +2775,25 @@ class _LecturerAttendanceReportScreenState
         );
         icon = Icons.event_busy_rounded;
       } else {
-        message = _tr(
-          'المعاينة والتعديل متاحان لهذا التقرير.',
-          'Preview and editing are available for this report.',
-        );
-        bg = const Color(0xFFEAF7EF);
-        border = const Color(0xFFCBE8D2);
-        text = const Color(0xFF24643A);
-        icon = Icons.check_circle_outline_rounded;
+        if (group.isVirtualPending) {
+          message = _tr(
+            'المحاضرة داخل وقت التحضير: الطلاب بانتظار التحضير، ولن يسجلهم النظام حاضرين إلا بعد انتهاء الوقت إذا لم يفتح المحاضر جلسة.',
+            'Lecture is in the attendance window: students remain pending, and the system marks them present only after the window ends if no session is opened.',
+          );
+          bg = const Color(0xFFFFF8E1);
+          border = const Color(0xFFFFE0A3);
+          text = const Color(0xFF8A6100);
+          icon = Icons.pending_actions_rounded;
+        } else {
+          message = _tr(
+            'المعاينة والتعديل متاحان لهذا التقرير.',
+            'Preview and editing are available for this report.',
+          );
+          bg = const Color(0xFFEAF7EF);
+          border = const Color(0xFFCBE8D2);
+          text = const Color(0xFF24643A);
+          icon = Icons.check_circle_outline_rounded;
+        }
       }
     }
 
@@ -3850,6 +4011,7 @@ class _LectureAttendanceGroup {
     required this.startTime,
     required this.timeRange,
     required this.students,
+    this.isVirtualPending = false,
   });
 
   final String sessionId;
@@ -3866,6 +4028,7 @@ class _LectureAttendanceGroup {
   final String startTime;
   final String timeRange;
   final List<_StudentAttendanceRecord> students;
+  final bool isVirtualPending;
 
   String localizedCourseTitle({bool? isArabic}) {
     return LocalizedFirestoreFields.localizedCourseName(
@@ -3903,6 +4066,7 @@ class _LectureAttendanceGroup {
       startTime: startTime,
       timeRange: timeRange,
       students: students ?? this.students,
+      isVirtualPending: isVirtualPending,
     );
   }
 
@@ -3922,6 +4086,7 @@ class _LectureAttendanceGroup {
       startTime: startTime,
       timeRange: timeRange,
       students: students.map((s) => s.deepCopy()).toList(),
+      isVirtualPending: isVirtualPending,
     );
   }
 }

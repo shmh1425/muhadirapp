@@ -215,3 +215,23 @@ Analyzer result:
 - Ran `flutter analyze`.
 - Result remained 32 existing warnings/infos from unrelated files.
 - No new analyzer issue was reported from the files changed for this implementation.
+
+## 12. Final Manual Verification
+
+Verification type: code-path review only. These scenarios were not manually verified from an emulator/device in this environment, and no runtime screenshots or live Firestore write/no-write evidence were available. Therefore these items remain pending final manual verification.
+
+| Scenario | Expected Result | Verification Type | Actual Result | Status | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| Tomorrow lecture | `حضر` hidden | Code-path reviewed only | Not manually verified from emulator/device | Pending manual verification | No screenshot available |
+| Today lecture before start time | `حضر` hidden | Code-path reviewed only | Not manually verified from emulator/device | Pending manual verification | No screenshot available |
+| Today lecture during active time | `حضر` visible | Code-path reviewed only | Not manually verified from emulator/device | Pending manual verification | No screenshot available |
+| Today lecture after end time | `حضر` hidden | Code-path reviewed only | Not manually verified from emulator/device | Pending manual verification | No screenshot available |
+| Direct navigation/session creation outside active time | Blocked with the correct Arabic message and no session document created | Code-path reviewed only | Not manually verified from emulator/device or live Firestore | Pending manual verification | No screenshot or Firestore document evidence available |
+
+Final note about the 10-minute end-time offset:
+
+- The strict eligibility helper receives `LectureItem.endTime`.
+- Current `LectureItem.endTime` behavior applies the existing offset rule: when `sections.schedule[].endTime` exists, the effective end is `sections.schedule[].endTime - 10 minutes`.
+- Therefore, with the current code, a raw scheduled lecture from `07:00` to `07:50` is treated as attendance-active until `07:40`, not `07:50`.
+- This confirms current code behavior only. It does not confirm product/business intent.
+- No code change was made for this cutoff. A product decision is still needed: attendance cutoff should be either the effective system end (`07:40`) or the raw schedule end (`07:50`).

@@ -1,6 +1,7 @@
 /// موديل بيانات المحاضرة
 class LectureItem {
   final String courseName;
+
   /// Bilingual Firestore names (for notifications / snapshots).
   final String? courseNameAr;
   final String? courseNameEn;
@@ -9,12 +10,21 @@ class LectureItem {
   final String section;
   final String activity;
   final String startTime;
-  final bool isDouble; // true = محاضرة زوجية (حصتان), false = محاضرة فردية (حصة واحدة)
-  final int dayOfWeek; // 1=الاثنين, 2=الثلاثاء, 3=الأربعاء, 4=الخميس, 5=الجمعة, 6=السبت, 7=الأحد  /// معرّف السكشن في Firestore (عند جلب المحاضرات من sections) — يُستخدم للحضور والتقارير
+
+  /// true = محاضرة زوجية (حصتان), false = محاضرة فردية (حصة واحدة)
+  final bool isDouble;
+
+  /// 1=الاثنين, 2=الثلاثاء, 3=الأربعاء, 4=الخميس, 5=الجمعة, 6=السبت, 7=الأحد
+  final int dayOfWeek;
+
+  /// معرّف السكشن في Firestore (عند جلب المحاضرات من sections) — يُستخدم للحضور والتقارير
   final String? sectionId;
+
   /// موقع المحاضرة من section.schedule[].location
   final String? location;
-  /// وقت النهاية الفعلي من section.schedule[].endTime (عند الجلب من Firestore)
+
+  /// وقت النهاية الخام من section.schedule[].endTime (عند الجلب من Firestore).
+  /// النظام ينهي المحاضرة قبل وقت الداتابيس بعشر دقائق.
   final String? scheduleEndTime;
 
   LectureItem({
@@ -33,10 +43,13 @@ class LectureItem {
     this.scheduleEndTime,
   });
 
-  // حساب الوقت النهائي للمحاضرة (من schedule إن وُجد، وإلا من isDouble)
+  static const int systemEndOffsetMinutes = 10;
+
+  // حساب وقت نهاية النظام للمحاضرة (وقت الداتابيس - 10 دقائق).
   String get endTime {
     if (scheduleEndTime != null && scheduleEndTime!.trim().isNotEmpty) {
-      return scheduleEndTime!.trim();
+      final scheduleEnd = _parseTime(scheduleEndTime!.trim());
+      return _formatTime(_addMinutes(scheduleEnd, -systemEndOffsetMinutes));
     }
     if (isDouble) {
       // محاضرة زوجية: من startTime إلى startTime+50 ثم من startTime+60 إلى startTime+110
@@ -59,15 +72,13 @@ class LectureItem {
       final firstStart = start;
       final firstEnd = _addMinutes(start, 50);
       final secondStart = _addMinutes(start, 60);
-      final secondEnd = _addMinutes(start, 110);
       return [
         '${_formatTime(firstStart)}–${_formatTime(firstEnd)}',
-        '${_formatTime(secondStart)}–${_formatTime(secondEnd)}',
+        '${_formatTime(secondStart)}–$endTime',
       ];
     } else {
       // محاضرة فردية: حصة واحدة
-      final end = _addMinutes(start, 50);
-      return ['${_formatTime(start)}–${_formatTime(end)}'];
+      return ['${_formatTime(start)}–$endTime'];
     }
   }
 
@@ -106,4 +117,3 @@ class LectureItem {
     return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
   }
 }
-

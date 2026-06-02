@@ -18,6 +18,7 @@ class QrAttendanceSession {
     required this.dateKey,
     this.attendanceMethod = 'qr',
     required this.isOpen,
+    this.explicitSessionOpened = false,
     required this.generatedAt,
     required this.expiresAt,
     required this.tokenVersion,
@@ -49,6 +50,7 @@ class QrAttendanceSession {
   final String dateKey;
   final String attendanceMethod;
   final bool isOpen;
+  final bool explicitSessionOpened;
   final DateTime generatedAt;
   final DateTime expiresAt;
   final int tokenVersion;
@@ -95,6 +97,7 @@ class QrAttendanceSession {
     String? dateKey,
     String? attendanceMethod,
     bool? isOpen,
+    bool? explicitSessionOpened,
     DateTime? generatedAt,
     DateTime? expiresAt,
     int? tokenVersion,
@@ -126,6 +129,8 @@ class QrAttendanceSession {
       dateKey: dateKey ?? this.dateKey,
       attendanceMethod: attendanceMethod ?? this.attendanceMethod,
       isOpen: isOpen ?? this.isOpen,
+      explicitSessionOpened:
+          explicitSessionOpened ?? this.explicitSessionOpened,
       generatedAt: generatedAt ?? this.generatedAt,
       expiresAt: expiresAt ?? this.expiresAt,
       tokenVersion: tokenVersion ?? this.tokenVersion,
@@ -162,6 +167,7 @@ class QrAttendanceSession {
       'dateKey': dateKey,
       'attendanceMethod': attendanceMethod,
       'isOpen': isOpen,
+      'explicitSessionOpened': explicitSessionOpened,
       'generatedAt': Timestamp.fromDate(generatedAt),
       'expiresAt': Timestamp.fromDate(expiresAt),
       'tokenVersion': tokenVersion,
@@ -215,6 +221,7 @@ class QrAttendanceSession {
       dateKey: (data['dateKey'] ?? _dateKey(lectureDate)).toString().trim(),
       attendanceMethod: (data['attendanceMethod'] ?? 'qr').toString().trim(),
       isOpen: data['isOpen'] == true,
+      explicitSessionOpened: data['explicitSessionOpened'] == true,
       generatedAt: generatedAt,
       expiresAt: expiresAt,
       tokenVersion: _safeInt(data['tokenVersion'], fallback: 1),

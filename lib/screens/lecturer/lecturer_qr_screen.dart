@@ -235,23 +235,33 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
         return;
       }
 
-      if (!mounted) return;
-      setState(() {
-        _isLoadingSession = true;
-      });
-
       try {
-        final session = await _qrAttendanceService.createOrGetSessionForLecture(
-          lecture: lecture,
-          lectureDate: _effectiveNowForLectureWindow(),
+        final sessionId = QrAttendanceService.buildSessionId(
+          sectionId: (lecture.sectionId ?? '').trim(),
+          sessionDate: _effectiveNowForLectureWindow(),
+          lectureStartTime: lecture.startTime,
         );
+        final session = await _qrAttendanceService.getSessionById(sessionId);
         if (!mounted) return;
+        if (session == null ||
+            !session.isOpen ||
+            !session.explicitSessionOpened) {
+          setState(() {
+            _qrSession = null;
+            _qrData = '';
+            _sessionErrorMessage = null;
+          });
+          _stopCodeRefreshTimer();
+          return;
+        }
         setState(() {
           _qrSession = session;
           _qrData = _buildQrPayload(session);
           _sessionErrorMessage = null;
         });
-        _startCodeRefreshTimer();
+        if (_selectedMethod == _CheckInMethod.qr) {
+          _startCodeRefreshTimer();
+        }
       } on FirebaseException catch (e) {
         if (!mounted) return;
         setState(() {
@@ -270,15 +280,9 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
         setState(() {
           _qrSession = null;
           _qrData = '';
-          _sessionErrorMessage = 'فشل إنشاء/جلب جلسة QR من Firestore.';
+          _sessionErrorMessage = 'فشل جلب جلسة QR من Firestore.';
         });
         _stopCodeRefreshTimer();
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isLoadingSession = false;
-          });
-        }
       }
     } finally {
       _isSyncingLectureAndCode = false;
@@ -551,7 +555,28 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
         });
         _startCodeRefreshTimer();
       } else {
-        await _syncLectureAndCode();
+        final session = await _qrAttendanceService.createOrGetSessionForLecture(
+          lecture: lecture,
+          lectureDate: _effectiveNowForLectureWindow(),
+        );
+        if (!mounted) return;
+        setState(() {
+          _qrSession = session;
+          _qrData = _buildQrPayload(session);
+          _sessionErrorMessage = null;
+        });
+        _startCodeRefreshTimer();
+        messenger?.showSnackBar(
+          SnackBar(
+            content: Text(
+              _tr(
+                'تم فتح جلسة QR لهذه المحاضرة.',
+                'QR session has been opened for this lecture.',
+              ),
+            ),
+            backgroundColor: const Color(0xFF2B9E56),
+          ),
+        );
       }
     } on LecturerAttendanceBlockedException catch (e) {
       if (!mounted) return;
@@ -617,7 +642,7 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
       _sessionErrorMessage = null;
     });
     _stopCodeRefreshTimer();
-    await _openOrConfirmBluetoothForCurrentLecture();
+    _stopBluetoothTokenTimer();
   }
 
   Future<void> _openOrConfirmBluetoothForCurrentLecture() async {
@@ -1162,6 +1187,8 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
                                   _stopBluetoothTokenTimer();
                                   if (_qrSession != null) {
                                     _startCodeRefreshTimer();
+                                  } else {
+                                    _stopCodeRefreshTimer();
                                   }
                                 },
                                 child: Container(
@@ -1546,6 +1573,40 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
                               ] else if (_selectedMethod ==
                                   _CheckInMethod.bluetooth) ...[
                                 _buildBluetoothSessionPanel(),
+                              ] else if (_qrSession == null ||
+                                  _qrData.isEmpty) ...[
+                                const Icon(
+                                  Icons.qr_code_2_rounded,
+                                  size: 58,
+                                  color: primaryColor,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _tr(
+                                    'جلسة QR غير مفتوحة',
+                                    'QR session is not open',
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: scheme.onSurfaceVariant,
+                                    fontFamily: 'Cairo',
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _tr(
+                                    'لن يتم تفعيل التحضير حتى تضغط زر فتح جلسة QR.',
+                                    'Attendance will not be activated until you tap Open QR Session.',
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: scheme.onSurfaceVariant,
+                                    fontFamily: 'Cairo',
+                                  ),
+                                ),
                               ] else ...[
                                 Container(
                                   height: 40,
@@ -1767,7 +1828,9 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
                                       ),
                                       icon: Icon(
                                         _selectedMethod == _CheckInMethod.qr
-                                            ? Icons.refresh_rounded
+                                            ? (_qrSession == null
+                                                  ? Icons.play_arrow_rounded
+                                                  : Icons.refresh_rounded)
                                             : _selectedMethod ==
                                                   _CheckInMethod.nfc
                                             ? Icons.nfc_rounded
@@ -1776,7 +1839,15 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
                                       ),
                                       label: Text(
                                         _selectedMethod == _CheckInMethod.qr
-                                            ? _tr('تحديث الكود', 'Refresh Code')
+                                            ? (_qrSession == null
+                                                  ? _tr(
+                                                      'فتح جلسة QR',
+                                                      'Open QR Session',
+                                                    )
+                                                  : _tr(
+                                                      'تحديث الكود',
+                                                      'Refresh Code',
+                                                    ))
                                             : _selectedMethod ==
                                                   _CheckInMethod.nfc
                                             ? _tr('تفعيل NFC', 'Enable NFC')

@@ -193,8 +193,11 @@ class NfcAttendanceService {
       'lecturerCardId': cardId,
       'attendanceMethod': 'nfc',
       'isOpen': true,
+      ManualAttendanceService.explicitSessionOpenedField: true,
       'openedAt': FieldValue.serverTimestamp(),
       'openedBy': lecturerId,
+      'explicitSessionOpenedAt': FieldValue.serverTimestamp(),
+      'explicitSessionOpenedBy': lecturerId,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
@@ -390,6 +393,7 @@ class NfcAttendanceService {
       'attendanceTime': nowTimeText,
       'status': status,
       'attendanceMethod': 'nfc',
+      ManualAttendanceService.explicitSessionOpenedField: true,
       'lecturerId': activeSession.lecturerId,
       'lecturerCardId': activeSession.lecturerCardId,
       if (location != null) 'location': location,
@@ -422,6 +426,7 @@ class NfcAttendanceService {
       'attendanceTime': nowTimeText,
       'status': status,
       'attendanceMethod': 'nfc',
+      ManualAttendanceService.explicitSessionOpenedField: true,
       'updatedAt': FieldValue.serverTimestamp(),
     };
 

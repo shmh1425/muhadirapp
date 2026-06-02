@@ -22,12 +22,15 @@ class AttendancePlannedSummary {
   final int totalPlannedMinutes;
   final int excusedMinutes;
   final int unexcusedMinutes;
+
   /// excused + unexcused (same as card total absence minutes).
   final int absenceMinutes;
   final double excusedAbsenceRatePercent;
   final double unexcusedAbsenceRatePercent;
+
   /// Total absence % = (excusedMinutes + unexcusedMinutes) / planned.
   final double absenceRatePercent;
+  static const int systemEndOffsetMinutes = 10;
 
   /// Same parsing as [_CourseSummaryCard._minutesFromTimeRange].
   static int minutesFromTimeRange(String timeRange) {
@@ -81,7 +84,9 @@ class AttendancePlannedSummary {
     }
 
     final weeklyHours = readHours(
-      courseData['weeklyHours'] ?? courseData['hoursPerWeek'] ?? courseData['contactHours'],
+      courseData['weeklyHours'] ??
+          courseData['hoursPerWeek'] ??
+          courseData['contactHours'],
     );
     if (weeklyHours > 0) return weeklyHours * 60;
     return 0;
@@ -108,10 +113,15 @@ class AttendancePlannedSummary {
     var total = 0;
     for (final row in schedule) {
       if (row is! Map) continue;
-      final start = hmToMinutes(row['startTime'] ?? row['start_time'] ?? row['from'] ?? row['start']);
-      final end = hmToMinutes(row['endTime'] ?? row['end_time'] ?? row['to'] ?? row['end']);
+      final start = hmToMinutes(
+        row['startTime'] ?? row['start_time'] ?? row['from'] ?? row['start'],
+      );
+      final end = hmToMinutes(
+        row['endTime'] ?? row['end_time'] ?? row['to'] ?? row['end'],
+      );
       if (start == null || end == null) continue;
-      final diff = end - start;
+      final effectiveEnd = end - systemEndOffsetMinutes;
+      final diff = effectiveEnd - start;
       final minutes = diff >= 0 ? diff : (diff + 24 * 60);
       // Sanity clamp: ignore absurd single-slot durations.
       if (minutes <= 0 || minutes > 12 * 60) continue;
@@ -127,7 +137,11 @@ class AttendancePlannedSummary {
     int semesterWeeksCount,
   ) {
     if (semesterStart != null) {
-      final start = DateTime(semesterStart.year, semesterStart.month, semesterStart.day);
+      final start = DateTime(
+        semesterStart.year,
+        semesterStart.month,
+        semesterStart.day,
+      );
       final d = DateTime(date.year, date.month, date.day);
       final days = d.difference(start).inDays;
       if (days >= 0) {
@@ -177,9 +191,12 @@ class AttendancePlannedSummary {
     required DateTime? semesterStartDate,
   }) {
     final code = courseCode.trim();
-    final weeklyFromSection = (weeklyMinutesFromSection ?? 0) > 0 ? weeklyMinutesFromSection! : 0;
-    final weeklyFromDb =
-        code.isNotEmpty && (codeToWeeklyMinutes[code] ?? 0) > 0 ? codeToWeeklyMinutes[code]! : 0;
+    final weeklyFromSection = (weeklyMinutesFromSection ?? 0) > 0
+        ? weeklyMinutesFromSection!
+        : 0;
+    final weeklyFromDb = code.isNotEmpty && (codeToWeeklyMinutes[code] ?? 0) > 0
+        ? codeToWeeklyMinutes[code]!
+        : 0;
     final weeklyFallback = weeklyMinutesFallback(
       dedupedRecords,
       semesterWeeksCount,
@@ -211,7 +228,9 @@ class AttendancePlannedSummary {
     final absenceMinutes = excusedMinutes + unexcusedMinutes;
 
     final excusedPct = planned <= 0 ? 0.0 : (excusedMinutes / planned) * 100.0;
-    final unexcusedPct = planned <= 0 ? 0.0 : (unexcusedMinutes / planned) * 100.0;
+    final unexcusedPct = planned <= 0
+        ? 0.0
+        : (unexcusedMinutes / planned) * 100.0;
     final totalPct = planned <= 0 ? 0.0 : (absenceMinutes / planned) * 100.0;
 
     return AttendancePlannedSummary(
@@ -263,7 +282,9 @@ class AttendanceSemesterContext {
     return parsed;
   }
 
-  static Future<AttendanceSemesterContext> load(FirebaseFirestore firestore) async {
+  static Future<AttendanceSemesterContext> load(
+    FirebaseFirestore firestore,
+  ) async {
     var weeks = 15;
     DateTime? semesterStart;
 
@@ -279,8 +300,10 @@ class AttendanceSemesterContext {
     }
 
     try {
-      final calendarDoc =
-          await firestore.collection('academic_calendar').doc('current').get();
+      final calendarDoc = await firestore
+          .collection('academic_calendar')
+          .doc('current')
+          .get();
       if (calendarDoc.exists) {
         final cal = calendarDoc.data() ?? <String, dynamic>{};
         const effectiveKeys = <String>[
@@ -320,7 +343,8 @@ class AttendanceSemesterContext {
       if (activeSnap.docs.isNotEmpty) {
         // Pick the one that contains "now" if possible; otherwise take the most recent startDate.
         final now = DateTime.now();
-        QueryDocumentSnapshot<Map<String, dynamic>> picked = activeSnap.docs.first;
+        QueryDocumentSnapshot<Map<String, dynamic>> picked =
+            activeSnap.docs.first;
         for (final doc in activeSnap.docs) {
           final data = doc.data();
           final start = _readDate(data['startDate']);
@@ -357,7 +381,8 @@ class AttendanceSemesterContext {
             .limit(25)
             .get();
         if (snapshot.docs.isNotEmpty) {
-          QueryDocumentSnapshot<Map<String, dynamic>> picked = snapshot.docs.first;
+          QueryDocumentSnapshot<Map<String, dynamic>> picked =
+              snapshot.docs.first;
           for (final doc in snapshot.docs) {
             final data = doc.data();
             final start = _readDate(data['startDate']);
@@ -391,22 +416,32 @@ class AttendanceSemesterContext {
             ? (data['termId'] ?? '').toString().trim()
             : preferred.id;
 
-        final termEffectiveWeeks = _readPositiveInt(data['effectiveTeachingWeeks']);
+        final termEffectiveWeeks = _readPositiveInt(
+          data['effectiveTeachingWeeks'],
+        );
         final termOfficialWeeks =
-            _readPositiveInt(data['officialWeeksCount']) ?? _readPositiveInt(data['semesterWeeks']);
+            _readPositiveInt(data['officialWeeksCount']) ??
+            _readPositiveInt(data['semesterWeeks']);
 
         int? weeksFromWeeksSubcollection;
         try {
-          final weeksSnap =
-              await firestore.collection('academic_terms').doc(termId).collection('weeks').get();
+          final weeksSnap = await firestore
+              .collection('academic_terms')
+              .doc(termId)
+              .collection('weeks')
+              .get();
           if (weeksSnap.docs.isNotEmpty) {
-            final countInAttendance =
-                weeksSnap.docs.where((d) => (d.data()['countInAttendance'] == true)).length;
-            if (countInAttendance > 0) weeksFromWeeksSubcollection = countInAttendance;
+            final countInAttendance = weeksSnap.docs
+                .where((d) => (d.data()['countInAttendance'] == true))
+                .length;
+            if (countInAttendance > 0) {
+              weeksFromWeeksSubcollection = countInAttendance;
+            }
           }
         } catch (_) {}
 
-        final chosenWeeks = termEffectiveWeeks ??
+        final chosenWeeks =
+            termEffectiveWeeks ??
             weeksFromWeeksSubcollection ??
             calendarWeeksCandidate ??
             termOfficialWeeks ??
@@ -414,7 +449,9 @@ class AttendanceSemesterContext {
         weeks = chosenWeeks.clamp(1, 40);
 
         semesterStart =
-            _readDate(data['startDate']) ?? calendarStartCandidate ?? semesterStart;
+            _readDate(data['startDate']) ??
+            calendarStartCandidate ??
+            semesterStart;
       }
     } catch (_) {}
 

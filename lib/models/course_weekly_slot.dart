@@ -16,29 +16,54 @@ class CourseWeeklySlot {
   final String hall;
   final String location;
 
+  static const int systemEndOffsetMinutes = 10;
+
   String get normalizedStartTime {
-    var s = startTime.trim();
-    if (s.length == 4 && s.isNotEmpty && s[0] != '0') {
-      s = '0$s';
-    }
-    return s;
+    return _normalizeHhmm(startTime);
+  }
+
+  String get normalizedScheduleEndTime {
+    return _normalizeHhmm(endTime);
   }
 
   String get normalizedEndTime {
-    var s = endTime.trim();
+    final minutes = _tryMinutesFromHhmm(normalizedScheduleEndTime);
+    if (minutes == null) return normalizedScheduleEndTime;
+    return _formatMinutes(minutes - systemEndOffsetMinutes);
+  }
+
+  static String _normalizeHhmm(String value) {
+    var s = value.trim();
     if (s.length == 4 && s.isNotEmpty && s[0] != '0') {
       s = '0$s';
     }
     return s;
   }
 
+  static int? _tryMinutesFromHhmm(String value) {
+    final parts = value.split(':');
+    if (parts.length != 2) return null;
+    final hour = int.tryParse(parts[0].trim());
+    final minute = int.tryParse(parts[1].trim());
+    if (hour == null || minute == null) return null;
+    return hour * 60 + minute;
+  }
+
+  static String _formatMinutes(int totalMinutes) {
+    final normalized = totalMinutes % (24 * 60);
+    final positive = normalized < 0 ? normalized + (24 * 60) : normalized;
+    final hour = positive ~/ 60;
+    final minute = positive % 60;
+    return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+  }
+
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'dayOfWeek': dayOfWeek,
-        'startTime': startTime,
-        'endTime': endTime,
-        'hall': hall,
-        'location': location,
-      };
+    'dayOfWeek': dayOfWeek,
+    'startTime': startTime,
+    'endTime': endTime,
+    'hall': hall,
+    'location': location,
+  };
 
   factory CourseWeeklySlot.fromJson(Map<String, dynamic> json) {
     final dayRaw = json['dayOfWeek'];

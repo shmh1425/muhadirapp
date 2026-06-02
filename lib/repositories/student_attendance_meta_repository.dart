@@ -22,7 +22,7 @@ class StudentAttendanceMetaRepository {
           (w) => <String, dynamic>{
             'dayOfWeek': w.dayOfWeek,
             'startTime': w.normalizedStartTime,
-            'endTime': w.normalizedEndTime,
+            'endTime': w.normalizedScheduleEndTime,
           },
         )
         .toList();
@@ -53,8 +53,7 @@ class StudentAttendanceMetaRepository {
     final codeToNameAr = <String, String>{};
     final codeToWeeklyMinutes = <String, int>{};
     final sectionIdToWeeklyMinutes = <String, int>{};
-    final sectionIdToScheduleSlots =
-        <String, List<AttendanceScheduleSlot>>{};
+    final sectionIdToScheduleSlots = <String, List<AttendanceScheduleSlot>>{};
 
     if (enrollments.isEmpty) {
       return (

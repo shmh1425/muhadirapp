@@ -123,6 +123,25 @@ class QrAttendanceService {
     if (existing.exists && existing.data() != null) {
       final session = QrAttendanceSession.fromDocumentSnapshot(existing);
       final now = DateTime.now();
+      if (!session.explicitSessionOpened) {
+        await sessionRef.set({
+          'isOpen': true,
+          ManualAttendanceService.explicitSessionOpenedField: true,
+          'sessionOpenedAt': Timestamp.fromDate(now),
+          'explicitSessionOpenedAt': Timestamp.fromDate(now),
+          'explicitSessionOpenedBy': lecturerId,
+          'lectureEndTime': lecture.endTime,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        return refreshSessionToken(session.sessionId);
+      }
+      if (session.lectureEndTime.trim() != lecture.endTime.trim()) {
+        await sessionRef.set({
+          'lectureEndTime': lecture.endTime,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        return refreshSessionToken(session.sessionId);
+      }
       if (session.numericCode.isEmpty ||
           now.isAfter(session.numericCodeExpiresAt) ||
           now.isAfter(session.expiresAt)) {
@@ -151,7 +170,10 @@ class QrAttendanceService {
       'dateKey': _dateKey(date),
       'attendanceMethod': 'qr',
       'isOpen': true,
+      ManualAttendanceService.explicitSessionOpenedField: true,
       'sessionOpenedAt': Timestamp.fromDate(now),
+      'explicitSessionOpenedAt': Timestamp.fromDate(now),
+      'explicitSessionOpenedBy': lecturerId,
       'generatedAt': Timestamp.fromDate(now),
       'expiresAt': Timestamp.fromDate(_calculateExpiresAt(now)),
       'tokenVersion': 1,
@@ -346,7 +368,7 @@ class QrAttendanceService {
     );
 
     final now = currentTime ?? DateTime.now();
-    if (!session.isOpen) {
+    if (!session.isOpen || !session.explicitSessionOpened) {
       _debugLog('QR_SUBMIT_FAILED reason=session_closed');
       throw QrAttendanceException(
         code: QrAttendanceErrorCode.sessionClosed,
@@ -576,6 +598,8 @@ class QrAttendanceService {
                 ),
           ),
           'attendanceMethod': 'qr',
+          ManualAttendanceService.explicitSessionOpenedField: true,
+          'explicitSessionOpenedBy': session.lecturerId,
           'lecturerId': session.lecturerId,
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));

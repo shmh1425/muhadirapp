@@ -165,10 +165,13 @@ class BluetoothAttendanceService {
       'dateKey': _dateKey(date),
       'attendanceMethod': 'bluetooth',
       'sessionWasOpened': true,
+      ManualAttendanceService.explicitSessionOpenedField: true,
       'isOpen': true,
       'sessionOpenedAt': Timestamp.fromDate(now),
+      'explicitSessionOpenedAt': Timestamp.fromDate(now),
       'openedAt': FieldValue.serverTimestamp(),
       'openedBy': lecturerId,
+      'explicitSessionOpenedBy': lecturerId,
       'bluetoothSessionToken': token,
       'tokenVersion': 1,
       'generatedAt': Timestamp.fromDate(now),
@@ -204,6 +207,7 @@ class BluetoothAttendanceService {
     String? detectedSignalId,
     String? rawPayload,
     DateTime? currentTime,
+
     /// Offline queue replay: resolve closed sessions and skip live token checks.
     bool queueReplay = false,
   }) async {
@@ -335,12 +339,12 @@ class BluetoothAttendanceService {
       }
 
       if (now.isAfter(session.expiresAt)) {
-      _debugBluetoothValidationFailed(
-        reason: 'session_expired',
-        sessionIdArg: sessionId,
-        sessionIdHash: sessionIdHash,
-        tokenFragment: tokenFragment,
-      );
+        _debugBluetoothValidationFailed(
+          reason: 'session_expired',
+          sessionIdArg: sessionId,
+          sessionIdHash: sessionIdHash,
+          tokenFragment: tokenFragment,
+        );
         throw BluetoothAttendanceException(
           code: BluetoothAttendanceErrorCode.sessionExpired,
           message: 'انتهت صلاحية جلسة البلوتوث',
@@ -508,6 +512,7 @@ class BluetoothAttendanceService {
       'lectureEndTime': session.lectureEndTime,
       'sessionOpenedAt': Timestamp.fromDate(sessionOpenedAt),
       'sessionWasOpened': true,
+      ManualAttendanceService.explicitSessionOpenedField: true,
       'attendanceTime': attendanceTime,
       'status': status,
       'attendanceMethod': 'bluetooth',
@@ -562,6 +567,7 @@ class BluetoothAttendanceService {
         transaction.set(manualSessionRef, {
           'attendanceMethod': 'bluetooth',
           'sessionWasOpened': true,
+          ManualAttendanceService.explicitSessionOpenedField: true,
           'sessionOpenedAt': Timestamp.fromDate(sessionOpenedAt),
           'lastAttendanceAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
@@ -723,6 +729,9 @@ class BluetoothAttendanceService {
       'openedAt': FieldValue.serverTimestamp(),
       'sessionOpenedAt': Timestamp.fromDate(now),
       'openedBy': lecturerId,
+      ManualAttendanceService.explicitSessionOpenedField: true,
+      'explicitSessionOpenedAt': Timestamp.fromDate(now),
+      'explicitSessionOpenedBy': lecturerId,
       'closedAt': FieldValue.delete(),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
@@ -853,7 +862,8 @@ class BluetoothAttendanceService {
         continue;
       }
       if (!queueReplay) {
-        if (fullToken.isNotEmpty && session.bluetoothSessionToken != fullToken) {
+        if (fullToken.isNotEmpty &&
+            session.bluetoothSessionToken != fullToken) {
           continue;
         }
         if (fragment.isNotEmpty &&

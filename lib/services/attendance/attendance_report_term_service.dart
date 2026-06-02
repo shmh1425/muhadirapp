@@ -3,7 +3,7 @@ import '../../models/lecturer/lecture_item.dart';
 import '../lecturer/lecture_repository.dart';
 import 'manual_attendance_service.dart';
 
-/// Term-wide scheduled lecture expansion + default-present persistence for reports.
+/// Term-wide scheduled lecture expansion + default-present persistence.
 class AttendanceReportTermService {
   AttendanceReportTermService._();
   static final AttendanceReportTermService instance =
@@ -11,8 +11,14 @@ class AttendanceReportTermService {
 
   final ManualAttendanceService _manual = ManualAttendanceService.instance;
 
-  /// Ensures ended scheduled lectures without an opened session have persisted
-  /// default-present sessions, then returns all section sessions.
+  /// Ensures ended scheduled lectures without an opened session are persisted
+  /// as default-present, then returns all section sessions.
+  ///
+  /// Policy:
+  /// - If lecturer opened attendance, pending students may become absent after
+  ///   the lecture window ends.
+  /// - If lecturer never opened attendance, reports materialize the lecture as
+  ///   present for everyone, never absent.
   Future<List<ManualAttendanceSession>> syncAndLoadSectionSessions({
     required List<LectureItem> lectures,
     required LectureRepository calendar,
@@ -23,8 +29,7 @@ class AttendanceReportTermService {
     };
     if (sectionIds.isEmpty) return const <ManualAttendanceSession>[];
 
-    final existing =
-        await _manual.getSessionsForSectionIds(sectionIds);
+    final existing = await _manual.getSessionsForSectionIds(sectionIds);
     final knownSessionIds = existing.map((s) => s.sessionId).toSet();
     final now = calendar.currentDateTime;
 
@@ -52,11 +57,12 @@ class AttendanceReportTermService {
         );
         if (knownSessionIds.contains(sessionId)) continue;
 
-        final created = await _manual.ensureDefaultPresentSessionForEndedLecture(
-          lecture: lecture,
-          lectureDate: date,
-          now: now,
-        );
+        final created = await _manual
+            .ensureDefaultPresentSessionForEndedLecture(
+              lecture: lecture,
+              lectureDate: date,
+              now: now,
+            );
         if (created != null && created.isNotEmpty) {
           knownSessionIds.add(created);
         }
