@@ -14,7 +14,6 @@ import '../../models/attendance/qr_attendance_session.dart';
 import '../../models/lecturer/lecture_item.dart';
 import '../../services/attendance/attendance_session_export_service.dart';
 import '../../widgets/lecturer/attendance_export_format_picker.dart';
-import '../../services/attendance/attendance_status_policy.dart';
 import '../../services/attendance/bluetooth_attendance_service.dart';
 import '../../services/attendance/bluetooth_ble_service.dart';
 import '../../features/attendance/attendance_entry_point.dart';
@@ -112,6 +111,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   bool _isExporting = false;
   bool _isLoadingAttendance = true;
   String? _attendanceLoadError;
+  LecturerAttendanceEligibilityResult? _attendanceStartEligibilityResult;
+  bool _isCheckingAttendanceStartEligibility = false;
   DateTime? _calendarReferenceDate;
   bool _isSyncRefreshing = false;
   AttendanceMethod _selectedMethod = AttendanceMethod.manual;
@@ -175,6 +176,10 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   DateTime? get _selectedDate => widget.selectedDate;
   String? get _providedSessionId => widget.sessionId;
   bool get _effectiveViewOnly => _viewOnly;
+  bool get _canEditAttendanceNow =>
+      !_effectiveViewOnly &&
+      !_isCheckingAttendanceStartEligibility &&
+      (_attendanceStartEligibilityResult?.canTakeAttendance ?? false);
 
   /// صيغة موحدة لعرض النسبة: "N٪" بدون مسافات أو رموز زيادة.
   String _formatPercentage(int value) => '$value٪';
@@ -215,12 +220,12 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
 
   /// هل يوجد طلاب بحالة مزامنة نشطة (pending / syncing / failed)؟
   bool get _hasPendingSyncStudents => _students.any(
-        (s) =>
-            s.uiSyncState == AttendanceUIState.pending ||
-            s.uiSyncState == AttendanceUIState.syncing ||
-            s.uiSyncState == AttendanceUIState.failed ||
-            s.isOffline,
-      );
+    (s) =>
+        s.uiSyncState == AttendanceUIState.pending ||
+        s.uiSyncState == AttendanceUIState.syncing ||
+        s.uiSyncState == AttendanceUIState.failed ||
+        s.isOffline,
+  );
 
   Map<int, ManualAttendanceStatus> _firestoreStatusMap() {
     final map = <int, ManualAttendanceStatus>{};
@@ -238,10 +243,10 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       sessionId: sessionId,
       firestoreMapBuilder: () async => _firestoreStatusMap(),
     );
-    _attendanceStateEventsSub =
-        AttendanceStateService.instance.attendanceStateEvents.listen(
-      _onAttendanceStateEvent,
-    );
+    _attendanceStateEventsSub = AttendanceStateService
+        .instance
+        .attendanceStateEvents
+        .listen(_onAttendanceStateEvent);
   }
 
   void _onAttendanceStateEvent(AttendanceStateEvent event) {
@@ -259,7 +264,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     required AttendanceUIState uiSyncState,
   }) {
     final hadPendingSyncBefore = _hasPendingSyncStudents;
-    final showSync = uiSyncState == AttendanceUIState.pending ||
+    final showSync =
+        uiSyncState == AttendanceUIState.pending ||
         uiSyncState == AttendanceUIState.syncing ||
         uiSyncState == AttendanceUIState.failed;
     setState(() {
@@ -299,7 +305,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           studentId: s.academicNumber,
         );
         final uiSyncState = model?.state ?? AttendanceUIState.idle;
-        final showSync = uiSyncState == AttendanceUIState.pending ||
+        final showSync =
+            uiSyncState == AttendanceUIState.pending ||
             uiSyncState == AttendanceUIState.syncing ||
             uiSyncState == AttendanceUIState.failed;
         if (showSync == s.isOffline && uiSyncState == s.uiSyncState) return s;
@@ -337,7 +344,9 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       return;
     }
 
-    if (hadPendingSyncBefore && !hasPendingSyncAfter && _syncCompletionSnackArmed) {
+    if (hadPendingSyncBefore &&
+        !hasPendingSyncAfter &&
+        _syncCompletionSnackArmed) {
       _syncCompletionSnackArmed = false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -429,19 +438,6 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     );
   }
 
-  Future<void> _prepareSessionInBackground(DateTime sessionDate) async {
-    try {
-      await _manualAttendanceService
-          .prepareSessionForLecture(
-            lecture: _lecture,
-            sessionDate: sessionDate,
-          )
-          .timeout(const Duration(seconds: 12));
-    } catch (_) {
-      // Session doc will be created on first successful online save/sync.
-    }
-  }
-
   /// حفظ التعديلات للجلسة الحالية فقط (مربوط بـ CRN + تاريخ اليوم).
   /// التعديل على أيام سابقة من [Attendance Reports].
   Future<void> _saveChanges() async {
@@ -481,6 +477,14 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       );
       return;
     }
+    if (!_canEditAttendanceNow) {
+      final latest = await _refreshAttendanceStartEligibility();
+      if (latest == null || !latest.canTakeAttendance) {
+        if (!mounted) return;
+        _showMethodSnack(_editBlockedMessage(latest), error: true);
+        return;
+      }
+    }
 
     setState(() => _isSaving = true);
 
@@ -491,8 +495,17 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         if (studentId == null) continue;
         updates[studentId] = _manualStatusFromUi(entry.value);
       }
+      final preparedSessionId = await _manualAttendanceService
+          .prepareSessionForLecture(
+            lecture: _lecture,
+            sessionDate: _sessionDate,
+          );
+      if (mounted) {
+        _sessionId = preparedSessionId;
+      }
+
       await AttendanceEntryPoint.submitManualBatch(
-        sessionId: sessionId,
+        sessionId: preparedSessionId,
         courseId: _lecture.crn.trim(),
         updates: updates,
       );
@@ -511,10 +524,11 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         _hasPendingChanges = false;
       });
       _applyPendingSyncFlagsFromQueue();
-      _persistSessionCache(sessionId);
+      _persistSessionCache(preparedSessionId);
       if (!mounted) return;
       unawaited(
-        ManualAttendanceOfflineService.instance.triggerBackgroundSyncIfPossible(),
+        ManualAttendanceOfflineService.instance
+            .triggerBackgroundSyncIfPossible(),
       );
       unawaited(_refreshSectionAbsencePercents());
 
@@ -537,7 +551,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_eligibilityMessage(e.result)),
+          content: Text(_editBlockedMessage(e.result)),
           backgroundColor: const Color(0xFFD32F2F),
         ),
       );
@@ -749,29 +763,6 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       return;
     }
 
-    if (!_effectiveViewOnly) {
-      try {
-        final eligibility = await _attendanceStartEligibility();
-        if (!eligibility.canTakeAttendance) {
-          if (!mounted) return;
-          setState(() {
-            _isLoadingAttendance = false;
-            _attendanceLoadError = _eligibilityMessage(eligibility);
-            _students = <_StudentRow>[];
-          });
-          return;
-        }
-      } catch (e) {
-        if (!mounted) return;
-        setState(() {
-          _isLoadingAttendance = false;
-          _attendanceLoadError = e.toString();
-          _students = <_StudentRow>[];
-        });
-        return;
-      }
-    }
-
     final cached = LecturerAttendanceSessionUiCache.instance.snapshotFor(
       ctx.sessionId,
     );
@@ -781,6 +772,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       if (!mounted) return;
       setState(() {
         _sessionId = ctx.sessionId;
+        _attendanceStartEligibilityResult = null;
         _students = cached.students.map(_rowFromSnapshot).toList();
         _isUsingRosterFallback = cached.rosterFallback;
         _isLoadingAttendance = false;
@@ -790,23 +782,14 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       unawaited(_refreshSectionAbsencePercents());
     } else {
       setState(() {
+        _attendanceStartEligibilityResult = null;
         _isLoadingAttendance = true;
         _attendanceLoadError = null;
       });
     }
+    unawaited(_refreshAttendanceStartEligibility(showReportOnlyNote: true));
 
     try {
-      if (!_effectiveViewOnly && !ctx.hasProvidedSession) {
-        if (restoredFromCache) {
-          unawaited(_prepareSessionInBackground(ctx.targetDate));
-        } else {
-          await _manualAttendanceService.prepareSessionForLecture(
-            lecture: _lecture,
-            sessionDate: ctx.targetDate,
-          );
-        }
-      }
-
       if (!mounted) return;
       if (!restoredFromCache) {
         unawaited(_refreshSectionAbsencePercents());
@@ -894,6 +877,19 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   Future<void> _loadFallbackRosterForSection(String sessionId) async {
     final sectionId = (_lecture.sectionId ?? '').trim();
     if (sectionId.isEmpty) return;
+    if (_shouldSuppressRosterFallbackForEndedLecture) {
+      if (!mounted || _sessionId != sessionId) return;
+      setState(() {
+        if (_students.isEmpty) {
+          _isUsingRosterFallback = false;
+          _methodStatusMessage = _tr(
+            'لا توجد بيانات تحضير مسجلة لهذه المحاضرة.',
+            'No attendance data is recorded for this lecture.',
+          );
+        }
+      });
+      return;
+    }
     try {
       final roster = await _manualAttendanceService.getActiveSectionRoster(
         sectionId,
@@ -977,14 +973,104 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     );
   }
 
+  Future<LecturerAttendanceEligibilityResult?>
+  _refreshAttendanceStartEligibility({bool showReportOnlyNote = false}) async {
+    if (_effectiveViewOnly) return null;
+    if (mounted) {
+      setState(() => _isCheckingAttendanceStartEligibility = true);
+    }
+    try {
+      final result = await _attendanceStartEligibility();
+      if (!mounted) return result;
+      setState(() {
+        _attendanceStartEligibilityResult = result;
+        _isCheckingAttendanceStartEligibility = false;
+        if (showReportOnlyNote && !result.canTakeAttendance) {
+          _methodStatusMessage = _reportOnlyMessage(result);
+        }
+      });
+      return result;
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isCheckingAttendanceStartEligibility = false);
+      }
+      return null;
+    }
+  }
+
   String _eligibilityMessage(LecturerAttendanceEligibilityResult result) {
     return LecturerLanguageController.isArabic
         ? result.messageAr
         : result.messageEn;
   }
 
+  String _editBlockedMessage(LecturerAttendanceEligibilityResult? result) {
+    if (result?.reason == LecturerAttendanceBlockReason.afterEnd) {
+      return _tr(
+        'انتهى وقت المحاضرة ولا يمكن تعديل التحضير.',
+        'The lecture time has ended and attendance cannot be edited.',
+      );
+    }
+    if (result == null) {
+      return _tr(
+        'جاري التحقق من صلاحية تعديل التحضير.',
+        'Checking whether attendance can be edited.',
+      );
+    }
+    return _eligibilityMessage(result);
+  }
+
+  String _reportOnlyMessage(LecturerAttendanceEligibilityResult result) {
+    if (result.reason == LecturerAttendanceBlockReason.afterEnd) {
+      return _tr(
+        'انتهى وقت المحاضرة. يمكنك عرض تقرير التحضير فقط.',
+        'The lecture time has ended. You can view the attendance report only.',
+      );
+    }
+    return _eligibilityMessage(result);
+  }
+
+  void _showEditBlockedSnack() {
+    _showMethodSnack(
+      _editBlockedMessage(_attendanceStartEligibilityResult),
+      error: true,
+    );
+  }
+
   void _showAttendanceBlockedSnack(LecturerAttendanceEligibilityResult result) {
     _showMethodSnack(_eligibilityMessage(result), error: true);
+  }
+
+  bool get _shouldSuppressRosterFallbackForEndedLecture {
+    final sessionDay = DateTime(
+      _sessionDate.year,
+      _sessionDate.month,
+      _sessionDate.day,
+    );
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (sessionDay.isBefore(today)) return true;
+    final result = LecturerAttendanceEligibility.evaluateForTimes(
+      lectureDate: sessionDay,
+      lectureStartTime: _lecture.startTime,
+      lectureEndTime: _lecture.endTime,
+      now: now,
+      lectureStatus: null,
+    );
+    return result.reason == LecturerAttendanceBlockReason.afterEnd;
+  }
+
+  String get _emptyAttendanceTableMessage {
+    if (_shouldSuppressRosterFallbackForEndedLecture) {
+      return _tr(
+        'لا توجد بيانات تحضير مسجلة لهذه المحاضرة.',
+        'No attendance data is recorded for this lecture.',
+      );
+    }
+    return _tr(
+      'لا يوجد طلاب مسجلون في هذه الشعبة حتى الآن.',
+      'No enrolled students found for this section yet.',
+    );
   }
 
   Future<void> _onSelectMethod(AttendanceMethod method) async {
@@ -1012,93 +1098,98 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       _stopBluetoothTokenTimer();
     }
 
-    try {
-      switch (method) {
-        case AttendanceMethod.manual:
-          await _startManualAttendanceMode();
-          break;
-        case AttendanceMethod.qr:
-          await _loadQrForCurrentLecture();
-          break;
-        case AttendanceMethod.nfc:
-          await _openOrConfirmNfcForCurrentLecture();
-          break;
-        case AttendanceMethod.bluetooth:
-          await _openOrConfirmBluetoothForCurrentLecture();
-          break;
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isProcessingMethodAction = false;
-        });
-      }
-    }
+    if (!mounted) return;
+    setState(() {
+      final blockedMessage =
+          _attendanceStartEligibilityResult != null &&
+              !_attendanceStartEligibilityResult!.canTakeAttendance
+          ? _reportOnlyMessage(_attendanceStartEligibilityResult!)
+          : null;
+      _methodStatusMessage =
+          blockedMessage ??
+          switch (method) {
+            AttendanceMethod.manual => _tr(
+              'اضغط حفظ/تعديل الحضور لتفعيل التحضير اليدوي.',
+              'Save or edit attendance to activate manual attendance.',
+            ),
+            AttendanceMethod.qr =>
+              (_qrSession != null && _qrData.isNotEmpty)
+                  ? _tr(
+                      'جلسة QR جاهزة. يمكنك عرض رمز التحضير.',
+                      'QR session is ready. You can show the attendance code.',
+                    )
+                  : _tr(
+                      'اضغط زر "تفعيل التحضير عبر QR" لفتح الجلسة.',
+                      'Tap "Activate QR attendance" to open the session.',
+                    ),
+            AttendanceMethod.nfc =>
+              _isNfcActiveForLecture
+                  ? _tr(
+                      'التحضير عبر NFC نشط لهذه المحاضرة.',
+                      'NFC attendance is active for this lecture.',
+                    )
+                  : _tr(
+                      'اضغط زر "تفعيل NFC" لفتح الجلسة.',
+                      'Tap "Enable NFC" to open the session.',
+                    ),
+            AttendanceMethod.bluetooth =>
+              (_bluetoothSession != null)
+                  ? _tr(
+                      'جلسة البلوتوث جاهزة. يمكنك بدء البث.',
+                      'Bluetooth session is ready. You can start broadcasting.',
+                    )
+                  : _tr(
+                      'اضغط زر "فتح جلسة البلوتوث" قبل بدء البث.',
+                      'Tap "Start Bluetooth Session" before broadcasting.',
+                    ),
+          };
+      _isProcessingMethodAction = false;
+    });
   }
 
-  Future<void> _startManualAttendanceMode() async {
-    final sessionId = _sessionId?.trim() ?? '';
-    if (sessionId.isEmpty) {
-      setState(() {
-        _methodStatusMessage = _tr(
-          'تعذر بدء التحضير اليدوي قبل تحميل الجلسة.',
-          'Cannot start manual attendance before loading session.',
-        );
-      });
-      return;
-    }
-
-    try {
-      final changed = await _manualAttendanceService
-          .markPendingAsPresentForManual(sessionId);
-      if (!mounted) return;
-      setState(() {
-        _methodStatusMessage = changed > 0
-            ? _tr(
-                'التحضير اليدوي فعّال: تم اعتبار جميع الطلاب حاضرين افتراضياً.',
-                'Manual attendance active: all students are marked present by default.',
-              )
-            : _tr('التحضير اليدوي فعّال.', 'Manual attendance is active.');
-      });
-    } catch (_) {
-      if (!mounted) return;
-      _showMethodSnack(
-        _tr(
-          'تعذر تفعيل التحضير اليدوي حالياً.',
-          'Unable to activate manual attendance right now.',
+  Widget _buildCompactNfcActionButton() {
+    final isBusy = _isProcessingMethodAction;
+    final isActive = _isNfcActiveForLecture;
+    final canStart = _canEditAttendanceNow;
+    return SizedBox(
+      width: double.infinity,
+      height: 46,
+      child: FilledButton.icon(
+        onPressed: isBusy || isActive || !canStart
+            ? null
+            : _openOrConfirmNfcForCurrentLecture,
+        style: FilledButton.styleFrom(
+          backgroundColor: const Color(0xFF006571),
+          disabledBackgroundColor: isActive
+              ? const Color(0xFFB9D8D8)
+              : const Color(0xFFE3E8EA),
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
-        error: true,
-      );
-    }
+        icon: Icon(isActive ? Icons.check_circle_rounded : Icons.nfc_rounded),
+        label: Text(
+          isActive
+              ? _tr('NFC مفعل', 'NFC Enabled')
+              : _tr('تفعيل NFC', 'Enable NFC'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontFamily: 'Cairo',
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _maybeAutoActivateQrForScheduledLecture(String sessionId) async {
+    // Important: opening QR must be explicit by lecturer action.
+    // Auto-activation previously opened attendance sessions implicitly.
     if (_effectiveViewOnly) return;
     if (_autoActivatedQrSessionId == sessionId) return;
-
-    final now = DateTime.now();
-    final sessionDate = _sessionDate;
-    final today = DateTime(now.year, now.month, now.day);
-    final targetDate = DateTime(
-      sessionDate.year,
-      sessionDate.month,
-      sessionDate.day,
-    );
-    if (targetDate != today) return;
-
-    final withinWindow = AttendanceStatusPolicy.isSessionWithinAttendanceWindow(
-      lectureDate: targetDate,
-      lectureStartTime: _lecture.startTime,
-      lectureEndTime: _lecture.endTime,
-      currentTime: now,
-    );
-    if (!withinWindow) return;
-
     _autoActivatedQrSessionId = sessionId;
-    if (mounted && _selectedMethod != AttendanceMethod.qr) {
-      setState(() => _selectedMethod = AttendanceMethod.qr);
-    }
-    await _loadQrForCurrentLecture();
   }
 
   Future<void> _loadQrForCurrentLecture({bool refreshToken = false}) async {
@@ -1919,6 +2010,11 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                               padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
                               child: _buildCompactQrActionButton(),
                             ),
+                          if (_selectedMethod == AttendanceMethod.nfc)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
+                              child: _buildCompactNfcActionButton(),
+                            ),
                           if (_selectedMethod == AttendanceMethod.bluetooth)
                             Padding(
                               padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
@@ -2472,6 +2568,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     final session = _bluetoothSession;
+    final hasSession = session != null;
     final isBroadcasting =
         _bluetoothBroadcastState == BluetoothBroadcastState.broadcasting;
     final busy =
@@ -2480,6 +2577,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         _isStoppingBluetoothBroadcast ||
         _bluetoothBroadcastState ==
             BluetoothBroadcastState.requestingPermission;
+    final canStart = _canEditAttendanceNow;
 
     return Container(
       width: double.infinity,
@@ -2533,6 +2631,11 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                               'يتم بث إشارة البلوتوث الآن',
                               'Bluetooth signal is broadcasting now',
                             )
+                          : !hasSession
+                          ? _tr(
+                              'جلسة البلوتوث غير مفتوحة',
+                              'Bluetooth session is not open',
+                            )
                           : _tr(
                               'جلسة البلوتوث غير نشطة',
                               'Bluetooth session inactive',
@@ -2572,11 +2675,13 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           ),
           const SizedBox(height: 10),
           FilledButton.icon(
-            onPressed: session == null || busy
+            onPressed: busy || (!isBroadcasting && !canStart)
                 ? null
-                : (isBroadcasting
-                      ? _stopBluetoothBroadcast
-                      : () => _startBluetoothBroadcast()),
+                : (!hasSession
+                      ? _openOrConfirmBluetoothForCurrentLecture
+                      : (isBroadcasting
+                            ? _stopBluetoothBroadcast
+                            : () => _startBluetoothBroadcast())),
             style: FilledButton.styleFrom(
               backgroundColor: isBroadcasting
                   ? const Color(0xFFD14A4A)
@@ -2598,13 +2703,17 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                     ),
                   )
                 : Icon(
-                    isBroadcasting
+                    !hasSession
+                        ? Icons.bluetooth_rounded
+                        : isBroadcasting
                         ? Icons.bluetooth_disabled_rounded
                         : Icons.bluetooth_searching_rounded,
                     size: 18,
                   ),
             label: Text(
-              isBroadcasting
+              !hasSession
+                  ? _tr('فتح جلسة البلوتوث', 'Start Bluetooth Session')
+                  : isBroadcasting
                   ? _tr('إيقاف البث', 'Stop Broadcast')
                   : _tr('بدء البث', 'Start Broadcast'),
               overflow: TextOverflow.ellipsis,
@@ -2689,10 +2798,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                     padding: const EdgeInsets.all(24),
                     child: Text(
                       _allStudents.isEmpty
-                          ? _tr(
-                              'لا يوجد طلاب مسجلون في هذه الشعبة حتى الآن.',
-                              'No enrolled students found for this section yet.',
-                            )
+                          ? _emptyAttendanceTableMessage
                           : _tr(
                               'لا يوجد طلاب في هذا الفلتر.',
                               'No students in this filter.',
@@ -3059,42 +3165,39 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   }
 
   Widget _buildCompactQrActionButton() {
-    final canOpen = _qrSession != null && _qrData.isNotEmpty && !_isLoadingQr;
+    final hasReadyQr = _qrSession != null && _qrData.isNotEmpty;
+    final isBusy = _isLoadingQr || _isProcessingMethodAction;
+    final canStart = _canEditAttendanceNow;
     return SizedBox(
       width: double.infinity,
       height: 46,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: _isLoadingQr
+          onTap: isBusy || !canStart
               ? null
-              : () {
-                  if (!canOpen) {
-                    _showMethodSnack(
-                      _tr(
-                        'جاري تجهيز رمز QR، حاول مرة أخرى بعد لحظات.',
-                        'QR is still loading, please try again shortly.',
-                      ),
-                      error: true,
-                    );
-                    return;
+              : () async {
+                  if (!hasReadyQr) {
+                    await _loadQrForCurrentLecture();
+                    if (!mounted) return;
+                    if (_qrSession == null || _qrData.isEmpty) return;
                   }
-                  _showQrPopup();
+                  await _showQrPopup();
                 },
           borderRadius: BorderRadius.circular(14),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
-              gradient: _isLoadingQr
+              gradient: isBusy || !canStart
                   ? null
                   : const LinearGradient(
                       colors: [Color(0xFF27A2A9), Color(0xFF006571)],
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                     ),
-              color: _isLoadingQr ? const Color(0xFFE3E8EA) : null,
+              color: isBusy || !canStart ? const Color(0xFFE3E8EA) : null,
               borderRadius: BorderRadius.circular(14),
-              boxShadow: _isLoadingQr
+              boxShadow: isBusy || !canStart
                   ? null
                   : [
                       BoxShadow(
@@ -3110,12 +3213,16 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                 Icon(
                   Icons.qr_code_rounded,
                   size: 20,
-                  color: _isLoadingQr ? const Color(0xFF92A2A7) : Colors.white,
+                  color: isBusy || !canStart
+                      ? const Color(0xFF92A2A7)
+                      : Colors.white,
                 ),
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
-                    _tr('عرض رمز التحضير', 'Show Attendance Code'),
+                    hasReadyQr
+                        ? _tr('عرض رمز التحضير', 'Show Attendance Code')
+                        : _tr('تفعيل التحضير عبر QR', 'Activate QR attendance'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
@@ -3123,7 +3230,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                       fontFamily: 'Cairo',
                       fontSize: 14,
                       fontWeight: FontWeight.w800,
-                      color: _isLoadingQr
+                      color: isBusy || !canStart
                           ? const Color(0xFF92A2A7)
                           : Colors.white,
                     ),
@@ -3491,7 +3598,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     final effectiveStyle =
         statusStyle ?? _statusStyle(AttendanceStatus.present);
     final effectiveStatus = _effectiveStatus(student);
-    final showSync = student.isOffline ||
+    final showSync =
+        student.isOffline ||
         student.uiSyncState == AttendanceUIState.pending ||
         student.uiSyncState == AttendanceUIState.syncing ||
         student.uiSyncState == AttendanceUIState.failed;
@@ -3509,18 +3617,20 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
               ),
             ),
           )
-        : (isSuspended
-              ? () => ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      _tr(
-                        'لا يمكن تعديل حالة المحروم.',
-                        'Suspended status cannot be changed.',
-                      ),
-                    ),
-                  ),
-                )
-              : () => _showStatusPicker(student));
+        : (!_canEditAttendanceNow
+              ? _showEditBlockedSnack
+              : (isSuspended
+                    ? () => ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            _tr(
+                              'لا يمكن تعديل حالة المحروم.',
+                              'Suspended status cannot be changed.',
+                            ),
+                          ),
+                        ),
+                      )
+                    : () => _showStatusPicker(student)));
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -3638,7 +3748,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     const radius = 14.0;
     const gap = 12.0;
     final hasChanges = _hasPendingChanges;
-    final canTap = !_isSaving;
+    final canSave = !_isSaving && _canEditAttendanceNow;
 
     if (_effectiveViewOnly) {
       return SizedBox(
@@ -3677,24 +3787,28 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           child: Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: canTap ? _saveChanges : null,
+              onTap: _isSaving
+                  ? null
+                  : (!_canEditAttendanceNow && hasChanges)
+                  ? _showEditBlockedSnack
+                  : _saveChanges,
               borderRadius: BorderRadius.circular(radius),
               child: Container(
                 height: height,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  gradient: (hasChanges && canTap)
+                  gradient: (hasChanges && canSave)
                       ? const LinearGradient(
                           colors: [Color(0xFF27A2A9), Color(0xFF006571)],
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                         )
                       : null,
-                  color: (hasChanges && canTap)
+                  color: (hasChanges && canSave)
                       ? null
                       : const Color(0xFFE3E8EA),
                   borderRadius: BorderRadius.circular(radius),
-                  boxShadow: (hasChanges && canTap)
+                  boxShadow: (hasChanges && canSave)
                       ? [
                           BoxShadow(
                             color: _primary.withValues(alpha: 0.18),
@@ -3721,7 +3835,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
                           fontFamily: 'Cairo',
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
-                          color: (hasChanges && canTap)
+                          color: (hasChanges && canSave)
                               ? Colors.white
                               : const Color(0xFF92A2A7),
                         ),
