@@ -8,6 +8,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../models/attendance/bluetooth_attendance_session.dart';
 import '../../models/attendance/manual_attendance_record.dart';
+import '../../models/attendance/manual_attendance_session.dart';
 import '../../models/external_student.dart';
 import '../../models/attendance/nfc_attendance_session.dart';
 import '../../models/attendance/qr_attendance_session.dart';
@@ -133,6 +134,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       BluetoothBroadcastState.idle;
   String? _bluetoothBroadcastMessage;
   bool _isUsingRosterFallback = false;
+  bool _sessionExistsForEditing = false;
   Map<int, ExternalStudent> _studentProfiles = {};
 
   /// Overall section absence metrics per student (same logic as student attendance tracking).
@@ -176,10 +178,13 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   DateTime? get _selectedDate => widget.selectedDate;
   String? get _providedSessionId => widget.sessionId;
   bool get _effectiveViewOnly => _viewOnly;
-  bool get _canEditAttendanceNow =>
+  bool get _canStartAttendanceNow =>
       !_effectiveViewOnly &&
       !_isCheckingAttendanceStartEligibility &&
       (_attendanceStartEligibilityResult?.canTakeAttendance ?? false);
+  bool get _canEditAttendanceNow =>
+      !_effectiveViewOnly &&
+      (_sessionExistsForEditing || _canStartAttendanceNow);
 
   /// صيغة موحدة لعرض النسبة: "N٪" بدون مسافات أو رموز زيادة.
   String _formatPercentage(int value) => '$value٪';
@@ -477,7 +482,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       );
       return;
     }
-    if (!_canEditAttendanceNow) {
+    if (!_sessionExistsForEditing && !_canStartAttendanceNow) {
       final latest = await _refreshAttendanceStartEligibility();
       if (latest == null || !latest.canTakeAttendance) {
         if (!mounted) return;
@@ -495,13 +500,15 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         if (studentId == null) continue;
         updates[studentId] = _manualStatusFromUi(entry.value);
       }
-      final preparedSessionId = await _manualAttendanceService
-          .prepareSessionForLecture(
-            lecture: _lecture,
-            sessionDate: _sessionDate,
-          );
+      final preparedSessionId = _sessionExistsForEditing
+          ? sessionId
+          : await _manualAttendanceService.prepareSessionForLecture(
+              lecture: _lecture,
+              sessionDate: _sessionDate,
+            );
       if (mounted) {
         _sessionId = preparedSessionId;
+        _sessionExistsForEditing = true;
       }
 
       await AttendanceEntryPoint.submitManualBatch(
@@ -767,11 +774,21 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       ctx.sessionId,
     );
     final restoredFromCache = cached != null && cached.students.isNotEmpty;
+    ManualAttendanceSession? existingSession;
+    try {
+      existingSession = await _manualAttendanceService.getSessionById(
+        ctx.sessionId,
+      );
+    } catch (_) {
+      existingSession = null;
+    }
+    final sessionExistsForEditing = existingSession != null;
 
     if (restoredFromCache) {
       if (!mounted) return;
       setState(() {
         _sessionId = ctx.sessionId;
+        _sessionExistsForEditing = sessionExistsForEditing;
         _attendanceStartEligibilityResult = null;
         _students = cached.students.map(_rowFromSnapshot).toList();
         _isUsingRosterFallback = cached.rosterFallback;
@@ -783,6 +800,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
     } else {
       setState(() {
         _attendanceStartEligibilityResult = null;
+        _sessionExistsForEditing = sessionExistsForEditing;
         _isLoadingAttendance = true;
         _attendanceLoadError = null;
       });
@@ -818,6 +836,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
             if (!mounted) return;
             if (records.isNotEmpty) {
               setState(() {
+                _sessionExistsForEditing = true;
                 _students = records.map(_studentFromRecord).toList();
                 if (_isUsingRosterFallback) {
                   _methodStatusMessage = null;
@@ -881,6 +900,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       if (!mounted || _sessionId != sessionId) return;
       setState(() {
         if (_students.isEmpty) {
+          _sessionExistsForEditing = false;
           _isUsingRosterFallback = false;
           _methodStatusMessage = _tr(
             'لا توجد بيانات تحضير مسجلة لهذه المحاضرة.',
@@ -1150,7 +1170,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   Widget _buildCompactNfcActionButton() {
     final isBusy = _isProcessingMethodAction;
     final isActive = _isNfcActiveForLecture;
-    final canStart = _canEditAttendanceNow;
+    final canStart = _canStartAttendanceNow;
     return SizedBox(
       width: double.infinity,
       height: 46,
@@ -2577,7 +2597,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         _isStoppingBluetoothBroadcast ||
         _bluetoothBroadcastState ==
             BluetoothBroadcastState.requestingPermission;
-    final canStart = _canEditAttendanceNow;
+    final canStart = _canStartAttendanceNow;
 
     return Container(
       width: double.infinity,
@@ -3167,7 +3187,7 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
   Widget _buildCompactQrActionButton() {
     final hasReadyQr = _qrSession != null && _qrData.isNotEmpty;
     final isBusy = _isLoadingQr || _isProcessingMethodAction;
-    final canStart = _canEditAttendanceNow;
+    final canStart = _canStartAttendanceNow;
     return SizedBox(
       width: double.infinity,
       height: 46,
