@@ -9,6 +9,7 @@ class LectureCard extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onDelayTap;
   final VoidCallback? onCancelTap;
+  final bool showAttendanceAction;
 
   const LectureCard({
     super.key,
@@ -16,6 +17,7 @@ class LectureCard extends StatelessWidget {
     this.onTap,
     this.onDelayTap,
     this.onCancelTap,
+    this.showAttendanceAction = true,
   });
 
   @override
@@ -118,13 +120,15 @@ class LectureCard extends StatelessWidget {
               ),
             ],
           ),
-          if (onTap != null || onDelayTap != null || onCancelTap != null) ...[
+          if ((showAttendanceAction && onTap != null) ||
+              onDelayTap != null ||
+              onCancelTap != null) ...[
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                if (onTap != null)
+                if (showAttendanceAction && onTap != null)
                   _buildActionChip(
                     context: context,
                     label: tr('حضر', 'Attend'),

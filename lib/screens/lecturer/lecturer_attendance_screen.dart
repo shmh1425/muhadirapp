@@ -33,6 +33,7 @@ import '../../repositories/lecturer_catalog_repository.dart';
 import '../../services/lecturer_auth_service.dart';
 import '../../services/lecturer/lecture_repository.dart';
 import '../../services/lecturer/calendar_sync_service.dart';
+import '../../utils/lecturer_attendance_eligibility.dart';
 import 'lecturer_language.dart';
 import 'lecturer_navigation.dart';
 import 'widgets/profile_back_button.dart';
@@ -532,6 +533,14 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           backgroundColor: const Color(0xFF2B9E56),
         ),
       );
+    } on LecturerAttendanceBlockedException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_eligibilityMessage(e.result)),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -740,8 +749,32 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
       return;
     }
 
-    final cached =
-        LecturerAttendanceSessionUiCache.instance.snapshotFor(ctx.sessionId);
+    if (!_effectiveViewOnly) {
+      try {
+        final eligibility = await _attendanceStartEligibility();
+        if (!eligibility.canTakeAttendance) {
+          if (!mounted) return;
+          setState(() {
+            _isLoadingAttendance = false;
+            _attendanceLoadError = _eligibilityMessage(eligibility);
+            _students = <_StudentRow>[];
+          });
+          return;
+        }
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _isLoadingAttendance = false;
+          _attendanceLoadError = e.toString();
+          _students = <_StudentRow>[];
+        });
+        return;
+      }
+    }
+
+    final cached = LecturerAttendanceSessionUiCache.instance.snapshotFor(
+      ctx.sessionId,
+    );
     final restoredFromCache = cached != null && cached.students.isNotEmpty;
 
     if (restoredFromCache) {
@@ -937,6 +970,23 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         _lecture.endTime.trim().isNotEmpty;
   }
 
+  Future<LecturerAttendanceEligibilityResult> _attendanceStartEligibility() {
+    return _manualAttendanceService.checkAttendanceStartEligibility(
+      lecture: _lecture,
+      sessionDate: _sessionDate,
+    );
+  }
+
+  String _eligibilityMessage(LecturerAttendanceEligibilityResult result) {
+    return LecturerLanguageController.isArabic
+        ? result.messageAr
+        : result.messageEn;
+  }
+
+  void _showAttendanceBlockedSnack(LecturerAttendanceEligibilityResult result) {
+    _showMethodSnack(_eligibilityMessage(result), error: true);
+  }
+
   Future<void> _onSelectMethod(AttendanceMethod method) async {
     if (_isProcessingMethodAction) return;
     if (!_hasRequiredLectureData()) {
@@ -1095,6 +1145,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           'QR attendance is active for this lecture.',
         );
       });
+    } on LecturerAttendanceBlockedException catch (e) {
+      _showAttendanceBlockedSnack(e.result);
     } on FirebaseException catch (e) {
       final message = e.code == 'permission-denied'
           ? _tr(
@@ -1259,6 +1311,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
         );
       });
       _startBluetoothTokenTimer();
+    } on LecturerAttendanceBlockedException catch (e) {
+      _showAttendanceBlockedSnack(e.result);
     } on BluetoothAttendanceException catch (e) {
       _showMethodSnack(_mapBluetoothError(e), error: true);
     } on FirebaseException catch (e) {
@@ -1595,6 +1649,8 @@ class _LecturerAttendanceScreenState extends State<LecturerAttendanceScreen> {
           'NFC attendance is now active for this lecture.',
         );
       });
+    } on LecturerAttendanceBlockedException catch (e) {
+      _showAttendanceBlockedSnack(e.result);
     } on NfcAttendanceException catch (e) {
       _showMethodSnack(_mapNfcErrorToArabic(e), error: true);
     } on FirebaseException catch (e) {

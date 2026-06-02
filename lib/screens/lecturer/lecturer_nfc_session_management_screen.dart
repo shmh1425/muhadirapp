@@ -13,6 +13,7 @@ import '../../services/attendance/manual_attendance_service.dart';
 import '../../services/attendance/nfc_attendance_service.dart';
 import '../../services/lecturer/calendar_service.dart';
 import '../../services/lecturer/lecture_repository.dart';
+import '../../utils/lecturer_attendance_eligibility.dart';
 import '../../widgets/monthly_calendar.dart';
 import 'lecturer_language.dart';
 import 'widgets/profile_back_button.dart';
@@ -306,6 +307,12 @@ class _LecturerNfcSessionManagementScreenState
           'تم فتح جلسة NFC ويمكن للطلاب التحضير الآن.',
           'NFC session is open. Students can mark attendance now.',
         ),
+      );
+    } on LecturerAttendanceBlockedException catch (e) {
+      if (!mounted) return;
+      _showSnack(
+        LecturerLanguageController.isArabic ? e.messageAr : e.messageEn,
+        error: true,
       );
     } on NfcAttendanceException catch (e) {
       if (!mounted) return;

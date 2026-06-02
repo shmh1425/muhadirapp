@@ -7,7 +7,9 @@ import '../../models/lecturer/lecture_item.dart';
 import '../../models/term_week.dart';
 import '../../repositories/academic_term_repository.dart';
 import '../lecturer_auth_service.dart';
+import '../notifications/lecture_action_notification_service.dart';
 import '../../utils/lecture_action_eligibility.dart';
+import '../../utils/lecturer_attendance_eligibility.dart';
 import 'attendance_status_policy.dart';
 
 class ManualEnrollmentStudent {
@@ -51,6 +53,29 @@ class ManualAttendanceService {
     return '${normalizedSection}_${dateKey}_$startKey';
   }
 
+  Future<LecturerAttendanceEligibilityResult> checkAttendanceStartEligibility({
+    required LectureItem lecture,
+    DateTime? sessionDate,
+    DateTime? now,
+  }) async {
+    final sectionId = (lecture.sectionId ?? '').trim();
+    if (sectionId.isEmpty) {
+      throw StateError('Lecture sectionId is required for manual attendance.');
+    }
+
+    await _assertLectureBelongsToCurrentLecturer(sectionId);
+
+    final date = _normalizedDate(sessionDate ?? DateTime.now());
+    final isCanceled = await _isLectureCanceled(lecture: lecture, date: date);
+    return LecturerAttendanceEligibility.evaluateForTimes(
+      lectureDate: date,
+      lectureStartTime: lecture.startTime,
+      lectureEndTime: lecture.endTime,
+      now: now ?? DateTime.now(),
+      lectureStatus: isCanceled ? 'canceled' : null,
+    );
+  }
+
   Future<String> prepareSessionForLecture({
     required LectureItem lecture,
     DateTime? sessionDate,
@@ -61,6 +86,7 @@ class ManualAttendanceService {
     }
 
     final date = _normalizedDate(sessionDate ?? DateTime.now());
+    await _assertCanCreateAttendanceSession(lecture: lecture, date: date);
     final sessionId = buildSessionId(
       sectionId: sectionId,
       sessionDate: date,
@@ -80,6 +106,50 @@ class ManualAttendanceService {
       date: date,
     );
     return sessionId;
+  }
+
+  Future<void> _assertCanCreateAttendanceSession({
+    required LectureItem lecture,
+    required DateTime date,
+  }) async {
+    final eligibility = await checkAttendanceStartEligibility(
+      lecture: lecture,
+      sessionDate: date,
+    );
+    if (!eligibility.canTakeAttendance) {
+      throw LecturerAttendanceBlockedException(eligibility);
+    }
+  }
+
+  Future<void> _assertLectureBelongsToCurrentLecturer(String sectionId) async {
+    final lecturerId =
+        LecturerAuthService.instance.currentLecturer?.lecturerId.trim() ?? '';
+    if (lecturerId.isEmpty) {
+      throw StateError('Lecturer session is missing. Please log in again.');
+    }
+
+    final sectionSnap = await _firestore
+        .collection('sections')
+        .doc(sectionId)
+        .get();
+    final sectionData = sectionSnap.data();
+    if (sectionData == null) {
+      throw StateError('Lecture section was not found.');
+    }
+
+    final ownerId = (sectionData['lecturerId'] ?? '').toString().trim();
+    if (ownerId.isNotEmpty && ownerId != lecturerId) {
+      throw StateError('Lecture does not belong to the logged-in lecturer.');
+    }
+  }
+
+  Future<bool> _isLectureCanceled({
+    required LectureItem lecture,
+    required DateTime date,
+  }) async {
+    final statuses = await LectureActionNotificationService.instance
+        .loadLectureActionStatuses(lectures: [lecture], lectureDate: date);
+    return statuses.values.any((status) => status.isCanceled);
   }
 
   Stream<List<ManualAttendanceRecord>> watchSessionRecords(String sessionId) {

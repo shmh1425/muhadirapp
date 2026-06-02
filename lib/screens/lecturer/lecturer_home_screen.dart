@@ -21,6 +21,7 @@ import '../../widgets/lecturer/lecture_card.dart';
 import '../../widgets/lecturer/day_tap_handler.dart';
 import 'lecturer_navigation.dart';
 import '../../utils/shared/time_utils.dart';
+import '../../utils/lecturer_attendance_eligibility.dart';
 import 'widgets/modern_popup_dialog.dart';
 
 class LecturerHomeScreen extends ConsumerStatefulWidget {
@@ -46,6 +47,12 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
   StreamSubscription<void>? _calendarSyncSub;
   bool _isSyncRefreshing = false;
   bool _isDispatchingLectureAction = false;
+  String? _homeActionStatusesLoadingKey;
+  String? _homeActionStatusesReadyKey;
+  Map<String, LectureActionStatus> _todayLectureActionStatuses =
+      <String, LectureActionStatus>{};
+  Map<String, LectureActionStatus> _tomorrowLectureActionStatuses =
+      <String, LectureActionStatus>{};
 
   /// Last non-empty catalog lectures (survives provider reload / invalidate).
   List<LectureItem> _lastNonEmptyCatalogLectures = <LectureItem>[];
@@ -134,6 +141,132 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
     return DateTime(tomorrow.year, tomorrow.month, tomorrow.day);
   }
 
+  static String _lectureStatusLookupKey(LectureItem lecture) {
+    final sectionKey = (lecture.sectionId ?? '').trim().isNotEmpty
+        ? (lecture.sectionId ?? '').trim()
+        : lecture.section.trim();
+    return '$sectionKey|${lecture.startTime}';
+  }
+
+  static String _dateKey(DateTime date) {
+    final y = date.year.toString().padLeft(4, '0');
+    final m = date.month.toString().padLeft(2, '0');
+    final d = date.day.toString().padLeft(2, '0');
+    return '$y$m$d';
+  }
+
+  String _homeActionStatusKey({
+    required DateTime today,
+    required List<LectureItem> todayLectures,
+    required DateTime tomorrow,
+    required List<LectureItem> tomorrowLectures,
+  }) {
+    String lectureKeys(List<LectureItem> lectures) {
+      final keys = lectures.map(_lectureStatusLookupKey).toList()..sort();
+      return keys.join(',');
+    }
+
+    return '${_dateKey(today)}:${lectureKeys(todayLectures)}|'
+        '${_dateKey(tomorrow)}:${lectureKeys(tomorrowLectures)}';
+  }
+
+  void _scheduleHomeActionStatusLoad({
+    required String key,
+    required DateTime today,
+    required List<LectureItem> todayLectures,
+    required DateTime tomorrow,
+    required List<LectureItem> tomorrowLectures,
+  }) {
+    if (_homeActionStatusesReadyKey == key ||
+        _homeActionStatusesLoadingKey == key) {
+      return;
+    }
+
+    _homeActionStatusesLoadingKey = key;
+    unawaited(
+      _loadHomeActionStatuses(
+        key: key,
+        today: today,
+        todayLectures: todayLectures,
+        tomorrow: tomorrow,
+        tomorrowLectures: tomorrowLectures,
+      ),
+    );
+  }
+
+  Future<void> _loadHomeActionStatuses({
+    required String key,
+    required DateTime today,
+    required List<LectureItem> todayLectures,
+    required DateTime tomorrow,
+    required List<LectureItem> tomorrowLectures,
+  }) async {
+    try {
+      final results = await Future.wait([
+        _lectureActionService.loadLectureActionStatuses(
+          lectures: todayLectures,
+          lectureDate: today,
+        ),
+        _lectureActionService.loadLectureActionStatuses(
+          lectures: tomorrowLectures,
+          lectureDate: tomorrow,
+        ),
+      ]);
+      if (!mounted || _homeActionStatusesLoadingKey != key) return;
+      setState(() {
+        _todayLectureActionStatuses = results[0];
+        _tomorrowLectureActionStatuses = results[1];
+        _homeActionStatusesReadyKey = key;
+        _homeActionStatusesLoadingKey = null;
+      });
+    } catch (_) {
+      if (!mounted || _homeActionStatusesLoadingKey != key) return;
+      setState(() {
+        _todayLectureActionStatuses = <String, LectureActionStatus>{};
+        _tomorrowLectureActionStatuses = <String, LectureActionStatus>{};
+        _homeActionStatusesReadyKey = null;
+        _homeActionStatusesLoadingKey = null;
+      });
+    }
+  }
+
+  LectureActionStatus _lectureActionStatusFor(
+    LectureItem lecture,
+    DateTime lectureDate,
+  ) {
+    final today = _normalizedToday();
+    final tomorrow = _normalizedTomorrow();
+    final key = _lectureStatusLookupKey(lecture);
+    if (_sameDate(lectureDate, today)) {
+      return _todayLectureActionStatuses[key] ??
+          const LectureActionStatus.normal();
+    }
+    if (_sameDate(lectureDate, tomorrow)) {
+      return _tomorrowLectureActionStatuses[key] ??
+          const LectureActionStatus.normal();
+    }
+    return const LectureActionStatus.normal();
+  }
+
+  bool _canTakeAttendanceFromHome({
+    required LectureItem lecture,
+    required DateTime lectureDate,
+    required LectureActionStatus actionStatus,
+  }) {
+    final result = LecturerAttendanceEligibility.evaluateForTimes(
+      lectureDate: lectureDate,
+      lectureStartTime: lecture.startTime,
+      lectureEndTime: lecture.endTime,
+      now: DateTime.now(),
+      lectureStatus: actionStatus.isCanceled ? 'canceled' : null,
+    );
+    return result.canTakeAttendance;
+  }
+
+  static bool _sameDate(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
   static const String _emptyNoLecturesTodayAr = 'لا توجد محاضرات اليوم.';
   static const String _emptyNoLecturesTodayEn = 'No lectures today.';
   static const String _emptyNoLecturesTomorrowAr = 'لا توجد محاضرات غدًا.';
@@ -208,19 +341,36 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
     );
   }
 
-  void _openAttendanceForToday(LectureItem lecture) {
+  Future<void> _openAttendanceForToday(LectureItem lecture) async {
+    final lectureDate = _normalizedToday();
+    var actionStatus = _lectureActionStatusFor(lecture, lectureDate);
+    if (_homeActionStatusesReadyKey == null) {
+      final statuses = await _lectureActionService.loadLectureActionStatuses(
+        lectures: [lecture],
+        lectureDate: lectureDate,
+      );
+      if (!mounted) return;
+      if (statuses.isNotEmpty) {
+        actionStatus = statuses.values.first;
+      }
+    }
+
+    final eligibility = LecturerAttendanceEligibility.evaluateForTimes(
+      lectureDate: lectureDate,
+      lectureStartTime: lecture.startTime,
+      lectureEndTime: lecture.endTime,
+      now: DateTime.now(),
+      lectureStatus: actionStatus.isCanceled ? 'canceled' : null,
+    );
+    if (!eligibility.canTakeAttendance) {
+      _showActionSnack(eligibility.messageAr, error: true);
+      return;
+    }
+
     LecturerNavigation.goToAttendance(
       context,
       lecture,
-      selectedDate: _normalizedToday(),
-    );
-  }
-
-  void _openAttendanceForTomorrowViewOnly(LectureItem lecture) {
-    LecturerNavigation.goToAttendanceViewOnly(
-      context,
-      lecture,
-      _normalizedTomorrow(),
+      selectedDate: lectureDate,
     );
   }
 
@@ -478,6 +628,7 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
     required List<LectureItem> lectures,
     required DateTime Function(LectureItem lecture) actionDateResolver,
     void Function(LectureItem lecture)? onAttendTap,
+    bool attendanceStatusesReady = false,
   }) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -570,6 +721,7 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
                       lecture: sortedLectures[index],
                       actionDateResolver: actionDateResolver,
                       onAttendTap: onAttendTap,
+                      attendanceStatusesReady: attendanceStatusesReady,
                     );
                   },
                 ),
@@ -624,6 +776,7 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
     required LectureItem lecture,
     required DateTime Function(LectureItem lecture) actionDateResolver,
     void Function(LectureItem lecture)? onAttendTap,
+    required bool attendanceStatusesReady,
   }) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -631,6 +784,16 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
     final timeLabel = lecture.timeSlots.isNotEmpty
         ? lecture.timeSlots.join('  •  ')
         : lecture.startTime;
+    final lectureDate = actionDateResolver(lecture);
+    final actionStatus = _lectureActionStatusFor(lecture, lectureDate);
+    final canAttend =
+        onAttendTap != null &&
+        attendanceStatusesReady &&
+        _canTakeAttendanceFromHome(
+          lecture: lecture,
+          lectureDate: lectureDate,
+          actionStatus: actionStatus,
+        );
 
     return SizedBox(
       width: 296,
@@ -668,13 +831,10 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
           Expanded(
             child: LectureCard(
               lecture: lecture,
-              onTap: onAttendTap != null ? () => onAttendTap(lecture) : null,
-              onDelayTap: () =>
-                  _onDelayLectureFromCard(lecture, actionDateResolver(lecture)),
-              onCancelTap: () => _onCancelLectureFromCard(
-                lecture,
-                actionDateResolver(lecture),
-              ),
+              onTap: canAttend ? () => onAttendTap(lecture) : null,
+              showAttendanceAction: canAttend,
+              onDelayTap: () => _onDelayLectureFromCard(lecture, lectureDate),
+              onCancelTap: () => _onCancelLectureFromCard(lecture, lectureDate),
             ),
           ),
         ],
@@ -740,6 +900,23 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
             catalogLoading && allLectures.isEmpty && !catalogAsync.hasValue;
         final todayBlock = _todayLecturesBlock(allLectures);
         final tomorrowBlock = _tomorrowLecturesBlock(allLectures);
+        final todayDate = _normalizedToday();
+        final tomorrowDate = _normalizedTomorrow();
+        final homeActionStatusKey = _homeActionStatusKey(
+          today: todayDate,
+          todayLectures: todayBlock.lectures,
+          tomorrow: tomorrowDate,
+          tomorrowLectures: tomorrowBlock.lectures,
+        );
+        _scheduleHomeActionStatusLoad(
+          key: homeActionStatusKey,
+          today: todayDate,
+          todayLectures: todayBlock.lectures,
+          tomorrow: tomorrowDate,
+          tomorrowLectures: tomorrowBlock.lectures,
+        );
+        final attendanceStatusesReady =
+            _homeActionStatusesReadyKey == homeActionStatusKey;
 
         return Directionality(
           textDirection: LecturerLanguageController.direction(),
@@ -873,7 +1050,10 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
                           emptyEn: todayBlock.emptyEn,
                           lectures: todayBlock.lectures,
                           actionDateResolver: (_) => _normalizedToday(),
-                          onAttendTap: _openAttendanceForToday,
+                          onAttendTap: (lecture) {
+                            unawaited(_openAttendanceForToday(lecture));
+                          },
+                          attendanceStatusesReady: attendanceStatusesReady,
                         ),
                         const SizedBox(height: 16),
                         _buildDayLecturesMainCard(
@@ -883,7 +1063,8 @@ class _LecturerHomeScreenState extends ConsumerState<LecturerHomeScreen> {
                           emptyEn: tomorrowBlock.emptyEn,
                           lectures: tomorrowBlock.lectures,
                           actionDateResolver: (_) => _normalizedTomorrow(),
-                          onAttendTap: _openAttendanceForTomorrowViewOnly,
+                          onAttendTap: null,
+                          attendanceStatusesReady: attendanceStatusesReady,
                         ),
                         const SizedBox(height: 24),
                         _buildAllCalendarSection(allLectures),

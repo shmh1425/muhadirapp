@@ -20,6 +20,7 @@ import '../../services/attendance/qr_attendance_service.dart';
 import '../../services/lecturer/lecture_repository.dart';
 import '../../services/lecturer/calendar_sync_service.dart';
 import '../../services/lecturer/lecturer_sections_service.dart';
+import '../../utils/lecturer_attendance_eligibility.dart';
 import '../../utils/shared/time_utils.dart';
 import 'lecturer_language.dart';
 
@@ -552,6 +553,13 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
       } else {
         await _syncLectureAndCode();
       }
+    } on LecturerAttendanceBlockedException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _sessionErrorMessage = LecturerLanguageController.isArabic
+            ? e.messageAr
+            : e.messageEn;
+      });
     } on FirebaseException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -648,6 +656,13 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
           backgroundColor: const Color(0xFF2B9E56),
         ),
       );
+    } on LecturerAttendanceBlockedException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _sessionErrorMessage = LecturerLanguageController.isArabic
+            ? e.messageAr
+            : e.messageEn;
+      });
     } on BluetoothAttendanceException catch (e) {
       if (!mounted) return;
       setState(() => _sessionErrorMessage = _mapBluetoothError(e));
@@ -998,6 +1013,16 @@ class _LecturerQrScreenState extends ConsumerState<LecturerQrScreen> {
             ),
           ),
           backgroundColor: const Color(0xFF2B9E56),
+        ),
+      );
+    } on LecturerAttendanceBlockedException catch (e) {
+      if (!mounted) return;
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(
+            LecturerLanguageController.isArabic ? e.messageAr : e.messageEn,
+          ),
+          backgroundColor: const Color(0xFFD32F2F),
         ),
       );
     } on NfcAttendanceException catch (e) {
