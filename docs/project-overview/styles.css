@@ -241,15 +241,6 @@ html[data-theme="dark"] .btn-pill-light {
   white-space: nowrap;
 }
 
-/* Visual order: brand ← center ← pill (يسار · وسط · يمين) */
-html[dir="rtl"] .hero-nav__brand { order: 3; }
-html[dir="rtl"] .hero-nav__center { order: 2; }
-html[dir="rtl"] .hero-nav__pill { order: 1; }
-
-html[dir="ltr"] .hero-nav__brand { order: 1; }
-html[dir="ltr"] .hero-nav__center { order: 2; }
-html[dir="ltr"] .hero-nav__pill { order: 3; }
-
 @media (max-width: 480px) {
   .hero-nav {
     gap: 0.5rem;
