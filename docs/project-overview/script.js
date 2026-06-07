@@ -48,6 +48,8 @@
       titleEn: "NFC Attendance",
       descAr: "سجّل حضورك بلمسة واحدة عبر البطاقة الرقمية، مع دعم العمل دون اتصال بالإنترنت ومزامنة البيانات لاحقاً.",
       descEn: "Check in with one tap using your digital card—with offline support and data sync when connectivity returns.",
+      chipsAr: ["سريع", "آمن"],
+      chipsEn: ["Fast", "Secure"],
     },
     {
       icon: "qr",
@@ -57,6 +59,8 @@
       titleEn: "Dynamic QR Codes",
       descAr: "يتم إنشاء رمز QR متغير لكل جلسة حضور مع قيود جغرافية للتحقق من وجود الطالب داخل الموقع المسموح.",
       descEn: "A new QR code for each session, with geographic restrictions to confirm the student is in the allowed location.",
+      chipsAr: ["متجدد", "مرتبط بالموقع"],
+      chipsEn: ["Dynamic", "Location-aware"],
     },
     {
       icon: "ble",
@@ -66,6 +70,8 @@
       titleEn: "Bluetooth Attendance",
       descAr: "يكتشف النظام أجهزة الطلاب القريبة ويسجل الحضور تلقائياً، مع دعم التشغيل عبر الإنترنت أو دون اتصال.",
       descEn: "Detects nearby student devices and records attendance automatically—with online or offline operation.",
+      chipsAr: ["قرب", "تلقائي"],
+      chipsEn: ["Proximity", "Automatic"],
     },
     {
       icon: "clipboard",
@@ -75,6 +81,8 @@
       titleEn: "Manual Attendance",
       descAr: "يوفّر مرونة كاملة للمحاضر في تسجيل الحضور وإدارته، حتى في حالات انقطاع الإنترنت، مع مزامنة البيانات تلقائياً عند عودة الاتصال.",
       descEn: "Gives lecturers full flexibility to record and manage attendance—even offline—with automatic sync when the network returns.",
+      chipsAr: ["بإشراف المحاضر", "احتياطي"],
+      chipsEn: ["Lecturer-controlled", "Fallback"],
     },
   ];
 
@@ -156,13 +164,6 @@
     { ar: "عرض آمن", en: "Secure display" },
     { ar: "كاش دون اتصال", en: "Offline-ready cache" },
     { ar: "تحذير مسح مكرر", en: "Repeat scan warnings" },
-  ];
-
-  const gateSteps = [
-    { ar: "يفتح الطالب البطاقة الجامعية الرقمية.", en: "Student opens the digital university card." },
-    { ar: "الأمن يمسح NFC أو QR للبوابة.", en: "Security scans NFC or QR gate credential." },
-    { ar: "محضر يتحقق من الهوية والحالة وقواعد الأمان.", en: "MUHADIR validates identity, status, and security rules." },
-    { ar: "قبول أو رفض الدخول مع تسجيل السبب.", en: "Security accepts or rejects access with reason logging." },
   ];
 
   const gateDetails = [
@@ -299,14 +300,62 @@
     if (!grid) return;
     grid.innerHTML = stats
       .map(
-        (s) => `
-      <article class="stat-card reveal">
-        <span class="stat-value">${s.value}</span>
+        (s, idx) => `
+      <article class="stat-card reveal" data-stat-card style="--stat-progress: ${68 + idx * 8}%">
+        <span class="stat-ring" aria-hidden="true"></span>
+        <span class="stat-value" data-stat-value="${s.value}">${s.value}</span>
         <span class="stat-label">${t(s.labelAr, s.labelEn)}</span>
+        <span class="stat-progress" aria-hidden="true"><span></span></span>
       </article>`
       )
       .join("");
     observeReveals(grid.querySelectorAll(".reveal"));
+    initDashboardCounters(grid.querySelectorAll("[data-stat-value]"));
+  }
+
+  function initDashboardCounters(nodes) {
+    const values = Array.from(nodes || document.querySelectorAll("[data-stat-value]"));
+    if (!values.length) return;
+
+    const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced || !("IntersectionObserver" in window)) {
+      values.forEach((el) => {
+        el.textContent = el.getAttribute("data-stat-value") || el.textContent;
+      });
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          const el = entry.target;
+          observer.unobserve(el);
+          const target = el.getAttribute("data-stat-value") || "";
+          const match = target.match(/^(\d+)(.*)$/);
+          if (!match) {
+            el.textContent = target;
+            return;
+          }
+
+          const end = Number(match[1]);
+          const suffix = match[2] || "";
+          const duration = end > 100 ? 950 : 650;
+          const start = performance.now();
+          const tick = (now) => {
+            const ratio = Math.min(1, (now - start) / duration);
+            const eased = 1 - Math.pow(1 - ratio, 3);
+            el.textContent = `${Math.round(end * eased)}${suffix}`;
+            if (ratio < 1) requestAnimationFrame(tick);
+          };
+          el.textContent = `0${suffix}`;
+          requestAnimationFrame(tick);
+        });
+      },
+      { threshold: 0.35 }
+    );
+
+    values.forEach((el) => observer.observe(el));
   }
 
   function bindExpandCards(container, cardSelector, detailSelector = ".feature-desc") {
@@ -343,8 +392,9 @@
       .map((m, idx) => {
         const extra = m.featured ? " feature-card--featured" : "";
         const tag = m.tagAr ? `<span class="feature-tag">${t(m.tagAr, m.tagEn)}</span>` : "";
+        const chips = (lang === "ar" ? m.chipsAr : m.chipsEn) || [];
         return `
-      <article class="feature-card reveal${extra}" role="button" tabindex="0" aria-expanded="false" data-method-idx="${idx}">
+      <article class="feature-card feature-card--method feature-card--method-${m.icon} reveal${extra}" role="button" tabindex="0" aria-expanded="false" data-method-idx="${idx}" data-tilt-card>
         <div class="feature-top">
           <div class="feature-icon" aria-hidden="true">${ICONS[m.icon] || ""}</div>
           <div class="feature-head">
@@ -352,6 +402,7 @@
             <h3>${t(m.titleAr, m.titleEn)}</h3>
           </div>
         </div>
+        <div class="method-chip-row" aria-hidden="true">${chips.map((chip) => `<span>${chip}</span>`).join("")}</div>
         <div class="feature-desc" aria-hidden="true">${t(m.descAr, m.descEn)}</div>
         <div class="feature-line" aria-hidden="true"></div>
       </article>`;
@@ -376,7 +427,7 @@
           ? `<span class="feature-tag">${t(f.tagAr, f.tagEn)}</span>`
           : "";
         return `
-      <article class="feature-card reveal${extra}" role="button" tabindex="0" aria-expanded="false" data-feature-idx="${idx}">
+      <article class="feature-card feature-card--dynamic reveal${extra}" role="button" tabindex="0" aria-expanded="false" data-feature-idx="${idx}" data-tilt-card>
         <div class="feature-top">
           <div class="feature-icon" aria-hidden="true">${ICONS[f.icon] || ""}</div>
           <div class="feature-head">
@@ -426,64 +477,28 @@
         .join("");
     }
 
-    const panel = document.getElementById("gateStepsPanel");
     const detail = document.getElementById("gateDetailText");
-    const prog = document.getElementById("gateProg");
     const prev = document.getElementById("gatePrev");
     const next = document.getElementById("gateNext");
-    if (!panel || !detail || !prog || !prev || !next) return;
+    if (!detail || !prev || !next) return;
 
     let cur = 0;
 
-    const renderSteps = () => {
-      panel.innerHTML = gateSteps
-        .map(
-          (s, i) => `
-        <div class="gate-step ${i === 0 ? "active" : ""}" data-idx="${i}" tabindex="0" role="button" aria-label="${t(`الخطوة ${i + 1}`, `Step ${i + 1}`)}">
-          <div class="gate-step-num"><span>${i + 1}</span></div>
-          <div class="gate-step-text">${t(s.ar, s.en)}</div>
-        </div>`
-        )
-        .join("");
-    };
-
     const goTo = (i) => {
-      cur = Math.max(0, Math.min(gateSteps.length - 1, i));
-      const rows = Array.from(panel.querySelectorAll(".gate-step"));
-      rows.forEach((r, idx) => {
-        r.classList.remove("active", "done");
-        if (idx < cur) r.classList.add("done");
-      });
-      rows[cur]?.classList.add("active");
-
+      cur = Math.max(0, Math.min(gateDetails.length - 1, i));
       detail.innerHTML = t(gateDetails[cur].ar, gateDetails[cur].en);
-      prog.style.width = `${((cur + 1) / gateSteps.length) * 100}%`;
       prev.disabled = cur === 0;
-      next.textContent = cur === gateSteps.length - 1 ? t("إعادة", "Reset") : t("التالي", "Next");
+      next.textContent = cur === gateDetails.length - 1 ? t("إعادة", "Reset") : t("التالي", "Next");
     };
 
     const move = (dir) => {
-      if (dir === 1 && cur === gateSteps.length - 1) {
+      if (dir === 1 && cur === gateDetails.length - 1) {
         goTo(0);
         return;
       }
       goTo(cur + dir);
     };
 
-    renderSteps();
-    panel.addEventListener("click", (e) => {
-      const row = e.target.closest?.(".gate-step[data-idx]");
-      if (!row) return;
-      goTo(Number(row.getAttribute("data-idx") || "0"));
-    });
-    panel.addEventListener("keydown", (e) => {
-      const row = e.target.closest?.(".gate-step[data-idx]");
-      if (!row) return;
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        goTo(Number(row.getAttribute("data-idx") || "0"));
-      }
-    });
     prev.addEventListener("click", () => move(-1));
     next.addEventListener("click", () => move(1));
     goTo(0);
@@ -792,6 +807,50 @@
     });
   }
 
+  let dynamicTiltReady = false;
+  function initDynamicTilt() {
+    if (dynamicTiltReady) return;
+    const canHover = window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+    const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!canHover || reduced) return;
+
+    dynamicTiltReady = true;
+    const selector = "[data-tilt-card]";
+    const reset = (card) => {
+      card.classList.remove("is-tilting");
+      card.style.removeProperty("--tilt-x");
+      card.style.removeProperty("--tilt-y");
+      card.style.removeProperty("--glow-x");
+      card.style.removeProperty("--glow-y");
+    };
+
+    document.addEventListener(
+      "pointermove",
+      (e) => {
+        const card = e.target.closest?.(selector);
+        if (!card) return;
+        const rect = card.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width;
+        const y = (e.clientY - rect.top) / rect.height;
+        card.classList.add("is-tilting");
+        card.style.setProperty("--tilt-x", `${(0.5 - y) * 4.5}deg`);
+        card.style.setProperty("--tilt-y", `${(x - 0.5) * 5.5}deg`);
+        card.style.setProperty("--glow-x", `${x * 100}%`);
+        card.style.setProperty("--glow-y", `${y * 100}%`);
+      },
+      { passive: true }
+    );
+
+    document.addEventListener(
+      "pointerleave",
+      (e) => {
+        const card = e.target.closest?.(selector);
+        if (card) reset(card);
+      },
+      true
+    );
+  }
+
   document.querySelectorAll(".lang-seg-btn[data-lang]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const next = btn.getAttribute("data-lang");
@@ -815,5 +874,6 @@
   initSolutionReveal();
   initStackSwap();
   initTeamCards();
+  initDynamicTilt();
 
 })();

@@ -59,7 +59,6 @@
               </span>
             </button>
           </div>
-          <span class="hero-nav__pill btn-pill btn-pill-light" data-ar="نظرة عامة" data-en="Project Overview">نظرة عامة</span>
         </header>
 
         <div class="hero-grid hero-grid-overview reveal">
@@ -156,6 +155,25 @@
       </div>
     </section>
 
+    <section id="why-muhadir" class="opening-hook-section reveal" aria-label="Why MUHADIR matters">
+      <div class="container opening-hook-card">
+        <div class="opening-hook-copy">
+          <p class="eyebrow" data-ar="لماذا محضّر؟" data-en="Why it matters">لماذا محضّر؟</p>
+          <h2 data-ar="الحضور اليدوي يستهلك الوقت. محضّر يتحقق ويسجل ويعرض التقارير خلال ثوانٍ." data-en="Manual attendance wastes time. MUHADIR verifies, records, and reports attendance in seconds.">
+            الحضور اليدوي يستهلك الوقت. محضّر يتحقق ويسجل ويعرض التقارير خلال ثوانٍ.
+          </h2>
+        </div>
+        <div class="story-strip" aria-label="MUHADIR story flow">
+          <a href="#about" data-ar="المشكلة" data-en="Problem">المشكلة</a>
+          <a href="#roles" data-ar="الأدوار" data-en="Roles">الأدوار</a>
+          <a href="#attendance-methods" data-ar="الطرق" data-en="Methods">الطرق</a>
+          <a href="#attendance-flow" data-ar="المسار" data-en="Workflow">المسار</a>
+          <a href="#gate" data-ar="البوابة" data-en="Gate">البوابة</a>
+          <a href="#features" data-ar="التقارير" data-en="Reports">التقارير</a>
+        </div>
+      </div>
+    </section>
+
     <section class="stats-section" aria-label="Statistics">
       <div class="container stats-grid" id="statsGrid"></div>
     </section>
@@ -198,7 +216,7 @@
 
     <section id="features" class="section-features">
       <div class="container">
-        <header class="section-intro reveal">
+        <header class="section-intro section-intro-center reveal">
           <p class="eyebrow" data-ar="الميزات الأساسية" data-en="Core Features">الميزات الأساسية</p>
           <h2 data-ar="مصمّم للسرعة والأمان والرؤية الأكاديمية" data-en="Built for speed, security, and academic visibility">مصمّم للسرعة والأمان والرؤية الأكاديمية</h2>
         </header>
@@ -207,24 +225,136 @@
           يوفّر محضر أربع طرق مختلفة لتسجيل الحضور تناسب مختلف البيئات الجامعية.
         </p>
         <p class="features-hint reveal" data-ar="اضغط على أي بطاقة لقراءة التفاصيل" data-en="Tap a card to read details">اضغط على أي بطاقة لقراءة التفاصيل</p>
-        <div class="methods-four" id="attendanceMethodsGrid"></div>
+        <div id="attendance-methods">
+          <div class="methods-four" id="attendanceMethodsGrid"></div>
+        </div>
 
         <div class="features-grid" id="featuresGrid"></div>
       </div>
     </section>
 
+    <section id="attendance-flow" class="section-attendance-flow">
+      <div class="container">
+        <header class="section-intro section-intro-center reveal">
+          <p class="eyebrow" data-ar="مسار الحضور" data-en="Attendance Flow">مسار الحضور</p>
+          <h2 data-ar="من اختيار الطريقة إلى تأكيد الحضور." data-en="From method selection to attendance confirmation.">من اختيار الطريقة إلى تأكيد الحضور.</h2>
+          <p data-ar="مسار واضح من خمس خطوات يوضّح كيف يحوّل محضر تسجيل الحضور إلى تجربة موثوقة وسريعة." data-en="A clear five-step journey showing how MUHADIR turns check-in into a fast, verifiable experience.">مسار واضح من خمس خطوات يوضّح كيف يحوّل محضر تسجيل الحضور إلى تجربة موثوقة وسريعة.</p>
+        </header>
+
+        <div class="flow-vtimeline reveal" aria-label="MUHADIR attendance process flow">
+          <div class="flow-vtimeline__spine" aria-hidden="true"></div>
+
+          <article class="flow-vstep">
+            <div class="flow-vstep__node" aria-hidden="true"><span class="flow-vstep__num">1</span></div>
+            <div class="flow-vstep__card">
+              <div class="flow-vstep__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 17h7M17.5 14v7"/></svg>
+              </div>
+              <div class="flow-vstep__copy">
+                <h3 data-ar="اختيار طريقة الحضور" data-en="Choose attendance method">اختيار طريقة الحضور</h3>
+                <p data-ar="QR Code / NFC / Bluetooth / Manual" data-en="QR Code / NFC / Bluetooth / Manual">QR Code / NFC / Bluetooth / Manual</p>
+              </div>
+            </div>
+            <div class="flow-vstep__connector" aria-hidden="true"><span class="flow-vstep__connector-line"></span><span class="flow-vstep__connector-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M7 14l5 5 5-5"/></svg></span></div>
+          </article>
+
+          <article class="flow-vstep">
+            <div class="flow-vstep__node" aria-hidden="true"><span class="flow-vstep__num">2</span></div>
+            <div class="flow-vstep__card">
+              <div class="flow-vstep__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h2v2H8z"/></svg>
+              </div>
+              <div class="flow-vstep__copy">
+                <h3 data-ar="التحقق من الجلسة" data-en="Verify session">التحقق من الجلسة</h3>
+                <p data-ar="التأكد من وجود جلسة حضور نشطة" data-en="Confirm an active attendance session exists">التأكد من وجود جلسة حضور نشطة</p>
+              </div>
+            </div>
+            <div class="flow-vstep__connector" aria-hidden="true"><span class="flow-vstep__connector-line"></span><span class="flow-vstep__connector-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M7 14l5 5 5-5"/></svg></span></div>
+          </article>
+
+          <article class="flow-vstep">
+            <div class="flow-vstep__node" aria-hidden="true"><span class="flow-vstep__num">3</span></div>
+            <div class="flow-vstep__card">
+              <div class="flow-vstep__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </div>
+              <div class="flow-vstep__copy">
+                <h3 data-ar="التحقق من تسجيل الطالب" data-en="Verify student enrollment">التحقق من تسجيل الطالب</h3>
+                <p data-ar="التحقق من تسجيل الطالب في المقرر" data-en="Verify the student is enrolled in the course">التحقق من تسجيل الطالب في المقرر</p>
+              </div>
+            </div>
+            <div class="flow-vstep__connector" aria-hidden="true"><span class="flow-vstep__connector-line"></span><span class="flow-vstep__connector-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M7 14l5 5 5-5"/></svg></span></div>
+          </article>
+
+          <article class="flow-vstep">
+            <div class="flow-vstep__node" aria-hidden="true"><span class="flow-vstep__num">4</span></div>
+            <div class="flow-vstep__card">
+              <div class="flow-vstep__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>
+              </div>
+              <div class="flow-vstep__copy">
+                <h3 data-ar="تسجيل الحضور" data-en="Record attendance">تسجيل الحضور</h3>
+                <p data-ar="حفظ سجل الحضور في النظام" data-en="Save the attendance record in the system">حفظ سجل الحضور في النظام</p>
+              </div>
+            </div>
+            <div class="flow-vstep__connector" aria-hidden="true"><span class="flow-vstep__connector-line"></span><span class="flow-vstep__connector-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M7 14l5 5 5-5"/></svg></span></div>
+          </article>
+
+          <article class="flow-vstep flow-vstep--last">
+            <div class="flow-vstep__node" aria-hidden="true"><span class="flow-vstep__num">5</span></div>
+            <div class="flow-vstep__card flow-vstep__card--success">
+              <div class="flow-vstep__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></svg>
+              </div>
+              <div class="flow-vstep__copy">
+                <h3 data-ar="تأكيد الحضور" data-en="Confirm attendance">تأكيد الحضور</h3>
+                <p data-ar="عرض رسالة نجاح وإشعار للطالب" data-en="Show a success message and notify the student">عرض رسالة نجاح وإشعار للطالب</p>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="assistant-preview" class="section-assistant-preview">
+      <div class="container assistant-grid">
+        <div class="assistant-copy reveal">
+          <p class="eyebrow" data-ar="مساعد محضر" data-en="MUHADIR Assistant">مساعد محضر</p>
+          <h2 data-ar="اسأل... ومحضر يجيب." data-en="Ask... and MUHADIR answers.">اسأل... ومحضر يجيب.</h2>
+          <p data-ar="مساعد ذكي يتيح للطلاب والطالبات الوصول السريع إلى معلومات الحضور والغياب والخدمات الأكاديمية داخل التطبيق." data-en="A smart assistant that gives students quick access to attendance, absence, and academic services—right inside the app.">مساعد ذكي يتيح للطلاب والطالبات الوصول السريع إلى معلومات الحضور والغياب والخدمات الأكاديمية داخل التطبيق.</p>
+        </div>
+        <div class="assistant-chat-card reveal" aria-label="MUHADIR assistant preview">
+          <div class="assistant-chat-top">
+            <img class="assistant-avatar" src="assets/images/chatbot_icon.png" alt="" width="28" height="28" />
+            <strong data-ar="مساعد محضر" data-en="MUHADIR Assistant">مساعد محضر</strong>
+          </div>
+          <div class="assistant-message assistant-message-user">
+            <span data-ar="الطالبة" data-en="Student">الطالبة</span>
+            <p data-ar="كم غيابي؟" data-en="How much have I missed?">كم غيابي؟</p>
+          </div>
+          <div class="assistant-message assistant-message-bot">
+            <span data-ar="مساعد محضر" data-en="MUHADIR Assistant">مساعد محضر</span>
+            <div class="assistant-report">
+              <p class="assistant-report-greeting" data-ar="👋 هلا نوف" data-en="👋 Hi Nouf">👋 هلا نوف</p>
+              <p class="assistant-report-heading" data-ar="📊 تقرير الغياب" data-en="📊 Absence Report">📊 تقرير الغياب</p>
+              <p class="assistant-report-course" data-ar="📘 أساسيات هندسة البرمجيات" data-en="📘 Software Engineering Fundamentals">📘 أساسيات هندسة البرمجيات</p>
+              <ul class="assistant-report-stats">
+                <li data-ar="بدون عذر: 8.3% من أصل 15%" data-en="Without excuse: 8.3% of 15%">بدون عذر: 8.3% من أصل 15%</li>
+                <li data-ar="بعذر: 0.0% من أصل 25%" data-en="With excuse: 0.0% of 25%">بعذر: 0.0% من أصل 25%</li>
+                <li data-ar="الإجمالي: 8.3% من أصل 25%" data-en="Total: 8.3% of 25%">الإجمالي: 8.3% من أصل 25%</li>
+                <li data-ar="الغياب: 3 جلسات (6.0 ساعة)" data-en="Absences: 3 sessions (6.0 hours)">الغياب: 3 جلسات (6.0 ساعة)</li>
+              </ul>
+              <p class="assistant-report-status" data-ar="الحالة: تنبيه مبكر" data-en="Status: Early warning">الحالة: تنبيه مبكر</p>
+              <p class="assistant-report-note" data-ar="تقدر تغيب 4 ساعات تقريباً" data-en="You can miss about 4 more hours">تقدر تغيب 4 ساعات تقريباً</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="gate" class="section-gate">
       <div class="container gate-grid">
-        <aside class="gate-left reveal reveal-delay-1" aria-label="Gate flow interactive panel">
-          <div class="gate-left-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1 2 3 6 3s6-2 6-3v-5"/></svg>
-          </div>
-          <h3 class="gate-left-title" data-ar="مسار بوابة الحرم" data-en="Campus Gate Flow">مسار بوابة الحرم</h3>
-          <div class="gate-progress" aria-hidden="true"><div class="gate-progress-fill" id="gateProg"></div></div>
-          <div class="gate-steps-panel" id="gateStepsPanel" aria-label="Steps"></div>
-        </aside>
-
-        <div class="gate-right reveal">
+        <div class="gate-right gate-premium-panel reveal">
           <div class="gate-copy">
             <p class="eyebrow" data-ar="تحقق البوابة مع احترام الخصوصية" data-en="Privacy-Aware Gate Verification">تحقق البوابة مع احترام الخصوصية</p>
             <h2 data-ar="دخول آمن للحرم دون المساس بخصوصية الطالبة." data-en="Secure campus access without compromising student privacy.">دخول آمن للحرم دون المساس بخصوصية الطالبة.</h2>
@@ -369,7 +499,24 @@
               <div class="tcard-bg" aria-hidden="true"></div>
               <div class="av" aria-hidden="true">MS</div>
               <div class="tcard-name" data-ar="د. مصلح السلمي" data-en="Dr. Musleh Al-Sulami">د. مصلح السلمي</div>
-              <div class="tcard-role" data-ar="المشرف الأكاديمي" data-en="Academic supervisor">المشرف الأكاديمي</div>
+              <div class="tcard-role" data-ar="مشرف أكاديمي" data-en="Academic supervisor">مشرف أكاديمي</div>
+              <div class="tcard-link mono" data-ar="LinkedIn" data-en="LinkedIn">
+                <span class="tcard-link-ico" aria-hidden="true">in</span>
+                LinkedIn
+              </div>
+            </a>
+
+            <a
+              class="tcard reveal"
+              href="https://www.linkedin.com/in/mohamed-tounsi/"
+              target="_blank"
+              rel="noopener noreferrer"
+              tabindex="0"
+            >
+              <div class="tcard-bg" aria-hidden="true"></div>
+              <div class="av" aria-hidden="true">MT</div>
+              <div class="tcard-name" data-ar="د. محمد التونسي" data-en="Dr. Mohamed Tounsi">د. محمد التونسي</div>
+              <div class="tcard-role" data-ar="مشرف أكاديمي" data-en="Academic supervisor">مشرف أكاديمي</div>
               <div class="tcard-link mono" data-ar="LinkedIn" data-en="LinkedIn">
                 <span class="tcard-link-ico" aria-hidden="true">in</span>
                 LinkedIn
