@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="MUHADIR (محضر) — Smart university attendance with NFC, QR, BLE, smart alerts, excuse tracking, and secure campus verification." />
+  <meta name="theme-color" content="#082932" />
+  <title>محضر | MUHADIR — Project Overview</title>
+  <link rel="icon" href="assets/images/app_icon.png" type="image/png" />
+  <script>
+    (function () {
+      var p = location.pathname || "";
+      var local = p.indexOf("project-overview") !== -1 || location.protocol === "file:";
+      window.MUHADIR_ASSETS = local ? "assets/images/" : "/assets/images/";
+      document.querySelectorAll("[data-muhadir-img]").forEach(function (img) {
+        img.src = window.MUHADIR_ASSETS + img.getAttribute("data-muhadir-img");
+      });
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main" data-ar="تخطي إلى المحتوى" data-en="Skip to content">تخطي إلى المحتوى</a>
+  <div class="scroll-progress" id="scrollProgress" aria-hidden="true"></div>
+
+  <main id="main">
+    <section class="hero-panel" id="top">
+      <div class="hero-panel-glow" aria-hidden="true"></div>
+      <div class="container hero-panel-inner">
+        <header class="hero-nav">
+          <a href="#top" class="hero-nav__brand hero-brand">
+            <span class="hero-brand-icon hero-brand-icon-img" aria-hidden="true">
+              <img data-muhadir-img="app_icon.png" src="assets/images/app_icon.png" alt="" width="24" height="24" />
+            </span>
+            <span class="hero-brand-text">
+              <span class="hero-brand-name" data-ar="محضر" data-en="MUHADIR">محضر</span>
+              <span class="hero-brand-tag" data-ar="نظام حضور ذكي" data-en="Smart Attendance System">نظام حضور ذكي</span>
+            </span>
+          </a>
+          <div class="hero-nav__center">
+            <div class="lang-seg" role="group" aria-label="Language">
+              <button type="button" class="lang-seg-btn" data-lang="ar">AR</button>
+              <button type="button" class="lang-seg-btn" data-lang="en">EN</button>
+            </div>
+            <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode" aria-pressed="false">
+              <span class="theme-ico theme-ico-sun" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="4" />
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+                </svg>
+              </span>
+              <span class="theme-ico theme-ico-moon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.5 6.5 0 0 0 9.8 9.8Z" />
+                </svg>
+              </span>
+            </button>
+          </div>
+          <span class="hero-nav__pill btn-pill btn-pill-light" data-ar="نظرة عامة" data-en="Project Overview">نظرة عامة</span>
+        </header>
+
+        <div class="hero-grid hero-grid-overview reveal">
+          <div class="hero-copy muhadir-hero">
+            <h1 class="muhadir-hero__title" data-ar="حضور أسرع.. إدارة أذكى" data-en="Faster attendance.. smarter management">
+              حضور أسرع.. إدارة أذكى
+            </h1>
+
+            <p class="muhadir-hero__desc" data-ar="نظام ذكي لتسجيل الحضور والتحقق من الهوية ومتابعة الغياب في مكان واحد." data-en="A smart system for attendance logging, identity verification, and absence tracking—all in one place.">
+              نظام ذكي لتسجيل الحضور والتحقق من الهوية ومتابعة الغياب في مكان واحد.
+            </p>
+
+            <p class="muhadir-hero__affiliation" data-ar="مشروع طالبات من جامعة أم القرى" data-en="A project by students from Umm Al-Qura University">
+              مشروع طالبات من جامعة أم القرى
+            </p>
+
+            <div class="muhadir-hero__actions">
+              <a
+                class="muhadir-hero__btn muhadir-hero__btn--primary"
+                href="https://muhadir-7f83e.firebaseapp.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-ar="جرب التطبيق"
+                data-en="Try the app"
+              >جرب التطبيق</a>
+              <a
+                class="muhadir-hero__btn muhadir-hero__btn--secondary js-hero-scroll-features"
+                href="#features"
+                data-ar="استكشف مميزات محضر"
+                data-en="Explore MUHADIR features"
+              >استكشف مميزات محضر</a>
+            </div>
+          </div>
+
+          <div class="hero-phone hero-scene reveal reveal-delay-1" aria-label="Floating phone preview">
+            <div class="hero-tech-bg" aria-hidden="true">
+              <div class="hero-mesh"></div>
+              <div class="hero-gridlines"></div>
+              <div class="hero-glow hero-glow-a"></div>
+              <div class="hero-glow hero-glow-b"></div>
+              <div class="hero-pulse">
+                <span class="pulse p1"></span>
+                <span class="pulse p2"></span>
+                <span class="pulse p3"></span>
+              </div>
+              <div class="hero-particles">
+                <span class="pt"></span><span class="pt"></span><span class="pt"></span><span class="pt"></span><span class="pt"></span><span class="pt"></span>
+              </div>
+            </div>
+
+            <div class="phone-wrap">
+              <div class="phone">
+                <div class="phone-notch"></div>
+                <div class="phone-header">
+                  <span data-ar="جاهز" data-en="Ready">جاهز</span>
+                  <span class="phone-brand">MUHADIR</span>
+                  <span class="phone-dot" aria-hidden="true"></span>
+                </div>
+
+                <div class="phone-title" data-ar="التحضير عبر NFC" data-en="NFC Check-in">التحضير عبر NFC</div>
+
+                <div class="tabs" role="tablist" aria-label="Methods">
+                  <button class="tab" type="button" role="tab" aria-selected="false" data-method="ble" data-ar="بلوتوث" data-en="BLE">بلوتوث</button>
+                  <button class="tab active" type="button" role="tab" aria-selected="true" data-method="nfc">NFC</button>
+                  <button class="tab" type="button" role="tab" aria-selected="false" data-method="qr">QR</button>
+                </div>
+
+                <div class="nfc-zone" aria-hidden="true">
+                  <div class="ring"></div>
+                  <div class="ring"></div>
+                  <div class="ring"></div>
+                  <div class="ring"></div>
+                  <div class="nfc-icon">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <rect x="4" y="3" width="8" height="10" rx="1.5" stroke="currentColor" stroke-width="1.3" />
+                      <line x1="6" y1="7" x2="10" y2="7" stroke="currentColor" stroke-width="1.2" />
+                      <line x1="6" y1="9" x2="9" y2="9" stroke="currentColor" stroke-width="1.2" />
+                    </svg>
+                  </div>
+                  <div class="nfc-label" data-ar="اقترب من المستشعر" data-en="Move closer to the sensor">اقترب من المستشعر</div>
+                </div>
+
+                <button type="button" class="phone-btn phone-checkin" data-ar="بدء التحضير" data-en="Start check-in">بدء التحضير</button>
+                <div class="phone-result" role="status" aria-live="polite"></div>
+              </div>
+
+              <div class="badge badge-1" aria-hidden="true"><strong>GeoFence</strong><span data-ar="نشط ✓" data-en="Active ✓">نشط ✓</span></div>
+              <div class="badge badge-2" aria-hidden="true"><strong>Dynamic QR</strong><span data-ar="مُفعَّل" data-en="Enabled">مُفعَّل</span></div>
+              <div class="badge badge-3" aria-hidden="true"><strong>Smart Alerts</strong><span data-ar="مباشر" data-en="Live">مباشر</span></div>
+              <div class="badge badge-4" aria-hidden="true"><strong>Secure Session</strong><span data-ar="محمي" data-en="Protected">محمي</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="why-muhadir" class="opening-hook-section reveal" aria-label="Why MUHADIR matters">
+      <div class="container opening-hook-card">
+        <div class="opening-hook-copy">
+          <p class="eyebrow" data-ar="لماذا محضّر؟" data-en="Why it matters">لماذا محضّر؟</p>
+          <h2 data-ar="الحضور اليدوي يستهلك الوقت. محضّر يتحقق ويسجل ويعرض التقارير خلال ثوانٍ." data-en="Manual attendance wastes time. MUHADIR verifies, records, and reports attendance in seconds.">
+            الحضور اليدوي يستهلك الوقت. محضّر يتحقق ويسجل ويعرض التقارير خلال ثوانٍ.
+          </h2>
+        </div>
+        <div class="story-strip" aria-label="MUHADIR story flow">
+          <a href="#about" data-ar="المشكلة" data-en="Problem">المشكلة</a>
+          <a href="#role-journey" data-ar="الأدوار" data-en="Roles">الأدوار</a>
+          <a href="#features" data-ar="الطرق" data-en="Methods">الطرق</a>
+          <a href="#attendance-flow" data-ar="المسار" data-en="Workflow">المسار</a>
+          <a href="#gate" data-ar="البوابة" data-en="Gate">البوابة</a>
+          <a href="#live-dashboard" data-ar="التقارير" data-en="Reports">التقارير</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="stats-section" aria-label="Statistics">
+      <div class="container stats-grid" id="statsGrid"></div>
+    </section>
+
+    <section id="about" class="section-duo">
+      <div class="container duo-grid duo-grid-flip">
+        <div class="flip-scene reveal" id="problemSolutionCard" role="button" tabindex="0" aria-label="اضغط لعرض الحل" aria-pressed="false">
+          <div class="flip-inner">
+            <!-- Front: Problem -->
+            <article class="flip-face flip-front">
+              <div class="card-icon card-icon-red" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </div>
+              <h2 data-ar="المشكلة" data-en="The Problem">المشكلة</h2>
+              <p data-ar="طرق الحضور التقليدية تهدر وقت المحاضرة، وتعتمد على ورق أو مناداة شفهية، وتسمح بالحضور بالنيابة، ولا توفّر رؤية فورية للغياب للطلاب والمحاضرين والإدارة." data-en="Traditional university attendance methods waste lecture time, depend on paper sheets or verbal roll calls, allow proxy attendance, and do not provide real-time absence visibility for students, lecturers, and administrators.">
+                طرق الحضور التقليدية تهدر وقت المحاضرة، وتعتمد على ورق أو مناداة شفهية، وتسمح بالحضور بالنيابة، ولا توفّر رؤية فورية للغياب للطلاب والمحاضرين والإدارة.
+              </p>
+              <div class="flip-hint">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v7h-7"/></svg>
+                <span data-ar="اضغط لترى الحل" data-en="Tap to view the solution">اضغط لترى الحل</span>
+              </div>
+            </article>
+
+            <!-- Back: Solution -->
+            <article class="flip-face flip-back">
+              <div class="flip-particles" aria-hidden="true"></div>
+              <div class="card-icon card-icon-cyan" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
+              </div>
+              <h2 data-ar="الحل" data-en="The Solution">الحل</h2>
+              <div class="flip-divider" aria-hidden="true"></div>
+              <p data-ar="محضر يوحّد الحضور داخل القاعات وعند بوابات الحرم عبر هوية رقمية آمنة، وقنوات تسجيل متعددة، وضوابط الخصوصية، ومراقبة غياب تلقائية." data-en="MUHADIR centralizes attendance inside classrooms and at campus gates through secure digital identity, multiple check-in methods, privacy controls, and automated absence monitoring.">
+                محضر يوحّد الحضور داخل القاعات وعند بوابات الحرم عبر هوية رقمية آمنة، وقنوات تسجيل متعددة، وضوابط الخصوصية، ومراقبة غياب تلقائية.
+              </p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="section-features">
+      <div class="container">
+        <header class="section-intro reveal">
+          <p class="eyebrow" data-ar="الميزات الأساسية" data-en="Core Features">الميزات الأساسية</p>
+          <h2 data-ar="مصمّم للسرعة والأمان والرؤية الأكاديمية" data-en="Built for speed, security, and academic visibility">مصمّم للسرعة والأمان والرؤية الأكاديمية</h2>
+        </header>
+
+        <p class="attendance-methods__lead reveal" data-ar="يوفّر محضر خمس طرق متكاملة لتسجيل الحضور والتحقق منه بما يناسب بيئات الجامعة المختلفة." data-en="MUHADIR offers five integrated ways to record and verify attendance across different university settings.">
+          يوفّر محضر خمس طرق متكاملة لتسجيل الحضور والتحقق منه بما يناسب بيئات الجامعة المختلفة.
+        </p>
+        <p class="features-hint reveal" data-ar="اضغط على أي بطاقة لقراءة التفاصيل" data-en="Tap a card to read details">اضغط على أي بطاقة لقراءة التفاصيل</p>
+        <div class="methods-four" id="attendanceMethodsGrid"></div>
+
+        <div class="features-grid" id="featuresGrid"></div>
+      </div>
+    </section>
+
+    <section id="attendance-flow" class="section-workflow dynamic-phase-block">
+      <div class="container">
+        <header class="section-intro section-intro-center reveal">
+          <p class="eyebrow" data-ar="مسار الحضور" data-en="Attendance Flow">مسار الحضور</p>
+          <h2 data-ar="من طريقة الحضور إلى تقرير المحاضر." data-en="From attendance method to lecturer report.">من طريقة الحضور إلى تقرير المحاضر.</h2>
+          <p data-ar="مسار مختصر يوضح كيف يحوّل محضر الحضور إلى خطوات قابلة للتحقق." data-en="A short flow showing how MUHADIR makes attendance verifiable.">مسار مختصر يوضح كيف يحوّل محضر الحضور إلى خطوات قابلة للتحقق.</p>
+        </header>
+
+        <div class="workflow-shell reveal" id="attendanceWorkflow">
+          <div class="workflow-ambient" aria-hidden="true"></div>
+          <div class="workflow-track" aria-label="MUHADIR attendance workflow">
+            <article class="workflow-step active" data-flow-step="0">
+              <span class="workflow-step__num">01</span>
+              <h3 data-ar="الطالبة" data-en="Student">الطالبة</h3>
+              <p data-ar="تفتح محضر وتختار جلسة الحضور." data-en="Opens MUHADIR and selects the attendance session.">تفتح محضر وتختار جلسة الحضور.</p>
+            </article>
+            <article class="workflow-step" data-flow-step="1">
+              <span class="workflow-step__num">02</span>
+              <h3 data-ar="طريقة الحضور" data-en="Attendance Method">طريقة الحضور</h3>
+              <p data-ar="QR أو NFC أو Bluetooth أو يدوي حسب إعداد المحاضر." data-en="QR, NFC, Bluetooth, or manual based on lecturer setup.">QR أو NFC أو Bluetooth أو يدوي حسب إعداد المحاضر.</p>
+            </article>
+            <article class="workflow-step" data-flow-step="2">
+              <span class="workflow-step__num">03</span>
+              <h3 data-ar="التحقق" data-en="Verification">التحقق</h3>
+              <p data-ar="يتحقق النظام من الهوية والموقع والجلسة." data-en="The system checks identity, location, and session rules.">يتحقق النظام من الهوية والموقع والجلسة.</p>
+            </article>
+            <article class="workflow-step" data-flow-step="3">
+              <span class="workflow-step__num">04</span>
+              <h3 data-ar="تسجيل الحضور" data-en="Recorded">تسجيل الحضور</h3>
+              <p data-ar="تسجل النتيجة فورياً مع منع التكرار." data-en="The result is recorded instantly with repeat prevention.">تسجل النتيجة فورياً مع منع التكرار.</p>
+            </article>
+            <article class="workflow-step" data-flow-step="4">
+              <span class="workflow-step__num">05</span>
+              <h3 data-ar="تقرير المحاضر" data-en="Lecturer Report">تقرير المحاضر</h3>
+              <p data-ar="تظهر مؤشرات الحضور والغياب في لوحة واضحة." data-en="Attendance and absence indicators appear in a clear report.">تظهر مؤشرات الحضور والغياب في لوحة واضحة.</p>
+            </article>
+          </div>
+          <div class="workflow-methods" aria-label="Supported attendance methods">
+            <span data-ar="QR ديناميكي" data-en="Dynamic QR">QR ديناميكي</span>
+            <span data-ar="NFC" data-en="NFC">NFC</span>
+            <span data-ar="Bluetooth" data-en="Bluetooth">Bluetooth</span>
+            <span data-ar="يدوي" data-en="Manual">يدوي</span>
+            <span data-ar="تحقق الموقع" data-en="Geofence check">تحقق الموقع</span>
+          </div>
+          <div class="verification-status-strip" id="verificationStatusStrip" aria-live="polite">
+            <span class="verification-status-label" data-ar="أحداث تحقق مباشرة" data-en="Live verification events">أحداث تحقق مباشرة</span>
+            <div class="verification-events">
+              <span class="verification-event active" data-status-event="0"><b>QR</b><em data-ar="رمز الجلسة صالح" data-en="Session token valid">رمز الجلسة صالح</em></span>
+              <span class="verification-event" data-status-event="1"><b>NFC</b><em data-ar="هوية رقمية مؤكدة" data-en="Digital ID verified">هوية رقمية مؤكدة</em></span>
+              <span class="verification-event" data-status-event="2"><b>BLE</b><em data-ar="القرب داخل النطاق" data-en="Proximity in range">القرب داخل النطاق</em></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="gate" class="section-gate">
+      <div class="container gate-grid">
+        <aside class="gate-left reveal reveal-delay-1" aria-label="Gate flow interactive panel">
+          <div class="gate-left-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1 2 3 6 3s6-2 6-3v-5"/></svg>
+          </div>
+          <h3 class="gate-left-title" data-ar="مسار بوابة الحرم" data-en="Campus Gate Flow">مسار بوابة الحرم</h3>
+          <div class="gate-progress" aria-hidden="true"><div class="gate-progress-fill" id="gateProg"></div></div>
+          <div class="gate-steps-panel" id="gateStepsPanel" aria-label="Steps"></div>
+        </aside>
+
+        <div class="gate-right reveal">
+          <div class="gate-copy">
+            <p class="eyebrow" data-ar="تحقق البوابة مع احترام الخصوصية" data-en="Privacy-Aware Gate Verification">تحقق البوابة مع احترام الخصوصية</p>
+            <h2 data-ar="دخول آمن للحرم دون المساس بخصوصية الطالبة." data-en="Secure campus access without compromising student privacy.">دخول آمن للحرم دون المساس بخصوصية الطالبة.</h2>
+            <p data-ar="يمكن لموظفات الأمن التحقق من هوية الطالبة عبر NFC أو عرض QR آمن. يدعم النظام ضوابط الخصوصية مثل حماية الصور والوصول حسب الدور." data-en="Female security officers can verify student identity through NFC or QR-based secure display. The system supports privacy controls such as protected student photos and role-based access.">
+              يمكن لموظفات الأمن التحقق من هوية الطالبة عبر NFC أو عرض QR آمن. يدعم النظام ضوابط الخصوصية مثل حماية الصور والوصول حسب الدور.
+            </p>
+            <p class="section-micro-copy" data-ar="المشهد يوضح التحقق فقط، ولا يعرض أي بيانات طالبة حقيقية." data-en="The scene explains verification only and does not show real student data.">المشهد يوضح التحقق فقط، ولا يعرض أي بيانات طالبة حقيقية.</p>
+          </div>
+
+          <div class="gate-tags-grid" id="gateTags"></div>
+
+          <div class="gate-detail" aria-live="polite">
+            <p id="gateDetailText"></p>
+          </div>
+
+          <div class="gate-nav">
+            <button type="button" class="gate-btn" id="gatePrev" disabled data-ar="السابق" data-en="Prev">السابق</button>
+            <button type="button" class="gate-btn gate-btn-primary" id="gateNext" data-ar="التالي" data-en="Next">التالي</button>
+          </div>
+
+          <div class="security-verification-scene reveal" id="femaleSecurityScene" aria-label="Female security verification scene">
+            <div class="security-scene-copy">
+              <span class="security-scene-kicker" data-ar="مشهد تحقق رسمي" data-en="Official verification scene">مشهد تحقق رسمي</span>
+              <h3 data-ar="تتحقق موظفات الأمن من الهوية الرقمية مع الحفاظ على الخصوصية." data-en="Female Security staff verify digital identity with privacy controls.">تتحقق موظفات الأمن من الهوية الرقمية مع الحفاظ على الخصوصية.</h3>
+            </div>
+            <div class="campus-gate-visual" aria-hidden="true">
+              <div class="campus-gate-arch"></div>
+              <div class="campus-gate-pillars"></div>
+              <div class="security-id-card">
+                <span class="security-id-chip"></span>
+                <span class="security-id-line"></span>
+                <span class="security-id-line short"></span>
+                <span class="security-qr-mini"></span>
+              </div>
+              <div class="security-scan-beam"></div>
+            </div>
+            <div class="security-result-stack" aria-live="polite">
+              <div class="security-status-card active" data-gate-state="0">
+                <strong data-ar="تم التحقق" data-en="Verified">تم التحقق</strong>
+                <span data-ar="هوية رقمية صحيحة" data-en="Valid digital identity">هوية رقمية صحيحة</span>
+              </div>
+              <div class="security-status-card" data-gate-state="1">
+                <strong data-ar="مسموح بالدخول" data-en="Allowed">مسموح بالدخول</strong>
+                <span data-ar="مطابقة الجلسة والموقع" data-en="Session and location matched">مطابقة الجلسة والموقع</span>
+              </div>
+              <div class="security-status-card" data-gate-state="2">
+                <strong data-ar="تم التحضير مسبقاً" data-en="Already checked">تم التحضير مسبقاً</strong>
+                <span data-ar="منع تكرار التسجيل" data-en="Repeat check-in prevented">منع تكرار التسجيل</span>
+              </div>
+              <div class="security-status-card" data-gate-state="3">
+                <strong data-ar="بحاجة إلى مراجعة" data-en="Needs review">بحاجة إلى مراجعة</strong>
+                <span data-ar="تنبيه رسمي دون إظهار تفاصيل حساسة" data-en="Official alert without sensitive details">تنبيه رسمي دون إظهار تفاصيل حساسة</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="roles" class="section-users">
+      <div class="container">
+        <header class="section-intro section-intro-center reveal">
+          <p class="eyebrow" data-ar="مستخدمو النظام" data-en="System Users">مستخدمو النظام</p>
+          <h2 data-ar="منصة متكاملة لحضور الجامعة." data-en="One integrated platform for university attendance.">منصة متكاملة لحضور الجامعة.</h2>
+        </header>
+        <div class="users-grid" id="usersGrid"></div>
+      </div>
+    </section>
+
+    <section id="role-journey" class="section-role-journey dynamic-phase-block">
+      <div class="container">
+        <header class="section-intro section-intro-center reveal">
+          <p class="eyebrow" data-ar="اختر دورك" data-en="Choose Your Role">اختر دورك</p>
+          <h2 data-ar="كل مستخدم يرى رحلة حضور واضحة." data-en="Every user gets a clear attendance journey.">كل مستخدم يرى رحلة حضور واضحة.</h2>
+          <p data-ar="اختر الدور لعرض الخطوات الأساسية داخل محضر دون استخدام أي بيانات حقيقية." data-en="Choose a role to preview the core MUHADIR steps with no real user data.">اختر الدور لعرض الخطوات الأساسية داخل محضر دون استخدام أي بيانات حقيقية.</p>
+        </header>
+
+        <div class="role-journey-shell reveal" id="roleJourney">
+          <div class="role-selector" role="tablist" aria-label="MUHADIR roles">
+            <button type="button" class="role-tab active" data-role-tab="student" role="tab" aria-selected="true" data-ar="الطالبة" data-en="Student">الطالبة</button>
+            <button type="button" class="role-tab" data-role-tab="lecturer" role="tab" aria-selected="false" data-ar="المحاضر" data-en="Lecturer">المحاضر</button>
+            <button type="button" class="role-tab" data-role-tab="security" role="tab" aria-selected="false" data-ar="الأمن النسائي" data-en="Female Security">الأمن النسائي</button>
+            <button type="button" class="role-tab" data-role-tab="admin" role="tab" aria-selected="false" data-ar="المسؤول" data-en="Admin">المسؤول</button>
+          </div>
+
+          <div class="role-panels">
+            <article class="role-panel active" data-role-panel="student">
+              <h3 data-ar="رحلة الطالبة" data-en="Student Journey">رحلة الطالبة</h3>
+              <div class="role-steps">
+                <span data-ar="عرض الجدول" data-en="View schedule">عرض الجدول</span>
+                <span data-ar="حضور QR/NFC/Bluetooth" data-en="Attend by QR/NFC/Bluetooth">حضور QR/NFC/Bluetooth</span>
+                <span data-ar="تتبع الحضور" data-en="Track attendance">تتبع الحضور</span>
+                <span data-ar="رفع عذر" data-en="Submit excuse">رفع عذر</span>
+              </div>
+            </article>
+            <article class="role-panel" data-role-panel="lecturer">
+              <h3 data-ar="رحلة المحاضر" data-en="Lecturer Journey">رحلة المحاضر</h3>
+              <div class="role-steps">
+                <span data-ar="بدء الجلسة" data-en="Start session">بدء الجلسة</span>
+                <span data-ar="متابعة الحضور" data-en="Monitor attendance">متابعة الحضور</span>
+                <span data-ar="تعديل السجلات" data-en="Edit records">تعديل السجلات</span>
+                <span data-ar="تصدير التقرير" data-en="Export report">تصدير التقرير</span>
+              </div>
+            </article>
+            <article class="role-panel" data-role-panel="security">
+              <h3 data-ar="رحلة الأمن النسائي" data-en="Female Security Journey">رحلة الأمن النسائي</h3>
+              <div class="role-steps">
+                <span data-ar="مسح ID/QR/NFC" data-en="Scan ID/QR/NFC">مسح ID/QR/NFC</span>
+                <span data-ar="تحقق البوابة" data-en="Verify gate access">تحقق البوابة</span>
+                <span data-ar="حفظ سجل التحقق" data-en="Save verification record">حفظ سجل التحقق</span>
+              </div>
+            </article>
+            <article class="role-panel" data-role-panel="admin">
+              <h3 data-ar="رحلة المسؤول" data-en="Admin Journey">رحلة المسؤول</h3>
+              <div class="role-steps">
+                <span data-ar="إدارة المستخدمين والبيانات" data-en="Manage users/data">إدارة المستخدمين والبيانات</span>
+                <span data-ar="متابعة النظام" data-en="Monitor system">متابعة النظام</span>
+                <span data-ar="دعم العمليات" data-en="Support operations">دعم العمليات</span>
+              </div>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="stack" class="section-stack">
+      <div class="section-stack__glow" aria-hidden="true"></div>
+      <div class="container stack-layout">
+        <header class="stack-head reveal">
+          <p class="eyebrow eyebrow-light" data-ar="البنية التقنية" data-en="Technology Stack">البنية التقنية</p>
+          <h2 data-ar="Flutter و Firebase" data-en="Flutter &amp; Firebase">Flutter و Firebase</h2>
+        </header>
+        <div class="stack-swap reveal" id="stackSwap">
+          <div class="stack-swap__shell">
+            <button type="button" class="stack-swap__arrow stack-swap__arrow--prev" id="stackPrev" aria-label="السابق">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <div class="stack-swap__viewport" id="stackViewport">
+              <div class="stack-swap__track" id="stackTrack" aria-live="polite"></div>
+            </div>
+            <button type="button" class="stack-swap__arrow stack-swap__arrow--next" id="stackNext" aria-label="التالي">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
+          <div class="stack-swap__dots" id="stackDots" role="tablist" aria-label="Technology stack"></div>
+          <p class="stack-swap__hint" data-ar="اسحب أو استخدم الأسهم" data-en="Swipe or use arrows">اسحب أو استخدم الأسهم</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="smart-radar" class="section-smart-radar dynamic-phase-block">
+      <div class="container radar-layout">
+        <header class="section-intro reveal">
+          <p class="eyebrow" data-ar="رادار التحقق الذكي" data-en="Smart Verification Radar">رادار التحقق الذكي</p>
+          <h2 data-ar="خمس طرق تحقق. نتيجة واحدة موثوقة." data-en="Five verification methods. One trusted result.">خمس طرق تحقق. نتيجة واحدة موثوقة.</h2>
+          <p data-ar="رادار بصري مختصر يوضح أن QR و NFC و Bluetooth و Geofencing والحضور اليدوي تنتهي بحالة حضور موثقة." data-en="A compact visual showing QR, NFC, Bluetooth, Geofencing, and Manual check-in ending in verified attendance.">رادار بصري مختصر يوضح أن QR و NFC و Bluetooth و Geofencing والحضور اليدوي تنتهي بحالة حضور موثقة.</p>
+        </header>
+        <div class="radar-card reveal" id="smartVerificationRadar" aria-label="Smart verification radar">
+          <div class="radar-ring" aria-hidden="true"></div>
+          <div class="radar-core">
+            <strong>MUHADIR</strong>
+            <span data-ar="حضور موثّق" data-en="Verified Attendance">حضور موثّق</span>
+          </div>
+          <button type="button" class="radar-method active" data-radar-method="0"><b>QR</b></button>
+          <button type="button" class="radar-method" data-radar-method="1"><b>NFC</b></button>
+          <button type="button" class="radar-method" data-radar-method="2"><b>BLE</b></button>
+          <button type="button" class="radar-method" data-radar-method="3"><b>Geo</b></button>
+          <button type="button" class="radar-method" data-radar-method="4"><b>Manual</b></button>
+          <div class="radar-verified-pill" data-ar="تم التحقق من الحضور" data-en="Verified Attendance">تم التحقق من الحضور</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="campus-mode" class="section-campus-mode dynamic-phase-block">
+      <div class="container">
+        <header class="section-intro section-intro-center reveal">
+          <p class="eyebrow" data-ar="وضع الحرم المباشر" data-en="Live Campus Mode">وضع الحرم المباشر</p>
+          <h2 data-ar="محضّر يربط القاعة والبوابة والتقارير في تجربة واحدة." data-en="MUHADIR connects lecture halls, gates, and reports in one experience.">محضّر يربط القاعة والبوابة والتقارير في تجربة واحدة.</h2>
+          <p data-ar="بطاقات بسيطة توضّح نشاط الحرم دون بيانات حقيقية." data-en="Simple activity cards show the campus flow without real data.">بطاقات بسيطة توضّح نشاط الحرم دون بيانات حقيقية.</p>
+        </header>
+        <div class="campus-mode-grid reveal" id="campusMode">
+          <article class="campus-event active" data-campus-event="0">
+            <span class="campus-event-icon">QR</span>
+            <h3 data-ar="بدء جلسة QR" data-en="QR session started">بدء جلسة QR</h3>
+            <p data-ar="المحاضر يفتح قناة حضور آمنة." data-en="Lecturer opens a secure attendance channel.">المحاضر يفتح قناة حضور آمنة.</p>
+          </article>
+          <article class="campus-event" data-campus-event="1">
+            <span class="campus-event-icon">ID</span>
+            <h3 data-ar="تحقق قرب القاعة" data-en="Student verified near hall">تحقق قرب القاعة</h3>
+            <p data-ar="الطالبة ضمن نطاق المحاضرة." data-en="Student is within lecture range.">الطالبة ضمن نطاق المحاضرة.</p>
+          </article>
+          <article class="campus-event" data-campus-event="2">
+            <span class="campus-event-icon">Gate</span>
+            <h3 data-ar="اعتماد دخول البوابة" data-en="Gate access approved">اعتماد دخول البوابة</h3>
+            <p data-ar="الأمن النسائي يتحقق من الهوية بخصوصية." data-en="Female Security verifies identity with privacy.">الأمن النسائي يتحقق من الهوية بخصوصية.</p>
+          </article>
+          <article class="campus-event" data-campus-event="3">
+            <span class="campus-event-icon">Rpt</span>
+            <h3 data-ar="تحديث تقرير الحضور" data-en="Attendance report updated">تحديث تقرير الحضور</h3>
+            <p data-ar="لوحة المحاضر تعرض الحالة فوراً." data-en="Lecturer dashboard updates immediately.">لوحة المحاضر تعرض الحالة فوراً.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="inside-app" class="section-app-preview dynamic-phase-block">
+      <div class="container">
+        <header class="section-intro section-intro-center reveal">
+          <p class="eyebrow" data-ar="داخل تطبيق محضّر" data-en="Inside MUHADIR App">داخل تطبيق محضّر</p>
+          <h2 data-ar="لمحة واقعية عن الشاشات والخدمات الأساسية." data-en="A realistic preview of the core app screens and services.">لمحة واقعية عن الشاشات والخدمات الأساسية.</h2>
+          <p data-ar="معاينة أمامية فقط مستوحاة من شاشات التطبيق، دون عرض أي بيانات خاصة." data-en="Front-end-only mockups inspired by the app screens, with no private data.">معاينة أمامية فقط مستوحاة من شاشات التطبيق، دون عرض أي بيانات خاصة.</p>
+        </header>
+
+        <div class="app-preview-grid reveal" aria-label="Inside MUHADIR app preview">
+          <article class="app-preview-card app-preview-card--student">
+            <div class="app-preview-top">
+              <span data-ar="الطالبة" data-en="Student">الطالبة</span>
+              <strong data-ar="الرئيسية والجدول" data-en="Home & Schedule">الرئيسية والجدول</strong>
+            </div>
+            <div class="app-preview-phone">
+              <div class="app-mini-bar"></div>
+              <div class="app-mini-row strong"><span data-ar="محاضرة اليوم" data-en="Today lecture">محاضرة اليوم</span><b>09:00</b></div>
+              <div class="app-mini-row"><span data-ar="نسبة الحضور" data-en="Attendance rate">نسبة الحضور</span><b>92%</b></div>
+              <div class="app-mini-chip" data-ar="جاهزة للتحضير" data-en="Ready to attend">جاهزة للتحضير</div>
+            </div>
+          </article>
+
+          <article class="app-preview-card app-preview-card--lecturer">
+            <div class="app-preview-top">
+              <span data-ar="المحاضر" data-en="Lecturer">المحاضر</span>
+              <strong data-ar="إدارة الحضور" data-en="Attendance Session">إدارة الحضور</strong>
+            </div>
+            <div class="app-preview-dashboard">
+              <div><strong>86</strong><span data-ar="حضور" data-en="Present">حضور</span></div>
+              <div><strong>9</strong><span data-ar="متأخر / عذر" data-en="Late / Excused">متأخر / عذر</span></div>
+              <div class="wide"><span data-ar="تصدير التقرير" data-en="Export report">تصدير التقرير</span><b></b></div>
+            </div>
+          </article>
+
+          <article class="app-preview-card app-preview-card--security">
+            <div class="app-preview-top">
+              <span data-ar="الأمن النسائي" data-en="Female Security">الأمن النسائي</span>
+              <strong data-ar="تحقق البوابة" data-en="Gate Verification">تحقق البوابة</strong>
+            </div>
+            <div class="app-verification-card">
+              <span class="app-scan-ring" aria-hidden="true"></span>
+              <strong data-ar="ID / QR / NFC" data-en="ID / QR / NFC">ID / QR / NFC</strong>
+              <em data-ar="دخول معتمد" data-en="Access approved">دخول معتمد</em>
+            </div>
+          </article>
+
+          <article class="app-preview-card app-preview-card--report">
+            <div class="app-preview-top">
+              <span data-ar="التقارير" data-en="Reports">التقارير</span>
+              <strong data-ar="تقرير الحضور" data-en="Attendance Report">تقرير الحضور</strong>
+            </div>
+            <div class="app-report-lines">
+              <span style="--w: 86%"></span>
+              <span style="--w: 64%"></span>
+              <span style="--w: 42%"></span>
+              <small data-ar="حالة المحاضرة محدثة" data-en="Lecture status updated">حالة المحاضرة محدثة</small>
+            </div>
+          </article>
+
+          <article class="app-preview-card app-preview-card--services">
+            <div class="app-preview-top">
+              <span data-ar="الخدمات" data-en="Services">الخدمات</span>
+              <strong data-ar="الأعذار والتنبيهات" data-en="Excuses & Notifications">الأعذار والتنبيهات</strong>
+            </div>
+            <div class="app-service-list">
+              <span data-ar="رفع عذر" data-en="Submit excuse">رفع عذر</span>
+              <span data-ar="حالة الطلب" data-en="Request status">حالة الطلب</span>
+              <span data-ar="تنبيه أكاديمي" data-en="Academic notification">تنبيه أكاديمي</span>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="assistant-preview" class="section-assistant-preview dynamic-phase-block">
+      <div class="container assistant-grid">
+        <div class="assistant-copy reveal">
+          <p class="eyebrow" data-ar="مساعد محضر" data-en="MUHADIR Assistant">مساعد محضر</p>
+          <h2 data-ar="إرشاد سريع للطالبات داخل التطبيق." data-en="Fast guidance for students inside the app.">إرشاد سريع للطالبات داخل التطبيق.</h2>
+          <p data-ar="معاينة أمامية فقط توضّح كيف يمكن للمساعد تبسيط الوصول إلى الخدمات." data-en="A front-end-only preview showing how an assistant can simplify access to services.">معاينة أمامية فقط توضّح كيف يمكن للمساعد تبسيط الوصول إلى الخدمات.</p>
+        </div>
+        <div class="assistant-chat-card reveal" aria-label="MUHADIR assistant preview">
+          <div class="assistant-chat-top">
+            <span class="assistant-dot" aria-hidden="true"></span>
+            <strong data-ar="مساعد محضر" data-en="MUHADIR Assistant">مساعد محضر</strong>
+          </div>
+          <div class="assistant-message assistant-message-user">
+            <span data-ar="الطالبة" data-en="Student">الطالبة</span>
+            <p data-ar="كيف أعرف نسبة حضوري؟" data-en="How can I check my attendance?">كيف أعرف نسبة حضوري؟</p>
+          </div>
+          <div class="assistant-message assistant-message-bot">
+            <span data-ar="مساعد محضر" data-en="MUHADIR Assistant">مساعد محضر</span>
+            <p data-ar="يمكنك مراجعة الحضور من صفحة تتبع الحضور." data-en="You can view it from the Attendance Tracking page.">يمكنك مراجعة الحضور من صفحة تتبع الحضور.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="impact-highlights" class="section-impact-highlights dynamic-phase-block">
+      <div class="container">
+        <header class="section-intro section-intro-center reveal">
+          <p class="eyebrow" data-ar="أبرز ما يقدمه محضر" data-en="Key Highlights">أبرز ما يقدمه محضر</p>
+          <h2 data-ar="نظام حضور جامعي متكامل، وليس شاشة تسجيل فقط." data-en="A complete university attendance system, not just a check-in screen.">نظام حضور جامعي متكامل، وليس شاشة تسجيل فقط.</h2>
+        </header>
+        <div class="impact-grid reveal" id="impactHighlights">
+          <article class="impact-card"><strong data-stat-value="4">4</strong><span data-ar="أدوار مستخدم" data-en="User Roles">أدوار مستخدم</span></article>
+          <article class="impact-card"><strong data-stat-value="5">5</strong><span data-ar="طرق حضور" data-en="Attendance Methods">طرق حضور</span></article>
+          <article class="impact-card"><strong data-ar="آمن" data-en="Secure">آمن</strong><span data-ar="تحقق آمن للبوابة النسائية" data-en="Secure Female Gate Verification">تحقق آمن للبوابة النسائية</span></article>
+          <article class="impact-card"><strong data-ar="مباشر" data-en="Live">مباشر</strong><span data-ar="تقارير حضور فورية" data-en="Real-time Reports">تقارير حضور فورية</span></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="value-story" class="section-compare dynamic-phase-block">
+      <div class="container">
+        <header class="section-intro section-intro-center reveal">
+          <p class="eyebrow" data-ar="قبل ومع محضر" data-en="Before / With MUHADIR">قبل ومع محضر</p>
+          <h2 data-ar="قيمة المشروع تظهر في الفرق بين الورق والنظام الذكي." data-en="The value is clear when paper becomes a smart system.">قيمة المشروع تظهر في الفرق بين الورق والنظام الذكي.</h2>
+        </header>
+        <div class="compare-grid reveal">
+          <article class="compare-panel compare-panel--before">
+            <span class="compare-label" data-ar="قبل محضر" data-en="Before MUHADIR">قبل محضر</span>
+            <div class="paper-stack" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </div>
+            <ul>
+              <li data-ar="حضور يدوي واستهلاك وقت المحاضرة" data-en="Manual attendance consumes lecture time">حضور يدوي واستهلاك وقت المحاضرة</li>
+              <li data-ar="مخاطر الحضور بالنيابة" data-en="Proxy attendance risk">مخاطر الحضور بالنيابة</li>
+              <li data-ar="تقارير متأخرة وضغط على البوابات" data-en="Delayed reports and gate pressure">تقارير متأخرة وضغط على البوابات</li>
+            </ul>
+          </article>
+          <div class="compare-transform" aria-hidden="true">
+            <span></span>
+          </div>
+          <article class="compare-panel compare-panel--after">
+            <span class="compare-label" data-ar="مع محضر" data-en="With MUHADIR">مع محضر</span>
+            <div class="dashboard-stack-mini" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </div>
+            <ul>
+              <li data-ar="حضور رقمي بطرق تحقق متعددة" data-en="Digital attendance with multiple verification methods">حضور رقمي بطرق تحقق متعددة</li>
+              <li data-ar="تحقق آمن للبوابة النسائية" data-en="Secure female gate verification">تحقق آمن للبوابة النسائية</li>
+              <li data-ar="تقارير وتنبيهات واضحة للمحاضر" data-en="Clear lecturer reports and notifications">تقارير وتنبيهات واضحة للمحاضر</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="live-dashboard" class="section-live-dashboard dynamic-phase-block">
+      <div class="container dashboard-live-grid">
+        <div class="dashboard-live-copy reveal">
+          <p class="eyebrow" data-ar="معاينة لوحة التحكم" data-en="Dashboard Preview">معاينة لوحة التحكم</p>
+          <h2 data-ar="مؤشرات حضور وتقارير واضحة للمحاضر." data-en="Clear attendance indicators and reports for lecturers.">مؤشرات حضور وتقارير واضحة للمحاضر.</h2>
+          <p data-ar="القيم توضيحية فقط ولا ترتبط بقاعدة بيانات أو Firebase." data-en="Values are illustrative only and are not connected to Firebase.">القيم توضيحية فقط ولا ترتبط بقاعدة بيانات أو Firebase.</p>
+          <p class="section-micro-copy" data-ar="المحاضر يرى الحضور والطرق المستخدمة والتقرير من مكان واحد." data-en="Lecturers can review attendance, methods used, and report status in one place.">المحاضر يرى الحضور والطرق المستخدمة والتقرير من مكان واحد.</p>
+        </div>
+        <div class="dashboard-live-card reveal" id="liveDashboard">
+          <div class="dashboard-live-top">
+            <span data-ar="تقرير محاضرة" data-en="Lecture Report">تقرير محاضرة</span>
+            <strong>CS-401</strong>
+          </div>
+          <div class="dashboard-metrics-grid">
+            <div class="dashboard-metric">
+              <span data-stat-value="86">86</span>
+              <small data-ar="حضور" data-en="Present">حضور</small>
+            </div>
+            <div class="dashboard-metric">
+              <span data-stat-value="9">9</span>
+              <small data-ar="متأخر / عذر" data-en="Late / Excused">متأخر / عذر</small>
+            </div>
+            <div class="dashboard-metric">
+              <span data-stat-value="96%">96%</span>
+              <small data-ar="نجاح التحقق" data-en="Verification success">نجاح التحقق</small>
+            </div>
+            <div class="dashboard-metric">
+              <span data-stat-value="5">5</span>
+              <small data-ar="طرق مستخدمة" data-en="Methods used">طرق مستخدمة</small>
+            </div>
+          </div>
+          <div class="report-preview-card">
+            <div class="report-row"><span data-ar="QR" data-en="QR">QR</span><b style="--w:72%"></b></div>
+            <div class="report-row"><span data-ar="NFC" data-en="NFC">NFC</span><b style="--w:58%"></b></div>
+            <div class="report-row"><span data-ar="Bluetooth" data-en="Bluetooth">Bluetooth</span><b style="--w:46%"></b></div>
+            <div class="report-row"><span data-ar="يدوي" data-en="Manual">يدوي</span><b style="--w:24%"></b></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="mini-demo" class="section-mini-demo dynamic-phase-block">
+      <div class="container mini-demo-grid">
+        <div class="mini-demo-copy reveal">
+          <p class="eyebrow" data-ar="تجربة مصغّرة" data-en="Mini Interactive Demo">تجربة مصغّرة</p>
+          <h2 data-ar="جرّب مسار حضور أمامي فقط." data-en="Try a front-end-only attendance flow.">جرّب مسار حضور أمامي فقط.</h2>
+          <p data-ar="توليد رمز، مسح، تحقق موقع، ثم تحديث تقرير توضيحي." data-en="Generate a token, scan, verify location, then update a sample report.">توليد رمز، مسح، تحقق موقع، ثم تحديث تقرير توضيحي.</p>
+          <button type="button" class="mini-demo-btn" id="demoRun" data-ar="جرّب مسار الحضور" data-en="Try Attendance Flow">جرّب مسار الحضور</button>
+        </div>
+        <div class="mini-demo-console reveal" id="attendanceDemo">
+          <div class="demo-token-card" aria-hidden="true">
+            <span class="demo-token-title">MUHADIR TOKEN</span>
+            <div class="demo-qr-grid" id="demoQrGrid"></div>
+            <span class="demo-token-code" id="demoTokenCode">MH-QR-2041</span>
+          </div>
+          <div class="demo-steps" aria-live="polite">
+            <div class="demo-step active" data-demo-step="0" data-ar="جاهز للتجربة" data-en="Ready to start">جاهز للتجربة</div>
+            <div class="demo-step" data-demo-step="1" data-ar="جاري المسح..." data-en="Scanning...">جاري المسح...</div>
+            <div class="demo-step" data-demo-step="2" data-ar="التحقق من الموقع..." data-en="Checking location...">التحقق من الموقع...</div>
+            <div class="demo-step" data-demo-step="3" data-ar="التحقق من هوية الطالبة..." data-en="Verifying student...">التحقق من هوية الطالبة...</div>
+            <div class="demo-step" data-demo-step="4" data-ar="✓ تم تسجيل الحضور بنجاح" data-en="✓ Attendance Recorded Successfully">✓ تم تسجيل الحضور بنجاح</div>
+          </div>
+          <div class="demo-report-card">
+            <span data-ar="حضور المحاضرة" data-en="Lecture attendance">حضور المحاضرة</span>
+            <strong id="demoReportCount">86</strong>
+            <small id="demoReportStatus" data-ar="ينتظر اكتمال التجربة" data-en="Waiting for completion">ينتظر اكتمال التجربة</small>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="team" class="section-team">
+      <div class="container">
+        <header class="section-intro section-intro-center reveal">
+          <p class="eyebrow" data-ar="فريق العمل" data-en="Team">فريق العمل</p>
+          <h2 class="grad-title" data-ar="فريق محضّر" data-en="The team behind MUHADIR">فريق محضّر</h2>
+          <p data-ar="فريق متكامل لبناء تجربة حضور ذكية وموثوقة." data-en="A focused team building a smart, reliable attendance experience.">
+            فريق متكامل لبناء تجربة حضور ذكية وموثوقة.
+          </p>
+        </header>
+
+        <div class="team-grid team-grid-compact" id="teamGrid">
+          <a class="tcard reveal active" href="https://www.linkedin.com/in/shomokh-alosaimei-825851273/?skipRedirect=true" target="_blank" rel="noreferrer" tabindex="0">
+            <div class="tcard-bg" aria-hidden="true"></div>
+            <div class="av" aria-hidden="true">SA</div>
+            <div class="tcard-name" data-ar="شموخ محمد العصيمي" data-en="Shomokh Mohammed Alosaimei">شموخ محمد العصيمي</div>
+            <div class="tcard-role" data-ar="عضو الفريق" data-en="Team member">عضو الفريق</div>
+            <div class="tcard-link mono" data-ar="LinkedIn" data-en="LinkedIn">
+              <span class="tcard-link-ico" aria-hidden="true">in</span>
+              LinkedIn
+            </div>
+          </a>
+
+          <a class="tcard reveal" href="https://www.linkedin.com/in/aljazi-alhuthali-a62025374/" target="_blank" rel="noreferrer" tabindex="0">
+            <div class="tcard-bg" aria-hidden="true"></div>
+            <div class="av" aria-hidden="true">AA</div>
+            <div class="tcard-name" data-ar="الجازي سليمان الهذلي" data-en="Aljazi Sulaiman Alhuthali">الجازي سليمان الهذلي</div>
+            <div class="tcard-role" data-ar="عضو الفريق" data-en="Team member">عضو الفريق</div>
+            <div class="tcard-link mono" data-ar="LinkedIn" data-en="LinkedIn">
+              <span class="tcard-link-ico" aria-hidden="true">in</span>
+              LinkedIn
+            </div>
+          </a>
+
+          <a class="tcard reveal" href="https://www.linkedin.com/in/aeshah-alsulami/" target="_blank" rel="noreferrer" tabindex="0">
+            <div class="tcard-bg" aria-hidden="true"></div>
+            <div class="av" aria-hidden="true">AA</div>
+            <div class="tcard-name" data-ar="عائشه معيوض السلمي" data-en="Aeshah Mayud Alsulami">عائشه معيوض السلمي</div>
+            <div class="tcard-role" data-ar="عضو الفريق" data-en="Team member">عضو الفريق</div>
+            <div class="tcard-link mono" data-ar="LinkedIn" data-en="LinkedIn">
+              <span class="tcard-link-ico" aria-hidden="true">in</span>
+              LinkedIn
+            </div>
+          </a>
+
+          <a class="tcard reveal" href="https://www.linkedin.com/in/wadhuhalturgemi/" target="_blank" rel="noreferrer" tabindex="0">
+            <div class="tcard-bg" aria-hidden="true"></div>
+            <div class="av" aria-hidden="true">WA</div>
+            <div class="tcard-name" data-ar="وضوح سليمان الترجمي" data-en="Wadhuh Suliman Alturgemi">وضوح سليمان الترجمي</div>
+            <div class="tcard-role" data-ar="عضو الفريق" data-en="Team member">عضو الفريق</div>
+            <div class="tcard-link mono" data-ar="LinkedIn" data-en="LinkedIn">
+              <span class="tcard-link-ico" aria-hidden="true">in</span>
+              LinkedIn
+            </div>
+          </a>
+
+          <a class="tcard reveal" href="https://www.linkedin.com/in/ghalaqrnii?utm_source=share_via&utm_content=profile&utm_medium=member_ios" target="_blank" rel="noreferrer" tabindex="0">
+            <div class="tcard-bg" aria-hidden="true"></div>
+            <div class="av" aria-hidden="true">GA</div>
+            <div class="tcard-name" data-ar="غلا سعد القرني" data-en="Ghala Saad Al-Qarni">غلا سعد القرني</div>
+            <div class="tcard-role" data-ar="عضو الفريق" data-en="Team member">عضو الفريق</div>
+            <div class="tcard-link mono" data-ar="LinkedIn" data-en="LinkedIn">
+              <span class="tcard-link-ico" aria-hidden="true">in</span>
+              LinkedIn
+            </div>
+          </a>
+        </div>
+
+        <div class="supervisor-block reveal">
+          <header class="section-intro section-intro-center">
+            <p class="eyebrow" data-ar="الإشراف العلمي" data-en="Academic supervision">الإشراف العلمي</p>
+            <h2 class="grad-title" data-ar="إشراف" data-en="Supervision">إشراف</h2>
+            <p data-ar="إشراف أكاديمي على مشروع محضّر." data-en="Academic supervision for the MUHADIR project.">
+              إشراف أكاديمي على مشروع محضّر.
+            </p>
+          </header>
+
+          <div class="team-grid team-grid-compact supervisor-card-wrap">
+            <a
+              class="tcard reveal active"
+              href="https://www.linkedin.com/in/musleh-alsulami-5b502253/"
+              target="_blank"
+              rel="noopener noreferrer"
+              tabindex="0"
+            >
+              <div class="tcard-bg" aria-hidden="true"></div>
+              <div class="av" aria-hidden="true">MS</div>
+              <div class="tcard-name" data-ar="د. مصلح السلمي" data-en="Dr. Musleh Al-Sulami">د. مصلح السلمي</div>
+              <div class="tcard-role" data-ar="المشرف الأكاديمي" data-en="Academic supervisor">المشرف الأكاديمي</div>
+              <div class="tcard-link mono" data-ar="LinkedIn" data-en="LinkedIn">
+                <span class="tcard-link-ico" aria-hidden="true">in</span>
+                LinkedIn
+              </div>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta-try reveal" aria-label="Try now">
+      <div class="container cta-try-inner">
+        <div class="cta-try-icon" aria-hidden="true">
+          <div class="cta-try-icon-inner">
+            <img data-muhadir-img="app_icon.png" src="assets/images/app_icon.png" alt="" width="40" height="40" />
+          </div>
+        </div>
+
+        <h2 class="cta-try-title" data-ar="شاهد محضّر أثناء العمل" data-en="See MUHADIR in action">شاهد محضّر أثناء العمل</h2>
+
+        <p class="cta-try-sub" data-ar="محضر ليس مجرد مشروع تخرج؛ بل خطوة نحو حضور جامعي أسرع وأكثر أماناً ووضوحاً." data-en="MUHADIR is not only a graduation project. It is a step toward smarter, faster, and more secure university attendance.">
+          محضر ليس مجرد مشروع تخرج؛ بل خطوة نحو حضور جامعي أسرع وأكثر أماناً ووضوحاً.
+        </p>
+
+        <div class="cta-try-actions">
+          <a class="cta-try-btn" href="#mini-demo" data-ar="جرّب العرض" data-en="Try Demo">جرّب العرض</a>
+          <a class="cta-try-btn cta-try-btn-secondary" href="#attendance-flow" data-ar="اعرض المسار" data-en="View Workflow">اعرض المسار</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-center">
+      <img data-muhadir-img="app_icon.png" src="assets/images/app_icon.png" alt="" class="footer-logo" width="48" height="48" />
+      <h2 data-ar="محضر" data-en="MUHADIR">محضر</h2>
+      <p data-ar="نظام حضور ذكي وتحقق آمن من الحرم الجامعي" data-en="Smart Attendance &amp; Secure Campus Verification System">نظام حضور ذكي وتحقق آمن من الحرم الجامعي</p>
+      <p class="footer-uni" data-ar="طالبات من جامعة أم القرى" data-en="Students from Umm Al-Qura University">طالبات من جامعة أم القرى</p>
+      <p class="footer-meta mono">Flutter · Firebase · v1.0.0+6</p>
+    </div>
+  </footer>
+
+  <nav class="mobile-action-bar" aria-label="Mobile quick actions">
+    <a href="#attendance-flow" data-ar="عرض المسار" data-en="View Flow">عرض المسار</a>
+    <a href="#mini-demo" data-ar="جرّب الحضور" data-en="Try Demo">جرّب الحضور</a>
+  </nav>
+
+  <button type="button" class="back-top" id="backTop" aria-label="Back to top">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+  </button>
+
+  <script src="script.js"></script>
+</body>
+</html>
