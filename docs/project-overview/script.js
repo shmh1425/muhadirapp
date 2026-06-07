@@ -773,40 +773,6 @@
     });
   }
 
-  function initTeamCards() {
-    const grid = document.getElementById("teamGrid");
-    if (!grid) return;
-    const cards = Array.from(grid.querySelectorAll(".tcard"));
-    if (!cards.length) return;
-
-    const setActive = (card, active) => {
-      card.classList.toggle("active", active);
-    };
-    const clear = () => cards.forEach((c) => setActive(c, false));
-
-    cards.forEach((card) => {
-      const toggle = () => {
-        const was = card.classList.contains("active");
-        clear();
-        if (!was) setActive(card, true);
-      };
-      card.addEventListener("click", (e) => {
-        // Let normal anchor navigation happen; still set active for feedback.
-        toggle();
-      });
-      card.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          toggle();
-          // For anchors, Enter should also follow the link (Space shouldn't).
-          if (e.key === "Enter" && card.tagName === "A") {
-            card.click();
-          }
-        }
-      });
-    });
-  }
-
   let dynamicTiltReady = false;
   function initDynamicTilt() {
     if (dynamicTiltReady) return;
@@ -873,7 +839,6 @@
   initOverviewPhoneDemo();
   initSolutionReveal();
   initStackSwap();
-  initTeamCards();
   initDynamicTilt();
 
 })();

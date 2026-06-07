@@ -173,34 +173,35 @@ html[data-theme="dark"] .flow-card,
 html[data-theme="dark"] .flow-list-card,
 html[data-theme="dark"] .tcard {
   background: var(--surface-raised);
-  border-color: var(--border-subtle);
+  border-color: rgba(103, 232, 249, 0.22);
+  box-shadow: 0 0 0 4px rgba(103, 232, 249, 0.06), var(--shadow-sm);
 }
 
 html[data-theme="dark"] .tcard-bg {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(103, 232, 249, 0.10);
 }
 
 html[data-theme="dark"] .tcard:hover {
-  border-color: rgba(103, 232, 249, 0.22);
+  border-color: rgba(103, 232, 249, 0.32);
 }
 
 html[data-theme="dark"] .tcard-name {
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(165, 243, 252, 0.98);
 }
 
 html[data-theme="dark"] .tcard-role {
-  color: rgba(255, 255, 255, 0.66);
-  background: rgba(255, 255, 255, 0.06);
+  color: rgba(13, 89, 98, 0.95);
+  background: rgba(103, 232, 249, 0.16);
 }
 
 html[data-theme="dark"] .tcard-link {
-  color: rgba(255, 255, 255, 0.62);
+  color: rgba(13, 89, 98, 0.92);
 }
 
 html[data-theme="dark"] .av {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.10);
-  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(103, 232, 249, 0.35);
+  color: rgba(13, 89, 98, 0.95);
 }
 
 html[data-theme="dark"] .tcard-link-ico {
@@ -2219,20 +2220,29 @@ html[data-theme="dark"] .supervisor-block {
 }
 
 .supervisor-card-wrap {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 11.75rem));
+  justify-content: center;
+  gap: 1.35rem;
+  max-width: none;
   margin-top: 0;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  max-width: 32rem;
   margin-inline: auto;
+  padding: 0.65rem 1rem;
 }
 
 .supervisor-card-wrap .tcard {
   grid-column: auto;
+  width: 100%;
+  min-width: 0;
+  box-shadow: 0 0 0 4px rgba(103, 232, 249, 0.08), var(--shadow-sm);
 }
 
 @media (max-width: 640px) {
   .supervisor-card-wrap {
-    grid-template-columns: 1fr;
-    max-width: 280px;
+    grid-template-columns: minmax(0, 16.5rem);
+    gap: 1.1rem;
+    max-width: 100%;
+    padding: 0.5rem 0.75rem;
   }
 
   .supervisor-card-wrap .tcard {
@@ -2376,7 +2386,7 @@ html[data-theme="dark"] .cta-try {
   position: relative;
   overflow: hidden;
   background: #fff;
-  border: 1px solid rgba(7, 59, 66, 0.10);
+  border: 1px solid rgba(103, 232, 249, 0.40);
   border-radius: 18px;
   padding: 1.5rem 1rem 1.25rem;
   display: flex;
@@ -2387,17 +2397,14 @@ html[data-theme="dark"] .cta-try {
   text-decoration: none;
   color: inherit;
   cursor: pointer;
-  transition: transform 0.2s var(--ease), border-color var(--transition);
+  box-shadow: 0 0 0 6px rgba(103, 232, 249, 0.10), var(--shadow-sm);
+  transition: transform 0.2s var(--ease), border-color var(--transition), box-shadow var(--transition);
 }
 
 .tcard:hover {
   transform: translateY(-4px);
-  border-color: rgba(103, 232, 249, 0.28);
-}
-
-.tcard.active {
-  border-color: rgba(103, 232, 249, 0.40);
-  box-shadow: 0 0 0 6px rgba(103, 232, 249, 0.10), var(--shadow-md);
+  border-color: rgba(103, 232, 249, 0.48);
+  box-shadow: 0 0 0 6px rgba(103, 232, 249, 0.14), var(--shadow-md);
 }
 
 .tcard-bg {
@@ -2405,16 +2412,12 @@ html[data-theme="dark"] .cta-try {
   inset-inline: 0;
   top: 0;
   height: 70px;
-  background: rgba(15, 23, 42, 0.03);
+  background: rgba(103, 232, 249, 0.14);
   transition: background var(--transition);
 }
 
 .tcard:hover .tcard-bg {
-  background: linear-gradient(135deg, rgba(103, 232, 249, 0.14), rgba(94, 234, 212, 0.10));
-}
-
-.tcard.active .tcard-bg {
-  background: rgba(103, 232, 249, 0.14);
+  background: linear-gradient(135deg, rgba(103, 232, 249, 0.18), rgba(94, 234, 212, 0.12));
 }
 
 .av {
@@ -2422,56 +2425,42 @@ html[data-theme="dark"] .cta-try {
   height: 58px;
   border-radius: 50%;
   background: #fff;
-  border: 3px solid #fff;
+  border: 3px solid rgba(103, 232, 249, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 0.95rem;
   font-weight: 900;
-  color: rgba(100, 116, 139, 0.95);
+  color: rgba(13, 89, 98, 0.95);
   position: relative;
   z-index: 1;
   margin-top: 18px;
   transition: color var(--transition), border-color var(--transition);
 }
 
-.tcard.active .av {
-  color: rgba(13, 89, 98, 0.95);
-  border-color: rgba(103, 232, 249, 0.35);
-}
-
 .tcard-name {
   font-size: 0.78rem;
   font-weight: 900;
-  color: var(--text);
+  color: rgba(13, 89, 98, 0.98);
   line-height: 1.4;
 }
 
 .tcard-role {
   font-size: 0.72rem;
-  color: rgba(100, 116, 139, 0.95);
-  background: rgba(15, 23, 42, 0.04);
+  color: rgba(13, 89, 98, 0.95);
+  background: rgba(103, 232, 249, 0.16);
   padding: 0.18rem 0.6rem;
   border-radius: 999px;
   transition: background var(--transition), color var(--transition);
 }
 
-.tcard.active .tcard-role {
-  background: rgba(103, 232, 249, 0.16);
-  color: rgba(13, 89, 98, 0.95);
-}
-
 .tcard-link {
   font-size: 0.72rem;
-  color: rgba(100, 116, 139, 0.80);
+  color: rgba(13, 89, 98, 0.95);
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
   margin-top: 0.1rem;
-}
-
-.tcard.active .tcard-link {
-  color: rgba(13, 89, 98, 0.95);
 }
 
 .tcard-link-ico {
