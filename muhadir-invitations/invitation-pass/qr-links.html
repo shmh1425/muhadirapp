@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="أداة محلية لتوليد روابط وQR لـ MUHADIR PASS." />
+    <meta name="theme-color" content="#041923" />
+    <title>MUHADIR PASS | Link & QR Generator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900;1000&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="qr-links.css" />
+  </head>
+  <body>
+    <main class="helper-page">
+      <section class="helper-card">
+        <header class="helper-header">
+          <div class="brand-lockup">
+            <span class="brand-mark">
+              <img src="assets/images/muhadir-logo.jpg" alt="" />
+            </span>
+            <span class="brand-copy">
+              <strong>MUHADIR PASS</strong>
+              <small>Link & QR Generator</small>
+            </span>
+          </div>
+          <a class="helper-back" href="index.html">← تجربة البطاقة</a>
+        </header>
+
+        <div class="helper-intro">
+          <h1>توليد روابط وQR</h1>
+          <p>أداة محلية لإنشاء روابط دعوة مُحضِر مع ترميز صحيح للأسماء العربية.</p>
+        </div>
+
+        <aside class="helper-guide" aria-label="إرشادات اللقب">
+          <p>للدكاترة والأكاديميين: اختر <bdi dir="ltr">type=doctor</bdi> واستخدم اللقب <strong>د</strong> أو <strong>د.</strong></p>
+          <p>للمهندسين والزملاء: اختر <bdi dir="ltr">type=colleague</bdi> واستخدم اللقب <strong>م</strong> أو <strong>م.</strong></p>
+          <p>للدعوات العامة أو الأهل يمكن ترك اللقب والاسم فارغين.</p>
+        </aside>
+
+        <form class="helper-form" id="link-form" novalidate>
+          <label class="field">
+            <span>رابط الأساس (Base URL)</span>
+            <input
+              type="url"
+              id="base-url"
+              name="baseUrl"
+              placeholder="https://your-domain.com/invitation-pass/"
+              autocomplete="url"
+              required
+            />
+            <small>يجب أن ينتهي بـ <bdi dir="ltr">/invitation-pass/</bdi> أو مسار المجلد.</small>
+          </label>
+
+          <label class="field">
+            <span>نوع الدعوة</span>
+            <select id="invite-type" name="type">
+              <option value="general">general — دعوة عامة</option>
+              <option value="doctor">doctor — دعوة أكاديمية</option>
+              <option value="engineers44">engineers44 — مهندسات 44</option>
+              <option value="colleague">colleague — زميلة تخصص</option>
+              <option value="family">family — دعوة خاصة</option>
+            </select>
+          </label>
+
+          <div class="field-row">
+            <label class="field">
+              <span>اللقب (اختياري)</span>
+              <input
+                type="text"
+                id="title-field"
+                name="title"
+                placeholder="د أو م"
+                maxlength="8"
+                autocomplete="off"
+              />
+              <small>يقبل <strong>د</strong> أو <strong>د.</strong> و<strong>م</strong> أو <strong>م.</strong></small>
+            </label>
+
+            <label class="field">
+              <span>الاسم (اختياري)</span>
+              <input
+                type="text"
+                id="name-field"
+                name="name"
+                placeholder="محمد جبلي"
+                autocomplete="name"
+              />
+            </label>
+          </div>
+
+          <button type="submit" class="btn btn-primary">توليد الرابط وQR</button>
+        </form>
+
+        <section class="helper-output" id="output-panel" hidden>
+          <h2>الرابط النهائي</h2>
+          <div class="url-box">
+            <output id="generated-url" for="link-form"></output>
+            <button type="button" class="btn btn-ghost" id="copy-url-btn">نسخ الرابط</button>
+          </div>
+
+          <div class="qr-panel">
+            <div id="qr-mount" class="qr-mount" aria-label="QR code"></div>
+            <p class="qr-fallback" id="qr-fallback" hidden>
+              تعذر توليد QR تلقائيًا، يمكن نسخ الرابط وتحويله إلى QR من أي أداة خارجية.
+            </p>
+            <p class="qr-caption">امسح الرمز لفتح تجربة MUHADIR PASS</p>
+            <button type="button" class="btn btn-secondary" id="download-qr-btn" disabled>تنزيل QR</button>
+          </div>
+
+          <dl class="preview-meta">
+            <div>
+              <dt>النوع</dt>
+              <dd id="preview-type">—</dd>
+            </div>
+            <div>
+              <dt>المستلم</dt>
+              <dd id="preview-recipient">—</dd>
+            </div>
+          </dl>
+        </section>
+
+        <p class="helper-note" role="note">
+          مثال: <bdi dir="ltr">?type=doctor&amp;title=د&amp;name=محمد%20جبلي</bdi>
+        </p>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="qr-links.js" defer></script>
+  </body>
+</html>

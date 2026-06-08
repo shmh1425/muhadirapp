@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="ar" dir="rtl" data-invite-type="general" data-phase="sync">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="MUHADIR PASS بطاقة حضور رقمية لتجربة مُحضِر في بوث 31."
+    />
+    <meta name="theme-color" content="#041923" />
+    <title>MUHADIR PASS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900;1000&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="icon" type="image/jpeg" href="assets/images/muhadir-logo.jpg" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="ambient" aria-hidden="true">
+      <span class="ambient-grid"></span>
+      <span class="orb orb-a"></span>
+      <span class="orb orb-b"></span>
+      <span class="orb orb-c"></span>
+      <span class="scan-line"></span>
+    </div>
+
+    <main class="pass-page">
+      <section class="pass-card" aria-labelledby="pass-heading" aria-busy="true">
+        <span class="corner corner-a" aria-hidden="true"></span>
+        <span class="corner corner-b" aria-hidden="true"></span>
+        <span class="card-glow" aria-hidden="true"></span>
+        <span class="unlock-burst" aria-hidden="true"></span>
+        <span class="success-flash" aria-hidden="true"></span>
+
+        <!-- Stage A: Sync / Scan -->
+        <div class="stage stage-sync" data-stage="sync" aria-live="polite">
+          <header class="sync-header">
+            <div class="brand-lockup brand-lockup--ghost" aria-hidden="true">
+              <span class="brand-mark">
+                <img src="assets/images/muhadir-logo.jpg" alt="" />
+              </span>
+              <span class="brand-copy">
+                <strong>MUHADIR PASS</strong>
+                <small>بطاقة حضور رقمية</small>
+              </span>
+            </div>
+          </header>
+
+          <div class="sync-hero">
+            <div class="scanner" aria-hidden="true">
+              <span class="scanner-frame scanner-frame--tl"></span>
+              <span class="scanner-frame scanner-frame--tr"></span>
+              <span class="scanner-frame scanner-frame--bl"></span>
+              <span class="scanner-frame scanner-frame--br"></span>
+              <span class="scanner-ring scanner-ring--outer"></span>
+              <span class="scanner-ring scanner-ring--inner"></span>
+              <span class="scanner-core">
+                <svg viewBox="0 0 48 48" aria-hidden="true">
+                  <rect x="6" y="6" width="14" height="14" rx="2" fill="currentColor" opacity="0.9"/>
+                  <rect x="28" y="6" width="14" height="14" rx="2" fill="currentColor" opacity="0.9"/>
+                  <rect x="6" y="28" width="14" height="14" rx="2" fill="currentColor" opacity="0.9"/>
+                  <rect x="30" y="30" width="8" height="8" rx="1" fill="currentColor"/>
+                  <rect x="38" y="30" width="4" height="4" fill="currentColor"/>
+                  <rect x="30" y="38" width="4" height="4" fill="currentColor"/>
+                </svg>
+              </span>
+              <span class="scanner-beam"></span>
+              <span class="scanner-beam scanner-beam--trail"></span>
+              <span class="scanner-sweep"></span>
+            </div>
+
+            <p class="sync-status" data-sync-text>جاري قراءة رمز الدعوة...</p>
+
+            <div class="sync-track" aria-hidden="true">
+              <span class="sync-track-fill"></span>
+            </div>
+
+            <ol class="sync-steps" aria-hidden="true">
+              <li class="is-active" data-sync-step="0">
+                <span class="sync-step-dot"></span>
+                <span class="sync-step-label">قراءة رمز الدعوة</span>
+              </li>
+              <li data-sync-step="1">
+                <span class="sync-step-dot"></span>
+                <span class="sync-step-label">تسجيل ضمن حضور مُحضِر</span>
+              </li>
+              <li data-sync-step="2">
+                <span class="sync-step-dot"></span>
+                <span class="sync-step-label">تجهيز بطاقة الدعوة</span>
+              </li>
+            </ol>
+          </div>
+        </div>
+
+        <!-- Stage B: Success moment -->
+        <div class="stage stage-success" data-stage="success" hidden>
+          <div class="success-visual" aria-hidden="true">
+            <span class="success-burst"></span>
+            <span class="success-ring"></span>
+            <span class="success-ring success-ring--delay"></span>
+            <span class="success-check">
+              <svg viewBox="0 0 52 52" aria-hidden="true">
+                <circle class="success-circle" cx="26" cy="26" r="24" fill="none" stroke-width="3"/>
+                <path class="success-tick" fill="none" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="M14 27 L22 35 L38 17"/>
+              </svg>
+            </span>
+          </div>
+          <h1 class="success-heading" data-success-heading>
+            تم تسجيلكم ضمن حضور مُحضِر
+          </h1>
+          <p class="success-hook">بدأت التجربة بالمسح... وتكتمل بحضوركم في بوث 31.</p>
+        </div>
+
+        <!-- Stage C: Full pass reveal -->
+        <div class="stage stage-reveal" data-stage="reveal" hidden>
+          <header class="pass-top reveal-item" style="--i: 0">
+            <div class="brand-lockup" aria-label="MUHADIR">
+              <span class="brand-mark">
+                <img src="assets/images/muhadir-logo.jpg" alt="" />
+              </span>
+              <span class="brand-copy">
+                <strong>MUHADIR PASS</strong>
+                <small>بطاقة حضور رقمية</small>
+              </span>
+            </div>
+
+            <div class="pass-signal" aria-label="تم التحقق">
+              <span class="signal-dot" aria-hidden="true"></span>
+              <span>QR SCAN VERIFIED</span>
+            </div>
+          </header>
+
+          <div class="reveal-body">
+            <section class="status-panel">
+              <p class="audience-label reveal-item" style="--i: 1" data-audience-label>دعوة عامة</p>
+
+              <h2 id="pass-heading" class="reveal-item" style="--i: 2" data-heading>
+                تم تسجيلكم ضمن حضور مُحضِر
+              </h2>
+              <p class="recipient-name reveal-item" style="--i: 3" data-recipient hidden></p>
+              <p class="audience-message reveal-item" style="--i: 4" data-message>
+                نلقاكم في معرض إنجاز 2026، بوث 31، لتجربة نظام مُحضِر والتعرّف على حضور جامعي أذكى وأسهل.
+              </p>
+
+              <div class="booth-hero reveal-item" style="--i: 5" aria-label="بوث 31">
+                <span class="booth-hero-kicker">الوجهة</span>
+                <strong class="booth-hero-number" data-booth-display>بوث 31</strong>
+                <span class="booth-hero-glow" aria-hidden="true"></span>
+              </div>
+
+              <p class="cta-line reveal-item" style="--i: 6" data-cta>نلقاكم في بوث 31</p>
+            </section>
+
+            <div class="compact-details reveal-item" style="--i: 7" aria-label="تفاصيل الفعالية">
+              <span class="detail-chip" data-event>معرض إنجاز 2026</span>
+              <span class="detail-chip" data-date>الثلاثاء 9 يونيو 2026م</span>
+              <span class="detail-chip" data-time>من 11 صباحًا إلى 2 ظهرًا</span>
+              <span class="detail-chip detail-chip--wide" data-location>بهو قاعة الملك عبدالعزيز – المدينة الجامعية بالعابدية</span>
+            </div>
+
+            <div class="tech-chips reveal-item" style="--i: 8" aria-label="تقنيات مُحضِر">
+              <span>QR</span>
+              <span>NFC</span>
+              <span>BLE</span>
+              <span>Smart Attendance</span>
+            </div>
+
+            <p class="pass-id-subtle reveal-item" style="--i: 9" aria-label="معرّف البطاقة">
+              <span>PASS</span>
+              <strong data-pass-id>MHD-31-GEN-2026</strong>
+            </p>
+          </div>
+
+          <footer class="pass-footer reveal-item" style="--i: 10">
+            <p class="final-hook">بدأت التجربة بالمسح... وتكتمل بحضوركم في بوث 31.</p>
+          </footer>
+        </div>
+      </section>
+    </main>
+
+    <script src="script.js" defer></script>
+  </body>
+</html>
