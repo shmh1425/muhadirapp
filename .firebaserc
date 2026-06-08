@@ -2,6 +2,14 @@
   "projects": {
     "default": "muhadir-7f83e"
   },
-  "targets": {},
+  "targets": {
+    "muhadir-7f83e": {
+      "hosting": {
+        "invitations": [
+          "muhadir-invite-31"
+        ]
+      }
+    }
+  },
   "etags": {}
 }

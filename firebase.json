@@ -98,6 +98,15 @@
         "**/.*",
         "**/node_modules/**"
       ]
+    },
+    {
+      "target": "invitations",
+      "public": "muhadir-invitations",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ]
     }
   ]
 }

@@ -12,14 +12,14 @@ const audienceCopy = {
     heading: "تم تسجيلكم ضمن حضور مُحضِر",
     label: "دعوة عامة",
     message:
-      "نلقاكم في معرض إنجاز 2026، بوث 31، لتجربة نظام مُحضِر والتعرّف على حضور جامعي أذكى وأسهل.",
+      "نلقاكم في معرض إنجاز 2026، بوث 31، لتجربة مُحضِر والتعرّف على حضور جامعي أذكى وأسهل.",
     cta: "نلقاكم في بوث 31",
   },
   doctor: {
-    fallbackHeading: "تم تسجيلكم ضمن حضور مُحضِر",
+    heading: "تم تسجيلكم ضمن حضور مُحضِر",
     label: "دعوة أكاديمية خاصة",
     message:
-      "يشرفنا حضوركم في معرض إنجاز 2026، بوث 31، للاطلاع على مشروع مُحضِر ومناقشة فكرته من منظور أكاديمي وتطبيقي.",
+      "يشرفنا حضوركم في معرض إنجاز 2026، بوث 31، للاطلاع على مُحضِر ومناقشة فكرته من منظور أكاديمي وتطبيقي.",
     cta: "يشرفنا حضوركم في بوث 31",
     defaultTitle: "د",
   },
@@ -27,11 +27,11 @@ const audienceCopy = {
     heading: "تم تسجيلكن ضمن حضور مُحضِر",
     label: "دعوة مهندسات دفعة 44",
     message:
-      "نلقاكن في معرض إنجاز 2026، بوث 31، لنشارككن ثمرة رحلتنا في مشروع التخرج ولحظة نعتز بها مع دفعة 44.",
+      "نلقاكن في معرض إنجاز 2026، بوث 31، لنشارككن ثمرة رحلتنا في مشروع التخرج ولحظة نعتز بها.",
     cta: "ننتظركن في بوث 31",
   },
   colleague: {
-    fallbackHeading: "تم تسجيلكِ ضمن حضور مُحضِر",
+    heading: "تم تسجيلكِ ضمن حضور مُحضِر",
     label: "دعوة من التخصص",
     message:
       "نلقاكِ في معرض إنجاز 2026، بوث 31، لتجربة الفكرة عن قرب ومعرفة كيف حوّلنا تحدي الحضور الجامعي إلى حل تقني ذكي.",
@@ -60,11 +60,26 @@ const requestedType = params.get("type") || "general";
 const inviteType = Object.hasOwn(audienceCopy, requestedType) ? requestedType : "general";
 const currentCopy = audienceCopy[inviteType];
 const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+const customCopy = {
+  heading: getUrlText("heading"),
+  label: getUrlText("label"),
+  message: getUrlText("message"),
+  cta: getUrlText("cta"),
+  hook: getUrlText("hook"),
+};
+const resolvedCopy = {
+  heading: customCopy.heading || currentCopy.heading,
+  label: customCopy.label || currentCopy.label,
+  message: customCopy.message || currentCopy.message,
+  cta: customCopy.cta || currentCopy.cta,
+  hook: customCopy.hook || FINAL_HOOK,
+};
 
 const TIMING = {
-  syncTotal: reducedMotionQuery.matches ? 400 : 2600,
-  messageInterval: reducedMotionQuery.matches ? 120 : 800,
-  successHold: reducedMotionQuery.matches ? 300 : 1200,
+  syncTotal: reducedMotionQuery.matches ? 400 : 4800,
+  messageInterval: reducedMotionQuery.matches ? 120 : 1800,
+  successHold: reducedMotionQuery.matches ? 300 : 2100,
+  revealSettle: reducedMotionQuery.matches ? 0 : 1300,
 };
 
 function setText(selector, value) {
@@ -74,39 +89,45 @@ function setText(selector, value) {
   }
 }
 
-function normalizeTitle(rawTitle, fallbackTitle) {
-  const title = (rawTitle || fallbackTitle || "").trim().replace(/\.+$/u, "");
-  return title ? `${title}.` : "";
+function getUrlText(name) {
+  return (params.get(name) || "").trim();
 }
 
-function formatRecipient() {
-  if (inviteType !== "doctor" && inviteType !== "colleague") {
+function normalizeTitle(rawTitle, fallbackTitle) {
+  const title = (rawTitle || fallbackTitle || "")
+    .trim()
+    .replace(/\s+/gu, " ")
+    .replace(/\.{2,}/gu, ".");
+
+  if (!title) {
     return "";
   }
 
+  const compactTitle = title.replace(/\./gu, "");
+  if (compactTitle === "د" || compactTitle === "م") {
+    return `${compactTitle}.`;
+  }
+
+  return title;
+}
+
+function formatRecipient() {
   const name = (params.get("name") || "").trim();
   if (!name) {
     return "";
   }
 
-  const title = normalizeTitle(params.get("title"), currentCopy.defaultTitle);
+  const rawTitle = params.get("title");
+  const fallbackTitle =
+    rawTitle === null && (inviteType === "doctor" || inviteType === "colleague")
+      ? currentCopy.defaultTitle
+      : "";
+  const title = normalizeTitle(rawTitle, fallbackTitle);
   return [title, name].filter(Boolean).join(" ");
 }
 
-function makePassId() {
-  const typeCode = {
-    general: "GEN",
-    doctor: "ACD",
-    engineers44: "E44",
-    colleague: "COL",
-    family: "FAM",
-  }[inviteType];
-
-  return `MHD-${invitationConfig.booth}-${typeCode}-2026`;
-}
-
 function getHeading() {
-  return currentCopy.heading || currentCopy.fallbackHeading;
+  return resolvedCopy.heading || currentCopy.fallbackHeading;
 }
 
 function applyInvitationCopy() {
@@ -114,16 +135,15 @@ function applyInvitationCopy() {
   const heading = getHeading();
 
   document.documentElement.dataset.inviteType = inviteType;
-  document.title = `MUHADIR PASS | ${currentCopy.label}`;
+  document.title = `MUHADIR PASS | ${resolvedCopy.label}`;
 
-  setText("[data-audience-label]", currentCopy.label);
+  setText("[data-audience-label]", resolvedCopy.label);
   setText("[data-heading]", heading);
   setText("[data-success-heading]", heading);
-  setText("[data-message]", currentCopy.message);
-  setText("[data-cta]", currentCopy.cta);
-  setText(".success-hook", FINAL_HOOK);
-  setText(".final-hook", FINAL_HOOK);
-  setText("[data-pass-id]", makePassId());
+  setText("[data-message]", resolvedCopy.message);
+  setText("[data-cta]", resolvedCopy.cta);
+  setText(".success-hook", resolvedCopy.hook);
+  setText(".final-hook", resolvedCopy.hook);
   setText("[data-booth-display]", `بوث ${invitationConfig.booth}`);
   setText("[data-event]", invitationConfig.eventName);
   setText("[data-date]", invitationConfig.date);
@@ -174,7 +194,7 @@ function wait(ms) {
   });
 }
 
-function updateSyncMessage(index) {
+function updateSyncMessage(index, immediate = false) {
   const textElement = document.querySelector("[data-sync-text]");
   const steps = document.querySelectorAll("[data-sync-step]");
 
@@ -182,9 +202,7 @@ function updateSyncMessage(index) {
     return;
   }
 
-  textElement.classList.add("is-changing");
-
-  window.setTimeout(() => {
+  const applyMessage = () => {
     textElement.textContent = syncMessages[index] || syncMessages[syncMessages.length - 1];
     textElement.classList.remove("is-changing");
 
@@ -192,7 +210,15 @@ function updateSyncMessage(index) {
       step.classList.toggle("is-active", stepIndex === index);
       step.classList.toggle("is-done", stepIndex < index);
     });
-  }, reducedMotionQuery.matches ? 0 : 180);
+  };
+
+  if (immediate || reducedMotionQuery.matches) {
+    applyMessage();
+    return;
+  }
+
+  textElement.classList.add("is-changing");
+  window.setTimeout(applyMessage, 280);
 }
 
 async function runSyncSequence() {
@@ -204,7 +230,10 @@ async function runSyncSequence() {
     return;
   }
 
-  for (let index = 0; index < syncMessages.length; index += 1) {
+  updateSyncMessage(0, true);
+  await wait(TIMING.messageInterval);
+
+  for (let index = 1; index < syncMessages.length; index += 1) {
     updateSyncMessage(index);
     // eslint-disable-next-line no-await-in-loop
     await wait(TIMING.messageInterval);
@@ -221,7 +250,7 @@ async function runExperienceFlow() {
   setPhase("success");
   await wait(TIMING.successHold);
   setPhase("reveal");
-  await wait(reducedMotionQuery.matches ? 0 : 720);
+  await wait(TIMING.revealSettle);
   const card = document.querySelector(".pass-card");
   if (card) {
     card.classList.remove("is-unlocking");

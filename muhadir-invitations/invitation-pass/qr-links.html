@@ -12,6 +12,7 @@
       href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900;1000&display=swap"
       rel="stylesheet"
     />
+    <link rel="icon" type="image/jpeg" href="assets/images/muhadir-logo.jpg" />
     <link rel="stylesheet" href="qr-links.css" />
   </head>
   <body>
@@ -36,9 +37,9 @@
         </div>
 
         <aside class="helper-guide" aria-label="إرشادات اللقب">
-          <p>للدكاترة والأكاديميين: اختر <bdi dir="ltr">type=doctor</bdi> واستخدم اللقب <strong>د</strong> أو <strong>د.</strong></p>
-          <p>للمهندسين والزملاء: اختر <bdi dir="ltr">type=colleague</bdi> واستخدم اللقب <strong>م</strong> أو <strong>م.</strong></p>
-          <p>للدعوات العامة أو الأهل يمكن ترك اللقب والاسم فارغين.</p>
+          <p>يمكن إضافة اسم مستلم لأي نوع دعوة، ويظهر الاسم في بطاقة MUHADIR PASS.</p>
+          <p>للدكاترة والزميلات يقترح اللقب تلقائيًا، ويمكن تعديله أو مسحه قبل توليد الرابط.</p>
+          <p>لا يضاف <bdi dir="ltr">name</bdi> أو <bdi dir="ltr">title</bdi> إلى الرابط إذا تُرك الحقل فارغًا.</p>
         </aside>
 
         <form class="helper-form" id="link-form" novalidate>
@@ -73,11 +74,11 @@
                 type="text"
                 id="title-field"
                 name="title"
-                placeholder="د أو م"
-                maxlength="8"
+                placeholder="مثال: د.، م.، أختي، ضيفتنا، سعادة الدكتور"
+                maxlength="60"
                 autocomplete="off"
               />
-              <small>يقبل <strong>د</strong> أو <strong>د.</strong> و<strong>م</strong> أو <strong>م.</strong></small>
+              <small>اختياري — يمكنك كتابة أي لقب، حتى لو كان من أكثر من كلمة.</small>
             </label>
 
             <label class="field">
@@ -86,41 +87,133 @@
                 type="text"
                 id="name-field"
                 name="name"
-                placeholder="محمد جبلي"
+                placeholder="سارة محمد"
                 autocomplete="name"
               />
             </label>
           </div>
 
+          <details class="custom-copy-panel">
+            <summary>تخصيص نص الدعوة (اختياري)</summary>
+            <div class="custom-copy-grid">
+              <label class="field">
+                <span>العنوان الرئيسي اختياري</span>
+                <input
+                  type="text"
+                  id="custom-heading"
+                  name="customHeading"
+                  placeholder="مثال: دعوتكم تسعدنا"
+                  autocomplete="off"
+                />
+              </label>
+
+              <label class="field">
+                <span>نوع الدعوة / الوسم اختياري</span>
+                <input
+                  type="text"
+                  id="custom-label"
+                  name="customLabel"
+                  placeholder="مثال: دعوة عائلية خاصة"
+                  autocomplete="off"
+                />
+              </label>
+
+              <label class="field field-wide">
+                <span>نص الدعوة اختياري</span>
+                <textarea
+                  id="custom-message"
+                  name="customMessage"
+                  rows="3"
+                  placeholder="مثال: ننتظركم في بوث 31 لمشاركتنا فرحة مشروع التخرج"
+                ></textarea>
+              </label>
+
+              <label class="field">
+                <span>عبارة الزر أو النداء اختياري</span>
+                <input
+                  type="text"
+                  id="custom-cta"
+                  name="customCta"
+                  placeholder="مثال: نلقاكم في بوث 31"
+                  autocomplete="off"
+                />
+              </label>
+
+              <label class="field">
+                <span>العبارة الختامية اختياري</span>
+                <textarea
+                  id="custom-hook"
+                  name="customHook"
+                  rows="2"
+                  placeholder="مثال: ننتظركم في بوث 31"
+                ></textarea>
+              </label>
+            </div>
+            <p class="length-note">تنبيه: النصوص الطويلة تجعل رابط QR أطول؛ يفضّل أن تكون الرسائل مختصرة.</p>
+          </details>
+
+          <section class="bulk-panel" aria-labelledby="bulk-title">
+            <div class="bulk-heading">
+              <h2 id="bulk-title">إضافة عدة أشخاص مرة واحدة</h2>
+              <span>اختياري</span>
+            </div>
+            <p>
+              لكل شخص اكتب سطرًا مستقلًا. للّقب المخصص استخدمي الصيغة: اللقب|الاسم
+              <br />
+              مثال: أختي الغالية|سارة محمد
+            </p>
+            <label class="field">
+              <span>قائمة المستلمين</span>
+              <textarea
+                id="bulk-recipients"
+                name="bulkRecipients"
+                rows="5"
+                placeholder="د.|محمد جبلي&#10;م.|إيلاف الغامدي&#10;أختي الغالية|سارة محمد&#10;ضيفتنا العزيزة|نورة أحمد&#10;سعادة الدكتور|محمد جبلي&#10;|وضوح السلمي&#10;عائلتي الغالية"
+              ></textarea>
+              <small>صيغة <bdi dir="ltr">title|name</bdi> هي الأدق للألقاب المخصصة. بدون <bdi dir="ltr">|</bdi> يُعامل السطر كاملًا كاسم.</small>
+            </label>
+          </section>
+
           <button type="submit" class="btn btn-primary">توليد الرابط وQR</button>
         </form>
 
         <section class="helper-output" id="output-panel" hidden>
-          <h2>الرابط النهائي</h2>
-          <div class="url-box">
-            <output id="generated-url" for="link-form"></output>
-            <button type="button" class="btn btn-ghost" id="copy-url-btn">نسخ الرابط</button>
+          <div class="output-heading">
+            <h2>النتائج</h2>
+            <button type="button" class="btn btn-ghost" id="copy-all-btn" hidden>نسخ كل الروابط</button>
           </div>
 
-          <div class="qr-panel">
-            <div id="qr-mount" class="qr-mount" aria-label="QR code"></div>
-            <p class="qr-fallback" id="qr-fallback" hidden>
-              تعذر توليد QR تلقائيًا، يمكن نسخ الرابط وتحويله إلى QR من أي أداة خارجية.
-            </p>
-            <p class="qr-caption">امسح الرمز لفتح تجربة MUHADIR PASS</p>
-            <button type="button" class="btn btn-secondary" id="download-qr-btn" disabled>تنزيل QR</button>
+          <div class="single-result" id="single-result">
+            <h3>الرابط النهائي</h3>
+            <div class="url-box">
+              <output id="generated-url" for="link-form"></output>
+              <button type="button" class="btn btn-ghost" id="copy-url-btn">نسخ الرابط</button>
+            </div>
+
+            <p class="url-warning" id="length-warning" hidden>الرابط طويل جدًا، اختصري النصوص لضمان قراءة QR بسهولة.</p>
+
+            <div class="qr-panel">
+              <div id="qr-mount" class="qr-mount" aria-label="QR code"></div>
+              <p class="qr-fallback" id="qr-fallback" hidden>
+                تعذر توليد QR تلقائيًا، يمكن نسخ الرابط وتحويله إلى QR من أي أداة خارجية.
+              </p>
+              <p class="qr-caption">امسح الرمز لفتح تجربة MUHADIR PASS</p>
+              <button type="button" class="btn btn-secondary" id="download-qr-btn" disabled>تنزيل QR</button>
+            </div>
+
+            <dl class="preview-meta">
+              <div>
+                <dt>النوع</dt>
+                <dd id="preview-type">—</dd>
+              </div>
+              <div>
+                <dt>المستلم</dt>
+                <dd id="preview-recipient">—</dd>
+              </div>
+            </dl>
           </div>
 
-          <dl class="preview-meta">
-            <div>
-              <dt>النوع</dt>
-              <dd id="preview-type">—</dd>
-            </div>
-            <div>
-              <dt>المستلم</dt>
-              <dd id="preview-recipient">—</dd>
-            </div>
-          </dl>
+          <div class="bulk-output" id="bulk-output" hidden></div>
         </section>
 
         <p class="helper-note" role="note">

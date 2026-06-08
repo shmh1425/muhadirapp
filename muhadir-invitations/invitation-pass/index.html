@@ -34,6 +34,7 @@
         <span class="card-glow" aria-hidden="true"></span>
         <span class="unlock-burst" aria-hidden="true"></span>
         <span class="success-flash" aria-hidden="true"></span>
+        <span class="unlock-seam" aria-hidden="true"></span>
 
         <!-- Stage A: Sync / Scan -->
         <div class="stage stage-sync" data-stage="sync" aria-live="polite">
@@ -57,20 +58,52 @@
               <span class="scanner-frame scanner-frame--br"></span>
               <span class="scanner-ring scanner-ring--outer"></span>
               <span class="scanner-ring scanner-ring--inner"></span>
-              <span class="scanner-core">
-                <svg viewBox="0 0 48 48" aria-hidden="true">
-                  <rect x="6" y="6" width="14" height="14" rx="2" fill="currentColor" opacity="0.9"/>
-                  <rect x="28" y="6" width="14" height="14" rx="2" fill="currentColor" opacity="0.9"/>
-                  <rect x="6" y="28" width="14" height="14" rx="2" fill="currentColor" opacity="0.9"/>
-                  <rect x="30" y="30" width="8" height="8" rx="1" fill="currentColor"/>
-                  <rect x="38" y="30" width="4" height="4" fill="currentColor"/>
-                  <rect x="30" y="38" width="4" height="4" fill="currentColor"/>
+              <span class="scanner-pixel scanner-pixel--a"></span>
+              <span class="scanner-pixel scanner-pixel--b"></span>
+              <span class="scanner-pixel scanner-pixel--c"></span>
+              <span class="scanner-core" aria-label="رمز QR للدعوة">
+                <svg class="scanner-qr" viewBox="0 0 112 112" aria-hidden="true">
+                  <rect width="112" height="112" fill="#ffffff"/>
+                  <rect x="10" y="10" width="28" height="28" fill="#031119"/>
+                  <rect x="16" y="16" width="16" height="16" fill="#ffffff"/>
+                  <rect x="21" y="21" width="6" height="6" fill="#031119"/>
+                  <rect x="74" y="10" width="28" height="28" fill="#031119"/>
+                  <rect x="80" y="16" width="16" height="16" fill="#ffffff"/>
+                  <rect x="85" y="21" width="6" height="6" fill="#031119"/>
+                  <rect x="10" y="74" width="28" height="28" fill="#031119"/>
+                  <rect x="16" y="80" width="16" height="16" fill="#ffffff"/>
+                  <rect x="21" y="85" width="6" height="6" fill="#031119"/>
+                  <rect x="46" y="10" width="8" height="8" fill="#031119"/>
+                  <rect x="58" y="10" width="6" height="6" fill="#031119"/>
+                  <rect x="46" y="24" width="16" height="6" fill="#031119"/>
+                  <rect x="66" y="24" width="6" height="12" fill="#031119"/>
+                  <rect x="46" y="42" width="6" height="12" fill="#031119"/>
+                  <rect x="58" y="44" width="10" height="6" fill="#031119"/>
+                  <rect x="76" y="46" width="8" height="8" fill="#031119"/>
+                  <rect x="92" y="46" width="10" height="6" fill="#031119"/>
+                  <rect x="42" y="62" width="10" height="6" fill="#031119"/>
+                  <rect x="56" y="58" width="6" height="18" fill="#031119"/>
+                  <rect x="68" y="62" width="16" height="6" fill="#031119"/>
+                  <rect x="92" y="62" width="6" height="14" fill="#031119"/>
+                  <rect x="46" y="82" width="8" height="8" fill="#031119"/>
+                  <rect x="60" y="82" width="10" height="6" fill="#031119"/>
+                  <rect x="76" y="78" width="6" height="18" fill="#031119"/>
+                  <rect x="88" y="84" width="14" height="6" fill="#031119"/>
+                  <rect x="46" y="98" width="18" height="4" fill="#031119"/>
+                  <rect x="68" y="96" width="6" height="6" fill="#031119"/>
+                  <rect x="84" y="98" width="6" height="4" fill="#031119"/>
                 </svg>
               </span>
               <span class="scanner-beam"></span>
               <span class="scanner-beam scanner-beam--trail"></span>
               <span class="scanner-sweep"></span>
             </div>
+
+            <p class="scan-confirm">
+              <span class="scan-confirm-dot" aria-hidden="true"></span>
+              <span>تم قراءة رمز الدعوة</span>
+              <bdi dir="ltr">QR INVITE SCANNED</bdi>
+            </p>
 
             <p class="sync-status" data-sync-text>جاري قراءة رمز الدعوة...</p>
 
@@ -81,15 +114,15 @@
             <ol class="sync-steps" aria-hidden="true">
               <li class="is-active" data-sync-step="0">
                 <span class="sync-step-dot"></span>
-                <span class="sync-step-label">قراءة رمز الدعوة</span>
+                <span class="sync-step-label">قراءة الرمز</span>
               </li>
               <li data-sync-step="1">
                 <span class="sync-step-dot"></span>
-                <span class="sync-step-label">تسجيل ضمن حضور مُحضِر</span>
+                <span class="sync-step-label">تسجيل الدعوة</span>
               </li>
               <li data-sync-step="2">
                 <span class="sync-step-dot"></span>
-                <span class="sync-step-label">تجهيز بطاقة الدعوة</span>
+                <span class="sync-step-label">تجهيز البطاقة</span>
               </li>
             </ol>
           </div>
@@ -129,7 +162,7 @@
 
             <div class="pass-signal" aria-label="تم التحقق">
               <span class="signal-dot" aria-hidden="true"></span>
-              <span>QR SCAN VERIFIED</span>
+              <span>QR INVITE VERIFIED</span>
             </div>
           </header>
 
@@ -142,7 +175,7 @@
               </h2>
               <p class="recipient-name reveal-item" style="--i: 3" data-recipient hidden></p>
               <p class="audience-message reveal-item" style="--i: 4" data-message>
-                نلقاكم في معرض إنجاز 2026، بوث 31، لتجربة نظام مُحضِر والتعرّف على حضور جامعي أذكى وأسهل.
+                نلقاكم في معرض إنجاز 2026، بوث 31، لتجربة مُحضِر والتعرّف على حضور جامعي أذكى وأسهل.
               </p>
 
               <div class="booth-hero reveal-item" style="--i: 5" aria-label="بوث 31">
@@ -151,30 +184,24 @@
                 <span class="booth-hero-glow" aria-hidden="true"></span>
               </div>
 
-              <p class="cta-line reveal-item" style="--i: 6" data-cta>نلقاكم في بوث 31</p>
             </section>
 
-            <div class="compact-details reveal-item" style="--i: 7" aria-label="تفاصيل الفعالية">
+            <div class="compact-details reveal-item" style="--i: 6" aria-label="تفاصيل الفعالية">
               <span class="detail-chip" data-event>معرض إنجاز 2026</span>
               <span class="detail-chip" data-date>الثلاثاء 9 يونيو 2026م</span>
               <span class="detail-chip" data-time>من 11 صباحًا إلى 2 ظهرًا</span>
               <span class="detail-chip detail-chip--wide" data-location>بهو قاعة الملك عبدالعزيز – المدينة الجامعية بالعابدية</span>
             </div>
 
-            <div class="tech-chips reveal-item" style="--i: 8" aria-label="تقنيات مُحضِر">
+            <div class="tech-chips reveal-item" style="--i: 7" aria-label="تقنيات مُحضِر">
               <span>QR</span>
               <span>NFC</span>
               <span>BLE</span>
               <span>Smart Attendance</span>
             </div>
-
-            <p class="pass-id-subtle reveal-item" style="--i: 9" aria-label="معرّف البطاقة">
-              <span>PASS</span>
-              <strong data-pass-id>MHD-31-GEN-2026</strong>
-            </p>
           </div>
 
-          <footer class="pass-footer reveal-item" style="--i: 10">
+          <footer class="pass-footer reveal-item" style="--i: 8">
             <p class="final-hook">بدأت التجربة بالمسح... وتكتمل بحضوركم في بوث 31.</p>
           </footer>
         </div>
