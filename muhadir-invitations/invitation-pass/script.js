@@ -14,6 +14,8 @@ const audienceCopy = {
     message:
       "نلقاكم في معرض إنجاز 2026، بوث 31، لتجربة مُحضِر والتعرّف على حضور جامعي أذكى وأسهل.",
     cta: "نلقاكم في بوث 31",
+    hook: "بدأت التجربة بالمسح... وتكتمل بحضوركم في بوث 31.",
+    syncRegistering: "جاري تسجيلكم ضمن حضور مُحضِر...",
   },
   doctor: {
     heading: "تم تسجيلكم ضمن حضور مُحضِر",
@@ -21,6 +23,8 @@ const audienceCopy = {
     message:
       "يشرفنا حضوركم في معرض إنجاز 2026، بوث 31، للاطلاع على مُحضِر ومناقشة فكرته من منظور أكاديمي وتطبيقي.",
     cta: "يشرفنا حضوركم في بوث 31",
+    hook: "بدأت التجربة بالمسح... وتكتمل بحضوركم في بوث 31.",
+    syncRegistering: "جاري تسجيلكم ضمن حضور مُحضِر...",
     defaultTitle: "د",
   },
   engineers44: {
@@ -29,6 +33,8 @@ const audienceCopy = {
     message:
       "نلقاكن في معرض إنجاز 2026، بوث 31، لنشارككن ثمرة رحلتنا في مشروع التخرج ولحظة نعتز بها.",
     cta: "ننتظركن في بوث 31",
+    hook: "بدأت التجربة بالمسح... وتكتمل بحضوركن في بوث 31.",
+    syncRegistering: "جاري تسجيلكن ضمن حضور مُحضِر...",
   },
   colleague: {
     heading: "تم تسجيلكِ ضمن حضور مُحضِر",
@@ -36,6 +42,8 @@ const audienceCopy = {
     message:
       "نلقاكِ في معرض إنجاز 2026، بوث 31، لتجربة الفكرة عن قرب ومعرفة كيف حوّلنا تحدي الحضور الجامعي إلى حل تقني ذكي.",
     cta: "نلقاكِ في بوث 31",
+    hook: "بدأت التجربة بالمسح... وتكتمل بحضوركِ في بوث 31.",
+    syncRegistering: "جاري تسجيلكِ ضمن حضور مُحضِر...",
     defaultTitle: "م",
   },
   family: {
@@ -44,21 +52,62 @@ const audienceCopy = {
     message:
       "نلقاكم في معرض إنجاز 2026، بوث 31، لمشاركتنا لحظة مميزة من ختام رحلة مشروع التخرج.",
     cta: "ننتظركم في بوث 31",
+    hook: "بدأت التجربة بالمسح... وتكتمل بحضوركم في بوث 31.",
+    syncRegistering: "جاري تسجيلكم ضمن حضور مُحضِر...",
   },
 };
 
-const syncMessages = [
-  "جاري قراءة رمز الدعوة...",
-  "جاري تسجيلكم ضمن حضور مُحضِر...",
-  "جاري تجهيز بطاقة الدعوة الرقمية...",
-];
+const personalizedAudienceCopy = {
+  general: {
+    heading: "تم تسجيلك ضمن حضور مُحضِر",
+    message:
+      "نلقاك في معرض إنجاز 2026، بوث 31، لتجربة مُحضِر والتعرّف على حضور جامعي أذكى وأسهل.",
+    cta: "نلقاك في بوث 31",
+    hook: "بدأت التجربة بالمسح... وتكتمل بحضورك في بوث 31.",
+    syncRegistering: "جاري تسجيلك ضمن حضور مُحضِر...",
+  },
+  doctor: {
+    heading: "تم تسجيلك ضمن حضور مُحضِر",
+    message:
+      "يشرفنا حضورك في معرض إنجاز 2026، بوث 31، للاطلاع على مُحضِر ومناقشة فكرته من منظور أكاديمي وتطبيقي.",
+    cta: "يشرفنا حضورك في بوث 31",
+    hook: "بدأت التجربة بالمسح... وتكتمل بحضورك في بوث 31.",
+    syncRegistering: "جاري تسجيلك ضمن حضور مُحضِر...",
+  },
+  engineers44: {
+    heading: "تم تسجيلكِ ضمن حضور مُحضِر",
+    message:
+      "نلقاكِ في معرض إنجاز 2026، بوث 31، لنشارككِ ثمرة رحلتنا في مشروع التخرج ولحظة نعتز بها.",
+    cta: "ننتظركِ في بوث 31",
+    hook: "بدأت التجربة بالمسح... وتكتمل بحضوركِ في بوث 31.",
+    syncRegistering: "جاري تسجيلكِ ضمن حضور مُحضِر...",
+  },
+  colleague: {
+    heading: "تم تسجيلكِ ضمن حضور مُحضِر",
+    message:
+      "نلقاكِ في معرض إنجاز 2026، بوث 31، لتجربة الفكرة عن قرب ومعرفة كيف حوّلنا تحدي الحضور الجامعي إلى حل تقني ذكي.",
+    cta: "نلقاكِ في بوث 31",
+    hook: "بدأت التجربة بالمسح... وتكتمل بحضوركِ في بوث 31.",
+    syncRegistering: "جاري تسجيلكِ ضمن حضور مُحضِر...",
+  },
+  family: {
+    heading: "تم تسجيلك ضمن حضور مُحضِر",
+    message:
+      "نلقاك في معرض إنجاز 2026، بوث 31، لمشاركتنا لحظة مميزة من ختام رحلة مشروع التخرج.",
+    cta: "ننتظرك في بوث 31",
+    hook: "بدأت التجربة بالمسح... وتكتمل بحضورك في بوث 31.",
+    syncRegistering: "جاري تسجيلك ضمن حضور مُحضِر...",
+  },
+};
 
 const FINAL_HOOK = "بدأت التجربة بالمسح... وتكتمل بحضوركم في بوث 31.";
 
 const params = new URLSearchParams(window.location.search);
 const requestedType = params.get("type") || "general";
-const inviteType = Object.hasOwn(audienceCopy, requestedType) ? requestedType : "general";
+const inviteType = hasOwn(audienceCopy, requestedType) ? requestedType : "general";
+const hasName = hasRecipientName();
 const currentCopy = audienceCopy[inviteType];
+const selectedCopy = resolveAudienceCopy(inviteType, hasName);
 const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 const customCopy = {
   heading: getUrlText("heading"),
@@ -68,12 +117,17 @@ const customCopy = {
   hook: getUrlText("hook"),
 };
 const resolvedCopy = {
-  heading: customCopy.heading || currentCopy.heading,
-  label: customCopy.label || currentCopy.label,
-  message: customCopy.message || currentCopy.message,
-  cta: customCopy.cta || currentCopy.cta,
-  hook: customCopy.hook || FINAL_HOOK,
+  heading: customCopy.heading || selectedCopy.heading,
+  label: customCopy.label || selectedCopy.label,
+  message: customCopy.message || selectedCopy.message,
+  cta: customCopy.cta || selectedCopy.cta,
+  hook: customCopy.hook || selectedCopy.hook || FINAL_HOOK,
 };
+const syncMessages = [
+  "جاري قراءة رمز الدعوة...",
+  selectedCopy.syncRegistering || "جاري تسجيلك ضمن حضور مُحضِر...",
+  "جاري تجهيز بطاقة الدعوة الرقمية...",
+];
 
 const TIMING = {
   syncTotal: reducedMotionQuery.matches ? 400 : 4800,
@@ -91,6 +145,25 @@ function setText(selector, value) {
 
 function getUrlText(name) {
   return (params.get(name) || "").trim();
+}
+
+function hasOwn(object, key) {
+  return Object.prototype.hasOwnProperty.call(object, key);
+}
+
+function hasRecipientName() {
+  return Boolean(getUrlText("name"));
+}
+
+function resolveAudienceCopy(type, hasName) {
+  if (!hasName) {
+    return audienceCopy[type];
+  }
+
+  return {
+    ...audienceCopy[type],
+    ...(personalizedAudienceCopy[type] || {}),
+  };
 }
 
 function normalizeTitle(rawTitle, fallbackTitle) {
